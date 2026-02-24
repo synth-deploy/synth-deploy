@@ -7,6 +7,7 @@ import { ServerAgent, InMemoryDeploymentStore } from "./agent/server-agent.js";
 import { createMcpServer } from "./mcp/server.js";
 import { registerDeploymentRoutes } from "./api/deployments.js";
 import { registerHealthRoutes } from "./api/health.js";
+import { registerTentacleReportRoutes } from "./api/tentacle-reports.js";
 
 // --- Bootstrap shared state ---
 
@@ -60,6 +61,7 @@ const app = Fastify({ logger: true });
 // Register REST routes
 registerHealthRoutes(app);
 registerDeploymentRoutes(app, agent, tenants, environments, deployments, diary);
+registerTentacleReportRoutes(app, diary);
 
 // Convenience: list seed data
 app.get("/api/tenants", async () => ({ tenants: tenants.list() }));
