@@ -39,6 +39,7 @@ export interface Deployment {
   diaryEntryIds: DiaryEntryId[];
   createdAt: Date;
   completedAt: Date | null;
+  failureReason: string | null;
 }
 
 // --- Decision Diary ---
