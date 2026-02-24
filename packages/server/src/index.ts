@@ -37,6 +37,7 @@ diary.record({
   tenantId: null,
   deploymentId: null,
   agent: "server",
+  decisionType: "system",
   decision: "Server initialized with demo data",
   reasoning:
     "Seeded one tenant (Acme Corp), two environments (production, staging) " +

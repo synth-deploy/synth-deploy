@@ -47,12 +47,26 @@ export interface Deployment {
 export const AgentType = z.enum(["server", "tentacle"]);
 export type AgentType = z.infer<typeof AgentType>;
 
+export const DecisionType = z.enum([
+  "pipeline-plan",
+  "configuration-resolved",
+  "variable-conflict",
+  "health-check",
+  "deployment-execution",
+  "deployment-verification",
+  "deployment-completion",
+  "deployment-failure",
+  "system",
+]);
+export type DecisionType = z.infer<typeof DecisionType>;
+
 export interface DiaryEntry {
   id: DiaryEntryId;
   timestamp: Date;
   tenantId: TenantId | null;
   deploymentId: DeploymentId | null;
   agent: AgentType;
+  decisionType: DecisionType;
   decision: string;
   reasoning: string;
   context: Record<string, unknown>;

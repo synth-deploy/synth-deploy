@@ -188,6 +188,7 @@ export class ServerAgent {
       tenantId: trigger.tenantId,
       deploymentId,
       agent: "server",
+      decisionType: "pipeline-plan",
       decision: `Planned deployment pipeline: ${pipelineSteps.join(" → ")}`,
       reasoning:
         `Deployment of ${trigger.projectId} v${trigger.version} to ${environment.name} ` +
@@ -254,6 +255,7 @@ export class ServerAgent {
         tenantId: deployment.tenantId,
         deploymentId: deployment.id,
         agent: "server",
+        decisionType: "deployment-completion",
         decision: "Deployment completed successfully",
         reasoning:
           `All pipeline steps completed. Deployed ${deployment.projectId} v${deployment.version} ` +
@@ -282,6 +284,7 @@ export class ServerAgent {
         tenantId: deployment.tenantId,
         deploymentId: deployment.id,
         agent: "server",
+        decisionType: "deployment-failure",
         decision: `Deployment failed: ${deployment.failureReason}`,
         reasoning:
           error instanceof OrchestrationError
@@ -366,6 +369,7 @@ export class ServerAgent {
       tenantId: deployment.tenantId,
       deploymentId: deployment.id,
       agent: "server",
+      decisionType: "configuration-resolved",
       decision: `Configuration resolved: ${Object.keys(resolved).length} variable(s), ${conflicts.length} conflict(s)`,
       reasoning:
         conflicts.length === 0
@@ -539,6 +543,7 @@ export class ServerAgent {
         tenantId: deployment.tenantId,
         deploymentId: deployment.id,
         agent: "server",
+        decisionType: "variable-conflict",
         decision:
           assessment.action === "block"
             ? `Blocking deployment: ${crossEnvConn.length} cross-environment connectivity conflict(s)`
@@ -569,6 +574,7 @@ export class ServerAgent {
         tenantId: deployment.tenantId,
         deploymentId: deployment.id,
         agent: "server",
+        decisionType: "variable-conflict",
         decision: `Cross-environment variable pattern in ${crossEnv.length} non-connectivity variable(s)`,
         reasoning:
           `Detected non-connectivity variable(s) referencing a different environment: ${details}. ` +
@@ -593,6 +599,7 @@ export class ServerAgent {
         tenantId: deployment.tenantId,
         deploymentId: deployment.id,
         agent: "server",
+        decisionType: "variable-conflict",
         decision: `Security-sensitive variable(s) overridden: ${sensitiveDetails.map((d) => d.conflict.variable).join(", ")}`,
         reasoning:
           `${sensitiveDetails.length} variable(s) matching security-sensitive patterns ` +
@@ -627,6 +634,7 @@ export class ServerAgent {
         tenantId: deployment.tenantId,
         deploymentId: deployment.id,
         agent: "server",
+        decisionType: "variable-conflict",
         decision: `Resolved ${standardDetails.length} variable conflict(s) via precedence rules`,
         reasoning:
           `Standard precedence applied (trigger > tenant > environment). ` +
@@ -698,6 +706,7 @@ export class ServerAgent {
         tenantId: deployment.tenantId,
         deploymentId: deployment.id,
         agent: "server",
+        decisionType: "health-check",
         decision: "Pre-flight health check passed",
         reasoning:
           `Target environment "${environment.name}" is reachable and healthy ` +
@@ -726,6 +735,7 @@ export class ServerAgent {
         tenantId: deployment.tenantId,
         deploymentId: deployment.id,
         agent: "server",
+        decisionType: "health-check",
         decision: "Pre-flight health check failed — aborting without retry",
         reasoning: decision.reasoning,
         context: {
@@ -750,6 +760,7 @@ export class ServerAgent {
       tenantId: deployment.tenantId,
       deploymentId: deployment.id,
       agent: "server",
+      decisionType: "health-check",
       decision: "Pre-flight health check failed — attempting retry",
       reasoning: decision.reasoning,
       context: {
@@ -778,6 +789,7 @@ export class ServerAgent {
           tenantId: deployment.tenantId,
           deploymentId: deployment.id,
           agent: "server",
+          decisionType: "health-check",
           decision:
             "Health check recovered on retry — proceeding with deployment",
           reasoning:
@@ -969,6 +981,7 @@ export class ServerAgent {
       tenantId: deployment.tenantId,
       deploymentId: deployment.id,
       agent: "server",
+      decisionType: "deployment-execution",
       decision: `Executing deployment of ${deployment.projectId} v${deployment.version}`,
       reasoning:
         `Pre-flight checks passed. Deploying to "${environment.name}" for ` +
@@ -994,6 +1007,7 @@ export class ServerAgent {
       tenantId: deployment.tenantId,
       deploymentId: deployment.id,
       agent: "server",
+      decisionType: "deployment-verification",
       decision: "Post-deployment verification passed",
       reasoning:
         `Deployment artifacts confirmed in place for ${deployment.projectId} ` +

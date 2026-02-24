@@ -8,15 +8,23 @@ export type {
   DeploymentTrigger,
   Deployment,
   AgentType,
+  DecisionType,
   DiaryEntry,
   Tenant,
   Environment,
   Project,
 } from "./types.js";
 
-export { DeploymentTriggerSchema, DeploymentStatus as DeploymentStatusEnum, AgentType as AgentTypeEnum } from "./types.js";
+export {
+  DeploymentTriggerSchema,
+  DeploymentStatus as DeploymentStatusEnum,
+  AgentType as AgentTypeEnum,
+  DecisionType as DecisionTypeEnum,
+} from "./types.js";
 export { DecisionDiary } from "./decision-diary.js";
-export type { DiaryWriter, DiaryReader } from "./decision-diary.js";
+export type { DiaryWriter, DiaryReader, DiaryRecordParams } from "./decision-diary.js";
+export { PersistentDecisionDiary } from "./diary-persistence.js";
+export { formatDiaryEntry, formatDiaryEntries } from "./diary-formatter.js";
 export { TenantStore } from "./tenant.js";
 export { TenantContainer } from "./tenant-container.js";
 export type {
