@@ -35,3 +35,16 @@ export type {
 } from "./tenant-container.js";
 export { TenantManager } from "./tenant-manager.js";
 export type { DeploymentStoreReader } from "./tenant-manager.js";
+export { generatePostmortem, generateProjectHistory } from "./diary-reader.js";
+export type {
+  PostmortemReport,
+  TimelineEntry,
+  ConfigurationSection,
+  ConflictSummary,
+  FailureAnalysis,
+  ProjectHistory,
+  HistoryOverview,
+  DeploymentSummary,
+  ConfigurationPattern,
+  EnvironmentNote,
+} from "./diary-reader.js";
