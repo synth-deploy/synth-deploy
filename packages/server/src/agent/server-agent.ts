@@ -7,7 +7,10 @@ import type {
   Environment,
   Tenant,
 } from "@deploystack/core";
-import type { ServiceHealthChecker } from "./health-checker.js";
+import type {
+  ServiceHealthChecker,
+  HealthCheckResult,
+} from "./health-checker.js";
 import { DefaultHealthChecker } from "./health-checker.js";
 
 // ---------------------------------------------------------------------------
@@ -24,7 +27,7 @@ export interface DeploymentStore {
 export interface AgentOptions {
   /** Number of health check retries after initial failure. Default: 1 */
   healthCheckRetries: number;
-  /** Delay between health check retries in ms. Default: 500 */
+  /** Base delay between health check retries in ms. Default: 500 */
   healthCheckBackoffMs: number;
   /** Simulated execution delay in ms. Default: 10 */
   executionDelayMs: number;
@@ -37,7 +40,7 @@ const DEFAULT_OPTIONS: AgentOptions = {
 };
 
 // ---------------------------------------------------------------------------
-// Internal types
+// Internal types — reasoning inputs and outputs
 // ---------------------------------------------------------------------------
 
 interface VariableConflict {
@@ -46,6 +49,32 @@ interface VariableConflict {
   winnerValue: string;
   loserValue: string;
   loserLevel: "environment" | "tenant";
+}
+
+type ErrorCategory =
+  | "dns"
+  | "timeout"
+  | "connection_refused"
+  | "server_error"
+  | "unknown";
+
+interface HealthDecision {
+  action: "retry" | "abort";
+  delayMs: number;
+  reasoning: string;
+}
+
+interface ConflictRiskAssessment {
+  action: "proceed" | "block";
+  riskLevel: "low" | "medium" | "high";
+  reasoning: string;
+  details: ConflictDetail[];
+}
+
+interface ConflictDetail {
+  conflict: VariableConflict;
+  category: "cross-env-connectivity" | "cross-env" | "sensitive" | "standard";
+  riskContribution: string;
 }
 
 /**
@@ -57,6 +86,21 @@ const SENSITIVE_VARIABLE_PATTERNS = [
   /\bkey\b/i,
   /token/i,
   /credential/i,
+];
+
+/**
+ * Variable name patterns indicating network connectivity configuration.
+ * Overriding these cross-environment can route traffic or data to the
+ * wrong infrastructure.
+ */
+const CONNECTIVITY_VARIABLE_PATTERNS = [
+  /host/i,
+  /\burl\b/i,
+  /endpoint/i,
+  /\bport\b/i,
+  /\baddr/i,
+  /\buri\b/i,
+  /\bconn/i,
 ];
 
 // ---------------------------------------------------------------------------
@@ -88,19 +132,23 @@ export class OrchestrationError extends Error {
 /**
  * Server Agent — the reasoning engine that orchestrates deployments.
  *
- * Processes deployment requests through a structured pipeline:
+ * Processes deployment requests through a structured pipeline. When a step
+ * encounters an unexpected situation, the agent evaluates the specifics —
+ * error type, environment context, conflict severity — and makes a
+ * context-dependent decision about how to proceed.
  *
- *   1. Plan pipeline — determine steps and record intent
- *   2. Resolve configuration — merge variables with tenant precedence,
- *      reason through conflicts
- *   3. Pre-flight health check — verify target environment is reachable,
- *      retry with reasoning if not
- *   4. Execute deployment — apply artifacts (simulated in this phase)
- *   5. Post-deploy verify — confirm deployment took effect
+ * Key reasoning behaviors:
  *
- * When a step encounters an unexpected situation the agent reasons through
- * it — retrying, adjusting, or failing with a full explanation — rather
- * than silently failing or throwing an opaque error.
+ *   Health check failures:
+ *   - DNS errors abort immediately (retrying won't resolve infrastructure config)
+ *   - Timeouts on production get extended backoff (service may be under load)
+ *   - Connection refused gets standard retry (process may be restarting)
+ *
+ *   Variable conflicts:
+ *   - Multiple connectivity vars pointing cross-environment → block deployment
+ *   - Single cross-env connectivity var → proceed with operator warning
+ *   - Sensitive variable overrides → proceed, log for audit without exposing values
+ *   - Standard overrides → proceed with precedence rules
  *
  * Every decision is recorded to the Decision Diary. No silent actions.
  */
@@ -120,9 +168,6 @@ export class ServerAgent {
   // Main entry point
   // -----------------------------------------------------------------------
 
-  /**
-   * Process a deployment trigger. Called by both the REST API and MCP tools.
-   */
   async triggerDeployment(
     trigger: DeploymentTrigger,
     tenant: Tenant,
@@ -226,8 +271,6 @@ export class ServerAgent {
       });
       deployment.diaryEntryIds.push(completionEntry.id);
     } catch (error) {
-      // --- Pipeline failure ------------------------------------------------
-
       deployment.status = "failed";
       deployment.completedAt = new Date();
       deployment.failureReason =
@@ -251,11 +294,8 @@ export class ServerAgent {
           durationMs:
             deployment.completedAt.getTime() - deployment.createdAt.getTime(),
           status: deployment.status,
-          step:
-            error instanceof OrchestrationError ? error.step : "unknown",
-          ...(error instanceof Error
-            ? { errorMessage: error.message }
-            : {}),
+          step: error instanceof OrchestrationError ? error.step : "unknown",
+          ...(error instanceof Error ? { errorMessage: error.message } : {}),
         },
       });
       deployment.diaryEntryIds.push(failEntry.id);
@@ -266,16 +306,9 @@ export class ServerAgent {
   }
 
   // -----------------------------------------------------------------------
-  // Pipeline steps
+  // Pipeline step: resolve configuration
   // -----------------------------------------------------------------------
 
-  /**
-   * Resolve configuration variables with precedence: trigger > tenant > environment.
-   *
-   * Enhanced to detect and reason through two classes of conflict:
-   *   - Cross-environment patterns (e.g. production DB in staging deployment)
-   *   - Security-sensitive variable overrides (secrets, keys, tokens)
-   */
   private resolveConfiguration(
     deployment: Deployment,
     trigger: DeploymentTrigger,
@@ -316,7 +349,17 @@ export class ServerAgent {
     }
 
     if (conflicts.length > 0) {
-      this.reasonAboutVariableConflicts(deployment, conflicts, environment);
+      // Assess risk across ALL conflicts together, then act on the assessment
+      const assessment = this.assessConflictRisk(conflicts, environment);
+      this.recordConflictReasoning(deployment, assessment, environment);
+
+      if (assessment.action === "block") {
+        throw new OrchestrationError(
+          "resolve-configuration",
+          `Deployment blocked: ${assessment.riskLevel}-risk variable configuration detected`,
+          assessment.reasoning,
+        );
+      }
     }
 
     const configEntry = this.diary.record({
@@ -331,7 +374,7 @@ export class ServerAgent {
             `${Object.keys(resolved).length} variable(s).`
           : `Merged variables from environment, tenant, and trigger levels. ` +
             `${conflicts.length} conflict(s) resolved using precedence hierarchy ` +
-            `(trigger > tenant > environment). See preceding diary entries for detailed conflict analysis.`,
+            `(trigger > tenant > environment). See preceding diary entries for conflict analysis.`,
       context: {
         variableCount: Object.keys(resolved).length,
         conflictCount: conflicts.length,
@@ -347,120 +390,257 @@ export class ServerAgent {
     return { variables: resolved, hasConflicts: conflicts.length > 0 };
   }
 
+  // -----------------------------------------------------------------------
+  // Reasoning: variable conflict risk assessment
+  // -----------------------------------------------------------------------
+
   /**
-   * Categorize and reason through variable conflicts.
+   * Analyze all variable conflicts together and produce a risk assessment.
    *
-   * Three categories:
-   *   1. Cross-environment: value patterns suggest wrong environment
-   *   2. Sensitive: security-relevant variables being overridden
-   *   3. Standard: routine precedence-based resolution
+   * This is where genuine reasoning happens — the decision depends on
+   * the combination of factors across all conflicts, not just individual
+   * pattern matches:
+   *
+   *   - A single cross-env connectivity var might be intentional tenant config
+   *   - Multiple cross-env connectivity vars are almost certainly misconfiguration
+   *   - Sensitive vars get audit logging regardless of other factors
+   *   - The assessed risk level determines whether to proceed or block
    */
-  private reasonAboutVariableConflicts(
-    deployment: Deployment,
+  private assessConflictRisk(
     conflicts: VariableConflict[],
     environment: Environment,
-  ): void {
-    const crossEnv: VariableConflict[] = [];
-    const sensitive: VariableConflict[] = [];
-    const standard: VariableConflict[] = [];
+  ): ConflictRiskAssessment {
+    const details: ConflictDetail[] = [];
+    let crossEnvConnectivityCount = 0;
+    const crossEnvConnectivityVars: string[] = [];
 
     for (const conflict of conflicts) {
-      const isSensitive = SENSITIVE_VARIABLE_PATTERNS.some((p) =>
-        p.test(conflict.variable),
-      );
       const isCrossEnv = this.detectCrossEnvironmentPattern(
         conflict,
         environment.name,
       );
+      const isConnectivity = CONNECTIVITY_VARIABLE_PATTERNS.some((p) =>
+        p.test(conflict.variable),
+      );
+      const isSensitive = SENSITIVE_VARIABLE_PATTERNS.some((p) =>
+        p.test(conflict.variable),
+      );
 
-      if (isCrossEnv) {
-        crossEnv.push(conflict);
+      if (isCrossEnv && isConnectivity) {
+        crossEnvConnectivityCount++;
+        crossEnvConnectivityVars.push(conflict.variable);
+        details.push({
+          conflict,
+          category: "cross-env-connectivity",
+          riskContribution:
+            `${conflict.variable} is a connectivity variable pointing to ` +
+            `"${conflict.winnerValue}" in a ${environment.name} deployment — ` +
+            `this could route traffic or data to the wrong environment`,
+        });
+      } else if (isCrossEnv) {
+        details.push({
+          conflict,
+          category: "cross-env",
+          riskContribution:
+            `${conflict.variable} value "${conflict.winnerValue}" references ` +
+            `a different environment than target "${environment.name}"`,
+        });
       } else if (isSensitive) {
-        sensitive.push(conflict);
+        details.push({
+          conflict,
+          category: "sensitive",
+          riskContribution:
+            `${conflict.variable} is security-sensitive and overridden at ${conflict.winner} level`,
+        });
       } else {
-        standard.push(conflict);
+        details.push({
+          conflict,
+          category: "standard",
+          riskContribution:
+            `${conflict.variable}: ${conflict.winner} value overrides ${conflict.loserLevel} value`,
+        });
       }
     }
 
-    if (crossEnv.length > 0) {
-      const details = crossEnv
-        .map(
-          (c) =>
-            `${c.variable}: ${c.winner} value "${c.winnerValue}" overrides ` +
-            `${c.loserLevel} value "${c.loserValue}"`,
-        )
-        .join("; ");
+    // --- Decision logic: compound risk assessment ---
 
+    // Multiple connectivity variables pointing cross-environment = block.
+    // One might be intentional. Two or more is a pattern that indicates
+    // the tenant's variable bindings are wrong for this environment.
+    if (crossEnvConnectivityCount >= 2) {
+      return {
+        action: "block",
+        riskLevel: "high",
+        reasoning:
+          `${crossEnvConnectivityCount} connectivity variables ` +
+          `(${crossEnvConnectivityVars.join(", ")}) are overridden with values ` +
+          `referencing a different environment than the deployment target ` +
+          `"${environment.name}". ${details.filter((d) => d.category === "cross-env-connectivity").map((d) => d.riskContribution).join(". ")}. ` +
+          `A single cross-environment connectivity override might reflect ` +
+          `intentional tenant-specific infrastructure, but multiple overrides ` +
+          `strongly suggest the tenant's variable bindings are misconfigured ` +
+          `for this environment. Blocking deployment to prevent cross-environment ` +
+          `data access or traffic routing. To deploy with this configuration, ` +
+          `verify the tenant's variables are correct and re-trigger with explicit ` +
+          `overrides at the trigger level.`,
+        details,
+      };
+    }
+
+    // Single cross-env connectivity var: proceed but flag as medium risk.
+    if (crossEnvConnectivityCount === 1) {
+      return {
+        action: "proceed",
+        riskLevel: "medium",
+        reasoning:
+          `One connectivity variable (${crossEnvConnectivityVars[0]}) is overridden ` +
+          `with a value referencing a different environment than "${environment.name}". ` +
+          `This may reflect intentional tenant-specific infrastructure (e.g., a tenant ` +
+          `that maintains a shared database across environments) or may be ` +
+          `misconfiguration. Proceeding with tenant-level precedence because a single ` +
+          `override does not establish a pattern of misconfiguration. The operator ` +
+          `should verify this override is intentional.`,
+        details,
+      };
+    }
+
+    // Cross-env non-connectivity or sensitive-only: low risk, proceed
+    return {
+      action: "proceed",
+      riskLevel: "low",
+      reasoning:
+        `Variable conflicts resolved via standard precedence rules ` +
+        `(trigger > tenant > environment). No high-risk cross-environment ` +
+        `connectivity patterns detected.`,
+      details,
+    };
+  }
+
+  /**
+   * Record diary entries for each conflict category found in the assessment.
+   */
+  private recordConflictReasoning(
+    deployment: Deployment,
+    assessment: ConflictRiskAssessment,
+    environment: Environment,
+  ): void {
+    // Group details by category for diary entries
+    const byCategory = new Map<string, ConflictDetail[]>();
+    for (const detail of assessment.details) {
+      const existing = byCategory.get(detail.category) ?? [];
+      existing.push(detail);
+      byCategory.set(detail.category, existing);
+    }
+
+    // Cross-env connectivity (the high-risk ones)
+    const crossEnvConn = byCategory.get("cross-env-connectivity");
+    if (crossEnvConn) {
       const entry = this.diary.record({
         tenantId: deployment.tenantId,
         deploymentId: deployment.id,
         agent: "server",
-        decision: `Cross-environment variable pattern detected in ${crossEnv.length} variable(s)`,
-        reasoning:
-          `Detected variable value(s) that reference a different environment than the ` +
-          `deployment target "${environment.name}". Conflicts: ${details}. ` +
-          `This may indicate intentional tenant-specific infrastructure ` +
-          `(e.g., a tenant that maintains its own database across environments) ` +
-          `or misconfiguration (e.g., production credentials accidentally applied ` +
-          `to a staging deployment). Proceeding with tenant-level precedence as the ` +
-          `configuration hierarchy dictates. The operator should verify these overrides ` +
-          `are intentional for this tenant's deployment context.`,
+        decision:
+          assessment.action === "block"
+            ? `Blocking deployment: ${crossEnvConn.length} cross-environment connectivity conflict(s)`
+            : `Cross-environment connectivity override detected in ${crossEnvConn.length} variable(s)`,
+        reasoning: assessment.reasoning,
         context: {
           category: "cross-environment",
-          conflicts: crossEnv,
+          riskLevel: assessment.riskLevel,
+          action: assessment.action,
+          conflicts: crossEnvConn.map((d) => ({
+            variable: d.conflict.variable,
+            winnerValue: d.conflict.winnerValue,
+            loserValue: d.conflict.loserValue,
+          })),
           targetEnvironment: environment.name,
         },
       });
       deployment.diaryEntryIds.push(entry.id);
     }
 
-    if (sensitive.length > 0) {
-      const details = sensitive
-        .map((c) => `${c.variable}: overridden at ${c.winner} level`)
+    // Cross-env non-connectivity
+    const crossEnv = byCategory.get("cross-env");
+    if (crossEnv) {
+      const details = crossEnv
+        .map((d) => d.riskContribution)
         .join("; ");
-
       const entry = this.diary.record({
         tenantId: deployment.tenantId,
         deploymentId: deployment.id,
         agent: "server",
-        decision: `Security-sensitive variable(s) overridden: ${sensitive.map((c) => c.variable).join(", ")}`,
+        decision: `Cross-environment variable pattern in ${crossEnv.length} non-connectivity variable(s)`,
         reasoning:
-          `${sensitive.length} variable(s) matching security-sensitive patterns ` +
-          `(secrets, keys, tokens, credentials) are being overridden by higher-precedence ` +
-          `levels. ${details}. Applying precedence rules as configured. ` +
-          `These overrides are recorded for audit purposes.`,
+          `Detected non-connectivity variable(s) referencing a different environment: ${details}. ` +
+          `These are lower risk than connectivity variables because they don't affect ` +
+          `data routing. Proceeding with standard precedence.`,
         context: {
-          category: "sensitive-override",
-          variables: sensitive.map((c) => ({
-            variable: c.variable,
-            overriddenBy: c.winner,
+          category: "cross-environment-non-connectivity",
+          conflicts: crossEnv.map((d) => ({
+            variable: d.conflict.variable,
+            winnerValue: d.conflict.winnerValue,
+            loserValue: d.conflict.loserValue,
           })),
         },
       });
       deployment.diaryEntryIds.push(entry.id);
     }
 
-    if (standard.length > 0) {
-      const details = standard
-        .map(
-          (c) =>
-            `${c.variable}: used ${c.winner} value "${c.winnerValue}" over ` +
-            `${c.loserLevel} value "${c.loserValue}"`,
-        )
-        .join("; ");
-
+    // Sensitive overrides
+    const sensitiveDetails = byCategory.get("sensitive");
+    if (sensitiveDetails) {
       const entry = this.diary.record({
         tenantId: deployment.tenantId,
         deploymentId: deployment.id,
         agent: "server",
-        decision: `Resolved ${standard.length} variable conflict(s) via precedence rules`,
+        decision: `Security-sensitive variable(s) overridden: ${sensitiveDetails.map((d) => d.conflict.variable).join(", ")}`,
+        reasoning:
+          `${sensitiveDetails.length} variable(s) matching security-sensitive patterns ` +
+          `(secrets, keys, tokens, credentials) are being overridden by higher-precedence ` +
+          `levels. ${sensitiveDetails.map((d) => d.riskContribution).join("; ")}. ` +
+          `Applying precedence rules as configured. These overrides are recorded for ` +
+          `audit purposes.`,
+        context: {
+          category: "sensitive-override",
+          // Intentionally omit actual values for sensitive variables
+          variables: sensitiveDetails.map((d) => ({
+            variable: d.conflict.variable,
+            overriddenBy: d.conflict.winner,
+          })),
+        },
+      });
+      deployment.diaryEntryIds.push(entry.id);
+    }
+
+    // Standard overrides
+    const standardDetails = byCategory.get("standard");
+    if (standardDetails) {
+      const details = standardDetails
+        .map(
+          (d) =>
+            `${d.conflict.variable}: used ${d.conflict.winner} value ` +
+            `"${d.conflict.winnerValue}" over ${d.conflict.loserLevel} value ` +
+            `"${d.conflict.loserValue}"`,
+        )
+        .join("; ");
+      const entry = this.diary.record({
+        tenantId: deployment.tenantId,
+        deploymentId: deployment.id,
+        agent: "server",
+        decision: `Resolved ${standardDetails.length} variable conflict(s) via precedence rules`,
         reasoning:
           `Standard precedence applied (trigger > tenant > environment). ` +
           `Conflicts: ${details}. These are routine overrides consistent ` +
           `with the configuration hierarchy.`,
         context: {
           category: "standard-override",
-          conflicts: standard,
+          conflicts: standardDetails.map((d) => ({
+            variable: d.conflict.variable,
+            winner: d.conflict.winner,
+            winnerValue: d.conflict.winnerValue,
+            loserLevel: d.conflict.loserLevel,
+            loserValue: d.conflict.loserValue,
+          })),
         },
       });
       deployment.diaryEntryIds.push(entry.id);
@@ -469,7 +649,6 @@ export class ServerAgent {
 
   /**
    * Detect if a variable's winning value might reference the wrong environment.
-   * Example: a value containing "prod" when deploying to staging.
    */
   private detectCrossEnvironmentPattern(
     conflict: VariableConflict,
@@ -487,14 +666,18 @@ export class ServerAgent {
     return patternsToCheck.some((p) => p.test(conflict.winnerValue));
   }
 
+  // -----------------------------------------------------------------------
+  // Pipeline step: pre-flight health check
+  // -----------------------------------------------------------------------
+
   /**
-   * Pre-flight health check with retry logic and detailed reasoning.
+   * Pre-flight health check with context-dependent retry logic.
    *
-   * When the target environment is unreachable:
-   *   1. Records why the check failed
-   *   2. Reasons about whether to retry (transient vs persistent)
-   *   3. Retries with backoff
-   *   4. If still unreachable, fails with actionable explanation
+   * The retry strategy depends on the error type:
+   *   - DNS failure → abort immediately (retrying won't fix infrastructure config)
+   *   - Timeout in production → retry with extended backoff (service under load)
+   *   - Connection refused → retry with standard backoff (process restarting)
+   *   - After retries exhausted → fail with environment-appropriate reasoning
    */
   private async preflightHealthCheck(
     deployment: Deployment,
@@ -502,6 +685,8 @@ export class ServerAgent {
     environment: Environment,
   ): Promise<void> {
     const serviceId = `${deployment.projectId}/${environment.name}`;
+    const maxAttempts = this.options.healthCheckRetries + 1;
+    let attempt = 1;
 
     const firstCheck = await this.healthChecker.check(serviceId, {
       tenantId: tenant.id,
@@ -527,31 +712,61 @@ export class ServerAgent {
       return;
     }
 
-    // First check failed — reason about it and decide to retry
+    // First check failed — reason about what to do
+    const decision = this.reasonAboutHealthFailure(
+      firstCheck,
+      environment,
+      attempt,
+      maxAttempts,
+    );
+
+    if (decision.action === "abort") {
+      // Reasoning determined retrying won't help (e.g., DNS failure)
+      const abortEntry = this.diary.record({
+        tenantId: deployment.tenantId,
+        deploymentId: deployment.id,
+        agent: "server",
+        decision: "Pre-flight health check failed — aborting without retry",
+        reasoning: decision.reasoning,
+        context: {
+          serviceId,
+          error: firstCheck.error,
+          errorCategory: this.categorizeError(firstCheck.error),
+          attempt,
+          retriesSkipped: true,
+        },
+      });
+      deployment.diaryEntryIds.push(abortEntry.id);
+
+      throw new OrchestrationError(
+        "preflight-health-check",
+        `Target environment "${environment.name}" unreachable: ${firstCheck.error}`,
+        decision.reasoning,
+      );
+    }
+
+    // Decision is to retry
     const retryEntry = this.diary.record({
       tenantId: deployment.tenantId,
       deploymentId: deployment.id,
       agent: "server",
       decision: "Pre-flight health check failed — attempting retry",
-      reasoning:
-        `Health check to "${environment.name}" failed: ` +
-        `${firstCheck.error ?? "service unreachable"}. This could indicate the service ` +
-        `is still starting up, under heavy load, or experiencing a transient network issue. ` +
-        `Retrying in ${this.options.healthCheckBackoffMs}ms before making a deployment ` +
-        `decision (${this.options.healthCheckRetries} retry attempt(s) configured).`,
+      reasoning: decision.reasoning,
       context: {
         serviceId,
         error: firstCheck.error,
-        backoffMs: this.options.healthCheckBackoffMs,
-        retriesConfigured: this.options.healthCheckRetries,
-        attempt: 1,
+        errorCategory: this.categorizeError(firstCheck.error),
+        backoffMs: decision.delayMs,
+        retriesRemaining: maxAttempts - attempt,
+        attempt,
       },
     });
     deployment.diaryEntryIds.push(retryEntry.id);
 
-    // Retry loop
-    for (let attempt = 0; attempt < this.options.healthCheckRetries; attempt++) {
-      await this.delay(this.options.healthCheckBackoffMs);
+    // Retry loop — each iteration re-evaluates the situation
+    for (let i = 0; i < this.options.healthCheckRetries; i++) {
+      attempt++;
+      await this.delay(decision.delayMs);
 
       const retryCheck = await this.healthChecker.check(serviceId, {
         tenantId: tenant.id,
@@ -566,7 +781,7 @@ export class ServerAgent {
           decision:
             "Health check recovered on retry — proceeding with deployment",
           reasoning:
-            `Retry attempt ${attempt + 1} succeeded (response time: ` +
+            `Retry attempt ${i + 1} succeeded (response time: ` +
             `${retryCheck.responseTimeMs}ms). The initial failure was transient — ` +
             `likely caused by a brief service restart or momentary load spike. ` +
             `Target environment "${environment.name}" is now confirmed healthy. ` +
@@ -574,8 +789,8 @@ export class ServerAgent {
           context: {
             serviceId,
             responseTimeMs: retryCheck.responseTimeMs,
-            attempt: attempt + 2,
-            recoveredAfterMs: this.options.healthCheckBackoffMs * (attempt + 1),
+            attempt,
+            recoveredAfterMs: decision.delayMs * (i + 1),
           },
         });
         deployment.diaryEntryIds.push(recoveryEntry.id);
@@ -583,25 +798,168 @@ export class ServerAgent {
       }
     }
 
-    // All retries exhausted — fail with actionable explanation
-    const totalAttempts = this.options.healthCheckRetries + 1;
+    // All retries exhausted — produce context-aware failure
+    const exhaustedDecision = this.reasonAboutHealthFailure(
+      firstCheck,
+      environment,
+      maxAttempts,
+      maxAttempts,
+    );
+
     throw new OrchestrationError(
       "preflight-health-check",
-      `Target environment "${environment.name}" unreachable after ${totalAttempts} attempt(s)`,
-      `Attempted ${totalAttempts} health check(s) to "${environment.name}" — all failed. ` +
-        `Last error: ${firstCheck.error ?? "service unreachable"}. ` +
-        `Consecutive failures indicate a persistent infrastructure issue rather than a ` +
-        `transient glitch. Aborting deployment to prevent deploying artifacts to ` +
-        `infrastructure that cannot serve them. ` +
-        `Recommended action: verify the target environment's infrastructure is running ` +
-        `and network-accessible, then re-trigger the deployment.`,
+      `Target environment "${environment.name}" unreachable after ${maxAttempts} attempt(s)`,
+      exhaustedDecision.reasoning,
     );
   }
 
+  // -----------------------------------------------------------------------
+  // Reasoning: health check failure analysis
+  // -----------------------------------------------------------------------
+
   /**
-   * Execute the deployment. Simulated in this phase.
-   * In later phases, this delegates to Tentacles via MCP.
+   * Analyze a health check failure and decide what to do.
+   *
+   * The decision depends on three factors:
+   *   1. Error type (DNS vs timeout vs connection refused vs server error)
+   *   2. Environment context (production gets more patience)
+   *   3. Whether retries remain
+   *
+   * Different factor combinations produce different actions:
+   *   - DNS failure → abort immediately regardless of retries remaining
+   *   - Timeout + production + retries remaining → retry with extended backoff
+   *   - Connection refused + retries remaining → retry with standard backoff
+   *   - Any error + no retries remaining → abort with environment-specific message
    */
+  private reasonAboutHealthFailure(
+    checkResult: HealthCheckResult,
+    environment: Environment,
+    attempt: number,
+    maxAttempts: number,
+  ): HealthDecision {
+    const errorCategory = this.categorizeError(checkResult.error);
+    const isProduction =
+      environment.name.toLowerCase() === "production";
+    const retriesRemaining = maxAttempts - attempt;
+
+    // DNS failures are infrastructure-level — retrying won't help
+    if (errorCategory === "dns") {
+      return {
+        action: "abort",
+        delayMs: 0,
+        reasoning:
+          `DNS resolution failed for "${environment.name}" (${checkResult.error}). ` +
+          `This is an infrastructure configuration issue, not a transient failure — ` +
+          `retrying will not resolve it. The environment's hostname cannot be resolved, ` +
+          `which typically indicates the service has not been provisioned or DNS records ` +
+          `are misconfigured. Recommended action: verify DNS configuration for the ` +
+          `target environment.`,
+      };
+    }
+
+    // No retries remaining — produce context-aware abort
+    if (retriesRemaining <= 0) {
+      const envContext = isProduction
+        ? `This is a production environment — deploying to unreachable production ` +
+          `infrastructure would create a silent failure with no running service ` +
+          `to handle traffic.`
+        : `Aborting to prevent deploying artifacts to infrastructure that ` +
+          `cannot serve them.`;
+
+      return {
+        action: "abort",
+        delayMs: 0,
+        reasoning:
+          `${attempt} health check attempt(s) to "${environment.name}" all failed ` +
+          `(error: ${checkResult.error ?? "service unreachable"}, ` +
+          `category: ${errorCategory}). Consecutive failures indicate a persistent ` +
+          `infrastructure issue rather than a transient glitch. ${envContext} ` +
+          `Recommended action: verify the target environment's infrastructure is ` +
+          `running and network-accessible, then re-trigger the deployment.`,
+      };
+    }
+
+    // Timeout in production → extended backoff (service may be under load)
+    if (errorCategory === "timeout" && isProduction) {
+      const extendedDelay = this.options.healthCheckBackoffMs * 2;
+      return {
+        action: "retry",
+        delayMs: extendedDelay,
+        reasoning:
+          `Health check to production environment "${environment.name}" timed out ` +
+          `(${checkResult.error}). Production services under heavy load may respond ` +
+          `slowly rather than refusing connections outright. Using extended backoff ` +
+          `(${extendedDelay}ms instead of ${this.options.healthCheckBackoffMs}ms) ` +
+          `to allow the service time to recover before retrying. ` +
+          `${retriesRemaining} retry attempt(s) remaining.`,
+      };
+    }
+
+    // Server error (5xx) → the service is running but unhealthy
+    if (errorCategory === "server_error") {
+      return {
+        action: "retry",
+        delayMs: this.options.healthCheckBackoffMs,
+        reasoning:
+          `Health check to "${environment.name}" returned a server error ` +
+          `(${checkResult.error}). The service is running and network-reachable ` +
+          `but reporting unhealthy status — this could be a transient condition ` +
+          `during startup or a cascading failure from an upstream dependency. ` +
+          `Retrying in ${this.options.healthCheckBackoffMs}ms. ` +
+          `${retriesRemaining} retry attempt(s) remaining.`,
+      };
+    }
+
+    // Connection refused or unknown → standard retry
+    return {
+      action: "retry",
+      delayMs: this.options.healthCheckBackoffMs,
+      reasoning:
+        `Health check to "${environment.name}" failed ` +
+        `(${checkResult.error ?? "service unreachable"}, category: ${errorCategory}). ` +
+        `The service process may be restarting or not yet started. ` +
+        `Retrying in ${this.options.healthCheckBackoffMs}ms. ` +
+        `${retriesRemaining} retry attempt(s) remaining.`,
+    };
+  }
+
+  /**
+   * Categorize a health check error string into a semantic type.
+   * This drives the retry/abort decision tree.
+   */
+  private categorizeError(error: string | null): ErrorCategory {
+    if (!error) return "unknown";
+    const lower = error.toLowerCase();
+    if (
+      lower.includes("dns") ||
+      lower.includes("enotfound") ||
+      lower.includes("getaddrinfo")
+    )
+      return "dns";
+    if (
+      lower.includes("timeout") ||
+      lower.includes("etimedout") ||
+      lower.includes("timed out")
+    )
+      return "timeout";
+    if (
+      lower.includes("econnrefused") ||
+      lower.includes("connection refused")
+    )
+      return "connection_refused";
+    if (
+      lower.includes("500") ||
+      lower.includes("502") ||
+      lower.includes("503")
+    )
+      return "server_error";
+    return "unknown";
+  }
+
+  // -----------------------------------------------------------------------
+  // Pipeline steps: execute and verify
+  // -----------------------------------------------------------------------
+
   private async executeDeployment(
     deployment: Deployment,
     tenant: Tenant,
@@ -624,15 +982,9 @@ export class ServerAgent {
     });
     deployment.diaryEntryIds.push(entry.id);
 
-    // Simulate execution
     await this.delay(this.options.executionDelayMs);
   }
 
-  /**
-   * Post-deployment verification. In this phase, verification is implicit.
-   * Future phases will include active health checks and smoke tests
-   * via Tentacle agents.
-   */
   private async postDeployVerify(
     deployment: Deployment,
     _tenant: Tenant,
@@ -666,9 +1018,6 @@ export class ServerAgent {
 // In-memory deployment store
 // ---------------------------------------------------------------------------
 
-/**
- * In-memory deployment store. Partitioned by tenant for isolation.
- */
 export class InMemoryDeploymentStore implements DeploymentStore {
   private deployments: Map<DeploymentId, Deployment> = new Map();
 
