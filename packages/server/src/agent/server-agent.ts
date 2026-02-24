@@ -256,14 +256,15 @@ export class ServerAgent {
         deploymentId: deployment.id,
         agent: "server",
         decisionType: "deployment-completion",
-        decision: "Deployment completed successfully",
+        decision: `Marking deployment of ${deployment.projectId} v${deployment.version} as succeeded on "${environment.name}"`,
         reasoning:
-          `All pipeline steps completed. Deployed ${deployment.projectId} v${deployment.version} ` +
-          `to ${environment.name} for tenant "${tenant.name}". ` +
-          `${Object.keys(deployment.variables).length} variable(s) resolved. ` +
+          `All four pipeline steps completed: configuration accepted, health check passed, ` +
+          `execution finished, post-deploy verification confirmed. ` +
+          `${Object.keys(deployment.variables).length} variable(s) applied for tenant "${tenant.name}". ` +
           (hasConflicts
-            ? "Variable conflicts were resolved — see earlier diary entries for details."
-            : "No variable conflicts detected."),
+            ? "Variable conflicts were resolved via precedence rules — see earlier diary entries for per-conflict reasoning."
+            : "No variable conflicts encountered — configuration was unambiguous.") +
+          ` Total duration: ${deployment.completedAt!.getTime() - deployment.createdAt.getTime()}ms.`,
         context: {
           durationMs:
             deployment.completedAt.getTime() - deployment.createdAt.getTime(),
@@ -370,15 +371,20 @@ export class ServerAgent {
       deploymentId: deployment.id,
       agent: "server",
       decisionType: "configuration-resolved",
-      decision: `Configuration resolved: ${Object.keys(resolved).length} variable(s), ${conflicts.length} conflict(s)`,
+      decision:
+        conflicts.length === 0
+          ? `Accepted configuration for "${environment.name}" — ${Object.keys(resolved).length} variable(s) merged, no conflicts`
+          : `Accepted configuration for "${environment.name}" — ${conflicts.length} conflict(s) resolved via precedence, proceeding with merged result`,
       reasoning:
         conflicts.length === 0
-          ? `All variables merged without conflicts. Environment "${environment.name}" provided ` +
-            `base values, tenant-level overrides applied. Final configuration has ` +
-            `${Object.keys(resolved).length} variable(s).`
-          : `Merged variables from environment, tenant, and trigger levels. ` +
-            `${conflicts.length} conflict(s) resolved using precedence hierarchy ` +
-            `(trigger > tenant > environment). See preceding diary entries for conflict analysis.`,
+          ? `Environment "${environment.name}" provided ${Object.keys(environment.variables).length} base variable(s), ` +
+            `tenant added ${Object.keys(tenant.variables).length}, trigger added ${Object.keys(trigger.variables ?? {}).length}. ` +
+            `No values collided across levels, so the merged configuration is unambiguous. ` +
+            `Accepting ${Object.keys(resolved).length} final variable(s) as the deployment configuration.`
+          : `${conflicts.length} variable(s) had different values at multiple precedence levels. ` +
+            `Resolved using the hierarchy trigger > tenant > environment. ` +
+            `See preceding diary entries for per-conflict risk assessment and reasoning. ` +
+            `Accepting the merged result as the deployment configuration.`,
       context: {
         variableCount: Object.keys(resolved).length,
         conflictCount: conflicts.length,
@@ -707,10 +713,12 @@ export class ServerAgent {
         deploymentId: deployment.id,
         agent: "server",
         decisionType: "health-check",
-        decision: "Pre-flight health check passed",
+        decision: `Proceeding with deployment — target environment "${environment.name}" confirmed healthy in ${firstCheck.responseTimeMs}ms`,
         reasoning:
-          `Target environment "${environment.name}" is reachable and healthy ` +
-          `(response time: ${firstCheck.responseTimeMs}ms). Proceeding with deployment.`,
+          `Health check to "${environment.name}" returned a successful response ` +
+          `in ${firstCheck.responseTimeMs}ms on the first attempt. This confirms ` +
+          `the target infrastructure is running and network-accessible. No reason ` +
+          `to delay — proceeding to deployment execution.`,
         context: {
           serviceId,
           responseTimeMs: firstCheck.responseTimeMs,
@@ -982,11 +990,11 @@ export class ServerAgent {
       deploymentId: deployment.id,
       agent: "server",
       decisionType: "deployment-execution",
-      decision: `Executing deployment of ${deployment.projectId} v${deployment.version}`,
+      decision: `Proceeding to execute ${deployment.projectId} v${deployment.version} on "${environment.name}" — all preconditions satisfied`,
       reasoning:
-        `Pre-flight checks passed. Deploying to "${environment.name}" for ` +
-        `tenant "${tenant.name}" with ${Object.keys(deployment.variables).length} ` +
-        `resolved variable(s).`,
+        `Configuration is accepted (${Object.keys(deployment.variables).length} variable(s), ` +
+        `conflicts resolved). Health check confirmed "${environment.name}" is reachable. ` +
+        `No blocking conditions remain. Executing deployment for tenant "${tenant.name}".`,
       context: {
         step: "execute-deployment",
         projectId: deployment.projectId,
@@ -1008,12 +1016,12 @@ export class ServerAgent {
       deploymentId: deployment.id,
       agent: "server",
       decisionType: "deployment-verification",
-      decision: "Post-deployment verification passed",
+      decision: `Accepting deployment of ${deployment.projectId} v${deployment.version} as verified on "${environment.name}"`,
       reasoning:
-        `Deployment artifacts confirmed in place for ${deployment.projectId} ` +
-        `v${deployment.version} on "${environment.name}". In this phase, verification ` +
-        `is implicit — future phases will include active health checks and smoke tests ` +
-        `via Tentacle agents.`,
+        `Deployment execution completed without errors. At this phase, verification ` +
+        `is based on execution success — no runtime errors, no rollback triggered. ` +
+        `Active health checks and smoke tests via Tentacle agents will replace this ` +
+        `implicit verification in a future phase. Marking deployment as verified.`,
       context: { step: "post-deploy-verify" },
     });
     deployment.diaryEntryIds.push(entry.id);

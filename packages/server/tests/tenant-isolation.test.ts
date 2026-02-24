@@ -350,7 +350,7 @@ describe("Tenant Isolation", () => {
       // B only has success-path entries
       const bSuccess = findDecisions(
         tenantB.getDiaryEntries(),
-        "completed successfully",
+        "Marking deployment",
       );
       expect(bSuccess).toHaveLength(1);
     });
@@ -617,10 +617,10 @@ describe("Precedence Recording in Decision Diary", () => {
 
     // The agent's diary entries record the conflict resolution
     const entries = tenant.getDiaryEntries();
-    const configEntries = findDecisions(entries, "Configuration resolved");
+    const configEntries = findDecisions(entries, "Accepted configuration");
     expect(configEntries).toHaveLength(1);
-    expect(configEntries[0].reasoning).toContain("conflict");
     expect(configEntries[0].reasoning).toContain("precedence");
+    expect(configEntries[0].reasoning).toContain("conflict");
 
     // The standard override was recorded
     const overrideEntries = findDecisions(entries, "precedence rules");
