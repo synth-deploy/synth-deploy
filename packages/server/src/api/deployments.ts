@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { DeploymentTriggerSchema } from "@deploystack/core";
+import { DeploymentTriggerSchema, generatePostmortem } from "@deploystack/core";
 import type { TenantStore, DecisionDiary } from "@deploystack/core";
 import type { ServerAgent, DeploymentStore } from "../agent/server-agent.js";
 
@@ -69,6 +69,29 @@ export function registerDeploymentRoutes(
 
     return { deployments: list };
   });
+
+  // List deployments filtered by project
+  app.get("/api/projects/:projectId/deployments", async (request) => {
+    const { projectId } = request.params as { projectId: string };
+    const all = deployments.list();
+    const filtered = all.filter((d) => d.projectId === projectId);
+    return { deployments: filtered };
+  });
+
+  // Get deployment postmortem
+  app.get<{ Params: { id: string } }>(
+    "/api/deployments/:id/postmortem",
+    async (request, reply) => {
+      const deployment = deployments.get(request.params.id);
+      if (!deployment) {
+        return reply.status(404).send({ error: "Deployment not found" });
+      }
+
+      const entries = diary.getByDeployment(deployment.id);
+      const postmortem = generatePostmortem(entries, deployment);
+      return { postmortem };
+    },
+  );
 
   // Get recent diary entries
   app.get("/api/diary", async (request) => {

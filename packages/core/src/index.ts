@@ -26,6 +26,7 @@ export type { DiaryWriter, DiaryReader, DiaryRecordParams } from "./decision-dia
 export { PersistentDecisionDiary } from "./diary-persistence.js";
 export { formatDiaryEntry, formatDiaryEntries } from "./diary-formatter.js";
 export { TenantStore } from "./tenant.js";
+export { ProjectStore } from "./project-store.js";
 export { TenantContainer } from "./tenant-container.js";
 export type {
   PrecedenceEntry,
