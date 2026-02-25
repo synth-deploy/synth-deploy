@@ -140,3 +140,73 @@ export async function getTenantHistory(tenantId: string): Promise<ProjectHistory
 export async function getHealth(): Promise<{ status: string; service: string; timestamp: string }> {
   return fetchJson("/health");
 }
+
+// --- Agent Mode ---
+
+export interface ResolvedField {
+  value: string;
+  confidence: "exact" | "inferred" | "missing";
+  matchedFrom?: string;
+}
+
+export interface IntentResult {
+  resolved: {
+    projectId: ResolvedField;
+    tenantId: ResolvedField;
+    environmentId: ResolvedField;
+    version: ResolvedField;
+    variables: Record<string, string>;
+  };
+  ready: boolean;
+  missingFields: string[];
+  uiUpdates: Array<{
+    field: string;
+    action: "set" | "highlight" | "warn";
+    value?: string;
+    message?: string;
+  }>;
+}
+
+export interface ContextSignal {
+  type: "trend" | "health" | "drift";
+  severity: "info" | "warning" | "critical";
+  title: string;
+  detail: string;
+  relatedEntity?: { type: string; id: string; name: string };
+}
+
+export interface DeploymentContext {
+  signals: ContextSignal[];
+  recentActivity: {
+    deploymentsLast24h: number;
+    successRate: string;
+    lastDeployment: { version: string; environment: string; status: string; ago: string } | null;
+  };
+  environmentSummary: Array<{
+    id: string;
+    name: string;
+    lastDeployStatus: string | null;
+    deployCount: number;
+    variableCount: number;
+  }>;
+}
+
+export async function interpretIntent(
+  intent: string,
+  partialConfig?: {
+    projectId?: string;
+    tenantId?: string;
+    environmentId?: string;
+    version?: string;
+    variables?: Record<string, string>;
+  },
+): Promise<IntentResult> {
+  return fetchJson("/api/agent/interpret-intent", {
+    method: "POST",
+    body: JSON.stringify({ intent, partialConfig }),
+  });
+}
+
+export async function getDeploymentContext(): Promise<DeploymentContext> {
+  return fetchJson("/api/agent/context");
+}

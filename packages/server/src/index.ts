@@ -16,6 +16,7 @@ import { registerTentacleReportRoutes } from "./api/tentacle-reports.js";
 import { registerProjectRoutes } from "./api/projects.js";
 import { registerTenantRoutes } from "./api/tenants.js";
 import { registerEnvironmentRoutes } from "./api/environments.js";
+import { registerAgentRoutes } from "./api/agent.js";
 
 // --- Bootstrap shared state ---
 
@@ -81,6 +82,7 @@ registerTentacleReportRoutes(app, diary);
 registerProjectRoutes(app, projects, environments);
 registerTenantRoutes(app, tenants, deployments, diary);
 registerEnvironmentRoutes(app, environments);
+registerAgentRoutes(app, agent, tenants, environments, projects, deployments, diary);
 
 // Convenience: list seed data (keep for backward compat)
 app.get("/api/tenants", async () => ({ tenants: tenants.list() }));

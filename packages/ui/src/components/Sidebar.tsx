@@ -1,12 +1,32 @@
 import { NavLink } from "react-router";
+import { useMode } from "../context/ModeContext.js";
 
 export default function Sidebar() {
+  const { mode, toggleMode } = useMode();
+  const isAgent = mode === "agent";
+
   return (
-    <aside className="sidebar">
+    <aside className={`sidebar ${isAgent ? "sidebar-agent" : ""}`}>
       <div className="sidebar-logo">
         <h1>DeployStack</h1>
-        <span>Traditional Mode</span>
+        <span>{isAgent ? "Agent Mode" : "Traditional Mode"}</span>
       </div>
+
+      <div className="mode-toggle-container">
+        <button
+          className={`mode-toggle ${isAgent ? "mode-toggle-active" : ""}`}
+          onClick={toggleMode}
+          aria-label={`Switch to ${isAgent ? "traditional" : "agent"} mode`}
+        >
+          <span className="mode-toggle-track">
+            <span className="mode-toggle-thumb" />
+          </span>
+          <span className="mode-toggle-label">
+            {isAgent ? "Agent" : "Traditional"}
+          </span>
+        </button>
+      </div>
+
       <nav className="sidebar-nav">
         <NavLink to="/" end className={({ isActive }) => isActive ? "active" : ""}>
           <span className="nav-icon">&#9632;</span>
