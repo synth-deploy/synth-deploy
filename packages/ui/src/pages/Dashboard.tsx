@@ -74,7 +74,7 @@ export default function Dashboard() {
           <div className="card-header">
             <h3>Recent Deployments</h3>
           </div>
-          <DeploymentTable deployments={recent} environments={environments} />
+          <DeploymentTable deployments={recent} environments={environments} projects={projects} />
         </div>
         <TentacleHealth />
       </div>

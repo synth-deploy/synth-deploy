@@ -1,11 +1,12 @@
 import { Link } from "react-router";
-import type { Deployment, Environment } from "../types.js";
+import type { Deployment, Environment, Project } from "../types.js";
 import StatusBadge from "./StatusBadge.js";
 import EnvBadge from "./EnvBadge.js";
 
 interface Props {
   deployments: Deployment[];
   environments?: Environment[];
+  projects?: Project[];
   showProject?: boolean;
 }
 
@@ -26,8 +27,9 @@ function formatDuration(created: string, completed: string | null): string {
   return `${(ms / 1000).toFixed(1)}s`;
 }
 
-export default function DeploymentTable({ deployments, environments = [], showProject = true }: Props) {
+export default function DeploymentTable({ deployments, environments = [], projects = [], showProject = true }: Props) {
   const envMap = new Map(environments.map((e) => [e.id, e]));
+  const projectMap = new Map(projects.map((p) => [p.id, p]));
 
   if (deployments.length === 0) {
     return (
@@ -67,8 +69,8 @@ export default function DeploymentTable({ deployments, environments = [], showPr
                 </td>
                 {showProject && (
                   <td>
-                    <Link to={`/projects/${d.projectId}`} className="mono">
-                      {d.projectId.slice(0, 8)}
+                    <Link to={`/projects/${d.projectId}`}>
+                      {projectMap.get(d.projectId)?.name ?? d.projectId.slice(0, 8)}
                     </Link>
                   </td>
                 )}

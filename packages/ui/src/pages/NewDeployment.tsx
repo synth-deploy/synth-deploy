@@ -264,7 +264,16 @@ export default function NewDeployment() {
 
             {intentResult.missingFields.length > 0 && (
               <div className="resolved-missing">
-                Missing: {intentResult.missingFields.join(", ")}. Try being more specific or switch to traditional mode to fill these manually.
+                <strong>Missing: {intentResult.missingFields.join(", ")}</strong>
+                <div style={{ marginTop: 4, fontSize: 12 }}>
+                  Try including {intentResult.missingFields.map((f) => {
+                    if (f === "projectId") return "the project name";
+                    if (f === "tenantId") return "the tenant name";
+                    if (f === "environmentId") return '"production" or "staging"';
+                    if (f === "version") return 'a version like "v1.2.3"';
+                    return f;
+                  }).join(", ")} in your intent, or switch to traditional mode.
+                </div>
               </div>
             )}
 
@@ -403,6 +412,12 @@ export default function NewDeployment() {
 // Sub-components
 // ---------------------------------------------------------------------------
 
+const confidenceLabels: Record<string, string> = {
+  exact: "Exact match found in intent",
+  inferred: "Inferred from context (not explicitly stated)",
+  missing: "Could not be resolved from intent",
+};
+
 function ResolvedFieldDisplay({
   label,
   field,
@@ -425,7 +440,10 @@ function ResolvedFieldDisplay({
       {field.matchedFrom && (
         <span className="resolved-field-source">{field.matchedFrom}</span>
       )}
-      <span className={`resolved-confidence-dot confidence-${field.confidence}`} />
+      <span
+        className={`resolved-confidence-dot confidence-${field.confidence}`}
+        title={confidenceLabels[field.confidence] ?? field.confidence}
+      />
     </div>
   );
 }

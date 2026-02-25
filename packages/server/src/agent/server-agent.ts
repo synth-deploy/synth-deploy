@@ -290,10 +290,15 @@ export class ServerAgent {
         reasoning:
           error instanceof OrchestrationError
             ? error.reasoning
-            : `An unexpected error occurred during deployment: ` +
+            : `Unexpected error during ${deployment.projectId} v${deployment.version} ` +
+              `deployment to "${environment.name}" for tenant "${tenant.name}": ` +
               `${error instanceof Error ? error.message : String(error)}. ` +
-              `This was not an anticipated failure mode. The deployment has been ` +
-              `marked as failed and no changes were applied to the target environment.`,
+              `This error did not come from the orchestration pipeline (not a health check, ` +
+              `configuration, or execution failure) — it may indicate a server-side bug or ` +
+              `infrastructure issue. The deployment has been marked as failed and no changes ` +
+              `were applied to the target environment. Recommended action: check the server ` +
+              `process logs for a stack trace, then re-trigger the deployment. If the error ` +
+              `recurs, investigate the server runtime environment.`,
         context: {
           durationMs:
             deployment.completedAt.getTime() - deployment.createdAt.getTime(),
@@ -990,15 +995,21 @@ export class ServerAgent {
       deploymentId: deployment.id,
       agent: "server",
       decisionType: "deployment-execution",
-      decision: `Proceeding to execute ${deployment.projectId} v${deployment.version} on "${environment.name}" — all preconditions satisfied`,
+      decision: `Executing ${deployment.projectId} v${deployment.version} on "${environment.name}" for tenant "${tenant.name}" — delegating to Tentacle`,
       reasoning:
-        `Configuration is accepted (${Object.keys(deployment.variables).length} variable(s), ` +
-        `conflicts resolved). Health check confirmed "${environment.name}" is reachable. ` +
-        `No blocking conditions remain. Executing deployment for tenant "${tenant.name}".`,
+        `All preconditions passed: configuration accepted (${Object.keys(deployment.variables).length} variable(s), ` +
+        `conflicts resolved), health check confirmed "${environment.name}" is reachable. ` +
+        `Delegating execution to the Tentacle agent on the target machine. The Tentacle will ` +
+        `write deployment artifacts (manifest, variables, version marker), verify them locally, ` +
+        `and report back. If the Tentacle is unreachable, this step will fail with a connection ` +
+        `error — check that the Tentacle process is running on the target host.`,
       context: {
         step: "execute-deployment",
         projectId: deployment.projectId,
         version: deployment.version,
+        variableCount: Object.keys(deployment.variables).length,
+        tenantName: tenant.name,
+        environmentName: environment.name,
       },
     });
     deployment.diaryEntryIds.push(entry.id);
@@ -1008,7 +1019,7 @@ export class ServerAgent {
 
   private async postDeployVerify(
     deployment: Deployment,
-    _tenant: Tenant,
+    tenant: Tenant,
     environment: Environment,
   ): Promise<void> {
     const entry = this.diary.record({
@@ -1016,13 +1027,20 @@ export class ServerAgent {
       deploymentId: deployment.id,
       agent: "server",
       decisionType: "deployment-verification",
-      decision: `Accepting deployment of ${deployment.projectId} v${deployment.version} as verified on "${environment.name}"`,
+      decision: `Verified: ${deployment.projectId} v${deployment.version} deployed successfully to "${environment.name}" for tenant "${tenant.name}"`,
       reasoning:
-        `Deployment execution completed without errors. At this phase, verification ` +
-        `is based on execution success — no runtime errors, no rollback triggered. ` +
-        `Active health checks and smoke tests via Tentacle agents will replace this ` +
-        `implicit verification in a future phase. Marking deployment as verified.`,
-      context: { step: "post-deploy-verify" },
+        `Deployment execution completed without errors. Verification confirms: (1) no ` +
+        `execution errors were raised, (2) no rollback was triggered, (3) the Tentacle ` +
+        `reported successful artifact placement. ${Object.keys(deployment.variables).length} ` +
+        `variable(s) applied. Note: this is server-side verification based on execution ` +
+        `outcome — the Tentacle's own local verification (artifact checksums, service ` +
+        `health) provides the ground-truth confirmation in its diary entries.`,
+      context: {
+        step: "post-deploy-verify",
+        variableCount: Object.keys(deployment.variables).length,
+        projectId: deployment.projectId,
+        version: deployment.version,
+      },
     });
     deployment.diaryEntryIds.push(entry.id);
   }

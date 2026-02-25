@@ -7,6 +7,10 @@ interface EnvironmentStore {
   get(id: string): { id: string; name: string; variables: Record<string, string> } | undefined;
 }
 
+interface ProjectStore {
+  get(id: string): { id: string; name: string; environmentIds: string[] } | undefined;
+}
+
 /**
  * REST API routes for deployments. These are the traditional (non-MCP) interface
  * for the web UI and integrations. They call the same ServerAgent as MCP tools.
@@ -18,6 +22,7 @@ export function registerDeploymentRoutes(
   environments: EnvironmentStore,
   deployments: DeploymentStore,
   diary: DecisionDiary,
+  projects?: ProjectStore,
 ): void {
   // Trigger a deployment
   app.post("/api/deployments", async (request, reply) => {
@@ -30,6 +35,21 @@ export function registerDeploymentRoutes(
     }
 
     const trigger = parsed.data;
+
+    // Validate project exists
+    if (projects) {
+      const project = projects.get(trigger.projectId);
+      if (!project) {
+        return reply.status(404).send({ error: `Project not found: ${trigger.projectId}` });
+      }
+      // Validate environment belongs to project
+      if (!project.environmentIds.includes(trigger.environmentId)) {
+        return reply.status(400).send({
+          error: `Environment ${trigger.environmentId} is not linked to project "${project.name}". ` +
+            `Available environments: ${project.environmentIds.join(", ") || "none"}`,
+        });
+      }
+    }
 
     const tenant = tenants.get(trigger.tenantId);
     if (!tenant) {

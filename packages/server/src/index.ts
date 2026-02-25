@@ -77,7 +77,7 @@ await app.register(fastifyCors, {
 
 // Register REST routes
 registerHealthRoutes(app);
-registerDeploymentRoutes(app, agent, tenants, environments, deployments, diary);
+registerDeploymentRoutes(app, agent, tenants, environments, deployments, diary, projects);
 registerTentacleReportRoutes(app, diary);
 registerProjectRoutes(app, projects, environments);
 registerTenantRoutes(app, tenants, deployments, diary);

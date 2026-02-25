@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router";
-import { getTenant, updateTenantVariables, listDeployments, getTenantHistory, listEnvironments } from "../api.js";
-import type { Tenant, Deployment, ProjectHistory, Environment } from "../types.js";
+import { getTenant, updateTenantVariables, listDeployments, getTenantHistory, listEnvironments, listProjects } from "../api.js";
+import type { Tenant, Deployment, ProjectHistory, Environment, Project } from "../types.js";
 import VariableEditor from "../components/VariableEditor.js";
 import DeploymentTable from "../components/DeploymentTable.js";
 
@@ -10,6 +10,7 @@ export default function TenantDetail() {
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [deployments, setDeployments] = useState<Deployment[]>([]);
   const [environments, setEnvironments] = useState<Environment[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [history, setHistory] = useState<ProjectHistory | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -21,11 +22,13 @@ export default function TenantDetail() {
       listDeployments(id),
       getTenantHistory(id),
       listEnvironments(),
-    ]).then(([t, d, h, e]) => {
+      listProjects(),
+    ]).then(([t, d, h, e, p]) => {
       setTenant(t);
       setDeployments(d);
       setHistory(h);
       setEnvironments(e);
+      setProjects(p);
       setLoading(false);
     }).catch((e) => {
       setError(e.message);
@@ -100,7 +103,7 @@ export default function TenantDetail() {
         <div className="card-header">
           <h3>Deployment History</h3>
         </div>
-        <DeploymentTable deployments={sorted} environments={environments} />
+        <DeploymentTable deployments={sorted} environments={environments} projects={projects} />
       </div>
     </div>
   );

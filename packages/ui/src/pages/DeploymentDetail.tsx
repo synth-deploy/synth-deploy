@@ -99,7 +99,16 @@ export default function DeploymentDetail() {
         </div>
       </div>
 
-      {/* Failure Analysis */}
+      {/* Failure Analysis — shown for failed deployments even if postmortem failed to load */}
+      {deployment.status === "failed" && !postmortem?.failureAnalysis && (
+        <div className="failure-card">
+          <h4>Deployment Failed</h4>
+          <div className="failure-field">
+            <div className="failure-label">Reason</div>
+            <div className="failure-value">{deployment.failureReason ?? "No failure details available. Check the Decision Diary timeline below."}</div>
+          </div>
+        </div>
+      )}
       {postmortem?.failureAnalysis && (
         <div className="failure-card">
           <h4>Failure Analysis</h4>
@@ -167,8 +176,8 @@ export default function DeploymentDetail() {
                   <div key={i} style={{ padding: "8px 0", borderBottom: "1px solid var(--border)" }}>
                     <div style={{ fontSize: 13, fontWeight: 500 }}>{c.description}</div>
                     <div className="flex gap-8 mt-16" style={{ marginTop: 4 }}>
-                      <span className={`badge badge-${c.riskLevel === "high" ? "failed" : c.riskLevel === "medium" ? "rolled_back" : "pending"}`}>
-                        {c.riskLevel}
+                      <span className={`badge badge-${c.riskLevel === "high" ? "failed" : c.riskLevel === "medium" ? "running" : "succeeded"}`}>
+                        {c.riskLevel} risk
                       </span>
                     </div>
                     <div className="text-secondary" style={{ fontSize: 12, marginTop: 4 }}>

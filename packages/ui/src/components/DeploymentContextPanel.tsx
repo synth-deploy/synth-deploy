@@ -28,16 +28,27 @@ function SignalCard({ signal }: { signal: ContextSignal }) {
 export default function DeploymentContextPanel() {
   const [context, setContext] = useState<DeploymentContext | null>(null);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   useEffect(() => {
     getDeploymentContext()
       .then(setContext)
-      .catch(() => {})
+      .catch((e) => setFetchError(e.message ?? "Failed to load deployment context"))
       .finally(() => setLoading(false));
   }, []);
 
   if (loading) {
     return <div className="context-panel"><div className="loading">Loading context...</div></div>;
+  }
+
+  if (fetchError) {
+    return (
+      <div className="context-panel">
+        <div className="text-secondary" style={{ padding: 12, fontSize: 13 }}>
+          Context unavailable: {fetchError}
+        </div>
+      </div>
+    );
   }
 
   if (!context) return null;

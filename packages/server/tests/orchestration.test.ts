@@ -160,7 +160,7 @@ describe("Deployment Orchestration Engine", () => {
       expect(findDecisions(entries, "pipeline")).toHaveLength(1);
       expect(findDecisions(entries, "Accepted configuration")).toHaveLength(1);
       expect(findDecisions(entries, "Proceeding with deployment")).toHaveLength(1);
-      expect(findDecisions(entries, "Proceeding to execute")).toHaveLength(1);
+      expect(findDecisions(entries, "Executing")).toHaveLength(1);
       expect(findDecisions(entries, "Marking deployment")).toHaveLength(1);
     });
 

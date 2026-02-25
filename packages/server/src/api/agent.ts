@@ -102,7 +102,7 @@ function interpretIntent(
   const tenantField = resolveTenant(lower, partialConfig?.tenantId, allTenants);
 
   // --- Resolve environment ---
-  const envField = resolveEnvironment(lower, partialConfig?.environmentId, allEnvironments);
+  let envField = resolveEnvironment(lower, partialConfig?.environmentId, allEnvironments);
 
   // --- Resolve version ---
   const versionField = resolveVersion(lower, partialConfig?.version);
@@ -130,6 +130,23 @@ function interpretIntent(
       uiUpdates.push({ field: name, action: "set", value: field.value, message: `Matched: ${field.matchedFrom}` });
     } else {
       uiUpdates.push({ field: name, action: "set", value: field.value, message: `Inferred: ${field.matchedFrom}` });
+    }
+  }
+
+  // Validate environment belongs to project if both resolved
+  if (
+    projectField.confidence !== "missing" &&
+    envField.confidence !== "missing"
+  ) {
+    const project = projects.list().find((p) => p.id === projectField.value);
+    if (project && !project.environmentIds.includes(envField.value)) {
+      uiUpdates.push({
+        field: "environmentId",
+        action: "warn",
+        message: `Environment is not linked to project "${project.name}". Choose a linked environment.`,
+      });
+      missingFields.push("environmentId");
+      envField = { value: "", confidence: "missing", matchedFrom: `not linked to project "${project.name}"` };
     }
   }
 
@@ -438,20 +455,38 @@ export function registerAgentRoutes(
       environments,
     );
 
+    // Build actionable reasoning that explains WHY fields are missing
+    const reasoningParts = [`Interpreted intent "${body.intent}".`];
+    const allProjects = projects.list();
+    const allTenants = tenants.list();
+    const allEnvironments = environments.list();
+
+    const fieldEntries: Array<[string, ResolvedField, string[]]> = [
+      ["Project", result.resolved.projectId, allProjects.map((p: Project) => p.name)],
+      ["Tenant", result.resolved.tenantId, allTenants.map((t: Tenant) => t.name)],
+      ["Environment", result.resolved.environmentId, allEnvironments.map((e: Environment) => e.name)],
+      ["Version", result.resolved.version, []],
+    ];
+    for (const [name, field, availableNames] of fieldEntries) {
+      if (field.confidence === "missing") {
+        const available = name === "Version"
+          ? "Include a semver version (e.g. v1.2.3) in the intent."
+          : `Available ${name.toLowerCase()}s: ${availableNames.length > 0 ? availableNames.join(", ") : "none configured"}.`;
+        reasoningParts.push(`${name}: MISSING — no match found in intent text. ${available}`);
+      } else {
+        reasoningParts.push(`${name}: ${field.confidence} (${field.matchedFrom ?? "resolved"}).`);
+      }
+    }
+
     diary.record({
       tenantId: result.resolved.tenantId.confidence !== "missing" ? result.resolved.tenantId.value : null,
       deploymentId: null,
       agent: "server",
       decisionType: "system",
       decision: result.ready
-        ? `Intent fully resolved: ready to deploy`
+        ? `Intent fully resolved: ready to deploy ${result.resolved.projectId.matchedFrom ?? result.resolved.projectId.value} v${result.resolved.version.value}`
         : `Intent partially resolved: missing ${result.missingFields.join(", ")}`,
-      reasoning:
-        `Interpreted intent "${body.intent}". ` +
-        `Project: ${result.resolved.projectId.confidence} (${result.resolved.projectId.matchedFrom ?? "not found"}), ` +
-        `Tenant: ${result.resolved.tenantId.confidence} (${result.resolved.tenantId.matchedFrom ?? "not found"}), ` +
-        `Environment: ${result.resolved.environmentId.confidence} (${result.resolved.environmentId.matchedFrom ?? "not found"}), ` +
-        `Version: ${result.resolved.version.confidence} (${result.resolved.version.matchedFrom ?? "not found"}).`,
+      reasoning: reasoningParts.join(" "),
       context: {
         intent: body.intent,
         ready: result.ready,
