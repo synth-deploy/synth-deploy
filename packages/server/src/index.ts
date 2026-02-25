@@ -6,8 +6,7 @@ import Fastify from "fastify";
 import fastifyCors from "@fastify/cors";
 import fastifyStatic from "@fastify/static";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { DecisionDiary, TenantStore, ProjectStore } from "@deploystack/core";
-import type { Environment } from "@deploystack/core";
+import { DecisionDiary, TenantStore, ProjectStore, EnvironmentStore, SettingsStore } from "@deploystack/core";
 import { ServerAgent, InMemoryDeploymentStore } from "./agent/server-agent.js";
 import { createMcpServer } from "./mcp/server.js";
 import { registerDeploymentRoutes } from "./api/deployments.js";
@@ -17,26 +16,17 @@ import { registerProjectRoutes } from "./api/projects.js";
 import { registerTenantRoutes } from "./api/tenants.js";
 import { registerEnvironmentRoutes } from "./api/environments.js";
 import { registerAgentRoutes } from "./api/agent.js";
+import { registerSettingsRoutes } from "./api/settings.js";
 
 // --- Bootstrap shared state ---
 
 const diary = new DecisionDiary();
 const tenants = new TenantStore();
 const projects = new ProjectStore();
+const environments = new EnvironmentStore();
+const settings = new SettingsStore();
 const deployments = new InMemoryDeploymentStore();
 const agent = new ServerAgent(diary, deployments);
-
-// Simple in-memory environment store
-const environmentMap = new Map<string, Environment>();
-const environments = {
-  get: (id: string) => environmentMap.get(id),
-  create: (name: string, variables: Record<string, string> = {}): Environment => {
-    const env: Environment = { id: crypto.randomUUID(), name, variables };
-    environmentMap.set(env.id, env);
-    return env;
-  },
-  list: () => [...environmentMap.values()],
-};
 
 // --- Seed demo data so the server is immediately usable ---
 
@@ -81,12 +71,9 @@ registerDeploymentRoutes(app, agent, tenants, environments, deployments, diary, 
 registerTentacleReportRoutes(app, diary);
 registerProjectRoutes(app, projects, environments);
 registerTenantRoutes(app, tenants, deployments, diary);
-registerEnvironmentRoutes(app, environments);
+registerEnvironmentRoutes(app, environments, projects);
 registerAgentRoutes(app, agent, tenants, environments, projects, deployments, diary);
-
-// Convenience: list seed data (keep for backward compat)
-app.get("/api/tenants", async () => ({ tenants: tenants.list() }));
-app.get("/api/environments", async () => ({ environments: environments.list() }));
+registerSettingsRoutes(app, settings);
 
 // --- Serve UI static files if built ---
 

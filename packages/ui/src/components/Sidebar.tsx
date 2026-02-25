@@ -40,9 +40,17 @@ export default function Sidebar() {
           <span className="nav-icon">&#9670;</span>
           Tenants
         </NavLink>
+        <NavLink to="/environments" className={({ isActive }) => isActive ? "active" : ""}>
+          <span className="nav-icon">&#9679;</span>
+          Environments
+        </NavLink>
         <NavLink to="/deploy" className={({ isActive }) => isActive ? "active" : ""}>
           <span className="nav-icon">&#9650;</span>
           New Deployment
+        </NavLink>
+        <NavLink to="/settings" className={({ isActive }) => isActive ? "active" : ""}>
+          <span className="nav-icon">&#9881;</span>
+          Settings
         </NavLink>
       </nav>
       <div className="sidebar-footer">

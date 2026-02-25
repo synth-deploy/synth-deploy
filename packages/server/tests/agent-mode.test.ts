@@ -1,9 +1,8 @@
 import { describe, it, expect, beforeAll } from "vitest";
-import crypto from "node:crypto";
 import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
-import { DecisionDiary, TenantStore, ProjectStore } from "@deploystack/core";
-import type { Environment, Deployment, DiaryEntry } from "@deploystack/core";
+import { DecisionDiary, TenantStore, ProjectStore, EnvironmentStore } from "@deploystack/core";
+import type { Deployment, DiaryEntry } from "@deploystack/core";
 import { ServerAgent, InMemoryDeploymentStore } from "../src/agent/server-agent.js";
 import { registerDeploymentRoutes } from "../src/api/deployments.js";
 import { registerProjectRoutes } from "../src/api/projects.js";
@@ -19,19 +18,9 @@ let app: FastifyInstance;
 let diary: DecisionDiary;
 let tenants: TenantStore;
 let projects: ProjectStore;
+let environments: EnvironmentStore;
 let deployments: InMemoryDeploymentStore;
 let agent: ServerAgent;
-
-const environmentMap = new Map<string, Environment>();
-const environments = {
-  get: (id: string) => environmentMap.get(id),
-  create: (name: string, variables: Record<string, string> = {}): Environment => {
-    const env: Environment = { id: crypto.randomUUID(), name, variables };
-    environmentMap.set(env.id, env);
-    return env;
-  },
-  list: () => [...environmentMap.values()],
-};
 
 let projectId: string;
 let tenantId: string;
@@ -42,18 +31,16 @@ beforeAll(async () => {
   diary = new DecisionDiary();
   tenants = new TenantStore();
   projects = new ProjectStore();
+  environments = new EnvironmentStore();
   deployments = new InMemoryDeploymentStore();
   agent = new ServerAgent(diary, deployments);
 
   app = Fastify();
-  registerDeploymentRoutes(app, agent, tenants, environments, deployments, diary);
+  registerDeploymentRoutes(app, agent, tenants, environments, deployments, diary, projects);
   registerProjectRoutes(app, projects, environments);
   registerTenantRoutes(app, tenants, deployments, diary);
-  registerEnvironmentRoutes(app, environments);
+  registerEnvironmentRoutes(app, environments, projects);
   registerAgentRoutes(app, agent, tenants, environments, projects, deployments, diary);
-
-  app.get("/api/tenants", async () => ({ tenants: tenants.list() }));
-  app.get("/api/environments", async () => ({ environments: environments.list() }));
 
   await app.ready();
 

@@ -13,6 +13,14 @@ export type {
   Tenant,
   Environment,
   Project,
+  DeploymentStepType,
+  DeploymentStep,
+  PipelineConfig,
+  ConflictPolicy,
+  AgentSettings,
+  DeploymentDefaults,
+  TentacleEndpointConfig,
+  AppSettings,
 } from "./types.js";
 
 export {
@@ -20,6 +28,8 @@ export {
   DeploymentStatus as DeploymentStatusEnum,
   AgentType as AgentTypeEnum,
   DecisionType as DecisionTypeEnum,
+  DEFAULT_PIPELINE_CONFIG,
+  DEFAULT_APP_SETTINGS,
 } from "./types.js";
 export { DecisionDiary } from "./decision-diary.js";
 export type { DiaryWriter, DiaryReader, DiaryRecordParams } from "./decision-diary.js";
@@ -27,6 +37,8 @@ export { PersistentDecisionDiary } from "./diary-persistence.js";
 export { formatDiaryEntry, formatDiaryEntries } from "./diary-formatter.js";
 export { TenantStore } from "./tenant.js";
 export { ProjectStore } from "./project-store.js";
+export { EnvironmentStore } from "./environment-store.js";
+export { SettingsStore } from "./settings-store.js";
 export { TenantContainer } from "./tenant-container.js";
 export type {
   PrecedenceEntry,

@@ -1169,3 +1169,280 @@ table a:hover {
   font-size: 12px;
   color: #854d0e;
 }
+
+/* =====================================================================
+   CRUD Components — delete, inline edit, steps, pipeline, settings
+   ===================================================================== */
+
+/* ---- Danger button ---- */
+
+.btn-danger {
+  background: var(--status-failed);
+  color: #fff;
+  border: 1px solid var(--status-failed);
+}
+
+.btn-danger:hover {
+  background: #b91c1c;
+  border-color: #b91c1c;
+}
+
+.btn-danger-text {
+  color: var(--status-failed);
+  background: none;
+  border: none;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 2px 6px;
+}
+
+.btn-danger-text:hover {
+  text-decoration: underline;
+}
+
+.btn-sm {
+  padding: 3px 8px;
+  font-size: 12px;
+}
+
+/* ---- Confirm dialog ---- */
+
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.confirm-dialog {
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  max-width: 420px;
+  width: 90%;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+}
+
+.confirm-dialog h3 {
+  margin: 0 0 8px;
+}
+
+.confirm-dialog p {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 0 0 20px;
+}
+
+.confirm-dialog-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+/* ---- Inline edit ---- */
+
+.inline-edit-display {
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.inline-edit-display:hover .inline-edit-icon {
+  opacity: 1;
+}
+
+.inline-edit-icon {
+  font-size: 14px;
+  opacity: 0;
+  color: var(--text-muted);
+  transition: opacity 0.15s;
+}
+
+.inline-edit {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.inline-edit-input {
+  border: 1px solid var(--dt-plan);
+  border-radius: var(--radius);
+  padding: 4px 8px;
+  outline: none;
+  background: var(--surface);
+  font-family: var(--font);
+  color: var(--text);
+}
+
+.inline-edit-input-h2 {
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.inline-edit-input-h3 {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.inline-edit-input-span {
+  font-size: 14px;
+}
+
+/* ---- Step type badges ---- */
+
+.step-type-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+
+.step-type-pre-deploy {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.step-type-post-deploy {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.step-type-verification {
+  background: #fef9c3;
+  color: #854d0e;
+}
+
+/* ---- Step add form ---- */
+
+.step-add-form {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.step-add-form input,
+.step-add-form select {
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
+/* ---- Pipeline config form ---- */
+
+.pipeline-config-form .form-group {
+  max-width: 300px;
+}
+
+/* ---- Toggle field ---- */
+
+.toggle-field {
+  margin-bottom: 12px;
+}
+
+.toggle-field label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.toggle-field input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--dt-plan);
+}
+
+/* ---- Settings page ---- */
+
+.settings-description {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.server-info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+}
+
+.server-info-item {
+  padding: 10px 14px;
+  background: var(--bg);
+  border-radius: var(--radius);
+}
+
+.server-info-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.server-info-value {
+  font-size: 14px;
+  font-weight: 500;
+  font-family: var(--font-mono);
+}
+
+/* ---- Warning callout ---- */
+
+.warning-callout {
+  background: #fef9c3;
+  border: 1px solid #fde68a;
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  font-size: 13px;
+  color: #854d0e;
+  margin-bottom: 12px;
+}
+
+/* ---- Environment link management ---- */
+
+.env-link-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.env-link-add {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.env-link-add select {
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
+.env-remove-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0 4px;
+  line-height: 1;
+}
+
+.env-remove-btn:hover {
+  color: var(--status-failed);
+}

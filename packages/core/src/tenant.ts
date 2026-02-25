@@ -36,4 +36,19 @@ export class TenantStore {
     tenant.variables = { ...tenant.variables, ...variables };
     return tenant;
   }
+
+  update(id: TenantId, updates: { name?: string }): Tenant {
+    const tenant = this.tenants.get(id);
+    if (!tenant) {
+      throw new Error(`Tenant not found: ${id}`);
+    }
+    if (updates.name !== undefined) {
+      tenant.name = updates.name;
+    }
+    return tenant;
+  }
+
+  delete(id: TenantId): boolean {
+    return this.tenants.delete(id);
+  }
 }

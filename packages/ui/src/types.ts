@@ -1,10 +1,61 @@
 // Frontend type definitions mirroring @deploystack/core types.
 // Dates come as ISO strings from the API.
 
+export type DeploymentStepType = "pre-deploy" | "post-deploy" | "verification";
+
+export interface DeploymentStep {
+  id: string;
+  name: string;
+  type: DeploymentStepType;
+  command: string;
+  order: number;
+}
+
+export interface PipelineConfig {
+  healthCheckEnabled: boolean;
+  healthCheckRetries: number;
+  timeoutMs: number;
+  verificationStrategy: "basic" | "full" | "none";
+}
+
 export interface Project {
   id: string;
   name: string;
   environmentIds: string[];
+  steps: DeploymentStep[];
+  pipelineConfig: PipelineConfig;
+}
+
+export type ConflictPolicy = "strict" | "permissive";
+
+export interface AgentSettings {
+  defaultHealthCheckRetries: number;
+  defaultTimeoutMs: number;
+  conflictPolicy: ConflictPolicy;
+  defaultVerificationStrategy: "basic" | "full" | "none";
+}
+
+export interface DeploymentDefaults {
+  defaultVariableTemplates: Record<string, string>;
+  defaultPipelineConfig: PipelineConfig;
+}
+
+export interface TentacleEndpointConfig {
+  url: string;
+  timeoutMs: number;
+}
+
+export interface AppSettings {
+  agent: AgentSettings;
+  deploymentDefaults: DeploymentDefaults;
+  tentacle: TentacleEndpointConfig;
+}
+
+export interface ServerInfo {
+  version: string;
+  host: string;
+  port: number;
+  startedAt: string;
 }
 
 export interface Tenant {

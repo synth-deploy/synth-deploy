@@ -91,10 +91,82 @@ export interface Environment {
   variables: Record<string, string>;
 }
 
+// --- Deployment Steps & Pipeline ---
+
+export type DeploymentStepType = "pre-deploy" | "post-deploy" | "verification";
+
+export interface DeploymentStep {
+  id: string;
+  name: string;
+  type: DeploymentStepType;
+  command: string;
+  order: number;
+}
+
+export interface PipelineConfig {
+  healthCheckEnabled: boolean;
+  healthCheckRetries: number;
+  timeoutMs: number;
+  verificationStrategy: "basic" | "full" | "none";
+}
+
+export const DEFAULT_PIPELINE_CONFIG: PipelineConfig = {
+  healthCheckEnabled: true,
+  healthCheckRetries: 1,
+  timeoutMs: 30000,
+  verificationStrategy: "basic",
+};
+
 // --- Project ---
 
 export interface Project {
   id: ProjectId;
   name: string;
   environmentIds: EnvironmentId[];
+  steps: DeploymentStep[];
+  pipelineConfig: PipelineConfig;
 }
+
+// --- Settings ---
+
+export type ConflictPolicy = "strict" | "permissive";
+
+export interface AgentSettings {
+  defaultHealthCheckRetries: number;
+  defaultTimeoutMs: number;
+  conflictPolicy: ConflictPolicy;
+  defaultVerificationStrategy: "basic" | "full" | "none";
+}
+
+export interface DeploymentDefaults {
+  defaultVariableTemplates: Record<string, string>;
+  defaultPipelineConfig: PipelineConfig;
+}
+
+export interface TentacleEndpointConfig {
+  url: string;
+  timeoutMs: number;
+}
+
+export interface AppSettings {
+  agent: AgentSettings;
+  deploymentDefaults: DeploymentDefaults;
+  tentacle: TentacleEndpointConfig;
+}
+
+export const DEFAULT_APP_SETTINGS: AppSettings = {
+  agent: {
+    defaultHealthCheckRetries: 1,
+    defaultTimeoutMs: 30000,
+    conflictPolicy: "permissive",
+    defaultVerificationStrategy: "basic",
+  },
+  deploymentDefaults: {
+    defaultVariableTemplates: {},
+    defaultPipelineConfig: DEFAULT_PIPELINE_CONFIG,
+  },
+  tentacle: {
+    url: "http://localhost:3001",
+    timeoutMs: 10000,
+  },
+};

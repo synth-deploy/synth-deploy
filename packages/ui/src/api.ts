@@ -6,6 +6,11 @@ import type {
   DiaryEntry,
   PostmortemReport,
   ProjectHistory,
+  DeploymentStep,
+  DeploymentStepType,
+  PipelineConfig,
+  AppSettings,
+  ServerInfo,
 } from "./types.js";
 
 const BASE = "";
@@ -44,6 +49,78 @@ export async function createProject(name: string, environmentIds: string[]): Pro
   return data.project;
 }
 
+export async function updateProject(id: string, updates: { name?: string }): Promise<Project> {
+  const data = await fetchJson<{ project: Project }>(`/api/projects/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(updates),
+  });
+  return data.project;
+}
+
+export async function deleteProject(id: string): Promise<void> {
+  await fetchJson(`/api/projects/${id}`, { method: "DELETE" });
+}
+
+export async function addProjectEnvironment(projectId: string, environmentId: string): Promise<Project> {
+  const data = await fetchJson<{ project: Project }>(`/api/projects/${projectId}/environments`, {
+    method: "POST",
+    body: JSON.stringify({ environmentId }),
+  });
+  return data.project;
+}
+
+export async function removeProjectEnvironment(projectId: string, environmentId: string): Promise<Project> {
+  const data = await fetchJson<{ project: Project }>(`/api/projects/${projectId}/environments/${environmentId}`, {
+    method: "DELETE",
+  });
+  return data.project;
+}
+
+export async function listProjectSteps(projectId: string): Promise<DeploymentStep[]> {
+  const data = await fetchJson<{ steps: DeploymentStep[] }>(`/api/projects/${projectId}/steps`);
+  return data.steps;
+}
+
+export async function createProjectStep(
+  projectId: string,
+  step: { name: string; type: DeploymentStepType; command: string; order?: number },
+): Promise<DeploymentStep> {
+  const data = await fetchJson<{ step: DeploymentStep }>(`/api/projects/${projectId}/steps`, {
+    method: "POST",
+    body: JSON.stringify(step),
+  });
+  return data.step;
+}
+
+export async function updateProjectStep(
+  projectId: string,
+  stepId: string,
+  updates: Partial<{ name: string; type: DeploymentStepType; command: string; order: number }>,
+): Promise<DeploymentStep> {
+  const data = await fetchJson<{ step: DeploymentStep }>(`/api/projects/${projectId}/steps/${stepId}`, {
+    method: "PUT",
+    body: JSON.stringify(updates),
+  });
+  return data.step;
+}
+
+export async function deleteProjectStep(projectId: string, stepId: string): Promise<void> {
+  await fetchJson(`/api/projects/${projectId}/steps/${stepId}`, { method: "DELETE" });
+}
+
+export async function getProjectPipeline(projectId: string): Promise<PipelineConfig> {
+  const data = await fetchJson<{ pipeline: PipelineConfig }>(`/api/projects/${projectId}/pipeline`);
+  return data.pipeline;
+}
+
+export async function updateProjectPipeline(projectId: string, config: Partial<PipelineConfig>): Promise<PipelineConfig> {
+  const data = await fetchJson<{ pipeline: PipelineConfig }>(`/api/projects/${projectId}/pipeline`, {
+    method: "PUT",
+    body: JSON.stringify(config),
+  });
+  return data.pipeline;
+}
+
 // --- Tenants ---
 
 export async function listTenants(): Promise<Tenant[]> {
@@ -72,6 +149,18 @@ export async function updateTenantVariables(id: string, variables: Record<string
   return data.tenant;
 }
 
+export async function updateTenant(id: string, updates: { name?: string }): Promise<Tenant> {
+  const data = await fetchJson<{ tenant: Tenant }>(`/api/tenants/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(updates),
+  });
+  return data.tenant;
+}
+
+export async function deleteTenant(id: string): Promise<void> {
+  await fetchJson(`/api/tenants/${id}`, { method: "DELETE" });
+}
+
 // --- Environments ---
 
 export async function listEnvironments(): Promise<Environment[]> {
@@ -85,6 +174,26 @@ export async function createEnvironment(name: string, variables?: Record<string,
     body: JSON.stringify({ name, variables: variables ?? {} }),
   });
   return data.environment;
+}
+
+export async function getEnvironment(id: string): Promise<Environment> {
+  const data = await fetchJson<{ environment: Environment }>(`/api/environments/${id}`);
+  return data.environment;
+}
+
+export async function updateEnvironment(
+  id: string,
+  updates: { name?: string; variables?: Record<string, string> },
+): Promise<Environment> {
+  const data = await fetchJson<{ environment: Environment }>(`/api/environments/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(updates),
+  });
+  return data.environment;
+}
+
+export async function deleteEnvironment(id: string): Promise<void> {
+  await fetchJson(`/api/environments/${id}`, { method: "DELETE" });
 }
 
 // --- Deployments ---
@@ -209,4 +318,24 @@ export async function interpretIntent(
 
 export async function getDeploymentContext(): Promise<DeploymentContext> {
   return fetchJson("/api/agent/context");
+}
+
+// --- Settings ---
+
+export async function getSettings(): Promise<AppSettings> {
+  const data = await fetchJson<{ settings: AppSettings }>("/api/settings");
+  return data.settings;
+}
+
+export async function updateSettings(updates: Partial<AppSettings>): Promise<AppSettings> {
+  const data = await fetchJson<{ settings: AppSettings }>("/api/settings", {
+    method: "PUT",
+    body: JSON.stringify(updates),
+  });
+  return data.settings;
+}
+
+export async function getServerInfo(): Promise<ServerInfo> {
+  const data = await fetchJson<{ info: ServerInfo }>("/api/settings/server-info");
+  return data.info;
 }

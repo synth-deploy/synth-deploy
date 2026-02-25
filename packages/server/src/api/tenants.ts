@@ -9,6 +9,11 @@ export function registerTenantRoutes(
   deployments: DeploymentStore,
   diary: DecisionDiary,
 ): void {
+  // List all tenants
+  app.get("/api/tenants", async () => {
+    return { tenants: tenants.list() };
+  });
+
   // Create a tenant
   app.post("/api/tenants", async (request, reply) => {
     const { name, variables } = request.body as {
@@ -31,6 +36,30 @@ export function registerTenantRoutes(
       return reply.status(404).send({ error: "Tenant not found" });
     }
     return { tenant };
+  });
+
+  // Update tenant (name)
+  app.put<{ Params: { id: string } }>("/api/tenants/:id", async (request, reply) => {
+    const { name } = request.body as { name?: string };
+
+    try {
+      const tenant = tenants.update(request.params.id, {
+        name: name?.trim(),
+      });
+      return { tenant };
+    } catch {
+      return reply.status(404).send({ error: "Tenant not found" });
+    }
+  });
+
+  // Delete tenant
+  app.delete<{ Params: { id: string } }>("/api/tenants/:id", async (request, reply) => {
+    const tenant = tenants.get(request.params.id);
+    if (!tenant) {
+      return reply.status(404).send({ error: "Tenant not found" });
+    }
+    tenants.delete(request.params.id);
+    return { deleted: true };
   });
 
   // Update tenant variables
