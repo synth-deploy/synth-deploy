@@ -59,6 +59,7 @@ export const DecisionType = z.enum([
   "diagnostic-investigation",
   "environment-scan",
   "system",
+  "llm-call",
 ]);
 export type DecisionType = z.infer<typeof DecisionType>;
 

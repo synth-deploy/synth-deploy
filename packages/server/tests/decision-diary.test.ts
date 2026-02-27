@@ -324,6 +324,7 @@ describe("Decision Diary — orchestration completeness", () => {
       "deployment-completion",
       "deployment-failure",
       "system",
+      "llm-call",
     ];
 
     healthChecker.willReturn(HEALTHY);

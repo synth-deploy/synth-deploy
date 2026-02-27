@@ -49,6 +49,8 @@ export type {
 export { TenantManager } from "./tenant-manager.js";
 export type { DeploymentStoreReader } from "./tenant-manager.js";
 export { generatePostmortem, generateProjectHistory } from "./debrief-reader.js";
+export { LlmClient } from "./llm-client.js";
+export type { LlmConfig, LlmCallParams, LlmResult } from "./llm-client.js";
 export type {
   PostmortemReport,
   TimelineEntry,

@@ -10,7 +10,7 @@
     "dev": "npm run dev --workspace=packages/server",
     "dev:ui": "npm run dev --workspace=packages/ui",
     "build:ui": "npm run build --workspace=packages/ui",
-    "test": "npm test --workspace=packages/server --workspace=packages/tentacle",
+    "test": "npm test --workspace=packages/core --workspace=packages/server --workspace=packages/tentacle",
     "clean": "rm -rf packages/*/dist"
   },
   "engines": {
