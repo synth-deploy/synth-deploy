@@ -5,6 +5,7 @@ import os from "node:os";
 import {
   DecisionDiary,
   PersistentDecisionDiary,
+  OrderStore,
   formatDiaryEntry,
   formatDiaryEntries,
 } from "@deploystack/core";
@@ -15,6 +16,7 @@ import type {
   DecisionType,
   DiaryWriter,
   DiaryReader,
+  Project,
 } from "@deploystack/core";
 import {
   ServerAgent,
@@ -84,6 +86,22 @@ function makeTrigger(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function makeProject(overrides: Partial<Project> = {}): Project {
+  return {
+    id: "web-app",
+    name: "web-app",
+    environmentIds: ["env-prod"],
+    steps: [],
+    pipelineConfig: {
+      healthCheckEnabled: true,
+      healthCheckRetries: 1,
+      timeoutMs: 30000,
+      verificationStrategy: "basic",
+    },
+    ...overrides,
+  };
+}
+
 function findDecisions(entries: DiaryEntry[], substr: string): DiaryEntry[] {
   return entries.filter((e) =>
     e.decision.toLowerCase().includes(substr.toLowerCase()),
@@ -112,7 +130,7 @@ describe("Decision Diary — entry specificity", () => {
     diary = new DecisionDiary();
     deployments = new InMemoryDeploymentStore();
     healthChecker = new MockHealthChecker();
-    agent = new ServerAgent(diary, deployments, healthChecker, {
+    agent = new ServerAgent(diary, deployments, new OrderStore(), healthChecker, {
       healthCheckBackoffMs: 1,
       executionDelayMs: 1,
     });
@@ -128,7 +146,7 @@ describe("Decision Diary — entry specificity", () => {
     const trigger = makeTrigger({ variables: { LOG_LEVEL: "error" } });
 
     healthChecker.willReturn(HEALTHY);
-    const result = await agent.triggerDeployment(trigger, tenant, env);
+    const result = await agent.triggerDeployment(trigger, tenant, env, makeProject());
 
     const entries = diary.getByDeployment(result.id);
     expect(entries.length).toBeGreaterThanOrEqual(5);
@@ -154,7 +172,7 @@ describe("Decision Diary — entry specificity", () => {
     const trigger = makeTrigger({ variables: { LOG_LEVEL: "error" } });
 
     healthChecker.willReturn(HEALTHY);
-    const result = await agent.triggerDeployment(trigger, tenant, env);
+    const result = await agent.triggerDeployment(trigger, tenant, env, makeProject());
 
     const entries = diary.getByDeployment(result.id);
 
@@ -187,6 +205,7 @@ describe("Decision Diary — entry specificity", () => {
       makeTrigger(),
       makeTenant(),
       makeEnvironment(),
+      makeProject(),
     );
 
     expect(result.status).toBe("failed");
@@ -210,7 +229,7 @@ describe("Decision Diary — entry specificity", () => {
     const trigger = makeTrigger({ variables: { LOG_LEVEL: "debug" } });
 
     healthChecker.willReturn(HEALTHY);
-    const result = await agent.triggerDeployment(trigger, tenant, env);
+    const result = await agent.triggerDeployment(trigger, tenant, env, makeProject());
 
     const entries = diary.getByDeployment(result.id);
     const conflictEntries = findDecisions(entries, "conflict");
@@ -240,7 +259,7 @@ describe("Decision Diary — orchestration completeness", () => {
     diary = new DecisionDiary();
     deployments = new InMemoryDeploymentStore();
     healthChecker = new MockHealthChecker();
-    agent = new ServerAgent(diary, deployments, healthChecker, {
+    agent = new ServerAgent(diary, deployments, new OrderStore(), healthChecker, {
       healthCheckBackoffMs: 1,
       executionDelayMs: 1,
     });
@@ -253,6 +272,7 @@ describe("Decision Diary — orchestration completeness", () => {
       makeTrigger(),
       makeTenant(),
       makeEnvironment(),
+      makeProject(),
     );
 
     const entries = diary.getByDeployment(result.id);
@@ -273,6 +293,7 @@ describe("Decision Diary — orchestration completeness", () => {
       makeTrigger(),
       makeTenant(),
       makeEnvironment(),
+      makeProject(),
     );
 
     const entries = diary.getByDeployment(result.id);
@@ -305,6 +326,7 @@ describe("Decision Diary — orchestration completeness", () => {
       makeTrigger({ environmentId: "env-staging" }),
       tenant,
       env,
+      makeProject({ environmentIds: ["env-staging"] }),
     );
 
     const entries = diary.getByDeployment(result.id);
@@ -329,7 +351,7 @@ describe("Decision Diary — orchestration completeness", () => {
 
     healthChecker.willReturn(HEALTHY);
 
-    await agent.triggerDeployment(makeTrigger(), makeTenant(), makeEnvironment());
+    await agent.triggerDeployment(makeTrigger(), makeTenant(), makeEnvironment(), makeProject());
 
     const entries = diary.getRecent(100);
     for (const entry of entries) {
@@ -352,7 +374,7 @@ describe("Decision Diary — retrieval dimensions", () => {
     diary = new DecisionDiary();
     deployments = new InMemoryDeploymentStore();
     healthChecker = new MockHealthChecker();
-    agent = new ServerAgent(diary, deployments, healthChecker, {
+    agent = new ServerAgent(diary, deployments, new OrderStore(), healthChecker, {
       healthCheckBackoffMs: 1,
       executionDelayMs: 1,
     });
@@ -365,11 +387,13 @@ describe("Decision Diary — retrieval dimensions", () => {
       makeTrigger({ version: "1.0.0" }),
       makeTenant(),
       makeEnvironment(),
+      makeProject(),
     );
     const result2 = await agent.triggerDeployment(
       makeTrigger({ version: "2.0.0" }),
       makeTenant(),
       makeEnvironment(),
+      makeProject(),
     );
 
     const entries1 = diary.getByDeployment(result1.id);
@@ -395,11 +419,13 @@ describe("Decision Diary — retrieval dimensions", () => {
       makeTrigger({ tenantId: "tenant-a" }),
       makeTenant({ id: "tenant-a", name: "Tenant A" }),
       makeEnvironment(),
+      makeProject(),
     );
     await agent.triggerDeployment(
       makeTrigger({ tenantId: "tenant-b" }),
       makeTenant({ id: "tenant-b", name: "Tenant B" }),
       makeEnvironment(),
+      makeProject(),
     );
 
     const entriesA = diary.getByTenant("tenant-a");
@@ -431,11 +457,13 @@ describe("Decision Diary — retrieval dimensions", () => {
       makeTrigger({ version: "1.0.0" }),
       makeTenant(),
       makeEnvironment(),
+      makeProject(),
     );
     await agent.triggerDeployment(
       makeTrigger({ version: "2.0.0" }),
       makeTenant(),
       makeEnvironment(),
+      makeProject(),
     );
 
     const planEntries = diary.getByType("pipeline-plan");
@@ -468,6 +496,7 @@ describe("Decision Diary — retrieval dimensions", () => {
       makeTrigger(),
       makeTenant(),
       makeEnvironment(),
+      makeProject(),
     );
 
     const after = new Date();
@@ -495,6 +524,7 @@ describe("Decision Diary — retrieval dimensions", () => {
       makeTrigger(),
       makeTenant(),
       makeEnvironment(),
+      makeProject(),
     );
 
     const after = new Date();
@@ -763,7 +793,7 @@ describe("PersistentDecisionDiary — integration with ServerAgent", () => {
     diary = new PersistentDecisionDiary(dbPath);
     deployments = new InMemoryDeploymentStore();
     healthChecker = new MockHealthChecker();
-    agent = new ServerAgent(diary, deployments, healthChecker, {
+    agent = new ServerAgent(diary, deployments, new OrderStore(), healthChecker, {
       healthCheckBackoffMs: 1,
       executionDelayMs: 1,
     });
@@ -787,6 +817,7 @@ describe("PersistentDecisionDiary — integration with ServerAgent", () => {
       makeTrigger(),
       makeTenant({ name: "Acme Corp" }),
       makeEnvironment(),
+      makeProject(),
     );
 
     expect(result.status).toBe("succeeded");
@@ -822,11 +853,13 @@ describe("PersistentDecisionDiary — integration with ServerAgent", () => {
       makeTrigger({ tenantId: "acme" }),
       makeTenant({ id: "acme", name: "Acme Corp" }),
       makeEnvironment(),
+      makeProject(),
     );
     const result2 = await agent.triggerDeployment(
       makeTrigger({ tenantId: "beta" }),
       makeTenant({ id: "beta", name: "Beta Inc" }),
       makeEnvironment(),
+      makeProject(),
     );
 
     // By deployment

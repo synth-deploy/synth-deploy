@@ -7,6 +7,7 @@ export type DeploymentId = string;
 export type ProjectId = string;
 export type EnvironmentId = string;
 export type DebriefEntryId = string;
+export type OrderId = string;
 
 // --- Deployment ---
 
@@ -37,6 +38,7 @@ export interface Deployment {
   status: DeploymentStatus;
   variables: Record<string, string>;
   debriefEntryIds: DebriefEntryId[];
+  orderId: OrderId | null;
   createdAt: Date;
   completedAt: Date | null;
   failureReason: string | null;
@@ -60,6 +62,7 @@ export const DecisionType = z.enum([
   "environment-scan",
   "system",
   "llm-call",
+  "order-created",
 ]);
 export type DecisionType = z.infer<typeof DecisionType>;
 
@@ -126,6 +129,22 @@ export interface Project {
   environmentIds: EnvironmentId[];
   steps: DeploymentStep[];
   pipelineConfig: PipelineConfig;
+}
+
+// --- Order (immutable deployment snapshot) ---
+
+export interface Order {
+  id: OrderId;
+  projectId: ProjectId;
+  projectName: string;
+  tenantId: TenantId;
+  environmentId: EnvironmentId;
+  environmentName: string;
+  version: string;
+  steps: DeploymentStep[];
+  pipelineConfig: PipelineConfig;
+  variables: Record<string, string>;
+  createdAt: Date;
 }
 
 // --- Settings ---

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { DecisionDiary } from "@deploystack/core";
-import type { Tenant, Environment, DiaryEntry } from "@deploystack/core";
+import { DecisionDiary, OrderStore } from "@deploystack/core";
+import type { Tenant, Environment, DiaryEntry, Project } from "@deploystack/core";
 import {
   ServerAgent,
   InMemoryDeploymentStore,
@@ -89,6 +89,22 @@ function makeTrigger(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function makeProject(overrides: Partial<Project> = {}): Project {
+  return {
+    id: "web-app",
+    name: "web-app",
+    environmentIds: ["env-prod"],
+    steps: [],
+    pipelineConfig: {
+      healthCheckEnabled: true,
+      healthCheckRetries: 1,
+      timeoutMs: 30000,
+      verificationStrategy: "basic",
+    },
+    ...overrides,
+  };
+}
+
 function findDecisions(entries: DiaryEntry[], substr: string): DiaryEntry[] {
   return entries.filter((e) =>
     e.decision.toLowerCase().includes(substr.toLowerCase()),
@@ -109,7 +125,7 @@ describe("Deployment Orchestration Engine", () => {
     diary = new DecisionDiary();
     deployments = new InMemoryDeploymentStore();
     healthChecker = new MockHealthChecker();
-    agent = new ServerAgent(diary, deployments, healthChecker, {
+    agent = new ServerAgent(diary, deployments, new OrderStore(), healthChecker, {
       healthCheckBackoffMs: 1,
       executionDelayMs: 1,
     });
@@ -133,7 +149,7 @@ describe("Deployment Orchestration Engine", () => {
 
       healthChecker.willReturn(HEALTHY);
 
-      const result = await agent.triggerDeployment(trigger, tenant, env);
+      const result = await agent.triggerDeployment(trigger, tenant, env, makeProject());
 
       expect(result.status).toBe("succeeded");
       expect(result.failureReason).toBeNull();
@@ -170,7 +186,7 @@ describe("Deployment Orchestration Engine", () => {
 
       healthChecker.willReturn(HEALTHY);
 
-      const result = await agent.triggerDeployment(makeTrigger(), tenant, env);
+      const result = await agent.triggerDeployment(makeTrigger(), tenant, env, makeProject());
 
       expect(result.status).toBe("succeeded");
       expect(result.variables).toEqual({
@@ -196,6 +212,7 @@ describe("Deployment Orchestration Engine", () => {
         makeTrigger(),
         makeTenant(),
         makeEnvironment({ name: "staging" }),
+        makeProject(),
       );
 
       expect(result.status).toBe("failed");
@@ -223,6 +240,7 @@ describe("Deployment Orchestration Engine", () => {
         makeTrigger(),
         makeTenant(),
         makeEnvironment({ name: "staging" }),
+        makeProject(),
       );
 
       expect(result.status).toBe("failed");
@@ -253,6 +271,7 @@ describe("Deployment Orchestration Engine", () => {
         makeTrigger(),
         makeTenant(),
         makeEnvironment({ name: "production" }),
+        makeProject(),
       );
 
       expect(result.status).toBe("failed");
@@ -277,6 +296,7 @@ describe("Deployment Orchestration Engine", () => {
         makeTrigger(),
         makeTenant(),
         makeEnvironment({ name: "staging" }),
+        makeProject(),
       );
 
       expect(result.status).toBe("failed");
@@ -297,6 +317,7 @@ describe("Deployment Orchestration Engine", () => {
         makeTrigger(),
         makeTenant(),
         makeEnvironment(),
+        makeProject(),
       );
 
       expect(result.status).toBe("succeeded");
@@ -315,6 +336,7 @@ describe("Deployment Orchestration Engine", () => {
         makeTrigger(),
         makeTenant(),
         makeEnvironment(),
+        makeProject(),
       );
 
       expect(result.status).toBe("succeeded");
@@ -349,6 +371,7 @@ describe("Deployment Orchestration Engine", () => {
         makeTrigger({ environmentId: "env-staging" }),
         tenant,
         env,
+        makeProject({ environmentIds: ["env-staging"] }),
       );
 
       // Single override → agent proceeds (might be intentional)
@@ -389,6 +412,7 @@ describe("Deployment Orchestration Engine", () => {
         makeTrigger({ environmentId: "env-staging" }),
         tenant,
         env,
+        makeProject({ environmentIds: ["env-staging"] }),
       );
 
       // THIS IS THE KEY BEHAVIORAL DIFFERENCE:
@@ -430,6 +454,7 @@ describe("Deployment Orchestration Engine", () => {
         makeTrigger(),
         tenant,
         env,
+        makeProject(),
       );
 
       // Non-connectivity cross-env → proceeds (can't route traffic)
@@ -450,6 +475,7 @@ describe("Deployment Orchestration Engine", () => {
         makeTrigger(),
         tenant,
         env,
+        makeProject(),
       );
 
       expect(result.status).toBe("succeeded");
@@ -482,6 +508,7 @@ describe("Deployment Orchestration Engine", () => {
         trigger,
         tenant,
         makeEnvironment(),
+        makeProject(),
       );
       const entries = diary.getByDeployment(result.id);
 
@@ -500,6 +527,7 @@ describe("Deployment Orchestration Engine", () => {
         makeTrigger(),
         makeTenant(),
         makeEnvironment(),
+        makeProject(),
       );
 
       expect(result.status).toBe("failed");
@@ -525,6 +553,7 @@ describe("Deployment Orchestration Engine", () => {
         makeTrigger(),
         makeTenant(),
         makeEnvironment(),
+        makeProject(),
       );
 
       const stored = deployments.get(result.id);

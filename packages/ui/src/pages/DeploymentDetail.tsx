@@ -81,6 +81,14 @@ export default function DeploymentDetail() {
               <span className="meta-label">Environment</span>
               {env ? <EnvBadge name={env.name} /> : <span className="meta-value">{deployment.environmentId.slice(0, 8)}</span>}
             </div>
+            {deployment.orderId && (
+              <div className="meta-item">
+                <span className="meta-label">Order</span>
+                <Link to={`/orders/${deployment.orderId}`} className="meta-value mono">
+                  {deployment.orderId.slice(0, 8)}
+                </Link>
+              </div>
+            )}
             <div className="meta-item">
               <span className="meta-label">Started</span>
               <span className="meta-value">

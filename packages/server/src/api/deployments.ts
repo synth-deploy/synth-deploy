@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { DeploymentTriggerSchema, generatePostmortem } from "@deploystack/core";
-import type { TenantStore, DecisionDebrief } from "@deploystack/core";
+import type { TenantStore, DecisionDebrief, OrderStore, Project } from "@deploystack/core";
 import type { ServerAgent, DeploymentStore } from "../agent/server-agent.js";
 
 interface EnvironmentStore {
@@ -8,7 +8,7 @@ interface EnvironmentStore {
 }
 
 interface ProjectStore {
-  get(id: string): { id: string; name: string; environmentIds: string[] } | undefined;
+  get(id: string): Project | undefined;
 }
 
 /**
@@ -22,7 +22,8 @@ export function registerDeploymentRoutes(
   environments: EnvironmentStore,
   deployments: DeploymentStore,
   debrief: DecisionDebrief,
-  projects?: ProjectStore,
+  projects: ProjectStore,
+  orders: OrderStore,
 ): void {
   // Trigger a deployment
   app.post("/api/deployments", async (request, reply) => {
@@ -35,20 +36,19 @@ export function registerDeploymentRoutes(
     }
 
     const trigger = parsed.data;
+    const { orderId } = (request.body as Record<string, unknown>) ?? {};
 
     // Validate project exists
-    if (projects) {
-      const project = projects.get(trigger.projectId);
-      if (!project) {
-        return reply.status(404).send({ error: `Project not found: ${trigger.projectId}` });
-      }
-      // Validate environment belongs to project
-      if (!project.environmentIds.includes(trigger.environmentId)) {
-        return reply.status(400).send({
-          error: `Environment ${trigger.environmentId} is not linked to project "${project.name}". ` +
-            `Available environments: ${project.environmentIds.join(", ") || "none"}`,
-        });
-      }
+    const project = projects.get(trigger.projectId);
+    if (!project) {
+      return reply.status(404).send({ error: `Project not found: ${trigger.projectId}` });
+    }
+    // Validate environment belongs to project
+    if (!project.environmentIds.includes(trigger.environmentId)) {
+      return reply.status(400).send({
+        error: `Environment ${trigger.environmentId} is not linked to project "${project.name}". ` +
+          `Available environments: ${project.environmentIds.join(", ") || "none"}`,
+      });
     }
 
     const tenant = tenants.get(trigger.tenantId);
@@ -61,7 +61,16 @@ export function registerDeploymentRoutes(
       return reply.status(404).send({ error: `Environment not found: ${trigger.environmentId}` });
     }
 
-    const deployment = await agent.triggerDeployment(trigger, tenant, environment);
+    // If an orderId was provided, load the existing Order for re-execution
+    let existingOrder;
+    if (typeof orderId === "string") {
+      existingOrder = orders.get(orderId);
+      if (!existingOrder) {
+        return reply.status(404).send({ error: `Order not found: ${orderId}` });
+      }
+    }
+
+    const deployment = await agent.triggerDeployment(trigger, tenant, environment, project, existingOrder);
 
     return reply.status(201).send({
       deployment,

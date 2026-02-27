@@ -48,6 +48,7 @@
   --dt-diagnostic: #ec4899;
   --dt-scan: #14b8a6;
   --dt-system: #6b7280;
+  --dt-order: #a855f7;
 
   /* Agent badges */
   --agent-server: #7c3aed;
@@ -516,6 +517,7 @@ table a:hover {
 .debrief-entry.dt-verification::before { background: var(--dt-verification); }
 .debrief-entry.dt-diagnostic::before { background: var(--dt-diagnostic); }
 .debrief-entry.dt-scan::before { background: var(--dt-scan); }
+.debrief-entry.dt-order::before { background: var(--dt-order); }
 
 .debrief-entry-header {
   display: flex;

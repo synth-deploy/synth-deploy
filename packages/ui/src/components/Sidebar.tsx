@@ -44,6 +44,10 @@ export default function Sidebar() {
           <span className="nav-icon">&#9679;</span>
           Environments
         </NavLink>
+        <NavLink to="/orders" className={({ isActive }) => isActive ? "active" : ""}>
+          <span className="nav-icon">&#9776;</span>
+          Orders
+        </NavLink>
         <NavLink to="/deploy" className={({ isActive }) => isActive ? "active" : ""}>
           <span className="nav-icon">&#9650;</span>
           New Deployment

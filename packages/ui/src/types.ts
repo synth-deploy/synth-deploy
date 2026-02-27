@@ -82,6 +82,7 @@ export interface Deployment {
   status: DeploymentStatus;
   variables: Record<string, string>;
   debriefEntryIds: string[];
+  orderId: string | null;
   createdAt: string;
   completedAt: string | null;
   failureReason: string | null;
@@ -98,7 +99,8 @@ export type DecisionType =
   | "deployment-failure"
   | "diagnostic-investigation"
   | "environment-scan"
-  | "system";
+  | "system"
+  | "order-created";
 
 export type AgentType = "server" | "tentacle";
 
@@ -112,6 +114,20 @@ export interface DebriefEntry {
   decision: string;
   reasoning: string;
   context: Record<string, unknown>;
+}
+
+export interface Order {
+  id: string;
+  projectId: string;
+  projectName: string;
+  tenantId: string;
+  environmentId: string;
+  environmentName: string;
+  version: string;
+  steps: DeploymentStep[];
+  pipelineConfig: PipelineConfig;
+  variables: Record<string, string>;
+  createdAt: string;
 }
 
 export interface PostmortemReport {

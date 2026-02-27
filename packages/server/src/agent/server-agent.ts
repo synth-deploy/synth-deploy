@@ -6,7 +6,10 @@ import type {
   DebriefWriter,
   Environment,
   Tenant,
+  Project,
+  Order,
 } from "@deploystack/core";
+import type { OrderStore } from "@deploystack/core";
 import type {
   ServiceHealthChecker,
   HealthCheckResult,
@@ -158,6 +161,7 @@ export class ServerAgent {
   constructor(
     private debrief: DebriefWriter,
     private deployments: DeploymentStore,
+    private orders: OrderStore,
     private healthChecker: ServiceHealthChecker = new DefaultHealthChecker(),
     options: Partial<AgentOptions> = {},
   ) {
@@ -172,8 +176,37 @@ export class ServerAgent {
     trigger: DeploymentTrigger,
     tenant: Tenant,
     environment: Environment,
+    project: Project,
+    existingOrder?: Order,
   ): Promise<Deployment> {
     const deploymentId = crypto.randomUUID();
+
+    // --- Step 0: Create or reuse Order -------------------------------------
+
+    let order: Order;
+    if (existingOrder) {
+      order = existingOrder;
+      this.debrief.record({
+        tenantId: trigger.tenantId,
+        deploymentId,
+        agent: "server",
+        decisionType: "order-created",
+        decision: `Re-executing existing Order ${order.id.slice(0, 8)}`,
+        reasoning:
+          `An existing Order was provided for re-execution. Using frozen snapshot from ` +
+          `${order.createdAt.toISOString()} instead of reading current Project configuration. ` +
+          `This guarantees the deployment reproduces exactly what was captured in the Order.`,
+        context: { orderId: order.id, reused: true },
+      });
+    } else {
+      order = this.createOrderFromCurrentState(
+        deploymentId,
+        trigger,
+        tenant,
+        environment,
+        project,
+      );
+    }
 
     // --- Step 1: Plan the pipeline -----------------------------------------
 
@@ -201,6 +234,7 @@ export class ServerAgent {
         version: trigger.version,
         environmentName: environment.name,
         tenantName: tenant.name,
+        orderId: order.id,
       },
     });
 
@@ -213,6 +247,7 @@ export class ServerAgent {
       status: "pending",
       variables: {},
       debriefEntryIds: [planEntry.id],
+      orderId: order.id,
       createdAt: new Date(),
       completedAt: null,
       failureReason: null,
@@ -312,6 +347,52 @@ export class ServerAgent {
 
     this.deployments.save(deployment);
     return deployment;
+  }
+
+  // -----------------------------------------------------------------------
+  // Order creation — snapshot current project/env/tenant state
+  // -----------------------------------------------------------------------
+
+  private createOrderFromCurrentState(
+    deploymentId: string,
+    trigger: DeploymentTrigger,
+    tenant: Tenant,
+    environment: Environment,
+    project: Project,
+  ): Order {
+    const order = this.orders.create({
+      projectId: project.id,
+      projectName: project.name,
+      tenantId: tenant.id,
+      environmentId: environment.id,
+      environmentName: environment.name,
+      version: trigger.version,
+      steps: project.steps,
+      pipelineConfig: project.pipelineConfig,
+      variables: {}, // populated after resolve — we snapshot inputs here
+    });
+
+    this.debrief.record({
+      tenantId: trigger.tenantId,
+      deploymentId,
+      agent: "server",
+      decisionType: "order-created",
+      decision: `Created Order ${order.id.slice(0, 8)} — immutable snapshot of "${project.name}" configuration`,
+      reasoning:
+        `Snapshotted project "${project.name}" (${project.steps.length} step(s), ` +
+        `verification: ${project.pipelineConfig.verificationStrategy}) for deployment ` +
+        `v${trigger.version} to "${environment.name}". This Order freezes the project ` +
+        `configuration so the deployment can be reproduced exactly, even if the project ` +
+        `is modified later.`,
+      context: {
+        orderId: order.id,
+        reused: false,
+        stepCount: project.steps.length,
+        pipelineConfig: project.pipelineConfig,
+      },
+    });
+
+    return order;
   }
 
   // -----------------------------------------------------------------------

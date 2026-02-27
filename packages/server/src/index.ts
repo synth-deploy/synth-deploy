@@ -6,7 +6,7 @@ import Fastify from "fastify";
 import fastifyCors from "@fastify/cors";
 import fastifyStatic from "@fastify/static";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { DecisionDebrief, TenantStore, ProjectStore, EnvironmentStore, SettingsStore } from "@deploystack/core";
+import { DecisionDebrief, TenantStore, ProjectStore, EnvironmentStore, SettingsStore, OrderStore } from "@deploystack/core";
 import { ServerAgent, InMemoryDeploymentStore } from "./agent/server-agent.js";
 import { createMcpServer } from "./mcp/server.js";
 import { registerDeploymentRoutes } from "./api/deployments.js";
@@ -17,6 +17,7 @@ import { registerTenantRoutes } from "./api/tenants.js";
 import { registerEnvironmentRoutes } from "./api/environments.js";
 import { registerAgentRoutes } from "./api/agent.js";
 import { registerSettingsRoutes } from "./api/settings.js";
+import { registerOrderRoutes } from "./api/orders.js";
 
 // --- Bootstrap shared state ---
 
@@ -26,7 +27,8 @@ const projects = new ProjectStore();
 const environments = new EnvironmentStore();
 const settings = new SettingsStore();
 const deployments = new InMemoryDeploymentStore();
-const agent = new ServerAgent(debrief, deployments);
+const orders = new OrderStore();
+const agent = new ServerAgent(debrief, deployments, orders);
 
 // --- Seed demo data so the server is immediately usable ---
 
@@ -54,7 +56,7 @@ debrief.record({
 
 // --- Create MCP server ---
 
-const mcp = createMcpServer({ agent, debrief, tenants, environments, deployments });
+const mcp = createMcpServer({ agent, debrief, tenants, environments, deployments, projects });
 
 // --- Create Fastify HTTP server ---
 
@@ -67,13 +69,14 @@ await app.register(fastifyCors, {
 
 // Register REST routes
 registerHealthRoutes(app);
-registerDeploymentRoutes(app, agent, tenants, environments, deployments, debrief, projects);
+registerDeploymentRoutes(app, agent, tenants, environments, deployments, debrief, projects, orders);
 registerTentacleReportRoutes(app, debrief);
 registerProjectRoutes(app, projects, environments);
 registerTenantRoutes(app, tenants, deployments, debrief);
 registerEnvironmentRoutes(app, environments, projects);
 registerAgentRoutes(app, agent, tenants, environments, projects, deployments, debrief);
 registerSettingsRoutes(app, settings);
+registerOrderRoutes(app, orders, agent, tenants, environments, projects, deployments, debrief);
 
 // --- Serve UI static files if built ---
 

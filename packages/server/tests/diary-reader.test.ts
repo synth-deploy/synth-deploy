@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
   DecisionDiary,
+  OrderStore,
   generatePostmortem,
   generateProjectHistory,
 } from "@deploystack/core";
@@ -9,6 +10,7 @@ import type {
   Environment,
   Deployment,
   DiaryEntry,
+  Project,
 } from "@deploystack/core";
 import {
   ServerAgent,
@@ -90,6 +92,22 @@ function makeTrigger(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function makeProject(overrides: Partial<Project> = {}): Project {
+  return {
+    id: "web-app",
+    name: "web-app",
+    environmentIds: ["env-prod"],
+    steps: [],
+    pipelineConfig: {
+      healthCheckEnabled: true,
+      healthCheckRetries: 1,
+      timeoutMs: 30000,
+      verificationStrategy: "basic",
+    },
+    ...overrides,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // SCENARIO 1: Simulated Postmortem
 // ---------------------------------------------------------------------------
@@ -110,7 +128,7 @@ describe("Simulated Postmortem — failed deployment read experience", () => {
     diary = new DecisionDiary();
     deployments = new InMemoryDeploymentStore();
     healthChecker = new MockHealthChecker();
-    agent = new ServerAgent(diary, deployments, healthChecker, {
+    agent = new ServerAgent(diary, deployments, new OrderStore(), healthChecker, {
       healthCheckBackoffMs: 1,
       executionDelayMs: 1,
     });
@@ -124,6 +142,7 @@ describe("Simulated Postmortem — failed deployment read experience", () => {
       makeTrigger(),
       makeTenant(),
       makeEnvironment(),
+      makeProject(),
     );
 
     expect(deployment.status).toBe("failed");
@@ -181,6 +200,7 @@ describe("Simulated Postmortem — failed deployment read experience", () => {
       makeTrigger(),
       makeTenant(),
       makeEnvironment(),
+      makeProject(),
     );
 
     const entries = diary.getByDeployment(deployment.id);
@@ -226,6 +246,7 @@ describe("Simulated Postmortem — failed deployment read experience", () => {
       makeTrigger(),
       tenant,
       env,
+      makeProject(),
     );
 
     expect(deployment.status).toBe("failed");
@@ -259,6 +280,7 @@ describe("Simulated Postmortem — failed deployment read experience", () => {
       makeTrigger(),
       makeTenant(),
       makeEnvironment(),
+      makeProject(),
     );
 
     expect(deployment.status).toBe("succeeded");
@@ -283,6 +305,7 @@ describe("Simulated Postmortem — failed deployment read experience", () => {
       makeTrigger(),
       makeTenant(),
       makeEnvironment(),
+      makeProject(),
     );
 
     expect(deployment.status).toBe("succeeded");
@@ -318,6 +341,7 @@ describe("Simulated Postmortem — failed deployment read experience", () => {
       makeTrigger({ version: "3.1.0" }),
       makeTenant({ name: "Widget Inc" }),
       makeEnvironment({ name: "staging" }),
+      makeProject(),
     );
 
     const entries = diary.getByDeployment(deployment.id);
@@ -372,7 +396,7 @@ describe("Simulated Onboarding — project history read experience", () => {
     diary = new DecisionDiary();
     deploymentStore = new InMemoryDeploymentStore();
     healthChecker = new MockHealthChecker();
-    agent = new ServerAgent(diary, deploymentStore, healthChecker, {
+    agent = new ServerAgent(diary, deploymentStore, new OrderStore(), healthChecker, {
       healthCheckBackoffMs: 1,
       executionDelayMs: 1,
     });
@@ -395,6 +419,9 @@ describe("Simulated Onboarding — project history read experience", () => {
       variables: { APP_ENV: "staging", LOG_LEVEL: "debug" },
     });
 
+    const prodProject = makeProject({ environmentIds: ["env-prod"] });
+    const stagingProject = makeProject({ environmentIds: ["env-staging"] });
+
     const results: Deployment[] = [];
 
     // Deployment 1: v1.0.0 to staging — clean success
@@ -408,6 +435,7 @@ describe("Simulated Onboarding — project history read experience", () => {
         }),
         tenant,
         stagingEnv,
+        stagingProject,
       ),
     );
 
@@ -422,6 +450,7 @@ describe("Simulated Onboarding — project history read experience", () => {
         }),
         tenant,
         prodEnv,
+        prodProject,
       ),
     );
 
@@ -437,6 +466,7 @@ describe("Simulated Onboarding — project history read experience", () => {
         }),
         tenant,
         stagingEnv,
+        stagingProject,
       ),
     );
 
@@ -451,6 +481,7 @@ describe("Simulated Onboarding — project history read experience", () => {
         }),
         tenant,
         prodEnv,
+        prodProject,
       ),
     );
 
@@ -465,6 +496,7 @@ describe("Simulated Onboarding — project history read experience", () => {
         }),
         tenant,
         stagingEnv,
+        stagingProject,
       ),
     );
 
@@ -479,6 +511,7 @@ describe("Simulated Onboarding — project history read experience", () => {
         }),
         tenant,
         prodEnv,
+        prodProject,
       ),
     );
 
@@ -493,6 +526,7 @@ describe("Simulated Onboarding — project history read experience", () => {
         }),
         tenant,
         prodEnv,
+        prodProject,
       ),
     );
 
@@ -507,6 +541,7 @@ describe("Simulated Onboarding — project history read experience", () => {
         }),
         tenant,
         stagingEnv,
+        stagingProject,
       ),
     );
 
@@ -522,6 +557,7 @@ describe("Simulated Onboarding — project history read experience", () => {
         }),
         tenant,
         prodEnv,
+        prodProject,
       ),
     );
 
@@ -536,6 +572,7 @@ describe("Simulated Onboarding — project history read experience", () => {
         }),
         tenant,
         stagingEnv,
+        stagingProject,
       ),
     );
 
@@ -737,7 +774,7 @@ describe("Postmortem report — structural guarantees", () => {
     diary = new DecisionDiary();
     deployments = new InMemoryDeploymentStore();
     healthChecker = new MockHealthChecker();
-    agent = new ServerAgent(diary, deployments, healthChecker, {
+    agent = new ServerAgent(diary, deployments, new OrderStore(), healthChecker, {
       healthCheckBackoffMs: 1,
       executionDelayMs: 1,
     });
@@ -750,6 +787,7 @@ describe("Postmortem report — structural guarantees", () => {
       makeTrigger(),
       makeTenant(),
       makeEnvironment(),
+      makeProject(),
     );
 
     const entries = diary.getByDeployment(deployment.id);
@@ -775,7 +813,7 @@ describe("Postmortem report — structural guarantees", () => {
 
     healthChecker.willReturn(HEALTHY);
 
-    const deployment = await agent.triggerDeployment(trigger, tenant, env);
+    const deployment = await agent.triggerDeployment(trigger, tenant, env, makeProject());
 
     const entries = diary.getByDeployment(deployment.id);
     const postmortem = generatePostmortem(entries, deployment);
@@ -792,6 +830,7 @@ describe("Postmortem report — structural guarantees", () => {
       makeTrigger(),
       makeTenant(),
       makeEnvironment(),
+      makeProject(),
     );
 
     const entries = diary.getByDeployment(deployment.id);
@@ -807,6 +846,7 @@ describe("Postmortem report — structural guarantees", () => {
       makeTrigger(),
       makeTenant(),
       makeEnvironment(),
+      makeProject(),
     );
 
     const entries = diary.getByDeployment(deployment.id);

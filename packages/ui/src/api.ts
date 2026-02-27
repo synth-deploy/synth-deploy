@@ -11,6 +11,7 @@ import type {
   PipelineConfig,
   AppSettings,
   ServerInfo,
+  Order,
 } from "./types.js";
 
 const BASE = "";
@@ -251,6 +252,42 @@ export async function getPostmortem(deploymentId: string): Promise<PostmortemRep
 export async function getTenantHistory(tenantId: string): Promise<ProjectHistory> {
   const data = await fetchJson<{ history: ProjectHistory }>(`/api/tenants/${tenantId}/history`);
   return data.history;
+}
+
+// --- Orders ---
+
+export async function listOrders(filters?: {
+  projectId?: string;
+  tenantId?: string;
+}): Promise<Order[]> {
+  const params = new URLSearchParams();
+  if (filters?.projectId) params.set("projectId", filters.projectId);
+  if (filters?.tenantId) params.set("tenantId", filters.tenantId);
+  const qs = params.toString();
+  const url = qs ? `/api/orders?${qs}` : "/api/orders";
+  const data = await fetchJson<{ orders: Order[] }>(url);
+  return data.orders;
+}
+
+export async function getOrder(id: string): Promise<{ order: Order; deployments: Deployment[] }> {
+  return fetchJson(`/api/orders/${id}`);
+}
+
+export async function createOrder(params: {
+  projectId: string;
+  tenantId: string;
+  environmentId: string;
+  version: string;
+}): Promise<Order> {
+  const data = await fetchJson<{ order: Order }>("/api/orders", {
+    method: "POST",
+    body: JSON.stringify(params),
+  });
+  return data.order;
+}
+
+export async function executeOrder(id: string): Promise<{ deployment: Deployment; debrief: DebriefEntry[] }> {
+  return fetchJson(`/api/orders/${id}/execute`, { method: "POST" });
 }
 
 // --- Health ---

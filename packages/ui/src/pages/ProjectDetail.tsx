@@ -4,6 +4,7 @@ import {
   getProject,
   listProjectDeployments,
   listEnvironments,
+  listOrders,
   updateProject,
   deleteProject,
   addProjectEnvironment,
@@ -13,7 +14,7 @@ import {
   deleteProjectStep,
   updateProjectPipeline,
 } from "../api.js";
-import type { Project, Environment, Deployment, DeploymentStep, DeploymentStepType, PipelineConfig } from "../types.js";
+import type { Project, Environment, Deployment, DeploymentStep, DeploymentStepType, PipelineConfig, Order } from "../types.js";
 import EnvBadge from "../components/EnvBadge.js";
 import DeploymentTable from "../components/DeploymentTable.js";
 import InlineEdit from "../components/InlineEdit.js";
@@ -28,6 +29,7 @@ export default function ProjectDetail() {
   const [projectEnvs, setProjectEnvs] = useState<Environment[]>([]);
   const [allEnvs, setAllEnvs] = useState<Environment[]>([]);
   const [deployments, setDeployments] = useState<Deployment[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -39,11 +41,13 @@ export default function ProjectDetail() {
       getProject(id),
       listProjectDeployments(id),
       listEnvironments(),
-    ]).then(([data, deps, envs]) => {
+      listOrders({ projectId: id }),
+    ]).then(([data, deps, envs, ords]) => {
       setProject(data.project);
       setProjectEnvs(data.environments);
       setDeployments(deps);
       setAllEnvs(envs);
+      setOrders(ords);
       setLoading(false);
     }).catch((e) => {
       setError(e.message);
@@ -200,6 +204,49 @@ export default function ProjectDetail() {
           />
         </div>
       </div>
+
+      {/* Orders */}
+      {orders.length > 0 && (
+        <div className="card">
+          <div className="card-header">
+            <h3>Orders</h3>
+            <span className="text-muted" style={{ fontSize: 12 }}>{orders.length} order{orders.length !== 1 ? "s" : ""}</span>
+          </div>
+          <div className="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Version</th>
+                  <th>Environment</th>
+                  <th>Steps</th>
+                  <th>Created</th>
+                </tr>
+              </thead>
+              <tbody>
+                {orders
+                  .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                  .slice(0, 10)
+                  .map((o) => (
+                    <tr key={o.id}>
+                      <td>
+                        <Link to={`/orders/${o.id}`} className="mono" style={{ fontWeight: 500 }}>
+                          {o.id.slice(0, 8)}
+                        </Link>
+                      </td>
+                      <td className="mono">v{o.version}</td>
+                      <td>{o.environmentName}</td>
+                      <td>{o.steps.length}</td>
+                      <td className="text-muted" style={{ fontSize: 12 }}>
+                        {new Date(o.createdAt).toLocaleString()}
+                      </td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Deployment History */}
       <div className="card">

@@ -10,6 +10,8 @@ import TenantDetail from "./pages/TenantDetail.js";
 import Environments from "./pages/Environments.js";
 import EnvironmentDetail from "./pages/EnvironmentDetail.js";
 import DeploymentDetail from "./pages/DeploymentDetail.js";
+import Orders from "./pages/Orders.js";
+import OrderDetail from "./pages/OrderDetail.js";
 import NewDeployment from "./pages/NewDeployment.js";
 import Debrief from "./pages/Debrief.js";
 import Settings from "./pages/Settings.js";
@@ -28,6 +30,8 @@ createRoot(document.getElementById("root")!).render(
           <Route path="environments" element={<Environments />} />
           <Route path="environments/:id" element={<EnvironmentDetail />} />
           <Route path="deployments/:id" element={<DeploymentDetail />} />
+          <Route path="orders" element={<Orders />} />
+          <Route path="orders/:id" element={<OrderDetail />} />
           <Route path="deploy" element={<NewDeployment />} />
           <Route path="debrief" element={<Debrief />} />
           <Route path="settings" element={<Settings />} />

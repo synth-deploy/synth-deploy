@@ -2,8 +2,9 @@ import { describe, it, expect, beforeEach } from "vitest";
 import {
   DecisionDiary,
   TenantManager,
+  OrderStore,
 } from "@deploystack/core";
-import type { Environment, DiaryEntry } from "@deploystack/core";
+import type { Environment, DiaryEntry, Project } from "@deploystack/core";
 import {
   ServerAgent,
   InMemoryDeploymentStore,
@@ -50,6 +51,22 @@ function makeEnvironment(overrides: Partial<Environment> = {}): Environment {
   };
 }
 
+function makeProject(overrides: Partial<Project> = {}): Project {
+  return {
+    id: "web-app",
+    name: "web-app",
+    environmentIds: ["env-prod"],
+    steps: [],
+    pipelineConfig: {
+      healthCheckEnabled: true,
+      healthCheckRetries: 1,
+      timeoutMs: 30000,
+      verificationStrategy: "basic",
+    },
+    ...overrides,
+  };
+}
+
 function findDecisions(entries: DiaryEntry[], substr: string): DiaryEntry[] {
   return entries.filter((e) =>
     e.decision.toLowerCase().includes(substr.toLowerCase()),
@@ -71,7 +88,7 @@ describe("Tenant Isolation", () => {
     diary = new DecisionDiary();
     deployments = new InMemoryDeploymentStore();
     healthChecker = new MockHealthChecker();
-    agent = new ServerAgent(diary, deployments, healthChecker, {
+    agent = new ServerAgent(diary, deployments, new OrderStore(), healthChecker, {
       healthCheckBackoffMs: 1,
       executionDelayMs: 1,
     });
@@ -143,6 +160,7 @@ describe("Tenant Isolation", () => {
         triggerA,
         tenantA.toTenant(),
         env,
+        makeProject(),
       );
       expect(resultA.status).toBe("succeeded");
 
@@ -168,6 +186,7 @@ describe("Tenant Isolation", () => {
         },
         tenantA.toTenant(),
         env,
+        makeProject(),
       );
 
       // Tenant A can access by ID
@@ -194,6 +213,7 @@ describe("Tenant Isolation", () => {
           },
           tenantA.toTenant(),
           env,
+          makeProject(),
         );
       }
       for (let i = 0; i < 2; i++) {
@@ -206,6 +226,7 @@ describe("Tenant Isolation", () => {
           },
           tenantB.toTenant(),
           env,
+          makeProject(),
         );
       }
 
@@ -242,6 +263,7 @@ describe("Tenant Isolation", () => {
         },
         tenantA.toTenant(),
         env,
+        makeProject(),
       );
 
       // A has diary entries
@@ -279,6 +301,7 @@ describe("Tenant Isolation", () => {
         },
         tenantA.toTenant(),
         env,
+        makeProject(),
       );
       expect(resultA.status).toBe("failed");
 
@@ -292,6 +315,7 @@ describe("Tenant Isolation", () => {
         },
         tenantB.toTenant(),
         env,
+        makeProject(),
       );
       expect(resultB.status).toBe("succeeded");
 
@@ -319,6 +343,7 @@ describe("Tenant Isolation", () => {
         },
         tenantA.toTenant(),
         env,
+        makeProject(),
       );
 
       // B succeeds
@@ -331,6 +356,7 @@ describe("Tenant Isolation", () => {
         },
         tenantB.toTenant(),
         env,
+        makeProject(),
       );
 
       // A has failure entries
@@ -586,7 +612,7 @@ describe("Precedence Recording in Decision Diary", () => {
     diary = new DecisionDiary();
     deployments = new InMemoryDeploymentStore();
     healthChecker = new MockHealthChecker();
-    agent = new ServerAgent(diary, deployments, healthChecker, {
+    agent = new ServerAgent(diary, deployments, new OrderStore(), healthChecker, {
       healthCheckBackoffMs: 1,
       executionDelayMs: 1,
     });
@@ -611,6 +637,7 @@ describe("Precedence Recording in Decision Diary", () => {
       },
       tenant.toTenant(),
       env,
+      makeProject(),
     );
 
     expect(result.status).toBe("succeeded");
@@ -643,7 +670,7 @@ describe("Scale: 50 Tenants", () => {
     diary = new DecisionDiary();
     deployments = new InMemoryDeploymentStore();
     healthChecker = new MockHealthChecker();
-    agent = new ServerAgent(diary, deployments, healthChecker, {
+    agent = new ServerAgent(diary, deployments, new OrderStore(), healthChecker, {
       healthCheckBackoffMs: 1,
       executionDelayMs: 1,
     });
@@ -700,6 +727,7 @@ describe("Scale: 50 Tenants", () => {
           },
           tenant.toTenant(),
           env,
+          makeProject(),
         ),
       ),
     );
@@ -778,6 +806,7 @@ describe("Scale: 50 Tenants", () => {
           },
           tenant.toTenant(),
           env,
+          makeProject(),
         ),
       ),
     );

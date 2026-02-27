@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { ServerAgent, DeploymentStore } from "../agent/server-agent.js";
-import type { TenantStore } from "@deploystack/core";
+import type { TenantStore, ProjectStore } from "@deploystack/core";
 
 interface EnvironmentStore {
   get(id: string): { id: string; name: string; variables: Record<string, string> } | undefined;
@@ -17,6 +17,7 @@ export function registerTools(
   tenants: TenantStore,
   environments: EnvironmentStore,
   deployments: DeploymentStore,
+  projects: ProjectStore,
 ): void {
   mcp.registerTool(
     "trigger-deployment",
@@ -50,10 +51,19 @@ export function registerTools(
         };
       }
 
+      const project = projects.get(projectId);
+      if (!project) {
+        return {
+          content: [{ type: "text", text: `Error: Project not found: ${projectId}` }],
+          isError: true,
+        };
+      }
+
       const deployment = await agent.triggerDeployment(
         { projectId, tenantId, environmentId, version, variables },
         tenant,
         environment,
+        project,
       );
 
       return {

@@ -4,6 +4,7 @@ export type {
   ProjectId,
   EnvironmentId,
   DebriefEntryId,
+  OrderId,
   DeploymentStatus,
   DeploymentTrigger,
   Deployment,
@@ -13,6 +14,7 @@ export type {
   Tenant,
   Environment,
   Project,
+  Order,
   DeploymentStepType,
   DeploymentStep,
   PipelineConfig,
@@ -39,6 +41,8 @@ export { TenantStore } from "./tenant.js";
 export { ProjectStore } from "./project-store.js";
 export { EnvironmentStore } from "./environment-store.js";
 export { SettingsStore } from "./settings-store.js";
+export { OrderStore } from "./order-store.js";
+export type { CreateOrderParams } from "./order-store.js";
 export { TenantContainer } from "./tenant-container.js";
 export type {
   PrecedenceEntry,

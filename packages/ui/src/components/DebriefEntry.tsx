@@ -14,6 +14,7 @@ const dtClassMap: Record<string, string> = {
   "diagnostic-investigation": "dt-diagnostic",
   "environment-scan": "dt-scan",
   system: "dt-system",
+  "order-created": "dt-order",
 };
 
 const dtLabels: Record<string, string> = {
@@ -28,6 +29,7 @@ const dtLabels: Record<string, string> = {
   "diagnostic-investigation": "Diagnostic",
   "environment-scan": "Scan",
   system: "System",
+  "order-created": "Order",
 };
 
 function formatTs(iso: string): string {
