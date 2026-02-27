@@ -1,12 +1,12 @@
 import crypto from "node:crypto";
 import path from "node:path";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import Fastify from "fastify";
 import fastifyCors from "@fastify/cors";
 import fastifyStatic from "@fastify/static";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { DecisionDebrief, TenantStore, ProjectStore, EnvironmentStore, SettingsStore, OrderStore } from "@deploystack/core";
+import { PersistentDecisionDebrief, TenantStore, ProjectStore, EnvironmentStore, SettingsStore, OrderStore } from "@deploystack/core";
 import { ServerAgent, InMemoryDeploymentStore } from "./agent/server-agent.js";
 import { createMcpServer } from "./mcp/server.js";
 import { registerDeploymentRoutes } from "./api/deployments.js";
@@ -21,7 +21,10 @@ import { registerOrderRoutes } from "./api/orders.js";
 
 // --- Bootstrap shared state ---
 
-const debrief = new DecisionDebrief();
+const DATA_DIR = path.resolve(process.env.DEPLOYSTACK_DATA_DIR ?? "data");
+mkdirSync(DATA_DIR, { recursive: true });
+
+const debrief = new PersistentDecisionDebrief(path.join(DATA_DIR, "debrief.db"));
 const tenants = new TenantStore();
 const projects = new ProjectStore();
 const environments = new EnvironmentStore();

@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
-  DecisionDiary,
+  DecisionDebrief,
   TenantManager,
   OrderStore,
 } from "@deploystack/core";
-import type { Environment, DiaryEntry, Project } from "@deploystack/core";
+import type { Environment, DebriefEntry, Project } from "@deploystack/core";
 import {
   ServerAgent,
   InMemoryDeploymentStore,
@@ -67,7 +67,7 @@ function makeProject(overrides: Partial<Project> = {}): Project {
   };
 }
 
-function findDecisions(entries: DiaryEntry[], substr: string): DiaryEntry[] {
+function findDecisions(entries: DebriefEntry[], substr: string): DebriefEntry[] {
   return entries.filter((e) =>
     e.decision.toLowerCase().includes(substr.toLowerCase()),
   );
@@ -78,14 +78,14 @@ function findDecisions(entries: DiaryEntry[], substr: string): DiaryEntry[] {
 // ---------------------------------------------------------------------------
 
 describe("Tenant Isolation", () => {
-  let diary: DecisionDiary;
+  let diary: DecisionDebrief;
   let deployments: InMemoryDeploymentStore;
   let healthChecker: MockHealthChecker;
   let agent: ServerAgent;
   let manager: TenantManager;
 
   beforeEach(() => {
-    diary = new DecisionDiary();
+    diary = new DecisionDebrief();
     deployments = new InMemoryDeploymentStore();
     healthChecker = new MockHealthChecker();
     agent = new ServerAgent(diary, deployments, new OrderStore(), healthChecker, {
@@ -267,11 +267,11 @@ describe("Tenant Isolation", () => {
       );
 
       // A has diary entries
-      const entriesA = tenantA.getDiaryEntries();
+      const entriesA = tenantA.getDebriefEntries();
       expect(entriesA.length).toBeGreaterThan(0);
 
       // B has none
-      expect(tenantB.getDiaryEntries()).toHaveLength(0);
+      expect(tenantB.getDebriefEntries()).toHaveLength(0);
 
       // Every entry in A is tagged with A's tenantId
       for (const entry of entriesA) {
@@ -361,21 +361,21 @@ describe("Tenant Isolation", () => {
 
       // A has failure entries
       const failEntries = findDecisions(
-        tenantA.getDiaryEntries(),
+        tenantA.getDebriefEntries(),
         "failed",
       );
       expect(failEntries.length).toBeGreaterThan(0);
 
       // B has zero failure entries
       const bFailEntries = findDecisions(
-        tenantB.getDiaryEntries(),
+        tenantB.getDebriefEntries(),
         "failed",
       );
       expect(bFailEntries).toHaveLength(0);
 
       // B only has success-path entries
       const bSuccess = findDecisions(
-        tenantB.getDiaryEntries(),
+        tenantB.getDebriefEntries(),
         "Marking deployment",
       );
       expect(bSuccess).toHaveLength(1);
@@ -411,12 +411,12 @@ describe("Tenant Isolation", () => {
 // ---------------------------------------------------------------------------
 
 describe("Variable Precedence Resolution", () => {
-  let diary: DecisionDiary;
+  let diary: DecisionDebrief;
   let deployments: InMemoryDeploymentStore;
   let manager: TenantManager;
 
   beforeEach(() => {
-    diary = new DecisionDiary();
+    diary = new DecisionDebrief();
     deployments = new InMemoryDeploymentStore();
     manager = new TenantManager(deployments, diary);
   });
@@ -602,14 +602,14 @@ describe("Variable Precedence Resolution", () => {
 // ---------------------------------------------------------------------------
 
 describe("Precedence Recording in Decision Diary", () => {
-  let diary: DecisionDiary;
+  let diary: DecisionDebrief;
   let deployments: InMemoryDeploymentStore;
   let healthChecker: MockHealthChecker;
   let agent: ServerAgent;
   let manager: TenantManager;
 
   beforeEach(() => {
-    diary = new DecisionDiary();
+    diary = new DecisionDebrief();
     deployments = new InMemoryDeploymentStore();
     healthChecker = new MockHealthChecker();
     agent = new ServerAgent(diary, deployments, new OrderStore(), healthChecker, {
@@ -643,7 +643,7 @@ describe("Precedence Recording in Decision Diary", () => {
     expect(result.status).toBe("succeeded");
 
     // The agent's diary entries record the conflict resolution
-    const entries = tenant.getDiaryEntries();
+    const entries = tenant.getDebriefEntries();
     const configEntries = findDecisions(entries, "Accepted configuration");
     expect(configEntries).toHaveLength(1);
     expect(configEntries[0].reasoning).toContain("precedence");
@@ -660,14 +660,14 @@ describe("Precedence Recording in Decision Diary", () => {
 // ---------------------------------------------------------------------------
 
 describe("Scale: 50 Tenants", () => {
-  let diary: DecisionDiary;
+  let diary: DecisionDebrief;
   let deployments: InMemoryDeploymentStore;
   let healthChecker: MockHealthChecker;
   let agent: ServerAgent;
   let manager: TenantManager;
 
   beforeEach(() => {
-    diary = new DecisionDiary();
+    diary = new DecisionDebrief();
     deployments = new InMemoryDeploymentStore();
     healthChecker = new MockHealthChecker();
     agent = new ServerAgent(diary, deployments, new OrderStore(), healthChecker, {
@@ -817,7 +817,7 @@ describe("Scale: 50 Tenants", () => {
 
     // But each container only sees its own
     for (let i = 0; i < 50; i++) {
-      const entries = tenants[i].getDiaryEntries();
+      const entries = tenants[i].getDebriefEntries();
       expect(entries.length).toBeGreaterThan(0);
       for (const entry of entries) {
         expect(entry.tenantId).toBe(tenants[i].id);
@@ -826,12 +826,12 @@ describe("Scale: 50 Tenants", () => {
 
     // No tenant sees another tenant's entries
     for (let i = 0; i < 50; i++) {
-      const myEntries = tenants[i].getDiaryEntries();
+      const myEntries = tenants[i].getDebriefEntries();
       for (const entry of myEntries) {
         // This entry should NOT appear in any other tenant's view
         for (let j = 0; j < 50; j++) {
           if (j === i) continue;
-          const otherEntries = tenants[j].getDiaryEntries();
+          const otherEntries = tenants[j].getDebriefEntries();
           const leaked = otherEntries.find((e) => e.id === entry.id);
           expect(leaked).toBeUndefined();
         }

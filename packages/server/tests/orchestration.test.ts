@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { DecisionDiary, OrderStore } from "@deploystack/core";
-import type { Tenant, Environment, DiaryEntry, Project } from "@deploystack/core";
+import { DecisionDebrief, OrderStore } from "@deploystack/core";
+import type { Tenant, Environment, DebriefEntry, Project } from "@deploystack/core";
 import {
   ServerAgent,
   InMemoryDeploymentStore,
@@ -105,7 +105,7 @@ function makeProject(overrides: Partial<Project> = {}): Project {
   };
 }
 
-function findDecisions(entries: DiaryEntry[], substr: string): DiaryEntry[] {
+function findDecisions(entries: DebriefEntry[], substr: string): DebriefEntry[] {
   return entries.filter((e) =>
     e.decision.toLowerCase().includes(substr.toLowerCase()),
   );
@@ -116,13 +116,13 @@ function findDecisions(entries: DiaryEntry[], substr: string): DiaryEntry[] {
 // ---------------------------------------------------------------------------
 
 describe("Deployment Orchestration Engine", () => {
-  let diary: DecisionDiary;
+  let diary: DecisionDebrief;
   let deployments: InMemoryDeploymentStore;
   let healthChecker: MockHealthChecker;
   let agent: ServerAgent;
 
   beforeEach(() => {
-    diary = new DecisionDiary();
+    diary = new DecisionDebrief();
     deployments = new InMemoryDeploymentStore();
     healthChecker = new MockHealthChecker();
     agent = new ServerAgent(diary, deployments, new OrderStore(), healthChecker, {
@@ -532,7 +532,7 @@ describe("Deployment Orchestration Engine", () => {
 
       expect(result.status).toBe("failed");
 
-      for (const entryId of result.diaryEntryIds) {
+      for (const entryId of result.debriefEntryIds) {
         const entry = diary.getById(entryId);
         expect(entry).toBeDefined();
         expect(entry!.deploymentId).toBe(result.id);

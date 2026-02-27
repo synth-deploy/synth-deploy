@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
-import { DecisionDiary, TenantStore, ProjectStore, EnvironmentStore } from "@deploystack/core";
-import type { Deployment, DiaryEntry } from "@deploystack/core";
+import { DecisionDebrief, TenantStore, ProjectStore, EnvironmentStore, OrderStore } from "@deploystack/core";
+import type { Deployment, DebriefEntry } from "@deploystack/core";
 import { ServerAgent, InMemoryDeploymentStore } from "../src/agent/server-agent.js";
 import { registerDeploymentRoutes } from "../src/api/deployments.js";
 import { registerProjectRoutes } from "../src/api/projects.js";
@@ -15,11 +15,12 @@ import { registerAgentRoutes } from "../src/api/agent.js";
 // ---------------------------------------------------------------------------
 
 let app: FastifyInstance;
-let diary: DecisionDiary;
+let diary: DecisionDebrief;
 let tenants: TenantStore;
 let projects: ProjectStore;
 let environments: EnvironmentStore;
 let deployments: InMemoryDeploymentStore;
+let orders: OrderStore;
 let agent: ServerAgent;
 
 let projectId: string;
@@ -28,15 +29,16 @@ let productionEnvId: string;
 let stagingEnvId: string;
 
 beforeAll(async () => {
-  diary = new DecisionDiary();
+  diary = new DecisionDebrief();
   tenants = new TenantStore();
   projects = new ProjectStore();
   environments = new EnvironmentStore();
   deployments = new InMemoryDeploymentStore();
-  agent = new ServerAgent(diary, deployments);
+  orders = new OrderStore();
+  agent = new ServerAgent(diary, deployments, orders);
 
   app = Fastify();
-  registerDeploymentRoutes(app, agent, tenants, environments, deployments, diary, projects);
+  registerDeploymentRoutes(app, agent, tenants, environments, deployments, diary, projects, orders);
   registerProjectRoutes(app, projects, environments);
   registerTenantRoutes(app, tenants, deployments, diary);
   registerEnvironmentRoutes(app, environments, projects);
@@ -308,8 +310,8 @@ describe("Identical artifacts — traditional vs agent mode", () => {
     expect(agentDeploy.status).toBe(traditionalDeploy.status);
 
     // Same diary structure (same number of decision types)
-    const traditionalDiary: DiaryEntry[] = traditional.diary;
-    const agentDiary: DiaryEntry[] = JSON.parse(agentRes.payload).diary;
+    const traditionalDiary: DebriefEntry[] = traditional.debrief;
+    const agentDiary: DebriefEntry[] = JSON.parse(agentRes.payload).debrief;
 
     const traditionalTypes = traditionalDiary.map((d) => d.decisionType).sort();
     const agentTypes = agentDiary.map((d) => d.decisionType).sort();

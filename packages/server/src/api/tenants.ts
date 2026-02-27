@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import type { TenantStore, DecisionDebrief } from "@deploystack/core";
+import type { TenantStore, DebriefReader } from "@deploystack/core";
 import { generateProjectHistory } from "@deploystack/core";
 import type { DeploymentStore } from "../agent/server-agent.js";
 
@@ -7,7 +7,7 @@ export function registerTenantRoutes(
   app: FastifyInstance,
   tenants: TenantStore,
   deployments: DeploymentStore,
-  debrief: DecisionDebrief,
+  debrief: DebriefReader,
 ): void {
   // List all tenants
   app.get("/api/tenants", async () => {

@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
-import { DecisionDiary, TenantStore, ProjectStore, EnvironmentStore } from "@deploystack/core";
-import type { Deployment, DiaryEntry, PostmortemReport, ProjectHistory } from "@deploystack/core";
+import { DecisionDebrief, TenantStore, ProjectStore, EnvironmentStore, OrderStore } from "@deploystack/core";
+import type { Deployment, DebriefEntry, PostmortemReport, ProjectHistory } from "@deploystack/core";
 import { ServerAgent, InMemoryDeploymentStore } from "../src/agent/server-agent.js";
 import { registerDeploymentRoutes } from "../src/api/deployments.js";
 import { registerProjectRoutes } from "../src/api/projects.js";
@@ -14,23 +14,25 @@ import { registerEnvironmentRoutes } from "../src/api/environments.js";
 // ---------------------------------------------------------------------------
 
 let app: FastifyInstance;
-let diary: DecisionDiary;
+let diary: DecisionDebrief;
 let tenants: TenantStore;
 let projects: ProjectStore;
 let environments: EnvironmentStore;
 let deployments: InMemoryDeploymentStore;
+let orders: OrderStore;
 let agent: ServerAgent;
 
 beforeAll(async () => {
-  diary = new DecisionDiary();
+  diary = new DecisionDebrief();
   tenants = new TenantStore();
   projects = new ProjectStore();
   environments = new EnvironmentStore();
   deployments = new InMemoryDeploymentStore();
-  agent = new ServerAgent(diary, deployments);
+  orders = new OrderStore();
+  agent = new ServerAgent(diary, deployments, orders);
 
   app = Fastify();
-  registerDeploymentRoutes(app, agent, tenants, environments, deployments, diary, projects);
+  registerDeploymentRoutes(app, agent, tenants, environments, deployments, diary, projects, orders);
   registerProjectRoutes(app, projects, environments);
   registerTenantRoutes(app, tenants, deployments, diary);
   registerEnvironmentRoutes(app, environments, projects);
@@ -163,7 +165,7 @@ describe("Complete UI user journey", () => {
     const body = JSON.parse(res.payload);
     expect(body.deployment.status).toBe("succeeded");
     expect(body.deployment.version).toBe("1.0.0");
-    expect(body.diary.length).toBeGreaterThan(0);
+    expect(body.debrief.length).toBeGreaterThan(0);
     firstDeploymentId = body.deployment.id;
   });
 
@@ -193,10 +195,10 @@ describe("Complete UI user journey", () => {
     expect(body.deployment.status).toBe("succeeded");
 
     // Decision Diary entries must exist and be specific
-    expect(body.diary.length).toBeGreaterThanOrEqual(3);
+    expect(body.debrief.length).toBeGreaterThanOrEqual(3);
 
     // Verify diary entry structure
-    const entry = body.diary[0] as DiaryEntry;
+    const entry = body.debrief[0] as DebriefEntry;
     expect(entry.id).toBeDefined();
     expect(entry.decision).toBeDefined();
     expect(entry.reasoning).toBeDefined();
@@ -204,7 +206,7 @@ describe("Complete UI user journey", () => {
     expect(entry.agent).toBe("server");
 
     // Every entry should be tagged with our deployment
-    for (const de of body.diary) {
+    for (const de of body.debrief) {
       expect(de.deploymentId).toBe(firstDeploymentId);
     }
   });
@@ -323,7 +325,7 @@ describe("Complete UI user journey", () => {
   });
 
   it("gets recent diary entries", async () => {
-    const res = await app.inject({ method: "GET", url: "/api/diary?limit=10" });
+    const res = await app.inject({ method: "GET", url: "/api/debrief?limit=10" });
     const body = JSON.parse(res.payload);
     expect(body.entries.length).toBeGreaterThan(0);
 

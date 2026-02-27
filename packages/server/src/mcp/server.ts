@@ -1,5 +1,5 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { DecisionDebrief, TenantStore, ProjectStore } from "@deploystack/core";
+import type { DebriefWriter, DebriefReader, TenantStore, ProjectStore } from "@deploystack/core";
 import type { ServerAgent, DeploymentStore } from "../agent/server-agent.js";
 import { registerTools } from "./tools.js";
 import { registerResources } from "./resources.js";
@@ -13,7 +13,7 @@ interface EnvironmentStore {
  */
 export function createMcpServer(deps: {
   agent: ServerAgent;
-  debrief: DecisionDebrief;
+  debrief: DebriefWriter & DebriefReader;
   tenants: TenantStore;
   environments: EnvironmentStore;
   deployments: DeploymentStore;

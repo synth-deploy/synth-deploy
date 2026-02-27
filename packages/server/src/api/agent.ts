@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import type { TenantStore, DecisionDebrief, Project, Tenant, Environment } from "@deploystack/core";
+import type { TenantStore, DebriefWriter, DebriefReader, Project, Tenant, Environment } from "@deploystack/core";
 import type { ServerAgent, DeploymentStore } from "../agent/server-agent.js";
 
 // ---------------------------------------------------------------------------
@@ -433,7 +433,7 @@ export function registerAgentRoutes(
   environments: EnvironmentStore,
   projects: ProjectStore,
   deployments: DeploymentStore,
-  debrief: DecisionDebrief,
+  debrief: DebriefWriter & DebriefReader,
 ): void {
   /**
    * Interpret a plain-language deployment intent.

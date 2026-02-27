@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
-  DecisionDiary,
+  DecisionDebrief,
   OrderStore,
   generatePostmortem,
   generateProjectHistory,
@@ -9,7 +9,7 @@ import type {
   Tenant,
   Environment,
   Deployment,
-  DiaryEntry,
+  DebriefEntry,
   Project,
 } from "@deploystack/core";
 import {
@@ -119,13 +119,13 @@ function makeProject(overrides: Partial<Project> = {}): Project {
 // ---------------------------------------------------------------------------
 
 describe("Simulated Postmortem — failed deployment read experience", () => {
-  let diary: DecisionDiary;
+  let diary: DecisionDebrief;
   let deployments: InMemoryDeploymentStore;
   let healthChecker: MockHealthChecker;
   let agent: ServerAgent;
 
   beforeEach(() => {
-    diary = new DecisionDiary();
+    diary = new DecisionDebrief();
     deployments = new InMemoryDeploymentStore();
     healthChecker = new MockHealthChecker();
     agent = new ServerAgent(diary, deployments, new OrderStore(), healthChecker, {
@@ -387,13 +387,13 @@ describe("Simulated Postmortem — failed deployment read experience", () => {
 // ---------------------------------------------------------------------------
 
 describe("Simulated Onboarding — project history read experience", () => {
-  let diary: DecisionDiary;
+  let diary: DecisionDebrief;
   let deploymentStore: InMemoryDeploymentStore;
   let healthChecker: MockHealthChecker;
   let agent: ServerAgent;
 
   beforeEach(() => {
-    diary = new DecisionDiary();
+    diary = new DecisionDebrief();
     deploymentStore = new InMemoryDeploymentStore();
     healthChecker = new MockHealthChecker();
     agent = new ServerAgent(diary, deploymentStore, new OrderStore(), healthChecker, {
@@ -724,8 +724,8 @@ describe("Simulated Onboarding — project history read experience", () => {
     const text = history.formatted;
 
     // Quick-scan markers
-    const okCount = (text.match(/— OK/g) || []).length;
-    const failedCount = (text.match(/— FAILED/g) || []).length;
+    const okCount = (text.match(/-- OK/g) || []).length;
+    const failedCount = (text.match(/-- FAILED/g) || []).length;
 
     expect(okCount).toBe(9);
     expect(failedCount).toBe(1);
@@ -765,13 +765,13 @@ describe("Simulated Onboarding — project history read experience", () => {
 // ---------------------------------------------------------------------------
 
 describe("Postmortem report — structural guarantees", () => {
-  let diary: DecisionDiary;
+  let diary: DecisionDebrief;
   let deployments: InMemoryDeploymentStore;
   let healthChecker: MockHealthChecker;
   let agent: ServerAgent;
 
   beforeEach(() => {
-    diary = new DecisionDiary();
+    diary = new DecisionDebrief();
     deployments = new InMemoryDeploymentStore();
     healthChecker = new MockHealthChecker();
     agent = new ServerAgent(diary, deployments, new OrderStore(), healthChecker, {

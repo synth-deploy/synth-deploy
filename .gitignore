@@ -4,3 +4,9 @@ dist/
 .env
 .env.*
 !.env.example
+
+# SQLite database files
+data/
+*.db
+*.db-wal
+*.db-shm

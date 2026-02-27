@@ -1,6 +1,6 @@
 import { ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { DecisionDebrief } from "@deploystack/core";
+import type { DebriefReader } from "@deploystack/core";
 import type { DeploymentStore } from "../agent/server-agent.js";
 
 /**
@@ -9,7 +9,7 @@ import type { DeploymentStore } from "../agent/server-agent.js";
  */
 export function registerResources(
   mcp: McpServer,
-  debrief: DecisionDebrief,
+  debrief: DebriefReader,
   deployments: DeploymentStore,
 ): void {
   // Recent debrief entries

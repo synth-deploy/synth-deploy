@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { DeploymentTriggerSchema, generatePostmortem } from "@deploystack/core";
-import type { TenantStore, DecisionDebrief, OrderStore, Project } from "@deploystack/core";
+import type { TenantStore, DebriefWriter, DebriefReader, OrderStore, Project } from "@deploystack/core";
 import type { ServerAgent, DeploymentStore } from "../agent/server-agent.js";
 
 interface EnvironmentStore {
@@ -21,7 +21,7 @@ export function registerDeploymentRoutes(
   tenants: TenantStore,
   environments: EnvironmentStore,
   deployments: DeploymentStore,
-  debrief: DecisionDebrief,
+  debrief: DebriefWriter & DebriefReader,
   projects: ProjectStore,
   orders: OrderStore,
 ): void {

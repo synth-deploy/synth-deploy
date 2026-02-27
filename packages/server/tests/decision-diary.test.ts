@@ -3,19 +3,19 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import {
-  DecisionDiary,
-  PersistentDecisionDiary,
+  DecisionDebrief,
+  PersistentDecisionDebrief,
   OrderStore,
-  formatDiaryEntry,
-  formatDiaryEntries,
+  formatDebriefEntry,
+  formatDebriefEntries,
 } from "@deploystack/core";
 import type {
   Tenant,
   Environment,
-  DiaryEntry,
+  DebriefEntry,
   DecisionType,
-  DiaryWriter,
-  DiaryReader,
+  DebriefWriter,
+  DebriefReader,
   Project,
 } from "@deploystack/core";
 import {
@@ -102,7 +102,7 @@ function makeProject(overrides: Partial<Project> = {}): Project {
   };
 }
 
-function findDecisions(entries: DiaryEntry[], substr: string): DiaryEntry[] {
+function findDecisions(entries: DebriefEntry[], substr: string): DebriefEntry[] {
   return entries.filter((e) =>
     e.decision.toLowerCase().includes(substr.toLowerCase()),
   );
@@ -121,13 +121,13 @@ const MIN_SPECIFIC_WORD_COUNT = 3;
 // ---------------------------------------------------------------------------
 
 describe("Decision Diary — entry specificity", () => {
-  let diary: DecisionDiary;
+  let diary: DecisionDebrief;
   let deployments: InMemoryDeploymentStore;
   let healthChecker: MockHealthChecker;
   let agent: ServerAgent;
 
   beforeEach(() => {
-    diary = new DecisionDiary();
+    diary = new DecisionDebrief();
     deployments = new InMemoryDeploymentStore();
     healthChecker = new MockHealthChecker();
     agent = new ServerAgent(diary, deployments, new OrderStore(), healthChecker, {
@@ -250,13 +250,13 @@ describe("Decision Diary — entry specificity", () => {
 // ---------------------------------------------------------------------------
 
 describe("Decision Diary — orchestration completeness", () => {
-  let diary: DecisionDiary;
+  let diary: DecisionDebrief;
   let deployments: InMemoryDeploymentStore;
   let healthChecker: MockHealthChecker;
   let agent: ServerAgent;
 
   beforeEach(() => {
-    diary = new DecisionDiary();
+    diary = new DecisionDebrief();
     deployments = new InMemoryDeploymentStore();
     healthChecker = new MockHealthChecker();
     agent = new ServerAgent(diary, deployments, new OrderStore(), healthChecker, {
@@ -347,6 +347,7 @@ describe("Decision Diary — orchestration completeness", () => {
       "deployment-failure",
       "system",
       "llm-call",
+      "order-created",
     ];
 
     healthChecker.willReturn(HEALTHY);
@@ -365,13 +366,13 @@ describe("Decision Diary — orchestration completeness", () => {
 // ---------------------------------------------------------------------------
 
 describe("Decision Diary — retrieval dimensions", () => {
-  let diary: DecisionDiary;
+  let diary: DecisionDebrief;
   let deployments: InMemoryDeploymentStore;
   let healthChecker: MockHealthChecker;
   let agent: ServerAgent;
 
   beforeEach(() => {
-    diary = new DecisionDiary();
+    diary = new DecisionDebrief();
     deployments = new InMemoryDeploymentStore();
     healthChecker = new MockHealthChecker();
     agent = new ServerAgent(diary, deployments, new OrderStore(), healthChecker, {
@@ -542,16 +543,16 @@ describe("Decision Diary — retrieval dimensions", () => {
 // Test suite: Persistent Decision Diary (SQLite)
 // ---------------------------------------------------------------------------
 
-describe("PersistentDecisionDiary — SQLite backing store", () => {
+describe("PersistentDecisionDebrief — SQLite backing store", () => {
   let dbPath: string;
-  let diary: PersistentDecisionDiary;
+  let diary: PersistentDecisionDebrief;
 
   beforeEach(() => {
     dbPath = path.join(
       os.tmpdir(),
       `deploystack-test-${Date.now()}-${Math.random().toString(36).slice(2)}.db`,
     );
-    diary = new PersistentDecisionDiary(dbPath);
+    diary = new PersistentDecisionDebrief(dbPath);
   });
 
   afterEach(() => {
@@ -579,7 +580,7 @@ describe("PersistentDecisionDiary — SQLite backing store", () => {
     diary.close();
 
     // Reopen the same database
-    const diary2 = new PersistentDecisionDiary(dbPath);
+    const diary2 = new PersistentDecisionDebrief(dbPath);
     const retrieved = diary2.getById(entry.id);
     expect(retrieved).toBeDefined();
     expect(retrieved!.decision).toBe(entry.decision);
@@ -775,12 +776,12 @@ describe("PersistentDecisionDiary — SQLite backing store", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Test suite: Integration — PersistentDecisionDiary with ServerAgent
+// Test suite: Integration — PersistentDecisionDebrief with ServerAgent
 // ---------------------------------------------------------------------------
 
-describe("PersistentDecisionDiary — integration with ServerAgent", () => {
+describe("PersistentDecisionDebrief — integration with ServerAgent", () => {
   let dbPath: string;
-  let diary: PersistentDecisionDiary;
+  let diary: PersistentDecisionDebrief;
   let deployments: InMemoryDeploymentStore;
   let healthChecker: MockHealthChecker;
   let agent: ServerAgent;
@@ -790,7 +791,7 @@ describe("PersistentDecisionDiary — integration with ServerAgent", () => {
       os.tmpdir(),
       `deploystack-agent-test-${Date.now()}-${Math.random().toString(36).slice(2)}.db`,
     );
-    diary = new PersistentDecisionDiary(dbPath);
+    diary = new PersistentDecisionDebrief(dbPath);
     deployments = new InMemoryDeploymentStore();
     healthChecker = new MockHealthChecker();
     agent = new ServerAgent(diary, deployments, new OrderStore(), healthChecker, {
@@ -829,7 +830,7 @@ describe("PersistentDecisionDiary — integration with ServerAgent", () => {
     diary.close();
 
     // Reopen and verify persistence
-    const diary2 = new PersistentDecisionDiary(dbPath);
+    const diary2 = new PersistentDecisionDebrief(dbPath);
     const entriesAfter = diary2.getByDeployment(result.id);
     expect(entriesAfter).toHaveLength(entriesBefore.length);
 
@@ -895,8 +896,8 @@ describe("PersistentDecisionDiary — integration with ServerAgent", () => {
 // ---------------------------------------------------------------------------
 
 describe("Decision Diary — human-readable format", () => {
-  it("formatDiaryEntry produces readable output with all fields", () => {
-    const entry: DiaryEntry = {
+  it("formatDebriefEntry produces readable output with all fields", () => {
+    const entry: DebriefEntry = {
       id: "abc-123-def-456",
       timestamp: new Date("2026-02-23T14:30:05.000Z"),
       tenantId: "tenant-acme",
@@ -909,7 +910,7 @@ describe("Decision Diary — human-readable format", () => {
       context: { serviceId: "web-app/production", responseTimeMs: 5 },
     };
 
-    const formatted = formatDiaryEntry(entry);
+    const formatted = formatDebriefEntry(entry);
 
     expect(formatted).toContain("HEALTH-CHECK");
     expect(formatted).toContain("tenant-acme");
@@ -921,8 +922,8 @@ describe("Decision Diary — human-readable format", () => {
     expect(formatted).toContain("serviceId=web-app/production");
   });
 
-  it("formatDiaryEntry handles system-level entries (null tenant)", () => {
-    const entry: DiaryEntry = {
+  it("formatDebriefEntry handles system-level entries (null tenant)", () => {
+    const entry: DebriefEntry = {
       id: "sys-001",
       timestamp: new Date("2026-02-23T12:00:00.000Z"),
       tenantId: null,
@@ -934,14 +935,14 @@ describe("Decision Diary — human-readable format", () => {
       context: {},
     };
 
-    const formatted = formatDiaryEntry(entry);
+    const formatted = formatDebriefEntry(entry);
     expect(formatted).toContain("system");
     expect(formatted).toContain("n/a");
     expect(formatted).toContain("SYSTEM");
   });
 
-  it("formatDiaryEntries produces separator-delimited output", () => {
-    const entries: DiaryEntry[] = [
+  it("formatDebriefEntries produces separator-delimited output", () => {
+    const entries: DebriefEntry[] = [
       {
         id: "e1",
         timestamp: new Date("2026-02-23T14:00:00.000Z"),
@@ -966,13 +967,13 @@ describe("Decision Diary — human-readable format", () => {
       },
     ];
 
-    const formatted = formatDiaryEntries(entries);
+    const formatted = formatDebriefEntries(entries);
     expect(formatted).toContain("---");
     expect(formatted).toContain("Entry one");
     expect(formatted).toContain("Entry two");
   });
 
-  it("formatDiaryEntries handles empty list", () => {
-    expect(formatDiaryEntries([])).toBe("No diary entries found.");
+  it("formatDebriefEntries handles empty list", () => {
+    expect(formatDebriefEntries([])).toBe("No debrief entries found.");
   });
 });

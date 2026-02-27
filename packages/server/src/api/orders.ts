@@ -3,7 +3,8 @@ import type {
   OrderStore,
   ProjectStore,
   TenantStore,
-  DecisionDebrief,
+  DebriefWriter,
+  DebriefReader,
 } from "@deploystack/core";
 import type { ServerAgent, DeploymentStore } from "../agent/server-agent.js";
 
@@ -23,7 +24,7 @@ export function registerOrderRoutes(
   environments: EnvironmentStore,
   projects: ProjectStore,
   deployments: DeploymentStore,
-  debrief: DecisionDebrief,
+  debrief: DebriefWriter & DebriefReader,
 ): void {
   // List orders (supports ?projectId and ?tenantId filters)
   app.get("/api/orders", async (request) => {
