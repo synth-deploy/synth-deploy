@@ -1,5 +1,5 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { DecisionDiary, TenantStore } from "@deploystack/core";
+import type { DecisionDebrief, TenantStore } from "@deploystack/core";
 import type { ServerAgent, DeploymentStore } from "../agent/server-agent.js";
 import { registerTools } from "./tools.js";
 import { registerResources } from "./resources.js";
@@ -13,7 +13,7 @@ interface EnvironmentStore {
  */
 export function createMcpServer(deps: {
   agent: ServerAgent;
-  diary: DecisionDiary;
+  debrief: DecisionDebrief;
   tenants: TenantStore;
   environments: EnvironmentStore;
   deployments: DeploymentStore;
@@ -31,7 +31,7 @@ export function createMcpServer(deps: {
   );
 
   registerTools(mcp, deps.agent, deps.tenants, deps.environments, deps.deployments);
-  registerResources(mcp, deps.diary, deps.deployments);
+  registerResources(mcp, deps.debrief, deps.deployments);
 
   return mcp;
 }

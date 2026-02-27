@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { ServerAgent, DeploymentStore } from "../agent/server-agent.js";
-import type { TenantStore, DecisionDiary } from "@deploystack/core";
+import type { TenantStore } from "@deploystack/core";
 
 interface EnvironmentStore {
   get(id: string): { id: string; name: string; variables: Record<string, string> } | undefined;
@@ -24,7 +24,7 @@ export function registerTools(
       title: "Trigger Deployment",
       description:
         "Trigger a deployment for a project to a specific tenant and environment. " +
-        "The server agent will resolve variables, make decisions, and record everything to the Decision Diary.",
+        "The server agent will resolve variables, make decisions, and record everything to the Debrief.",
       inputSchema: {
         projectId: z.string().describe("The project to deploy"),
         tenantId: z.string().describe("Target tenant ID"),
@@ -65,7 +65,7 @@ export function registerTools(
                 deploymentId: deployment.id,
                 status: deployment.status,
                 version: deployment.version,
-                diaryEntries: deployment.diaryEntryIds.length,
+                debriefEntries: deployment.debriefEntryIds.length,
               },
               null,
               2,
@@ -80,7 +80,7 @@ export function registerTools(
     "get-deployment-status",
     {
       title: "Get Deployment Status",
-      description: "Get the current status and Decision Diary entries for a deployment.",
+      description: "Get the current status and Debrief entries for a deployment.",
       inputSchema: {
         deploymentId: z.string().describe("The deployment ID to check"),
       },

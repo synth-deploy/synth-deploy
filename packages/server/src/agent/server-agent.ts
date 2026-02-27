@@ -3,7 +3,7 @@ import type {
   Deployment,
   DeploymentId,
   DeploymentTrigger,
-  DiaryWriter,
+  DebriefWriter,
   Environment,
   Tenant,
 } from "@deploystack/core";
@@ -111,7 +111,7 @@ const CONNECTIVITY_VARIABLE_PATTERNS = [
  * Thrown when a pipeline step fails after the agent has reasoned through it
  * and determined the deployment cannot proceed.
  *
- * Carries structured reasoning so the final diary entry can explain
+ * Carries structured reasoning so the final debrief entry can explain
  * exactly why the deployment was aborted.
  */
 export class OrchestrationError extends Error {
@@ -150,13 +150,13 @@ export class OrchestrationError extends Error {
  *   - Sensitive variable overrides → proceed, log for audit without exposing values
  *   - Standard overrides → proceed with precedence rules
  *
- * Every decision is recorded to the Decision Diary. No silent actions.
+ * Every decision is recorded to the Debrief. No silent actions.
  */
 export class ServerAgent {
   private options: AgentOptions;
 
   constructor(
-    private diary: DiaryWriter,
+    private debrief: DebriefWriter,
     private deployments: DeploymentStore,
     private healthChecker: ServiceHealthChecker = new DefaultHealthChecker(),
     options: Partial<AgentOptions> = {},
@@ -184,7 +184,7 @@ export class ServerAgent {
       "post-deploy-verify",
     ];
 
-    const planEntry = this.diary.record({
+    const planEntry = this.debrief.record({
       tenantId: trigger.tenantId,
       deploymentId,
       agent: "server",
@@ -212,7 +212,7 @@ export class ServerAgent {
       version: trigger.version,
       status: "pending",
       variables: {},
-      diaryEntryIds: [planEntry.id],
+      debriefEntryIds: [planEntry.id],
       createdAt: new Date(),
       completedAt: null,
       failureReason: null,
@@ -251,7 +251,7 @@ export class ServerAgent {
       deployment.status = "succeeded";
       deployment.completedAt = new Date();
 
-      const completionEntry = this.diary.record({
+      const completionEntry = this.debrief.record({
         tenantId: deployment.tenantId,
         deploymentId: deployment.id,
         agent: "server",
@@ -262,7 +262,7 @@ export class ServerAgent {
           `execution finished, post-deploy verification confirmed. ` +
           `${Object.keys(deployment.variables).length} variable(s) applied for tenant "${tenant.name}". ` +
           (hasConflicts
-            ? "Variable conflicts were resolved via precedence rules — see earlier diary entries for per-conflict reasoning."
+            ? "Variable conflicts were resolved via precedence rules — see earlier debrief entries for per-conflict reasoning."
             : "No variable conflicts encountered — configuration was unambiguous.") +
           ` Total duration: ${deployment.completedAt!.getTime() - deployment.createdAt.getTime()}ms.`,
         context: {
@@ -272,7 +272,7 @@ export class ServerAgent {
           variableCount: Object.keys(deployment.variables).length,
         },
       });
-      deployment.diaryEntryIds.push(completionEntry.id);
+      deployment.debriefEntryIds.push(completionEntry.id);
     } catch (error) {
       deployment.status = "failed";
       deployment.completedAt = new Date();
@@ -281,7 +281,7 @@ export class ServerAgent {
           ? error.message
           : `Unexpected error: ${error instanceof Error ? error.message : String(error)}`;
 
-      const failEntry = this.diary.record({
+      const failEntry = this.debrief.record({
         tenantId: deployment.tenantId,
         deploymentId: deployment.id,
         agent: "server",
@@ -307,7 +307,7 @@ export class ServerAgent {
           ...(error instanceof Error ? { errorMessage: error.message } : {}),
         },
       });
-      deployment.diaryEntryIds.push(failEntry.id);
+      deployment.debriefEntryIds.push(failEntry.id);
     }
 
     this.deployments.save(deployment);
@@ -371,7 +371,7 @@ export class ServerAgent {
       }
     }
 
-    const configEntry = this.diary.record({
+    const configEntry = this.debrief.record({
       tenantId: deployment.tenantId,
       deploymentId: deployment.id,
       agent: "server",
@@ -388,7 +388,7 @@ export class ServerAgent {
             `Accepting ${Object.keys(resolved).length} final variable(s) as the deployment configuration.`
           : `${conflicts.length} variable(s) had different values at multiple precedence levels. ` +
             `Resolved using the hierarchy trigger > tenant > environment. ` +
-            `See preceding diary entries for per-conflict risk assessment and reasoning. ` +
+            `See preceding debrief entries for per-conflict risk assessment and reasoning. ` +
             `Accepting the merged result as the deployment configuration.`,
       context: {
         variableCount: Object.keys(resolved).length,
@@ -400,7 +400,7 @@ export class ServerAgent {
         },
       },
     });
-    deployment.diaryEntryIds.push(configEntry.id);
+    deployment.debriefEntryIds.push(configEntry.id);
 
     return { variables: resolved, hasConflicts: conflicts.length > 0 };
   }
@@ -532,14 +532,14 @@ export class ServerAgent {
   }
 
   /**
-   * Record diary entries for each conflict category found in the assessment.
+   * Record debrief entries for each conflict category found in the assessment.
    */
   private recordConflictReasoning(
     deployment: Deployment,
     assessment: ConflictRiskAssessment,
     environment: Environment,
   ): void {
-    // Group details by category for diary entries
+    // Group details by category for debrief entries
     const byCategory = new Map<string, ConflictDetail[]>();
     for (const detail of assessment.details) {
       const existing = byCategory.get(detail.category) ?? [];
@@ -550,7 +550,7 @@ export class ServerAgent {
     // Cross-env connectivity (the high-risk ones)
     const crossEnvConn = byCategory.get("cross-env-connectivity");
     if (crossEnvConn) {
-      const entry = this.diary.record({
+      const entry = this.debrief.record({
         tenantId: deployment.tenantId,
         deploymentId: deployment.id,
         agent: "server",
@@ -572,7 +572,7 @@ export class ServerAgent {
           targetEnvironment: environment.name,
         },
       });
-      deployment.diaryEntryIds.push(entry.id);
+      deployment.debriefEntryIds.push(entry.id);
     }
 
     // Cross-env non-connectivity
@@ -581,7 +581,7 @@ export class ServerAgent {
       const details = crossEnv
         .map((d) => d.riskContribution)
         .join("; ");
-      const entry = this.diary.record({
+      const entry = this.debrief.record({
         tenantId: deployment.tenantId,
         deploymentId: deployment.id,
         agent: "server",
@@ -600,13 +600,13 @@ export class ServerAgent {
           })),
         },
       });
-      deployment.diaryEntryIds.push(entry.id);
+      deployment.debriefEntryIds.push(entry.id);
     }
 
     // Sensitive overrides
     const sensitiveDetails = byCategory.get("sensitive");
     if (sensitiveDetails) {
-      const entry = this.diary.record({
+      const entry = this.debrief.record({
         tenantId: deployment.tenantId,
         deploymentId: deployment.id,
         agent: "server",
@@ -627,7 +627,7 @@ export class ServerAgent {
           })),
         },
       });
-      deployment.diaryEntryIds.push(entry.id);
+      deployment.debriefEntryIds.push(entry.id);
     }
 
     // Standard overrides
@@ -641,7 +641,7 @@ export class ServerAgent {
             `"${d.conflict.loserValue}"`,
         )
         .join("; ");
-      const entry = this.diary.record({
+      const entry = this.debrief.record({
         tenantId: deployment.tenantId,
         deploymentId: deployment.id,
         agent: "server",
@@ -662,7 +662,7 @@ export class ServerAgent {
           })),
         },
       });
-      deployment.diaryEntryIds.push(entry.id);
+      deployment.debriefEntryIds.push(entry.id);
     }
   }
 
@@ -713,7 +713,7 @@ export class ServerAgent {
     });
 
     if (firstCheck.reachable) {
-      const entry = this.diary.record({
+      const entry = this.debrief.record({
         tenantId: deployment.tenantId,
         deploymentId: deployment.id,
         agent: "server",
@@ -730,7 +730,7 @@ export class ServerAgent {
           attempt: 1,
         },
       });
-      deployment.diaryEntryIds.push(entry.id);
+      deployment.debriefEntryIds.push(entry.id);
       return;
     }
 
@@ -744,7 +744,7 @@ export class ServerAgent {
 
     if (decision.action === "abort") {
       // Reasoning determined retrying won't help (e.g., DNS failure)
-      const abortEntry = this.diary.record({
+      const abortEntry = this.debrief.record({
         tenantId: deployment.tenantId,
         deploymentId: deployment.id,
         agent: "server",
@@ -759,7 +759,7 @@ export class ServerAgent {
           retriesSkipped: true,
         },
       });
-      deployment.diaryEntryIds.push(abortEntry.id);
+      deployment.debriefEntryIds.push(abortEntry.id);
 
       throw new OrchestrationError(
         "preflight-health-check",
@@ -769,7 +769,7 @@ export class ServerAgent {
     }
 
     // Decision is to retry
-    const retryEntry = this.diary.record({
+    const retryEntry = this.debrief.record({
       tenantId: deployment.tenantId,
       deploymentId: deployment.id,
       agent: "server",
@@ -785,7 +785,7 @@ export class ServerAgent {
         attempt,
       },
     });
-    deployment.diaryEntryIds.push(retryEntry.id);
+    deployment.debriefEntryIds.push(retryEntry.id);
 
     // Retry loop — each iteration re-evaluates the situation
     for (let i = 0; i < this.options.healthCheckRetries; i++) {
@@ -798,7 +798,7 @@ export class ServerAgent {
       });
 
       if (retryCheck.reachable) {
-        const recoveryEntry = this.diary.record({
+        const recoveryEntry = this.debrief.record({
           tenantId: deployment.tenantId,
           deploymentId: deployment.id,
           agent: "server",
@@ -818,7 +818,7 @@ export class ServerAgent {
             recoveredAfterMs: decision.delayMs * (i + 1),
           },
         });
-        deployment.diaryEntryIds.push(recoveryEntry.id);
+        deployment.debriefEntryIds.push(recoveryEntry.id);
         return;
       }
     }
@@ -990,7 +990,7 @@ export class ServerAgent {
     tenant: Tenant,
     environment: Environment,
   ): Promise<void> {
-    const entry = this.diary.record({
+    const entry = this.debrief.record({
       tenantId: deployment.tenantId,
       deploymentId: deployment.id,
       agent: "server",
@@ -1012,7 +1012,7 @@ export class ServerAgent {
         environmentName: environment.name,
       },
     });
-    deployment.diaryEntryIds.push(entry.id);
+    deployment.debriefEntryIds.push(entry.id);
 
     await this.delay(this.options.executionDelayMs);
   }
@@ -1022,7 +1022,7 @@ export class ServerAgent {
     tenant: Tenant,
     environment: Environment,
   ): Promise<void> {
-    const entry = this.diary.record({
+    const entry = this.debrief.record({
       tenantId: deployment.tenantId,
       deploymentId: deployment.id,
       agent: "server",
@@ -1034,7 +1034,7 @@ export class ServerAgent {
         `reported successful artifact placement. ${Object.keys(deployment.variables).length} ` +
         `variable(s) applied. Note: this is server-side verification based on execution ` +
         `outcome — the Tentacle's own local verification (artifact checksums, service ` +
-        `health) provides the ground-truth confirmation in its diary entries.`,
+        `health) provides the ground-truth confirmation in its debrief entries.`,
       context: {
         step: "post-deploy-verify",
         variableCount: Object.keys(deployment.variables).length,
@@ -1042,7 +1042,7 @@ export class ServerAgent {
         version: deployment.version,
       },
     });
-    deployment.diaryEntryIds.push(entry.id);
+    deployment.debriefEntryIds.push(entry.id);
   }
 
   // -----------------------------------------------------------------------

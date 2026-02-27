@@ -117,7 +117,7 @@ export default function Settings() {
             </select>
             <div className="settings-description">
               Strict mode blocks deployments when cross-environment variable conflicts are detected.
-              Permissive mode proceeds but logs a warning in the Decision Diary.
+              Permissive mode proceeds but logs a warning in the Debrief.
             </div>
           </div>
           <div className="form-group">

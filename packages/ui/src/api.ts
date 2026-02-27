@@ -3,7 +3,7 @@ import type {
   Tenant,
   Environment,
   Deployment,
-  DiaryEntry,
+  DebriefEntry,
   PostmortemReport,
   ProjectHistory,
   DeploymentStep,
@@ -209,7 +209,7 @@ export async function listProjectDeployments(projectId: string): Promise<Deploym
   return data.deployments;
 }
 
-export async function getDeployment(id: string): Promise<{ deployment: Deployment; diary: DiaryEntry[] }> {
+export async function getDeployment(id: string): Promise<{ deployment: Deployment; debrief: DebriefEntry[] }> {
   return fetchJson(`/api/deployments/${id}`);
 }
 
@@ -219,18 +219,27 @@ export async function triggerDeployment(trigger: {
   environmentId: string;
   version: string;
   variables?: Record<string, string>;
-}): Promise<{ deployment: Deployment; diary: DiaryEntry[] }> {
+}): Promise<{ deployment: Deployment; debrief: DebriefEntry[] }> {
   return fetchJson("/api/deployments", {
     method: "POST",
     body: JSON.stringify(trigger),
   });
 }
 
-// --- Diary / Reports ---
+// --- Debrief / Reports ---
 
-export async function getRecentDiary(limit?: number): Promise<DiaryEntry[]> {
-  const url = limit ? `/api/diary?limit=${limit}` : "/api/diary";
-  const data = await fetchJson<{ entries: DiaryEntry[] }>(url);
+export async function getRecentDebrief(filters?: {
+  limit?: number;
+  tenantId?: string;
+  decisionType?: string;
+}): Promise<DebriefEntry[]> {
+  const params = new URLSearchParams();
+  if (filters?.limit) params.set("limit", String(filters.limit));
+  if (filters?.tenantId) params.set("tenantId", filters.tenantId);
+  if (filters?.decisionType) params.set("decisionType", filters.decisionType);
+  const qs = params.toString();
+  const url = qs ? `/api/debrief?${qs}` : "/api/debrief";
+  const data = await fetchJson<{ entries: DebriefEntry[] }>(url);
   return data.entries;
 }
 

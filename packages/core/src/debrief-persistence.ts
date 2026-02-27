@@ -4,13 +4,13 @@ import type {
   AgentType,
   DecisionType,
   DeploymentId,
-  DiaryEntry,
-  DiaryEntryId,
+  DebriefEntry,
+  DebriefEntryId,
   TenantId,
 } from "./types.js";
-import type { DiaryRecordParams, DiaryWriter, DiaryReader } from "./decision-diary.js";
+import type { DebriefRecordParams, DebriefWriter, DebriefReader } from "./debrief.js";
 
-interface DiaryRow {
+interface DebriefRow {
   id: string;
   timestamp: string;
   tenant_id: string | null;
@@ -22,7 +22,7 @@ interface DiaryRow {
   context: string;
 }
 
-function rowToEntry(row: DiaryRow): DiaryEntry {
+function rowToEntry(row: DebriefRow): DebriefEntry {
   return {
     id: row.id,
     timestamp: new Date(row.timestamp),
@@ -37,10 +37,10 @@ function rowToEntry(row: DiaryRow): DiaryEntry {
 }
 
 /**
- * SQLite-backed Decision Diary. Entries survive server restarts.
+ * SQLite-backed Decision Debrief. Entries survive server restarts.
  *
- * Uses better-sqlite3 for synchronous, single-file persistence —
- * no database server, no async overhead, and the same DiaryWriter/DiaryReader
+ * Uses better-sqlite3 for synchronous, single-file persistence --
+ * no database server, no async overhead, and the same DebriefWriter/DebriefReader
  * interfaces as the in-memory implementation.
  *
  * Indexes support all four query dimensions:
@@ -49,7 +49,7 @@ function rowToEntry(row: DiaryRow): DiaryEntry {
  *   - by decision type (idx_diary_decision_type)
  *   - by time range (idx_diary_timestamp)
  */
-export class PersistentDecisionDiary implements DiaryWriter, DiaryReader {
+export class PersistentDecisionDebrief implements DebriefWriter, DebriefReader {
   private db: Database.Database;
   private stmts: {
     insert: Database.Statement;
@@ -110,8 +110,8 @@ export class PersistentDecisionDiary implements DiaryWriter, DiaryReader {
     };
   }
 
-  record(params: DiaryRecordParams): DiaryEntry {
-    const entry: DiaryEntry = {
+  record(params: DebriefRecordParams): DebriefEntry {
+    const entry: DebriefEntry = {
       id: crypto.randomUUID(),
       timestamp: new Date(),
       tenantId: params.tenantId,
@@ -138,36 +138,36 @@ export class PersistentDecisionDiary implements DiaryWriter, DiaryReader {
     return entry;
   }
 
-  getById(id: DiaryEntryId): DiaryEntry | undefined {
-    const row = this.stmts.getById.get(id) as DiaryRow | undefined;
+  getById(id: DebriefEntryId): DebriefEntry | undefined {
+    const row = this.stmts.getById.get(id) as DebriefRow | undefined;
     return row ? rowToEntry(row) : undefined;
   }
 
-  getByDeployment(deploymentId: DeploymentId): DiaryEntry[] {
-    const rows = this.stmts.getByDeployment.all(deploymentId) as DiaryRow[];
+  getByDeployment(deploymentId: DeploymentId): DebriefEntry[] {
+    const rows = this.stmts.getByDeployment.all(deploymentId) as DebriefRow[];
     return rows.map(rowToEntry);
   }
 
-  getByTenant(tenantId: TenantId): DiaryEntry[] {
-    const rows = this.stmts.getByTenant.all(tenantId) as DiaryRow[];
+  getByTenant(tenantId: TenantId): DebriefEntry[] {
+    const rows = this.stmts.getByTenant.all(tenantId) as DebriefRow[];
     return rows.map(rowToEntry);
   }
 
-  getByType(decisionType: DecisionType): DiaryEntry[] {
-    const rows = this.stmts.getByType.all(decisionType) as DiaryRow[];
+  getByType(decisionType: DecisionType): DebriefEntry[] {
+    const rows = this.stmts.getByType.all(decisionType) as DebriefRow[];
     return rows.map(rowToEntry);
   }
 
-  getByTimeRange(from: Date, to: Date): DiaryEntry[] {
+  getByTimeRange(from: Date, to: Date): DebriefEntry[] {
     const rows = this.stmts.getByTimeRange.all(
       from.toISOString(),
       to.toISOString(),
-    ) as DiaryRow[];
+    ) as DebriefRow[];
     return rows.map(rowToEntry);
   }
 
-  getRecent(limit = 50): DiaryEntry[] {
-    const rows = this.stmts.getRecent.all(limit) as DiaryRow[];
+  getRecent(limit = 50): DebriefEntry[] {
+    const rows = this.stmts.getRecent.all(limit) as DebriefRow[];
     return rows.map(rowToEntry);
   }
 

@@ -4,17 +4,17 @@ import type {
   Tenant,
   Deployment,
   DeploymentId,
-  DiaryEntry,
+  DebriefEntry,
 } from "./types.js";
-import type { DiaryReader } from "./decision-diary.js";
+import type { DebriefReader } from "./debrief.js";
 import {
   TenantContainer,
   type ScopedDeploymentReader,
-  type ScopedDiaryReader,
+  type ScopedDebriefReader,
 } from "./tenant-container.js";
 
 // ---------------------------------------------------------------------------
-// Backing store interfaces — what TenantManager wraps
+// Backing store interfaces -- what TenantManager wraps
 // ---------------------------------------------------------------------------
 
 /**
@@ -27,7 +27,7 @@ export interface DeploymentStoreReader {
 }
 
 // ---------------------------------------------------------------------------
-// Scoped store implementations — the isolation enforcement layer
+// Scoped store implementations -- the isolation enforcement layer
 // ---------------------------------------------------------------------------
 
 /**
@@ -53,46 +53,46 @@ class TenantScopedDeployments implements ScopedDeploymentReader {
 }
 
 /**
- * Wraps a full diary reader and enforces tenant-scoped access.
+ * Wraps a full debrief reader and enforces tenant-scoped access.
  */
-class TenantScopedDiary implements ScopedDiaryReader {
+class TenantScopedDebrief implements ScopedDebriefReader {
   constructor(
     private tenantId: TenantId,
-    private backing: DiaryReader,
+    private backing: DebriefReader,
   ) {}
 
-  list(): DiaryEntry[] {
+  list(): DebriefEntry[] {
     return this.backing.getByTenant(this.tenantId);
   }
 }
 
 // ---------------------------------------------------------------------------
-// TenantManager — the single entry point for tenant lifecycle
+// TenantManager -- the single entry point for tenant lifecycle
 // ---------------------------------------------------------------------------
 
 /**
  * Manages the lifecycle of TenantContainers and wires up scoped store views.
  *
  * Cross-tenant data access is impossible through the container interface:
- * each container only sees deployments and diary entries belonging to its
- * tenant. Variables are owned copies within each container — modifying
+ * each container only sees deployments and debrief entries belonging to its
+ * tenant. Variables are owned copies within each container -- modifying
  * one tenant's variables has zero effect on any other tenant.
  *
  * Usage:
- *   const manager = new TenantManager(deploymentStore, diary);
+ *   const manager = new TenantManager(deploymentStore, debrief);
  *   const tenantA = manager.createTenant("Acme Corp", { DB_HOST: "acme-db" });
  *   const tenantB = manager.createTenant("Beta Inc", { DB_HOST: "beta-db" });
  *
- *   // tenantA.getDeployments() — only Acme's deployments
- *   // tenantB.getDiaryEntries() — only Beta's diary entries
- *   // tenantA.setVariables({...}) — no effect on tenantB
+ *   // tenantA.getDeployments() -- only Acme's deployments
+ *   // tenantB.getDebriefEntries() -- only Beta's debrief entries
+ *   // tenantA.setVariables({...}) -- no effect on tenantB
  */
 export class TenantManager {
   private containers: Map<TenantId, TenantContainer> = new Map();
 
   constructor(
     private deploymentStore: DeploymentStoreReader,
-    private diaryReader: DiaryReader,
+    private debriefReader: DebriefReader,
   ) {}
 
   createTenant(
@@ -109,7 +109,7 @@ export class TenantManager {
     const container = new TenantContainer(
       tenant,
       new TenantScopedDeployments(tenant.id, this.deploymentStore),
-      new TenantScopedDiary(tenant.id, this.diaryReader),
+      new TenantScopedDebrief(tenant.id, this.debriefReader),
     );
     this.containers.set(tenant.id, container);
     return container;

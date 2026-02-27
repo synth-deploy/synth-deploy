@@ -6,7 +6,7 @@ export type TenantId = string;
 export type DeploymentId = string;
 export type ProjectId = string;
 export type EnvironmentId = string;
-export type DiaryEntryId = string;
+export type DebriefEntryId = string;
 
 // --- Deployment ---
 
@@ -36,13 +36,13 @@ export interface Deployment {
   version: string;
   status: DeploymentStatus;
   variables: Record<string, string>;
-  diaryEntryIds: DiaryEntryId[];
+  debriefEntryIds: DebriefEntryId[];
   createdAt: Date;
   completedAt: Date | null;
   failureReason: string | null;
 }
 
-// --- Decision Diary ---
+// --- Debrief ---
 
 export const AgentType = z.enum(["server", "tentacle"]);
 export type AgentType = z.infer<typeof AgentType>;
@@ -62,8 +62,8 @@ export const DecisionType = z.enum([
 ]);
 export type DecisionType = z.infer<typeof DecisionType>;
 
-export interface DiaryEntry {
-  id: DiaryEntryId;
+export interface DebriefEntry {
+  id: DebriefEntryId;
   timestamp: Date;
   tenantId: TenantId | null;
   deploymentId: DeploymentId | null;

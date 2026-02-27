@@ -1,52 +1,52 @@
 import { ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { DecisionDiary } from "@deploystack/core";
+import type { DecisionDebrief } from "@deploystack/core";
 import type { DeploymentStore } from "../agent/server-agent.js";
 
 /**
  * Register MCP resources. These expose DeployStack state to MCP clients
- * as readable data — Decision Diary entries, deployment records, etc.
+ * as readable data — Debrief entries, deployment records, etc.
  */
 export function registerResources(
   mcp: McpServer,
-  diary: DecisionDiary,
+  debrief: DecisionDebrief,
   deployments: DeploymentStore,
 ): void {
-  // Recent diary entries
+  // Recent debrief entries
   mcp.registerResource(
-    "recent-diary-entries",
-    "diary://recent",
+    "recent-debrief-entries",
+    "debrief://recent",
     {
-      title: "Recent Decision Diary Entries",
+      title: "Recent Debrief Entries",
       description:
-        "The most recent Decision Diary entries across all deployments. " +
+        "The most recent Debrief entries across all deployments. " +
         "Each entry records what the agent decided and why, in plain language.",
       mimeType: "application/json",
     },
     async () => ({
       contents: [
         {
-          uri: "diary://recent",
-          text: JSON.stringify(diary.getRecent(20), null, 2),
+          uri: "debrief://recent",
+          text: JSON.stringify(debrief.getRecent(20), null, 2),
         },
       ],
     }),
   );
 
-  // Diary entries for a specific deployment
+  // Debrief entries for a specific deployment
   mcp.registerResource(
-    "deployment-diary",
-    new ResourceTemplate("diary://deployment/{deploymentId}", {
+    "deployment-debrief",
+    new ResourceTemplate("debrief://deployment/{deploymentId}", {
       list: undefined,
     }),
     {
-      title: "Deployment Decision Diary",
+      title: "Deployment Debrief",
       description:
-        "All Decision Diary entries for a specific deployment, showing the full reasoning chain.",
+        "All Debrief entries for a specific deployment, showing the full reasoning chain.",
       mimeType: "application/json",
     },
     async (uri, { deploymentId }) => {
-      const entries = diary.getByDeployment(deploymentId as string);
+      const entries = debrief.getByDeployment(deploymentId as string);
       return {
         contents: [
           {
@@ -71,7 +71,7 @@ export function registerResources(
     }),
     {
       title: "Deployment Record",
-      description: "Full deployment record including status, variables, and diary entry references.",
+      description: "Full deployment record including status, variables, and debrief entry references.",
       mimeType: "application/json",
     },
     async (uri, { deploymentId }) => {

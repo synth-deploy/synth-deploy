@@ -1,16 +1,16 @@
 import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router";
 import { getDeployment, getPostmortem, listEnvironments, listTenants } from "../api.js";
-import type { Deployment, DiaryEntry, PostmortemReport, Environment, Tenant } from "../types.js";
+import type { Deployment, DebriefEntry, PostmortemReport, Environment, Tenant } from "../types.js";
 import StatusBadge from "../components/StatusBadge.js";
 import EnvBadge from "../components/EnvBadge.js";
-import DiaryTimeline from "../components/DiaryTimeline.js";
+import DebriefTimeline from "../components/DebriefTimeline.js";
 import VariableEditor from "../components/VariableEditor.js";
 
 export default function DeploymentDetail() {
   const { id } = useParams<{ id: string }>();
   const [deployment, setDeployment] = useState<Deployment | null>(null);
-  const [diary, setDiary] = useState<DiaryEntry[]>([]);
+  const [debrief, setDebrief] = useState<DebriefEntry[]>([]);
   const [postmortem, setPostmortem] = useState<PostmortemReport | null>(null);
   const [environments, setEnvironments] = useState<Environment[]>([]);
   const [tenants, setTenants] = useState<Tenant[]>([]);
@@ -26,7 +26,7 @@ export default function DeploymentDetail() {
       listTenants(),
     ]).then(([data, pm, envs, ts]) => {
       setDeployment(data.deployment);
-      setDiary(data.diary);
+      setDebrief(data.debrief);
       setPostmortem(pm);
       setEnvironments(envs);
       setTenants(ts);
@@ -105,7 +105,7 @@ export default function DeploymentDetail() {
           <h4>Deployment Failed</h4>
           <div className="failure-field">
             <div className="failure-label">Reason</div>
-            <div className="failure-value">{deployment.failureReason ?? "No failure details available. Check the Decision Diary timeline below."}</div>
+            <div className="failure-value">{deployment.failureReason ?? "No failure details available. Check the Debrief timeline below."}</div>
           </div>
         </div>
       )}
@@ -130,16 +130,16 @@ export default function DeploymentDetail() {
         </div>
       )}
 
-      {/* Decision Diary Timeline — THE DIFFERENTIATOR */}
+      {/* Debrief Timeline — THE DIFFERENTIATOR */}
       <div className="section">
         <div className="card">
           <div className="card-header">
-            <h3>Decision Diary</h3>
+            <h3>Debrief</h3>
             <span className="text-muted" style={{ fontSize: 12 }}>
-              {diary.length} decision{diary.length !== 1 ? "s" : ""} recorded
+              {debrief.length} decision{diary.length !== 1 ? "s" : ""} recorded
             </span>
           </div>
-          <DiaryTimeline entries={diary} />
+          <DebriefTimeline entries={debrief} />
         </div>
       </div>
 

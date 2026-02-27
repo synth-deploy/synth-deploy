@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import type { TenantStore, DecisionDiary } from "@deploystack/core";
+import type { TenantStore, DecisionDebrief } from "@deploystack/core";
 import { generateProjectHistory } from "@deploystack/core";
 import type { DeploymentStore } from "../agent/server-agent.js";
 
@@ -7,7 +7,7 @@ export function registerTenantRoutes(
   app: FastifyInstance,
   tenants: TenantStore,
   deployments: DeploymentStore,
-  diary: DecisionDiary,
+  debrief: DecisionDebrief,
 ): void {
   // List all tenants
   app.get("/api/tenants", async () => {
@@ -93,7 +93,7 @@ export function registerTenantRoutes(
       }
 
       const tenantDeployments = deployments.getByTenant(request.params.id);
-      const tenantEntries = diary.getByTenant(request.params.id);
+      const tenantEntries = debrief.getByTenant(request.params.id);
       const history = generateProjectHistory(tenantEntries, tenantDeployments);
 
       return { history };

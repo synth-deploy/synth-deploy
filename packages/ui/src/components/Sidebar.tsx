@@ -48,6 +48,10 @@ export default function Sidebar() {
           <span className="nav-icon">&#9650;</span>
           New Deployment
         </NavLink>
+        <NavLink to="/debrief" className={({ isActive }) => isActive ? "active" : ""}>
+          <span className="nav-icon">&#9733;</span>
+          Debrief
+        </NavLink>
         <NavLink to="/settings" className={({ isActive }) => isActive ? "active" : ""}>
           <span className="nav-icon">&#9881;</span>
           Settings

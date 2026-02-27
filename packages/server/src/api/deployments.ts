@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { DeploymentTriggerSchema, generatePostmortem } from "@deploystack/core";
-import type { TenantStore, DecisionDiary } from "@deploystack/core";
+import type { TenantStore, DecisionDebrief } from "@deploystack/core";
 import type { ServerAgent, DeploymentStore } from "../agent/server-agent.js";
 
 interface EnvironmentStore {
@@ -21,7 +21,7 @@ export function registerDeploymentRoutes(
   tenants: TenantStore,
   environments: EnvironmentStore,
   deployments: DeploymentStore,
-  diary: DecisionDiary,
+  debrief: DecisionDebrief,
   projects?: ProjectStore,
 ): void {
   // Trigger a deployment
@@ -65,7 +65,7 @@ export function registerDeploymentRoutes(
 
     return reply.status(201).send({
       deployment,
-      diary: diary.getByDeployment(deployment.id),
+      debrief: debrief.getByDeployment(deployment.id),
     });
   });
 
@@ -78,7 +78,7 @@ export function registerDeploymentRoutes(
 
     return {
       deployment,
-      diary: diary.getByDeployment(deployment.id),
+      debrief: debrief.getByDeployment(deployment.id),
     };
   });
 
@@ -107,15 +107,40 @@ export function registerDeploymentRoutes(
         return reply.status(404).send({ error: "Deployment not found" });
       }
 
-      const entries = diary.getByDeployment(deployment.id);
+      const entries = debrief.getByDeployment(deployment.id);
       const postmortem = generatePostmortem(entries, deployment);
       return { postmortem };
     },
   );
 
-  // Get recent diary entries
-  app.get("/api/diary", async (request) => {
-    const { limit } = request.query as { limit?: string };
-    return { entries: diary.getRecent(limit ? parseInt(limit, 10) : 50) };
+  // Get recent debrief entries (supports filtering by tenant and decision type)
+  app.get("/api/debrief", async (request) => {
+    const { limit, tenantId, decisionType } = request.query as {
+      limit?: string;
+      tenantId?: string;
+      decisionType?: string;
+    };
+
+    const max = limit ? parseInt(limit, 10) : 50;
+
+    // No filters — fast path
+    if (!tenantId && !decisionType) {
+      return { entries: debrief.getRecent(max) };
+    }
+
+    // Start with the most selective filter, then narrow
+    let entries: ReturnType<typeof debrief.getByTenant>;
+    if (tenantId && decisionType) {
+      entries = debrief.getByTenant(tenantId).filter(
+        (e) => e.decisionType === decisionType,
+      );
+    } else if (tenantId) {
+      entries = debrief.getByTenant(tenantId);
+    } else {
+      entries = debrief.getByType(decisionType as Parameters<typeof debrief.getByType>[0]);
+    }
+
+    entries.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+    return { entries: entries.slice(0, max) };
   });
 }

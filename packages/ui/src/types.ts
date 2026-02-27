@@ -81,7 +81,7 @@ export interface Deployment {
   version: string;
   status: DeploymentStatus;
   variables: Record<string, string>;
-  diaryEntryIds: string[];
+  debriefEntryIds: string[];
   createdAt: string;
   completedAt: string | null;
   failureReason: string | null;
@@ -102,7 +102,7 @@ export type DecisionType =
 
 export type AgentType = "server" | "tentacle";
 
-export interface DiaryEntry {
+export interface DebriefEntry {
   id: string;
   timestamp: string;
   tenantId: string | null;

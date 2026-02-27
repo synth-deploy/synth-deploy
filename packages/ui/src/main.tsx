@@ -11,6 +11,7 @@ import Environments from "./pages/Environments.js";
 import EnvironmentDetail from "./pages/EnvironmentDetail.js";
 import DeploymentDetail from "./pages/DeploymentDetail.js";
 import NewDeployment from "./pages/NewDeployment.js";
+import Debrief from "./pages/Debrief.js";
 import Settings from "./pages/Settings.js";
 import "./app.css";
 
@@ -28,6 +29,7 @@ createRoot(document.getElementById("root")!).render(
           <Route path="environments/:id" element={<EnvironmentDetail />} />
           <Route path="deployments/:id" element={<DeploymentDetail />} />
           <Route path="deploy" element={<NewDeployment />} />
+          <Route path="debrief" element={<Debrief />} />
           <Route path="settings" element={<Settings />} />
         </Route>
       </Routes>

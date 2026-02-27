@@ -1,5 +1,6 @@
 import { useState } from "react";
-import type { DiaryEntry, DecisionType } from "../types.js";
+import { Link } from "react-router";
+import type { DebriefEntry, DecisionType } from "../types.js";
 
 const dtClassMap: Record<string, string> = {
   "pipeline-plan": "dt-plan",
@@ -47,23 +48,36 @@ function formatContext(ctx: Record<string, unknown>): string {
   return JSON.stringify(Object.fromEntries(filtered), null, 2);
 }
 
-export default function DiaryEntryCard({ entry }: { entry: DiaryEntry }) {
+export default function DebriefEntryCard({ entry }: { entry: DebriefEntry }) {
   const [expanded, setExpanded] = useState(false);
   const dtClass = dtClassMap[entry.decisionType] ?? "";
   const dtLabel = dtLabels[entry.decisionType] ?? entry.decisionType;
 
   return (
-    <div className={`diary-entry ${dtClass}`}>
-      <div className="diary-entry-header">
-        <span className="diary-entry-time">{formatTs(entry.timestamp)}</span>
+    <div className={`debrief-entry ${dtClass}`}>
+      <div className="debrief-entry-header">
+        <span className="debrief-entry-time">{formatTs(entry.timestamp)}</span>
         <span className={`dt-badge`} style={{ color: `var(--${dtClass})`, background: `color-mix(in srgb, var(--${dtClass}) 12%, transparent)` }}>
           {dtLabel}
         </span>
         <span className={`agent-badge agent-badge-${entry.agent}`}>
           {entry.agent}
         </span>
+        {entry.deploymentId && (
+          <Link
+            to={`/deployments/${entry.deploymentId}`}
+            className="debrief-entry-deploy-link"
+          >
+            {entry.deploymentId.slice(0, 8)}
+          </Link>
+        )}
+        {entry.tenantId && (
+          <span className="debrief-entry-tenant text-muted" style={{ fontSize: 11, marginLeft: "auto" }}>
+            tenant: {entry.tenantId.slice(0, 8)}
+          </span>
+        )}
       </div>
-      <div className="diary-entry-decision">{entry.decision}</div>
+      <div className="debrief-entry-decision">{entry.decision}</div>
       <button
         className="btn btn-sm mt-16"
         onClick={() => setExpanded(!expanded)}
@@ -73,9 +87,9 @@ export default function DiaryEntryCard({ entry }: { entry: DiaryEntry }) {
       </button>
       {expanded && (
         <>
-          <div className="diary-entry-reasoning">{entry.reasoning}</div>
+          <div className="debrief-entry-reasoning">{entry.reasoning}</div>
           {formatContext(entry.context) && (
-            <pre className="diary-entry-context">{formatContext(entry.context)}</pre>
+            <pre className="debrief-entry-context">{formatContext(entry.context)}</pre>
           )}
         </>
       )}

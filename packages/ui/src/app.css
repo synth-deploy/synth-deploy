@@ -468,14 +468,14 @@ table a:hover {
   box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
 }
 
-/* ---- Timeline ---- */
+/* ---- Debrief Timeline ---- */
 
-.diary-timeline {
+.debrief-timeline {
   position: relative;
   padding-left: 24px;
 }
 
-.diary-timeline::before {
+.debrief-timeline::before {
   content: "";
   position: absolute;
   left: 8px;
@@ -485,7 +485,7 @@ table a:hover {
   background: var(--border);
 }
 
-.diary-entry {
+.debrief-entry {
   position: relative;
   margin-bottom: 16px;
   padding: 12px 16px;
@@ -494,7 +494,7 @@ table a:hover {
   border-radius: var(--radius);
 }
 
-.diary-entry::before {
+.debrief-entry::before {
   content: "";
   position: absolute;
   left: -20px;
@@ -506,18 +506,18 @@ table a:hover {
   border: 2px solid var(--surface);
 }
 
-.diary-entry.dt-completion::before { background: var(--dt-completion); }
-.diary-entry.dt-failure::before { background: var(--dt-failure); }
-.diary-entry.dt-conflict::before { background: var(--dt-conflict); }
-.diary-entry.dt-health::before { background: var(--dt-health); }
-.diary-entry.dt-plan::before { background: var(--dt-plan); }
-.diary-entry.dt-config::before { background: var(--dt-config); }
-.diary-entry.dt-execution::before { background: var(--dt-execution); }
-.diary-entry.dt-verification::before { background: var(--dt-verification); }
-.diary-entry.dt-diagnostic::before { background: var(--dt-diagnostic); }
-.diary-entry.dt-scan::before { background: var(--dt-scan); }
+.debrief-entry.dt-completion::before { background: var(--dt-completion); }
+.debrief-entry.dt-failure::before { background: var(--dt-failure); }
+.debrief-entry.dt-conflict::before { background: var(--dt-conflict); }
+.debrief-entry.dt-health::before { background: var(--dt-health); }
+.debrief-entry.dt-plan::before { background: var(--dt-plan); }
+.debrief-entry.dt-config::before { background: var(--dt-config); }
+.debrief-entry.dt-execution::before { background: var(--dt-execution); }
+.debrief-entry.dt-verification::before { background: var(--dt-verification); }
+.debrief-entry.dt-diagnostic::before { background: var(--dt-diagnostic); }
+.debrief-entry.dt-scan::before { background: var(--dt-scan); }
 
-.diary-entry-header {
+.debrief-entry-header {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -525,19 +525,19 @@ table a:hover {
   flex-wrap: wrap;
 }
 
-.diary-entry-time {
+.debrief-entry-time {
   font-size: 11px;
   color: var(--text-muted);
   font-family: var(--font-mono);
 }
 
-.diary-entry-decision {
+.debrief-entry-decision {
   font-size: 13px;
   font-weight: 500;
   color: var(--text);
 }
 
-.diary-entry-reasoning {
+.debrief-entry-reasoning {
   font-size: 12px;
   color: var(--text-secondary);
   line-height: 1.6;
@@ -546,7 +546,7 @@ table a:hover {
   border-top: 1px solid var(--border);
 }
 
-.diary-entry-context {
+.debrief-entry-context {
   margin-top: 8px;
   padding: 8px 10px;
   background: #f8f9fa;
@@ -555,6 +555,25 @@ table a:hover {
   font-size: 11px;
   color: var(--text-secondary);
   overflow-x: auto;
+}
+
+.debrief-entry-deploy-link {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--dt-plan);
+  text-decoration: none;
+  padding: 1px 6px;
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--dt-plan) 8%, transparent);
+}
+
+.debrief-entry-deploy-link:hover {
+  background: color-mix(in srgb, var(--dt-plan) 16%, transparent);
+  text-decoration: underline;
+}
+
+.debrief-entry-tenant {
+  font-family: var(--font-mono);
 }
 
 /* ---- Variable editor ---- */

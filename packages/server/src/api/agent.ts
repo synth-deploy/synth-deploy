@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import type { TenantStore, DecisionDiary, Project, Tenant, Environment } from "@deploystack/core";
+import type { TenantStore, DecisionDebrief, Project, Tenant, Environment } from "@deploystack/core";
 import type { ServerAgent, DeploymentStore } from "../agent/server-agent.js";
 
 // ---------------------------------------------------------------------------
@@ -433,7 +433,7 @@ export function registerAgentRoutes(
   environments: EnvironmentStore,
   projects: ProjectStore,
   deployments: DeploymentStore,
-  diary: DecisionDiary,
+  debrief: DecisionDebrief,
 ): void {
   /**
    * Interpret a plain-language deployment intent.
@@ -478,7 +478,7 @@ export function registerAgentRoutes(
       }
     }
 
-    diary.record({
+    debrief.record({
       tenantId: result.resolved.tenantId.confidence !== "missing" ? result.resolved.tenantId.value : null,
       deploymentId: null,
       agent: "server",

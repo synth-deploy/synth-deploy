@@ -3,12 +3,12 @@ import type {
   AgentType,
   DecisionType,
   DeploymentId,
-  DiaryEntry,
-  DiaryEntryId,
+  DebriefEntry,
+  DebriefEntryId,
   TenantId,
 } from "./types.js";
 
-export interface DiaryRecordParams {
+export interface DebriefRecordParams {
   tenantId: TenantId | null;
   deploymentId: DeploymentId | null;
   agent: AgentType;
@@ -18,28 +18,28 @@ export interface DiaryRecordParams {
   context?: Record<string, unknown>;
 }
 
-export interface DiaryWriter {
-  record(params: DiaryRecordParams): DiaryEntry;
+export interface DebriefWriter {
+  record(params: DebriefRecordParams): DebriefEntry;
 }
 
-export interface DiaryReader {
-  getById(id: DiaryEntryId): DiaryEntry | undefined;
-  getByDeployment(deploymentId: DeploymentId): DiaryEntry[];
-  getByTenant(tenantId: TenantId): DiaryEntry[];
-  getByType(decisionType: DecisionType): DiaryEntry[];
-  getByTimeRange(from: Date, to: Date): DiaryEntry[];
-  getRecent(limit?: number): DiaryEntry[];
+export interface DebriefReader {
+  getById(id: DebriefEntryId): DebriefEntry | undefined;
+  getByDeployment(deploymentId: DeploymentId): DebriefEntry[];
+  getByTenant(tenantId: TenantId): DebriefEntry[];
+  getByType(decisionType: DecisionType): DebriefEntry[];
+  getByTimeRange(from: Date, to: Date): DebriefEntry[];
+  getRecent(limit?: number): DebriefEntry[];
 }
 
 /**
- * In-memory Decision Diary. Every agent decision flows through here.
- * Use PersistentDecisionDiary for durable storage that survives restarts.
+ * In-memory Decision Debrief. Every agent decision flows through here.
+ * Use PersistentDecisionDebrief for durable storage that survives restarts.
  */
-export class DecisionDiary implements DiaryWriter, DiaryReader {
-  private entries: Map<DiaryEntryId, DiaryEntry> = new Map();
+export class DecisionDebrief implements DebriefWriter, DebriefReader {
+  private entries: Map<DebriefEntryId, DebriefEntry> = new Map();
 
-  record(params: DiaryRecordParams): DiaryEntry {
-    const entry: DiaryEntry = {
+  record(params: DebriefRecordParams): DebriefEntry {
+    const entry: DebriefEntry = {
       id: crypto.randomUUID(),
       timestamp: new Date(),
       tenantId: params.tenantId,
@@ -54,27 +54,27 @@ export class DecisionDiary implements DiaryWriter, DiaryReader {
     return entry;
   }
 
-  getById(id: DiaryEntryId): DiaryEntry | undefined {
+  getById(id: DebriefEntryId): DebriefEntry | undefined {
     return this.entries.get(id);
   }
 
-  getByDeployment(deploymentId: DeploymentId): DiaryEntry[] {
+  getByDeployment(deploymentId: DeploymentId): DebriefEntry[] {
     return [...this.entries.values()].filter(
       (e) => e.deploymentId === deploymentId,
     );
   }
 
-  getByTenant(tenantId: TenantId): DiaryEntry[] {
+  getByTenant(tenantId: TenantId): DebriefEntry[] {
     return [...this.entries.values()].filter((e) => e.tenantId === tenantId);
   }
 
-  getByType(decisionType: DecisionType): DiaryEntry[] {
+  getByType(decisionType: DecisionType): DebriefEntry[] {
     return [...this.entries.values()].filter(
       (e) => e.decisionType === decisionType,
     );
   }
 
-  getByTimeRange(from: Date, to: Date): DiaryEntry[] {
+  getByTimeRange(from: Date, to: Date): DebriefEntry[] {
     return [...this.entries.values()]
       .filter(
         (e) => e.timestamp >= from && e.timestamp <= to,
@@ -82,7 +82,7 @@ export class DecisionDiary implements DiaryWriter, DiaryReader {
       .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
   }
 
-  getRecent(limit = 50): DiaryEntry[] {
+  getRecent(limit = 50): DebriefEntry[] {
     return [...this.entries.values()]
       .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
       .slice(0, limit);

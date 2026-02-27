@@ -4,7 +4,7 @@ import type {
   Environment,
   Deployment,
   DeploymentId,
-  DiaryEntry,
+  DebriefEntry,
 } from "./types.js";
 
 // ---------------------------------------------------------------------------
@@ -42,14 +42,14 @@ export interface ScopedDeploymentReader {
 }
 
 /**
- * Read-only diary access scoped to a single tenant.
+ * Read-only debrief access scoped to a single tenant.
  */
-export interface ScopedDiaryReader {
-  list(): DiaryEntry[];
+export interface ScopedDebriefReader {
+  list(): DebriefEntry[];
 }
 
 // ---------------------------------------------------------------------------
-// TenantContainer — the isolation boundary
+// TenantContainer -- the isolation boundary
 // ---------------------------------------------------------------------------
 
 /**
@@ -57,9 +57,9 @@ export interface ScopedDiaryReader {
  *
  * All access to tenant-specific data flows through this container.
  * The container enforces:
- *   1. Data scoping — only this tenant's data is accessible
- *   2. State isolation — variables are owned copies, not shared references
- *   3. Variable precedence — deterministic resolution with full audit trail
+ *   1. Data scoping -- only this tenant's data is accessible
+ *   2. State isolation -- variables are owned copies, not shared references
+ *   3. Variable precedence -- deterministic resolution with full audit trail
  *
  * A TenantContainer is NOT a copy of stored data. Scoped readers are live
  * views that delegate to shared stores but filter by tenantId. Variables
@@ -72,23 +72,23 @@ export class TenantContainer {
 
   private _variables: Record<string, string>;
   private _deployments: ScopedDeploymentReader;
-  private _diary: ScopedDiaryReader;
+  private _debrief: ScopedDebriefReader;
 
   constructor(
     tenant: Tenant,
     deployments: ScopedDeploymentReader,
-    diary: ScopedDiaryReader,
+    debrief: ScopedDebriefReader,
   ) {
     this.id = tenant.id;
     this.name = tenant.name;
     this.createdAt = tenant.createdAt;
     this._variables = { ...tenant.variables };
     this._deployments = deployments;
-    this._diary = diary;
+    this._debrief = debrief;
   }
 
   // -----------------------------------------------------------------------
-  // Variables — owned copy, no shared state
+  // Variables -- owned copy, no shared state
   // -----------------------------------------------------------------------
 
   getVariables(): Record<string, string> {
@@ -103,7 +103,7 @@ export class TenantContainer {
    * Resolve variables using precedence: trigger > tenant > environment.
    *
    * Returns the merged variable set and a complete precedence log that
-   * records — for every variable — which value was used, where it came
+   * records -- for every variable -- which value was used, where it came
    * from, what it overrode, and a plain-language explanation of why.
    *
    * This is the single source of truth for "what variables does this
@@ -117,7 +117,7 @@ export class TenantContainer {
     const tenantVars = this._variables;
     const triggerVars = triggerOverrides ?? {};
 
-    // Build the merged set — last write wins per precedence
+    // Build the merged set -- last write wins per precedence
     const resolved: Record<string, string> = {};
     const finalSource: Map<
       string,
@@ -137,7 +137,7 @@ export class TenantContainer {
       finalSource.set(key, "trigger");
     }
 
-    // Build the precedence log — one entry per variable
+    // Build the precedence log -- one entry per variable
     const precedenceLog: PrecedenceEntry[] = [];
 
     for (const [key, value] of Object.entries(resolved)) {
@@ -146,7 +146,7 @@ export class TenantContainer {
       let reason: string;
 
       if (source === "trigger") {
-        // Trigger won — check what it overrode
+        // Trigger won -- check what it overrode
         if (key in tenantVars && tenantVars[key] !== value) {
           overrode = { value: tenantVars[key], source: "tenant" };
           reason =
@@ -158,7 +158,7 @@ export class TenantContainer {
             `Trigger override "${value}" takes precedence over ` +
             `environment default "${envVars[key]}" for ${key}`;
         } else {
-          reason = `Trigger-only variable ${key} — not defined at lower levels`;
+          reason = `Trigger-only variable ${key} -- not defined at lower levels`;
         }
       } else if (source === "tenant") {
         if (key in envVars && envVars[key] !== value) {
@@ -167,10 +167,10 @@ export class TenantContainer {
             `Tenant value "${value}" overrides environment ` +
             `default "${envVars[key]}" for ${key}`;
         } else {
-          reason = `Tenant-only variable ${key} — not defined at environment level`;
+          reason = `Tenant-only variable ${key} -- not defined at environment level`;
         }
       } else {
-        reason = `Environment default applied for ${key} — no higher-level override`;
+        reason = `Environment default applied for ${key} -- no higher-level override`;
       }
 
       precedenceLog.push({ variable: key, resolvedValue: value, source, overrode, reason });
@@ -180,7 +180,7 @@ export class TenantContainer {
   }
 
   // -----------------------------------------------------------------------
-  // Scoped data access — only this tenant's data
+  // Scoped data access -- only this tenant's data
   // -----------------------------------------------------------------------
 
   getDeployments(): Deployment[] {
@@ -191,8 +191,8 @@ export class TenantContainer {
     return this._deployments.get(id);
   }
 
-  getDiaryEntries(): DiaryEntry[] {
-    return this._diary.list();
+  getDebriefEntries(): DebriefEntry[] {
+    return this._debrief.list();
   }
 
   /**

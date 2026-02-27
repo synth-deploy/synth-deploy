@@ -6,7 +6,7 @@ import Fastify from "fastify";
 import fastifyCors from "@fastify/cors";
 import fastifyStatic from "@fastify/static";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { DecisionDiary, TenantStore, ProjectStore, EnvironmentStore, SettingsStore } from "@deploystack/core";
+import { DecisionDebrief, TenantStore, ProjectStore, EnvironmentStore, SettingsStore } from "@deploystack/core";
 import { ServerAgent, InMemoryDeploymentStore } from "./agent/server-agent.js";
 import { createMcpServer } from "./mcp/server.js";
 import { registerDeploymentRoutes } from "./api/deployments.js";
@@ -20,13 +20,13 @@ import { registerSettingsRoutes } from "./api/settings.js";
 
 // --- Bootstrap shared state ---
 
-const diary = new DecisionDiary();
+const debrief = new DecisionDebrief();
 const tenants = new TenantStore();
 const projects = new ProjectStore();
 const environments = new EnvironmentStore();
 const settings = new SettingsStore();
 const deployments = new InMemoryDeploymentStore();
-const agent = new ServerAgent(diary, deployments);
+const agent = new ServerAgent(debrief, deployments);
 
 // --- Seed demo data so the server is immediately usable ---
 
@@ -35,7 +35,7 @@ const demoEnv = environments.create("production", { APP_ENV: "production", LOG_L
 const stagingEnv = environments.create("staging", { APP_ENV: "staging", LOG_LEVEL: "debug" });
 const demoProject = projects.create("web-app", [demoEnv.id, stagingEnv.id]);
 
-diary.record({
+debrief.record({
   tenantId: null,
   deploymentId: null,
   agent: "server",
@@ -54,7 +54,7 @@ diary.record({
 
 // --- Create MCP server ---
 
-const mcp = createMcpServer({ agent, diary, tenants, environments, deployments });
+const mcp = createMcpServer({ agent, debrief, tenants, environments, deployments });
 
 // --- Create Fastify HTTP server ---
 
@@ -67,12 +67,12 @@ await app.register(fastifyCors, {
 
 // Register REST routes
 registerHealthRoutes(app);
-registerDeploymentRoutes(app, agent, tenants, environments, deployments, diary, projects);
-registerTentacleReportRoutes(app, diary);
+registerDeploymentRoutes(app, agent, tenants, environments, deployments, debrief, projects);
+registerTentacleReportRoutes(app, debrief);
 registerProjectRoutes(app, projects, environments);
-registerTenantRoutes(app, tenants, deployments, diary);
+registerTenantRoutes(app, tenants, deployments, debrief);
 registerEnvironmentRoutes(app, environments, projects);
-registerAgentRoutes(app, agent, tenants, environments, projects, deployments, diary);
+registerAgentRoutes(app, agent, tenants, environments, projects, deployments, debrief);
 registerSettingsRoutes(app, settings);
 
 // --- Serve UI static files if built ---

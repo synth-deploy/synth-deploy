@@ -1,4 +1,4 @@
-import type { DiaryEntry, Deployment, DeploymentId } from "./types.js";
+import type { DebriefEntry, Deployment, DeploymentId } from "./types.js";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -13,7 +13,7 @@ export interface PostmortemReport {
   configuration: ConfigurationSection;
   /** Present only when the deployment failed. */
   failureAnalysis: FailureAnalysis | null;
-  /** Final outcome — what state the deployment ended in. */
+  /** Final outcome -- what state the deployment ended in. */
   outcome: string;
   /** Full formatted text suitable for reading without any other context. */
   formatted: string;
@@ -95,14 +95,14 @@ export interface EnvironmentNote {
 // ---------------------------------------------------------------------------
 
 /**
- * Generate a postmortem report from a deployment's diary entries.
+ * Generate a postmortem report from a deployment's debrief entries.
  *
  * Designed so a reviewer can read this and understand exactly what the agent
- * decided, why it rolled back or continued, and what the suggested fix is —
+ * decided, why it rolled back or continued, and what the suggested fix is --
  * without reading any log files.
  */
 export function generatePostmortem(
-  entries: DiaryEntry[],
+  entries: DebriefEntry[],
   deployment: Deployment,
 ): PostmortemReport {
   const sorted = [...entries].sort(
@@ -133,7 +133,7 @@ export function generatePostmortem(
   };
 }
 
-function buildSummary(entries: DiaryEntry[], deployment: Deployment): string {
+function buildSummary(entries: DebriefEntry[], deployment: Deployment): string {
   const planEntry = entries.find((e) => e.decisionType === "pipeline-plan");
   const project = (planEntry?.context?.projectId as string) ?? deployment.projectId;
   const version = (planEntry?.context?.version as string) ?? deployment.version;
@@ -146,11 +146,11 @@ function buildSummary(entries: DiaryEntry[], deployment: Deployment): string {
 
   return (
     `Deployment of ${project} v${version} to "${environment}" ` +
-    `for tenant "${tenant}" — ${statusLabel}`
+    `for tenant "${tenant}" -- ${statusLabel}`
   );
 }
 
-function buildTimeline(entries: DiaryEntry[]): TimelineEntry[] {
+function buildTimeline(entries: DebriefEntry[]): TimelineEntry[] {
   return entries.map((e) => ({
     timestamp: e.timestamp,
     step: e.decisionType,
@@ -159,7 +159,7 @@ function buildTimeline(entries: DiaryEntry[]): TimelineEntry[] {
   }));
 }
 
-function buildConfigurationSection(entries: DiaryEntry[]): ConfigurationSection {
+function buildConfigurationSection(entries: DebriefEntry[]): ConfigurationSection {
   const configEntry = entries.find(
     (e) => e.decisionType === "configuration-resolved",
   );
@@ -183,7 +183,7 @@ function buildConfigurationSection(entries: DiaryEntry[]): ConfigurationSection 
 }
 
 function buildFailureAnalysis(
-  entries: DiaryEntry[],
+  entries: DebriefEntry[],
   deployment: Deployment,
 ): FailureAnalysis | null {
   if (deployment.status !== "failed") return null;
@@ -197,7 +197,7 @@ function buildFailureAnalysis(
   const whatHappened = failureEntry.decision;
   const whyItFailed = failureEntry.reasoning;
 
-  // Extract suggested fix from reasoning — the agent always includes
+  // Extract suggested fix from reasoning -- the agent always includes
   // "Recommended action:" in failure reasoning
   const recommendedIdx = whyItFailed.indexOf("Recommended action:");
   const suggestedFix =
@@ -212,7 +212,7 @@ function buildFailureAnalysis(
  * Fallback: extract a suggested fix from health-check or conflict entries
  * when the failure entry doesn't include an explicit recommendation.
  */
-function extractSuggestedFix(entries: DiaryEntry[], failedStep: string): string {
+function extractSuggestedFix(entries: DebriefEntry[], failedStep: string): string {
   // Look for health check abort reasoning
   if (failedStep === "preflight-health-check") {
     const healthAbort = entries.find(
@@ -247,10 +247,10 @@ function extractSuggestedFix(entries: DiaryEntry[], failedStep: string): string 
     return "Review and correct the tenant's variable bindings for the target environment, then re-trigger.";
   }
 
-  return "Review the diary entries above for details on what failed, then address the root cause and re-trigger.";
+  return "Review the debrief entries above for details on what failed, then address the root cause and re-trigger.";
 }
 
-function buildOutcome(entries: DiaryEntry[], deployment: Deployment): string {
+function buildOutcome(entries: DebriefEntry[], deployment: Deployment): string {
   if (deployment.status === "succeeded") {
     const completionEntry = entries.find(
       (e) => e.decisionType === "deployment-completion",
@@ -347,14 +347,14 @@ function formatPostmortem(
 // ---------------------------------------------------------------------------
 
 /**
- * Generate a project history from diary entries and deployments.
+ * Generate a project history from debrief entries and deployments.
  *
  * Designed so a new engineer joining a project with 10 deployments in its
  * history can read this and understand the project's configuration decisions
  * and deployment patterns without digging through individual logs.
  */
 export function generateProjectHistory(
-  entries: DiaryEntry[],
+  entries: DebriefEntry[],
   deployments: Deployment[],
 ): ProjectHistory {
   const sorted = [...entries].sort(
@@ -392,7 +392,7 @@ export function generateProjectHistory(
 
 function buildOverview(
   deployments: Deployment[],
-  entries: DiaryEntry[],
+  entries: DebriefEntry[],
 ): HistoryOverview {
   const succeeded = deployments.filter((d) => d.status === "succeeded").length;
   const failed = deployments.filter((d) => d.status === "failed").length;
@@ -425,7 +425,7 @@ function buildOverview(
 
 function buildDeploymentSummaries(
   deployments: Deployment[],
-  entries: DiaryEntry[],
+  entries: DebriefEntry[],
 ): DeploymentSummary[] {
   return deployments.map((d) => {
     const deployEntries = entries.filter((e) => e.deploymentId === d.id);
@@ -460,7 +460,7 @@ function buildDeploymentSummaries(
   });
 }
 
-function findKeyDecision(entries: DiaryEntry[], deployment: Deployment): string {
+function findKeyDecision(entries: DebriefEntry[], deployment: Deployment): string {
   // For failures, the failure entry is the key decision
   if (deployment.status === "failed") {
     const failEntry = entries.find(
@@ -485,7 +485,7 @@ function findKeyDecision(entries: DiaryEntry[], deployment: Deployment): string 
 }
 
 function buildConfigurationPatterns(
-  entries: DiaryEntry[],
+  entries: DebriefEntry[],
 ): ConfigurationPattern[] {
   const patterns: ConfigurationPattern[] = [];
 
@@ -495,7 +495,7 @@ function buildConfigurationPatterns(
   );
   if (conflictEntries.length > 0) {
     // Group by conflict category
-    const categories = new Map<string, DiaryEntry[]>();
+    const categories = new Map<string, DebriefEntry[]>();
     for (const e of conflictEntries) {
       const cat = (e.context?.category as string) ?? "standard";
       const existing = categories.get(cat) ?? [];
@@ -595,12 +595,12 @@ function formatCategory(category: string): string {
 
 function buildEnvironmentNotes(
   deployments: Deployment[],
-  entries: DiaryEntry[],
+  entries: DebriefEntry[],
 ): EnvironmentNote[] {
   // Group deployments by environment (using plan entry for name)
   const envMap = new Map<
     string,
-    { deployments: Deployment[]; entries: DiaryEntry[] }
+    { deployments: Deployment[]; entries: DebriefEntry[] }
   >();
 
   for (const d of deployments) {
@@ -717,7 +717,7 @@ function formatProjectHistory(
       d.conflictCount > 0 ? ` [${d.conflictCount} conflict(s)]` : "";
 
     lines.push(
-      `${i + 1}. v${d.version} → ${d.environment} — ${outcome}${duration}${conflicts}`,
+      `${i + 1}. v${d.version} → ${d.environment} -- ${outcome}${duration}${conflicts}`,
     );
     lines.push(`   ${d.keyDecision}`);
   }

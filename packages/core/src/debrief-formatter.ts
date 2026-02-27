@@ -1,12 +1,12 @@
-import type { DiaryEntry } from "./types.js";
+import type { DebriefEntry } from "./types.js";
 
 /**
- * Format a diary entry for human reading.
+ * Format a debrief entry for human reading.
  *
  * Produces output specific enough that an engineer at 2am can read it
  * and know exactly what happened without further investigation.
  */
-export function formatDiaryEntry(entry: DiaryEntry): string {
+export function formatDebriefEntry(entry: DebriefEntry): string {
   const ts = entry.timestamp.toISOString().replace("T", " ").replace(/\.\d+Z$/, " UTC");
   const type = entry.decisionType.toUpperCase();
   const tenant = entry.tenantId ?? "system";
@@ -35,9 +35,9 @@ export function formatDiaryEntry(entry: DiaryEntry): string {
 }
 
 /**
- * Format multiple diary entries with visual separators.
+ * Format multiple debrief entries with visual separators.
  */
-export function formatDiaryEntries(entries: DiaryEntry[]): string {
-  if (entries.length === 0) return "No diary entries found.";
-  return entries.map(formatDiaryEntry).join("\n---\n");
+export function formatDebriefEntries(entries: DebriefEntry[]): string {
+  if (entries.length === 0) return "No debrief entries found.";
+  return entries.map(formatDebriefEntry).join("\n---\n");
 }
