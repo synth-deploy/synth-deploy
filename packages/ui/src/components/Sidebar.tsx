@@ -1,9 +1,12 @@
 import { NavLink } from "react-router";
 import { useMode } from "../context/ModeContext.js";
+import { useSettings } from "../context/SettingsContext.js";
 
 export default function Sidebar() {
   const { mode, toggleMode } = useMode();
+  const { settings } = useSettings();
   const isAgent = mode === "agent";
+  const environmentsEnabled = settings?.environmentsEnabled ?? true;
 
   return (
     <aside className={`sidebar ${isAgent ? "sidebar-agent" : ""}`}>
@@ -40,10 +43,12 @@ export default function Sidebar() {
           <span className="nav-icon">&#9670;</span>
           Partitions
         </NavLink>
-        <NavLink to="/environments" className={({ isActive }) => isActive ? "active" : ""}>
-          <span className="nav-icon">&#9679;</span>
-          Environments
-        </NavLink>
+        {environmentsEnabled && (
+          <NavLink to="/environments" className={({ isActive }) => isActive ? "active" : ""}>
+            <span className="nav-icon">&#9679;</span>
+            Environments
+          </NavLink>
+        )}
         <NavLink to="/orders" className={({ isActive }) => isActive ? "active" : ""}>
           <span className="nav-icon">&#9776;</span>
           Orders

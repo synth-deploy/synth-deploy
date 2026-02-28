@@ -13,6 +13,9 @@ export class SettingsStore {
   }
 
   update(partial: Partial<AppSettings>): AppSettings {
+    if (partial.environmentsEnabled !== undefined) {
+      this.settings.environmentsEnabled = partial.environmentsEnabled;
+    }
     if (partial.agent) {
       this.settings.agent = { ...this.settings.agent, ...partial.agent };
     }

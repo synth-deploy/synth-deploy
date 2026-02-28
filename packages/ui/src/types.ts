@@ -45,6 +45,7 @@ export interface EnvoyEndpointConfig {
 }
 
 export interface AppSettings {
+  environmentsEnabled: boolean;
   agent: AgentSettings;
   deploymentDefaults: DeploymentDefaults;
   envoy: EnvoyEndpointConfig;

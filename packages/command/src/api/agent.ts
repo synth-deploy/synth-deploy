@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import type { PartitionStore, DebriefWriter, DebriefReader, Project, Partition, Environment } from "@deploystack/core";
+import type { PartitionStore, DebriefWriter, DebriefReader, Project, Partition, Environment, SettingsStore } from "@deploystack/core";
 import type { CommandAgent, DeploymentStore } from "../agent/command-agent.js";
 
 // ---------------------------------------------------------------------------
@@ -434,6 +434,7 @@ export function registerAgentRoutes(
   projects: ProjectStore,
   deployments: DeploymentStore,
   debrief: DebriefWriter & DebriefReader,
+  settings: SettingsStore,
 ): void {
   /**
    * Interpret a plain-language deployment intent.
@@ -454,6 +455,15 @@ export function registerAgentRoutes(
       partitions,
       environments,
     );
+
+    // When environments are disabled, auto-resolve environmentId
+    const envEnabled = settings.get().environmentsEnabled;
+    if (!envEnabled) {
+      result.resolved.environmentId = { value: "", confidence: "exact", matchedFrom: "environments-disabled" };
+      result.missingFields = result.missingFields.filter((f) => f !== "environmentId");
+      result.uiUpdates = result.uiUpdates.filter((u) => u.field !== "environmentId");
+      result.ready = result.missingFields.length === 0;
+    }
 
     // Build actionable reasoning that explains WHY fields are missing
     const reasoningParts = [`Interpreted intent "${body.intent}".`];

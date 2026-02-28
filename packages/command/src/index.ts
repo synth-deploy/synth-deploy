@@ -72,14 +72,14 @@ await app.register(fastifyCors, {
 
 // Register REST routes
 registerHealthRoutes(app);
-registerDeploymentRoutes(app, agent, partitions, environments, deployments, debrief, projects, orders);
+registerDeploymentRoutes(app, agent, partitions, environments, deployments, debrief, projects, orders, settings);
 registerEnvoyReportRoutes(app, debrief);
 registerProjectRoutes(app, projects, environments);
 registerPartitionRoutes(app, partitions, deployments, debrief);
 registerEnvironmentRoutes(app, environments, projects);
-registerAgentRoutes(app, agent, partitions, environments, projects, deployments, debrief);
+registerAgentRoutes(app, agent, partitions, environments, projects, deployments, debrief, settings);
 registerSettingsRoutes(app, settings);
-registerOrderRoutes(app, orders, agent, partitions, environments, projects, deployments, debrief);
+registerOrderRoutes(app, orders, agent, partitions, environments, projects, deployments, debrief, settings);
 
 // --- Serve UI static files if built ---
 

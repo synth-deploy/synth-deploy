@@ -3,8 +3,11 @@ import { Link } from "react-router";
 import { listOrders, listProjects, listPartitions, listEnvironments, createOrder } from "../api.js";
 import type { Order, Project, Partition, Environment } from "../types.js";
 import EnvBadge from "../components/EnvBadge.js";
+import { useSettings } from "../context/SettingsContext.js";
 
 export default function Orders() {
+  const { settings: appSettings } = useSettings();
+  const environmentsEnabled = appSettings?.environmentsEnabled ?? true;
   const [orders, setOrders] = useState<Order[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [partitions, setPartitions] = useState<Partition[]>([]);
@@ -43,7 +46,7 @@ export default function Orders() {
   }, [filterProject, filterPartition]);
 
   async function handleCreate() {
-    if (!projectId || !partitionId || !environmentId || !version.trim()) return;
+    if (!projectId || !partitionId || !version.trim() || (environmentsEnabled && !environmentId)) return;
     setError(null);
     try {
       const order = await createOrder({ projectId, partitionId, environmentId, version: version.trim() });
@@ -96,15 +99,17 @@ export default function Orders() {
               ))}
             </select>
           </div>
-          <div className="form-group">
-            <label>Environment</label>
-            <select value={environmentId} onChange={(e) => setEnvironmentId(e.target.value)} disabled={!projectId}>
-              <option value="">Select environment...</option>
-              {availableEnvs.map((e) => (
-                <option key={e.id} value={e.id}>{e.name}</option>
-              ))}
-            </select>
-          </div>
+          {environmentsEnabled && (
+            <div className="form-group">
+              <label>Environment</label>
+              <select value={environmentId} onChange={(e) => setEnvironmentId(e.target.value)} disabled={!projectId}>
+                <option value="">Select environment...</option>
+                {availableEnvs.map((e) => (
+                  <option key={e.id} value={e.id}>{e.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
           <div className="form-group">
             <label>Version</label>
             <input
@@ -152,7 +157,7 @@ export default function Orders() {
                 <th>ID</th>
                 <th>Project</th>
                 <th>Version</th>
-                <th>Environment</th>
+                {environmentsEnabled && <th>Environment</th>}
                 <th>Partition</th>
                 <th>Steps</th>
                 <th>Created</th>
@@ -172,7 +177,7 @@ export default function Orders() {
                       <Link to={`/projects/${o.projectId}`}>{o.projectName}</Link>
                     </td>
                     <td className="mono">v{o.version}</td>
-                    <td><EnvBadge name={o.environmentName} /></td>
+                    {environmentsEnabled && <td><EnvBadge name={o.environmentName} /></td>}
                     <td>{partition?.name ?? o.partitionId.slice(0, 8)}</td>
                     <td>{o.steps.length}</td>
                     <td className="text-muted" style={{ fontSize: 12 }}>
@@ -183,7 +188,7 @@ export default function Orders() {
               })}
               {orders.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="empty-state">
+                  <td colSpan={environmentsEnabled ? 7 : 6} className="empty-state">
                     <p>No orders yet. Orders are created automatically when you deploy, or you can pre-stage one manually.</p>
                   </td>
                 </tr>

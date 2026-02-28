@@ -10,6 +10,7 @@ import {
 import type { Project, Partition, Environment } from "../types.js";
 import type { IntentResult } from "../api.js";
 import { useMode } from "../context/ModeContext.js";
+import { useSettings } from "../context/SettingsContext.js";
 import DeploymentContextPanel from "../components/DeploymentContextPanel.js";
 import IntentBar from "../components/IntentBar.js";
 
@@ -17,7 +18,9 @@ export default function NewDeployment() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { mode } = useMode();
+  const { settings: appSettings } = useSettings();
   const isAgent = mode === "agent";
+  const environmentsEnabled = appSettings?.environmentsEnabled ?? true;
 
   const [projects, setProjects] = useState<Project[]>([]);
   const [partitions, setPartitions] = useState<Partition[]>([]);
@@ -58,7 +61,7 @@ export default function NewDeployment() {
   // --- Shared deploy logic (both modes call this) ---
 
   async function deployWithCurrentConfig() {
-    if (!projectId || !partitionId || !environmentId || !version.trim()) {
+    if (!projectId || !partitionId || !version.trim() || (environmentsEnabled && !environmentId)) {
       setError("All fields are required");
       return;
     }
@@ -238,11 +241,13 @@ export default function NewDeployment() {
                 field={intentResult.resolved.partitionId}
                 displayValue={intentResult.resolved.partitionId.value ? partitionName(intentResult.resolved.partitionId.value) : ""}
               />
-              <ResolvedFieldDisplay
-                label="Environment"
-                field={intentResult.resolved.environmentId}
-                displayValue={intentResult.resolved.environmentId.value ? envName(intentResult.resolved.environmentId.value) : ""}
-              />
+              {environmentsEnabled && (
+                <ResolvedFieldDisplay
+                  label="Environment"
+                  field={intentResult.resolved.environmentId}
+                  displayValue={intentResult.resolved.environmentId.value ? envName(intentResult.resolved.environmentId.value) : ""}
+                />
+              )}
               <ResolvedFieldDisplay
                 label="Version"
                 field={intentResult.resolved.version}
@@ -262,20 +267,25 @@ export default function NewDeployment() {
               </div>
             )}
 
-            {intentResult.missingFields.length > 0 && (
-              <div className="resolved-missing">
-                <strong>Missing: {intentResult.missingFields.join(", ")}</strong>
-                <div style={{ marginTop: 4, fontSize: 12 }}>
-                  Try including {intentResult.missingFields.map((f) => {
-                    if (f === "projectId") return "the project name";
-                    if (f === "partitionId") return "the partition name";
-                    if (f === "environmentId") return '"production" or "staging"';
-                    if (f === "version") return 'a version like "v1.2.3"';
-                    return f;
-                  }).join(", ")} in your intent, or switch to traditional mode.
+            {(() => {
+              const missing = environmentsEnabled
+                ? intentResult.missingFields
+                : intentResult.missingFields.filter((f) => f !== "environmentId");
+              return missing.length > 0 ? (
+                <div className="resolved-missing">
+                  <strong>Missing: {missing.join(", ")}</strong>
+                  <div style={{ marginTop: 4, fontSize: 12 }}>
+                    Try including {missing.map((f) => {
+                      if (f === "projectId") return "the project name";
+                      if (f === "partitionId") return "the partition name";
+                      if (f === "environmentId") return '"production" or "staging"';
+                      if (f === "version") return 'a version like "v1.2.3"';
+                      return f;
+                    }).join(", ")} in your intent, or switch to traditional mode.
+                  </div>
                 </div>
-              </div>
-            )}
+              ) : null;
+            })()}
 
             {!intentResult.ready && (
               <button
@@ -335,15 +345,17 @@ export default function NewDeployment() {
             </select>
           </div>
 
-          <div className="form-group">
-            <label>Environment</label>
-            <select value={environmentId} onChange={(e) => setEnvironmentId(e.target.value)}>
-              <option value="">Select an environment...</option>
-              {availableEnvs.map((e) => (
-                <option key={e.id} value={e.id}>{e.name}</option>
-              ))}
-            </select>
-          </div>
+          {environmentsEnabled && (
+            <div className="form-group">
+              <label>Environment</label>
+              <select value={environmentId} onChange={(e) => setEnvironmentId(e.target.value)}>
+                <option value="">Select an environment...</option>
+                {availableEnvs.map((e) => (
+                  <option key={e.id} value={e.id}>{e.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div className="form-group">
             <label>Version</label>

@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { DeploymentTriggerSchema, generatePostmortem } from "@deploystack/core";
-import type { PartitionStore, DebriefWriter, DebriefReader, OrderStore, Project } from "@deploystack/core";
+import type { PartitionStore, DebriefWriter, DebriefReader, OrderStore, Project, SettingsStore } from "@deploystack/core";
 import type { CommandAgent, DeploymentStore } from "../agent/command-agent.js";
 
 interface EnvironmentStore {
@@ -24,6 +24,7 @@ export function registerDeploymentRoutes(
   debrief: DebriefWriter & DebriefReader,
   projects: ProjectStore,
   orders: OrderStore,
+  settings: SettingsStore,
 ): void {
   // Trigger a deployment
   app.post("/api/deployments", async (request, reply) => {
@@ -37,18 +38,12 @@ export function registerDeploymentRoutes(
 
     const trigger = parsed.data;
     const { orderId } = (request.body as Record<string, unknown>) ?? {};
+    const envEnabled = settings.get().environmentsEnabled;
 
     // Validate project exists
     const project = projects.get(trigger.projectId);
     if (!project) {
       return reply.status(404).send({ error: `Project not found: ${trigger.projectId}` });
-    }
-    // Validate environment belongs to project
-    if (!project.environmentIds.includes(trigger.environmentId)) {
-      return reply.status(400).send({
-        error: `Environment ${trigger.environmentId} is not linked to project "${project.name}". ` +
-          `Available environments: ${project.environmentIds.join(", ") || "none"}`,
-      });
     }
 
     const partition = partitions.get(trigger.partitionId);
@@ -56,9 +51,22 @@ export function registerDeploymentRoutes(
       return reply.status(404).send({ error: `Partition not found: ${trigger.partitionId}` });
     }
 
-    const environment = environments.get(trigger.environmentId);
-    if (!environment) {
-      return reply.status(404).send({ error: `Environment not found: ${trigger.environmentId}` });
+    // Resolve environment — skip validation when environments are disabled
+    let environment: { id: string; name: string; variables: Record<string, string> };
+    if (envEnabled && trigger.environmentId) {
+      if (!project.environmentIds.includes(trigger.environmentId)) {
+        return reply.status(400).send({
+          error: `Environment ${trigger.environmentId} is not linked to project "${project.name}". ` +
+            `Available environments: ${project.environmentIds.join(", ") || "none"}`,
+        });
+      }
+      const env = environments.get(trigger.environmentId);
+      if (!env) {
+        return reply.status(404).send({ error: `Environment not found: ${trigger.environmentId}` });
+      }
+      environment = env;
+    } else {
+      environment = { id: "", name: "(none)", variables: {} };
     }
 
     // If an orderId was provided, load the existing Order for re-execution

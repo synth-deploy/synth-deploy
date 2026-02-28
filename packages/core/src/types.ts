@@ -168,12 +168,14 @@ export interface EnvoyEndpointConfig {
 }
 
 export interface AppSettings {
+  environmentsEnabled: boolean;
   agent: AgentSettings;
   deploymentDefaults: DeploymentDefaults;
   envoy: EnvoyEndpointConfig;
 }
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
+  environmentsEnabled: true,
   agent: {
     defaultHealthCheckRetries: 1,
     defaultTimeoutMs: 30000,

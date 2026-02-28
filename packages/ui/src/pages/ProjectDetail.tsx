@@ -22,8 +22,11 @@ import InlineEdit from "../components/InlineEdit.js";
 import ConfirmDialog from "../components/ConfirmDialog.js";
 import StepEditor from "../components/StepEditor.js";
 import DeployConfigEditor from "../components/DeployConfigEditor.js";
+import { useSettings } from "../context/SettingsContext.js";
 
 export default function ProjectDetail() {
+  const { settings: appSettings } = useSettings();
+  const environmentsEnabled = appSettings?.environmentsEnabled ?? true;
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [project, setProject] = useState<Project | null>(null);
@@ -148,41 +151,43 @@ export default function ProjectDetail() {
       </div>
 
       {/* Environments */}
-      <div className="section">
-        <div className="card">
-          <div className="card-header">
-            <h3>Environments</h3>
-          </div>
-          <div className="env-link-row">
-            {projectEnvs.map((env) => (
-              <div key={env.id} style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                <EnvBadge name={env.name} />
-                <button
-                  className="env-remove-btn"
-                  onClick={() => handleRemoveEnv(env.id)}
-                  title={`Unlink ${env.name}`}
-                >
-                  &times;
+      {environmentsEnabled && (
+        <div className="section">
+          <div className="card">
+            <div className="card-header">
+              <h3>Environments</h3>
+            </div>
+            <div className="env-link-row">
+              {projectEnvs.map((env) => (
+                <div key={env.id} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                  <EnvBadge name={env.name} />
+                  <button
+                    className="env-remove-btn"
+                    onClick={() => handleRemoveEnv(env.id)}
+                    title={`Unlink ${env.name}`}
+                  >
+                    &times;
+                  </button>
+                </div>
+              ))}
+              {projectEnvs.length === 0 && <span className="text-muted">No environments linked</span>}
+            </div>
+            {unlinkedEnvs.length > 0 && (
+              <div className="env-link-add">
+                <select value={addEnvId} onChange={(e) => setAddEnvId(e.target.value)}>
+                  <option value="">Add environment...</option>
+                  {unlinkedEnvs.map((e) => (
+                    <option key={e.id} value={e.id}>{e.name}</option>
+                  ))}
+                </select>
+                <button className="btn btn-primary" onClick={handleAddEnv} disabled={!addEnvId}>
+                  Add
                 </button>
               </div>
-            ))}
-            {projectEnvs.length === 0 && <span className="text-muted">No environments linked</span>}
+            )}
           </div>
-          {unlinkedEnvs.length > 0 && (
-            <div className="env-link-add">
-              <select value={addEnvId} onChange={(e) => setAddEnvId(e.target.value)}>
-                <option value="">Add environment...</option>
-                {unlinkedEnvs.map((e) => (
-                  <option key={e.id} value={e.id}>{e.name}</option>
-                ))}
-              </select>
-              <button className="btn btn-primary" onClick={handleAddEnv} disabled={!addEnvId}>
-                Add
-              </button>
-            </div>
-          )}
         </div>
-      </div>
+      )}
 
       {/* Deployment Steps */}
       <div className="section">

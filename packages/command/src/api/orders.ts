@@ -5,6 +5,7 @@ import type {
   PartitionStore,
   DebriefWriter,
   DebriefReader,
+  SettingsStore,
 } from "@deploystack/core";
 import type { CommandAgent, DeploymentStore } from "../agent/command-agent.js";
 
@@ -25,6 +26,7 @@ export function registerOrderRoutes(
   projects: ProjectStore,
   deployments: DeploymentStore,
   debrief: DebriefWriter & DebriefReader,
+  settings: SettingsStore,
 ): void {
   // List orders (supports ?projectId and ?partitionId filters)
   app.get("/api/orders", async (request) => {
@@ -69,9 +71,13 @@ export function registerOrderRoutes(
       version?: string;
     };
 
-    if (!projectId || !partitionId || !environmentId || !version) {
+    const envEnabled = settings.get().environmentsEnabled;
+
+    if (!projectId || !partitionId || !version || (envEnabled && !environmentId)) {
       return reply.status(400).send({
-        error: "Missing required fields: projectId, partitionId, environmentId, version",
+        error: envEnabled
+          ? "Missing required fields: projectId, partitionId, environmentId, version"
+          : "Missing required fields: projectId, partitionId, version",
       });
     }
 
@@ -85,9 +91,15 @@ export function registerOrderRoutes(
       return reply.status(404).send({ error: `Partition not found: ${partitionId}` });
     }
 
-    const environment = environments.get(environmentId);
-    if (!environment) {
-      return reply.status(404).send({ error: `Environment not found: ${environmentId}` });
+    let environment: { id: string; name: string; variables: Record<string, string> };
+    if (envEnabled && environmentId) {
+      const env = environments.get(environmentId);
+      if (!env) {
+        return reply.status(404).send({ error: `Environment not found: ${environmentId}` });
+      }
+      environment = env;
+    } else {
+      environment = { id: "", name: "(none)", variables: {} };
     }
 
     // Resolve variables using the same precedence as deployments
@@ -123,9 +135,15 @@ export function registerOrderRoutes(
       return reply.status(404).send({ error: `Partition not found: ${order.partitionId}` });
     }
 
-    const environment = environments.get(order.environmentId);
-    if (!environment) {
-      return reply.status(404).send({ error: `Environment not found: ${order.environmentId}` });
+    let environment: { id: string; name: string; variables: Record<string, string> };
+    if (order.environmentId) {
+      const env = environments.get(order.environmentId);
+      if (!env) {
+        return reply.status(404).send({ error: `Environment not found: ${order.environmentId}` });
+      }
+      environment = env;
+    } else {
+      environment = { id: "", name: "(none)", variables: {} };
     }
 
     const project = projects.get(order.projectId);

@@ -2,8 +2,10 @@ import { useState, useEffect } from "react";
 import { getSettings, updateSettings, getCommandInfo } from "../api.js";
 import type { AppSettings, CommandInfo, ConflictPolicy } from "../types.js";
 import DeployConfigEditor from "../components/DeployConfigEditor.js";
+import { useSettings } from "../context/SettingsContext.js";
 
 export default function Settings() {
+  const { refresh: refreshGlobalSettings } = useSettings();
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [commandInfo, setCommandInfo] = useState<CommandInfo | null>(null);
   const [loading, setLoading] = useState(true);
@@ -36,6 +38,13 @@ export default function Settings() {
     setSettings(updated);
   }
 
+  async function handleToggleEnvironments() {
+    if (!settings) return;
+    const updated = await updateSettings({ environmentsEnabled: !settings.environmentsEnabled });
+    setSettings(updated);
+    await refreshGlobalSettings();
+  }
+
   async function handleSaveEnvoy() {
     if (!settings) return;
     const updated = await updateSettings({ envoy: settings.envoy });
@@ -51,6 +60,30 @@ export default function Settings() {
     <div>
       <div className="page-header">
         <h2>Settings</h2>
+      </div>
+
+      {/* Feature Toggles */}
+      <div className="section">
+        <div className="card">
+          <div className="card-header">
+            <h3>Feature Toggles</h3>
+          </div>
+          <div className="form-group">
+            <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+              <input
+                type="checkbox"
+                checked={settings.environmentsEnabled}
+                onChange={handleToggleEnvironments}
+              />
+              Enable Environments
+            </label>
+            <div className="settings-description">
+              When disabled, environment selection is hidden from the UI and
+              deployments proceed without environment-level variable merging.
+              Existing environment data is preserved and can be re-enabled at any time.
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Agent Configuration */}

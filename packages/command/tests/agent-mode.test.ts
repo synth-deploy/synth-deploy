@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
-import { DecisionDebrief, PartitionStore, ProjectStore, EnvironmentStore, OrderStore } from "@deploystack/core";
+import { DecisionDebrief, PartitionStore, ProjectStore, EnvironmentStore, OrderStore, SettingsStore } from "@deploystack/core";
 import type { Deployment, DebriefEntry } from "@deploystack/core";
 import { CommandAgent, InMemoryDeploymentStore } from "../src/agent/command-agent.js";
 import { registerDeploymentRoutes } from "../src/api/deployments.js";
@@ -21,6 +21,7 @@ let projects: ProjectStore;
 let environments: EnvironmentStore;
 let deployments: InMemoryDeploymentStore;
 let orders: OrderStore;
+let settings: SettingsStore;
 let agent: CommandAgent;
 
 let projectId: string;
@@ -35,14 +36,15 @@ beforeAll(async () => {
   environments = new EnvironmentStore();
   deployments = new InMemoryDeploymentStore();
   orders = new OrderStore();
+  settings = new SettingsStore();
   agent = new CommandAgent(diary, deployments, orders);
 
   app = Fastify();
-  registerDeploymentRoutes(app, agent, partitions, environments, deployments, diary, projects, orders);
+  registerDeploymentRoutes(app, agent, partitions, environments, deployments, diary, projects, orders, settings);
   registerProjectRoutes(app, projects, environments);
   registerPartitionRoutes(app, partitions, deployments, diary);
   registerEnvironmentRoutes(app, environments, projects);
-  registerAgentRoutes(app, agent, partitions, environments, projects, deployments, diary);
+  registerAgentRoutes(app, agent, partitions, environments, projects, deployments, diary, settings);
 
   await app.ready();
 
