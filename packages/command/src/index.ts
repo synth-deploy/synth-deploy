@@ -6,7 +6,7 @@ import Fastify from "fastify";
 import fastifyCors from "@fastify/cors";
 import fastifyStatic from "@fastify/static";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { PersistentDecisionDebrief, PartitionStore, ProjectStore, EnvironmentStore, SettingsStore, OrderStore } from "@deploystack/core";
+import { PersistentDecisionDebrief, PartitionStore, ProjectStore, EnvironmentStore, SettingsStore, OrderStore, LlmClient } from "@deploystack/core";
 import { CommandAgent, InMemoryDeploymentStore } from "./agent/command-agent.js";
 import { createMcpServer } from "./mcp/server.js";
 import { registerDeploymentRoutes } from "./api/deployments.js";
@@ -32,6 +32,7 @@ const settings = new SettingsStore();
 const deployments = new InMemoryDeploymentStore();
 const orders = new OrderStore();
 const agent = new CommandAgent(debrief, deployments, orders, undefined, {}, settings);
+const llm = new LlmClient(debrief, "command");
 
 // --- Seed demo data so the server is immediately usable ---
 
@@ -77,7 +78,7 @@ registerEnvoyReportRoutes(app, debrief);
 registerProjectRoutes(app, projects, environments);
 registerPartitionRoutes(app, partitions, deployments, debrief);
 registerEnvironmentRoutes(app, environments, projects);
-registerAgentRoutes(app, agent, partitions, environments, projects, deployments, debrief, settings);
+registerAgentRoutes(app, agent, partitions, environments, projects, deployments, debrief, settings, llm);
 registerSettingsRoutes(app, settings);
 registerOrderRoutes(app, orders, agent, partitions, environments, projects, deployments, debrief, settings);
 

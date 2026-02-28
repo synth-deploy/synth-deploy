@@ -1,14 +1,14 @@
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect, beforeAll, beforeEach } from "vitest";
 import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
-import { DecisionDebrief, PartitionStore, ProjectStore, EnvironmentStore, OrderStore, SettingsStore } from "@deploystack/core";
-import type { Deployment, DebriefEntry } from "@deploystack/core";
+import { DecisionDebrief, PartitionStore, ProjectStore, EnvironmentStore, OrderStore, SettingsStore, LlmClient } from "@deploystack/core";
+import type { Deployment, DebriefEntry, LlmResult } from "@deploystack/core";
 import { CommandAgent, InMemoryDeploymentStore } from "../src/agent/command-agent.js";
 import { registerDeploymentRoutes } from "../src/api/deployments.js";
 import { registerProjectRoutes } from "../src/api/projects.js";
 import { registerPartitionRoutes } from "../src/api/partitions.js";
 import { registerEnvironmentRoutes } from "../src/api/environments.js";
-import { registerAgentRoutes } from "../src/api/agent.js";
+import { registerAgentRoutes, conversations } from "../src/api/agent.js";
 
 // ---------------------------------------------------------------------------
 // Test server setup
@@ -374,5 +374,375 @@ describe("Identical artifacts — traditional vs agent mode", () => {
     expect(intent.resolved.partitionId.value).toBe(partitionId);
     expect(intent.resolved.version.value).toBe("7.0.0");
     expect(intent.resolved.environmentId.value).toBe(productionEnvId);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// LLM-powered intent interpretation tests
+// ---------------------------------------------------------------------------
+
+describe("Agent mode — LLM intent interpretation", () => {
+  let llmApp: FastifyInstance;
+  let llmDiary: DecisionDebrief;
+  let llmPartitions: PartitionStore;
+  let llmProjects: ProjectStore;
+  let llmEnvironments: EnvironmentStore;
+  let llmDeployments: InMemoryDeploymentStore;
+  let llmOrders: OrderStore;
+  let llmSettings: SettingsStore;
+  let llmAgent: CommandAgent;
+  let mockLlm: LlmClient;
+
+  let llmProjectId: string;
+  let llmPartitionId: string;
+  let llmProdEnvId: string;
+  let llmStagingEnvId: string;
+
+  // Track what classify() should return
+  let classifyResponse: LlmResult;
+
+  beforeAll(async () => {
+    llmDiary = new DecisionDebrief();
+    llmPartitions = new PartitionStore();
+    llmProjects = new ProjectStore();
+    llmEnvironments = new EnvironmentStore();
+    llmDeployments = new InMemoryDeploymentStore();
+    llmOrders = new OrderStore();
+    llmSettings = new SettingsStore();
+    llmAgent = new CommandAgent(llmDiary, llmDeployments, llmOrders);
+
+    // Create a mock LlmClient that returns controlled responses
+    mockLlm = new LlmClient(llmDiary, "command", { apiKey: "test-key" });
+
+    // Override classify to return our controlled response
+    mockLlm.classify = async () => classifyResponse;
+    // Override isAvailable to always return true for LLM tests
+    mockLlm.isAvailable = () => true;
+
+    llmApp = Fastify();
+    registerDeploymentRoutes(llmApp, llmAgent, llmPartitions, llmEnvironments, llmDeployments, llmDiary, llmProjects, llmOrders, llmSettings);
+    registerProjectRoutes(llmApp, llmProjects, llmEnvironments);
+    registerPartitionRoutes(llmApp, llmPartitions, llmDeployments, llmDiary);
+    registerEnvironmentRoutes(llmApp, llmEnvironments, llmProjects);
+    registerAgentRoutes(llmApp, llmAgent, llmPartitions, llmEnvironments, llmProjects, llmDeployments, llmDiary, llmSettings, mockLlm);
+
+    await llmApp.ready();
+
+    // Seed test data
+    const envRes = await llmApp.inject({
+      method: "POST",
+      url: "/api/environments",
+      payload: { name: "production", variables: { APP_ENV: "production" } },
+    });
+    llmProdEnvId = JSON.parse(envRes.payload).environment.id;
+
+    const stagingRes = await llmApp.inject({
+      method: "POST",
+      url: "/api/environments",
+      payload: { name: "staging", variables: { APP_ENV: "staging" } },
+    });
+    llmStagingEnvId = JSON.parse(stagingRes.payload).environment.id;
+
+    const projRes = await llmApp.inject({
+      method: "POST",
+      url: "/api/projects",
+      payload: { name: "web-app", environmentIds: [llmProdEnvId, llmStagingEnvId] },
+    });
+    llmProjectId = JSON.parse(projRes.payload).project.id;
+
+    const partRes = await llmApp.inject({
+      method: "POST",
+      url: "/api/partitions",
+      payload: { name: "Acme Corp" },
+    });
+    llmPartitionId = JSON.parse(partRes.payload).partition.id;
+  });
+
+  beforeEach(() => {
+    conversations.clear();
+  });
+
+  it("uses LLM response when available and valid", async () => {
+    classifyResponse = {
+      ok: true,
+      text: JSON.stringify({
+        projectId: { id: llmProjectId, confidence: "exact", matchedFrom: "web-app mentioned in intent" },
+        partitionId: { id: llmPartitionId, confidence: "exact", matchedFrom: "Acme Corp mentioned in intent" },
+        environmentId: { id: llmProdEnvId, confidence: "exact", matchedFrom: "production mentioned in intent" },
+        version: { value: "2.0.0", confidence: "exact", matchedFrom: "v2.0.0 in intent" },
+        variables: { FEATURE: "enabled" },
+      }),
+      model: "claude-haiku-4-5-20251001",
+      responseTimeMs: 150,
+    };
+
+    const res = await llmApp.inject({
+      method: "POST",
+      url: "/api/agent/interpret-intent",
+      payload: { intent: "Deploy web-app v2.0.0 to production for Acme Corp" },
+    });
+
+    const result = JSON.parse(res.payload);
+    expect(result.ready).toBe(true);
+    expect(result.resolved.projectId.value).toBe(llmProjectId);
+    expect(result.resolved.projectId.confidence).toBe("exact");
+    expect(result.resolved.version.value).toBe("2.0.0");
+    expect(result.resolved.variables.FEATURE).toBe("enabled");
+  });
+
+  it("falls back to regex when LLM returns invalid JSON", async () => {
+    classifyResponse = {
+      ok: true,
+      text: "This is not valid JSON at all",
+      model: "claude-haiku-4-5-20251001",
+      responseTimeMs: 100,
+    };
+
+    const res = await llmApp.inject({
+      method: "POST",
+      url: "/api/agent/interpret-intent",
+      payload: { intent: "Deploy web-app v3.0.0 to production for Acme Corp" },
+    });
+
+    const result = JSON.parse(res.payload);
+    // Should still work via regex fallback
+    expect(result.ready).toBe(true);
+    expect(result.resolved.projectId.value).toBe(llmProjectId);
+    expect(result.resolved.version.value).toBe("3.0.0");
+  });
+
+  it("falls back to regex when LLM returns hallucinated IDs", async () => {
+    classifyResponse = {
+      ok: true,
+      text: JSON.stringify({
+        projectId: { id: "fake-project-id", confidence: "exact", matchedFrom: "hallucinated" },
+        partitionId: { id: llmPartitionId, confidence: "exact", matchedFrom: "Acme Corp" },
+        environmentId: { id: llmProdEnvId, confidence: "exact", matchedFrom: "production" },
+        version: { value: "1.0.0", confidence: "exact", matchedFrom: "v1.0.0" },
+        variables: {},
+      }),
+      model: "claude-haiku-4-5-20251001",
+      responseTimeMs: 100,
+    };
+
+    const res = await llmApp.inject({
+      method: "POST",
+      url: "/api/agent/interpret-intent",
+      payload: { intent: "Deploy web-app v1.0.0 to production for Acme Corp" },
+    });
+
+    const result = JSON.parse(res.payload);
+    // Should fall back to regex — regex can still resolve this intent
+    expect(result.ready).toBe(true);
+    expect(result.resolved.projectId.value).toBe(llmProjectId);
+  });
+
+  it("falls back to regex when LLM call fails", async () => {
+    classifyResponse = {
+      ok: false,
+      fallback: true,
+      reason: "LLM not configured — DEPLOYSTACK_LLM_API_KEY not set",
+    };
+
+    const res = await llmApp.inject({
+      method: "POST",
+      url: "/api/agent/interpret-intent",
+      payload: { intent: "Deploy web-app v4.0.0 to production for Acme Corp" },
+    });
+
+    const result = JSON.parse(res.payload);
+    expect(result.ready).toBe(true);
+    expect(result.resolved.version.value).toBe("4.0.0");
+  });
+
+  it("surfaces disambiguation warnings in uiUpdates", async () => {
+    classifyResponse = {
+      ok: true,
+      text: JSON.stringify({
+        projectId: { id: llmProjectId, confidence: "exact", matchedFrom: "web-app" },
+        partitionId: { id: llmPartitionId, confidence: "exact", matchedFrom: "Acme Corp" },
+        environmentId: { id: llmProdEnvId, confidence: "inferred", matchedFrom: "inferred from context" },
+        version: { value: "1.0.0", confidence: "exact", matchedFrom: "v1.0.0" },
+        variables: {},
+        disambiguation: [
+          {
+            field: "environmentId",
+            candidates: [
+              { id: llmProdEnvId, name: "production", reason: "most likely target" },
+              { id: llmStagingEnvId, name: "staging", reason: "also possible" },
+            ],
+          },
+        ],
+      }),
+      model: "claude-haiku-4-5-20251001",
+      responseTimeMs: 200,
+    };
+
+    const res = await llmApp.inject({
+      method: "POST",
+      url: "/api/agent/interpret-intent",
+      payload: { intent: "Deploy web-app v1.0.0 for Acme Corp" },
+    });
+
+    const result = JSON.parse(res.payload);
+    const warnUpdate = result.uiUpdates.find(
+      (u: any) => u.field === "environmentId" && u.action === "warn",
+    );
+    expect(warnUpdate).toBeDefined();
+    expect(warnUpdate.message).toContain("Multiple matches");
+    expect(warnUpdate.message).toContain("production");
+    expect(warnUpdate.message).toContain("staging");
+  });
+
+  it("supports conversational follow-up intents", async () => {
+    const conversationId = "test-conv-1";
+
+    // First intent — fully resolved
+    classifyResponse = {
+      ok: true,
+      text: JSON.stringify({
+        projectId: { id: llmProjectId, confidence: "exact", matchedFrom: "web-app" },
+        partitionId: { id: llmPartitionId, confidence: "exact", matchedFrom: "Acme Corp" },
+        environmentId: { id: llmProdEnvId, confidence: "exact", matchedFrom: "production" },
+        version: { value: "1.0.0", confidence: "exact", matchedFrom: "v1.0.0" },
+        variables: {},
+      }),
+      model: "claude-haiku-4-5-20251001",
+      responseTimeMs: 100,
+    };
+
+    await llmApp.inject({
+      method: "POST",
+      url: "/api/agent/interpret-intent",
+      payload: {
+        intent: "Deploy web-app v1.0.0 to production for Acme Corp",
+        conversationId,
+      },
+    });
+
+    // Second intent — follow-up, switching environment
+    classifyResponse = {
+      ok: true,
+      text: JSON.stringify({
+        projectId: { id: llmProjectId, confidence: "inferred", matchedFrom: "carried from previous intent" },
+        partitionId: { id: llmPartitionId, confidence: "inferred", matchedFrom: "carried from previous intent" },
+        environmentId: { id: llmStagingEnvId, confidence: "exact", matchedFrom: "staging mentioned in follow-up" },
+        version: { value: "1.0.0", confidence: "inferred", matchedFrom: "carried from previous intent" },
+        variables: {},
+      }),
+      model: "claude-haiku-4-5-20251001",
+      responseTimeMs: 80,
+    };
+
+    const res = await llmApp.inject({
+      method: "POST",
+      url: "/api/agent/interpret-intent",
+      payload: {
+        intent: "same thing but for staging",
+        conversationId,
+      },
+    });
+
+    const result = JSON.parse(res.payload);
+    expect(result.ready).toBe(true);
+    expect(result.resolved.projectId.value).toBe(llmProjectId);
+    expect(result.resolved.environmentId.value).toBe(llmStagingEnvId);
+    expect(result.resolved.version.value).toBe("1.0.0");
+  });
+
+  it("records method in debrief context", async () => {
+    classifyResponse = {
+      ok: true,
+      text: JSON.stringify({
+        projectId: { id: llmProjectId, confidence: "exact", matchedFrom: "web-app" },
+        partitionId: { id: llmPartitionId, confidence: "exact", matchedFrom: "Acme" },
+        environmentId: { id: llmProdEnvId, confidence: "exact", matchedFrom: "prod" },
+        version: { value: "9.0.0", confidence: "exact", matchedFrom: "v9.0.0" },
+        variables: {},
+      }),
+      model: "claude-haiku-4-5-20251001",
+      responseTimeMs: 50,
+    };
+
+    const beforeCount = llmDiary.getRecent(200).length;
+
+    await llmApp.inject({
+      method: "POST",
+      url: "/api/agent/interpret-intent",
+      payload: { intent: "Deploy web-app v9.0.0 to prod for Acme Corp" },
+    });
+
+    const entries = llmDiary.getRecent(200);
+    // getRecent returns newest-first, so new entries are at the start
+    const newEntries = entries.slice(0, entries.length - beforeCount);
+    const systemEntry = newEntries.find(
+      (e) => e.decisionType === "system" && e.decision.includes("Intent"),
+    );
+    expect(systemEntry).toBeDefined();
+    expect(systemEntry!.context.method).toBe("llm");
+  });
+
+  it("handles LLM response wrapped in markdown code fences", async () => {
+    classifyResponse = {
+      ok: true,
+      text: '```json\n' + JSON.stringify({
+        projectId: { id: llmProjectId, confidence: "exact", matchedFrom: "web-app" },
+        partitionId: { id: llmPartitionId, confidence: "exact", matchedFrom: "Acme" },
+        environmentId: { id: llmProdEnvId, confidence: "exact", matchedFrom: "prod" },
+        version: { value: "5.0.0", confidence: "exact", matchedFrom: "v5.0.0" },
+        variables: {},
+      }) + '\n```',
+      model: "claude-haiku-4-5-20251001",
+      responseTimeMs: 100,
+    };
+
+    const res = await llmApp.inject({
+      method: "POST",
+      url: "/api/agent/interpret-intent",
+      payload: { intent: "Deploy web-app v5.0.0 to prod for Acme Corp" },
+    });
+
+    const result = JSON.parse(res.payload);
+    expect(result.ready).toBe(true);
+    expect(result.resolved.version.value).toBe("5.0.0");
+  });
+
+  it("validates environment-project linking after LLM extraction", async () => {
+    // Create a second project with only staging linked
+    const proj2Res = await llmApp.inject({
+      method: "POST",
+      url: "/api/projects",
+      payload: { name: "api-service", environmentIds: [llmStagingEnvId] },
+    });
+    const proj2Id = JSON.parse(proj2Res.payload).project.id;
+
+    // LLM resolves to api-service + production (which is NOT linked)
+    classifyResponse = {
+      ok: true,
+      text: JSON.stringify({
+        projectId: { id: proj2Id, confidence: "exact", matchedFrom: "api-service" },
+        partitionId: { id: llmPartitionId, confidence: "exact", matchedFrom: "Acme" },
+        environmentId: { id: llmProdEnvId, confidence: "exact", matchedFrom: "production" },
+        version: { value: "1.0.0", confidence: "exact", matchedFrom: "v1.0.0" },
+        variables: {},
+      }),
+      model: "claude-haiku-4-5-20251001",
+      responseTimeMs: 100,
+    };
+
+    const res = await llmApp.inject({
+      method: "POST",
+      url: "/api/agent/interpret-intent",
+      payload: { intent: "Deploy api-service v1.0.0 to production for Acme Corp" },
+    });
+
+    const result = JSON.parse(res.payload);
+    expect(result.ready).toBe(false);
+    expect(result.missingFields).toContain("environmentId");
+    const warnUpdate = result.uiUpdates.find(
+      (u: any) => u.field === "environmentId" && u.action === "warn",
+    );
+    expect(warnUpdate).toBeDefined();
+    expect(warnUpdate.message).toContain("not linked to project");
   });
 });

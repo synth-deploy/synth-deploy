@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
-import type { PartitionStore, DebriefWriter, DebriefReader, Project, Partition, Environment, SettingsStore } from "@deploystack/core";
+import type { PartitionStore, DebriefWriter, DebriefReader, Project, Partition, Environment, SettingsStore, LlmResult } from "@deploystack/core";
+import type { LlmClient } from "@deploystack/core";
 import type { CommandAgent, DeploymentStore } from "../agent/command-agent.js";
 
 // ---------------------------------------------------------------------------
@@ -8,6 +9,7 @@ import type { CommandAgent, DeploymentStore } from "../agent/command-agent.js";
 
 interface IntentRequest {
   intent: string;
+  conversationId?: string;
   partialConfig?: {
     projectId?: string;
     partitionId?: string;
@@ -80,7 +82,285 @@ interface EnvironmentStore {
 }
 
 // ---------------------------------------------------------------------------
-// Intent interpretation — pattern-based (LLM-replaceable in future phase)
+// LLM intent response schema (what the LLM returns as JSON)
+// ---------------------------------------------------------------------------
+
+interface LlmEntityMatch {
+  id: string;
+  confidence: "exact" | "inferred";
+  matchedFrom: string;
+}
+
+interface LlmIntentResponse {
+  projectId: LlmEntityMatch | null;
+  partitionId: LlmEntityMatch | null;
+  environmentId: LlmEntityMatch | null;
+  version: { value: string; confidence: "exact" | "inferred"; matchedFrom: string } | null;
+  variables: Record<string, string>;
+  disambiguation?: Array<{
+    field: string;
+    candidates: Array<{ id: string; name: string; reason: string }>;
+  }>;
+}
+
+// ---------------------------------------------------------------------------
+// Conversation context for follow-up intents
+// ---------------------------------------------------------------------------
+
+interface ConversationEntry {
+  intent: string;
+  resolved: IntentResult["resolved"];
+  timestamp: number;
+}
+
+const CONVERSATION_TTL_MS = 30 * 60 * 1000; // 30 minutes
+const MAX_CONVERSATION_ENTRIES = 5;
+
+/** @internal Exported for testing only */
+export const conversations = new Map<string, ConversationEntry[]>();
+
+function getConversationHistory(conversationId: string | undefined): ConversationEntry[] {
+  if (!conversationId) return [];
+
+  const entries = conversations.get(conversationId);
+  if (!entries) return [];
+
+  // Prune expired entries
+  const now = Date.now();
+  const valid = entries.filter((e) => now - e.timestamp < CONVERSATION_TTL_MS);
+  if (valid.length !== entries.length) {
+    conversations.set(conversationId, valid);
+  }
+
+  return valid.slice(-3); // Last 3 entries for LLM context
+}
+
+function recordConversation(conversationId: string | undefined, intent: string, resolved: IntentResult["resolved"]): void {
+  if (!conversationId) return;
+
+  const entries = conversations.get(conversationId) ?? [];
+  entries.push({ intent, resolved, timestamp: Date.now() });
+
+  // Cap at max entries
+  if (entries.length > MAX_CONVERSATION_ENTRIES) {
+    entries.splice(0, entries.length - MAX_CONVERSATION_ENTRIES);
+  }
+
+  conversations.set(conversationId, entries);
+}
+
+// ---------------------------------------------------------------------------
+// LLM-powered intent interpretation
+// ---------------------------------------------------------------------------
+
+function buildSystemPrompt(): string {
+  return `You are a deployment intent parser for DeployStack. Your job is to extract structured entities from natural language deployment intents.
+
+You will receive:
+- An intent string from a deployment engineer
+- Lists of known projects, partitions, and environments (with IDs and names)
+- Optionally, partial configuration already provided by the user
+- Optionally, previous conversation context for follow-up intents
+
+Return a JSON object with this exact schema:
+{
+  "projectId": { "id": "<project-id>", "confidence": "exact"|"inferred", "matchedFrom": "<explanation>" } | null,
+  "partitionId": { "id": "<partition-id>", "confidence": "exact"|"inferred", "matchedFrom": "<explanation>" } | null,
+  "environmentId": { "id": "<environment-id>", "confidence": "exact"|"inferred", "matchedFrom": "<explanation>" } | null,
+  "version": { "value": "<semver>", "confidence": "exact"|"inferred", "matchedFrom": "<explanation>" } | null,
+  "variables": { "<KEY>": "<value>", ... },
+  "disambiguation": [{ "field": "<field>", "candidates": [{ "id": "<id>", "name": "<name>", "reason": "<why>" }] }]
+}
+
+Rules:
+- ONLY use IDs from the provided entity lists. Never invent IDs.
+- "exact" confidence: the intent text directly mentions or clearly refers to the entity
+- "inferred" confidence: you deduced the entity from context, abbreviations, or follow-up references
+- If an entity cannot be determined, set it to null
+- If multiple entities match ambiguously, pick the best match but also populate "disambiguation"
+- Handle abbreviations, synonyms, and partial matches (e.g., "prod" → production, "stg" → staging)
+- For follow-up intents like "same thing but for staging", use conversation context to carry forward resolved entities
+- Extract key=value variable assignments from the intent
+- Return ONLY valid JSON, no markdown, no explanation`;
+}
+
+function buildUserPrompt(
+  intent: string,
+  partialConfig: IntentRequest["partialConfig"],
+  allProjects: Project[],
+  allPartitions: Partition[],
+  allEnvironments: Environment[],
+  history: ConversationEntry[],
+): string {
+  const parts: string[] = [];
+
+  parts.push(`Intent: "${intent}"`);
+
+  parts.push(`\nKnown projects:`);
+  for (const p of allProjects) {
+    parts.push(`  - id: "${p.id}", name: "${p.name}"`);
+  }
+  if (allProjects.length === 0) parts.push("  (none configured)");
+
+  parts.push(`\nKnown partitions:`);
+  for (const t of allPartitions) {
+    parts.push(`  - id: "${t.id}", name: "${t.name}"`);
+  }
+  if (allPartitions.length === 0) parts.push("  (none configured)");
+
+  parts.push(`\nKnown environments:`);
+  for (const e of allEnvironments) {
+    parts.push(`  - id: "${e.id}", name: "${e.name}"`);
+  }
+  if (allEnvironments.length === 0) parts.push("  (none configured)");
+
+  if (partialConfig) {
+    parts.push(`\nPre-filled fields (already selected by user):`);
+    if (partialConfig.projectId) parts.push(`  projectId: "${partialConfig.projectId}"`);
+    if (partialConfig.partitionId) parts.push(`  partitionId: "${partialConfig.partitionId}"`);
+    if (partialConfig.environmentId) parts.push(`  environmentId: "${partialConfig.environmentId}"`);
+    if (partialConfig.version) parts.push(`  version: "${partialConfig.version}"`);
+  }
+
+  if (history.length > 0) {
+    parts.push(`\nPrevious intents in this conversation (for follow-up context):`);
+    for (const entry of history) {
+      const resolved: string[] = [];
+      if (entry.resolved.projectId.confidence !== "missing") resolved.push(`project=${entry.resolved.projectId.value}`);
+      if (entry.resolved.partitionId.confidence !== "missing") resolved.push(`partition=${entry.resolved.partitionId.value}`);
+      if (entry.resolved.environmentId.confidence !== "missing") resolved.push(`environment=${entry.resolved.environmentId.value}`);
+      if (entry.resolved.version.confidence !== "missing") resolved.push(`version=${entry.resolved.version.value}`);
+      parts.push(`  - "${entry.intent}" → resolved: ${resolved.join(", ") || "nothing"}`);
+    }
+  }
+
+  return parts.join("\n");
+}
+
+function parseLlmResponse(
+  llmResult: LlmResult,
+  allProjects: Project[],
+  allPartitions: Partition[],
+  allEnvironments: Environment[],
+  partialConfig: IntentRequest["partialConfig"],
+): IntentResult | null {
+  if (!llmResult.ok) return null;
+
+  let parsed: LlmIntentResponse;
+  try {
+    // Strip markdown code fences if present
+    let text = llmResult.text.trim();
+    if (text.startsWith("```")) {
+      text = text.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "");
+    }
+    parsed = JSON.parse(text);
+  } catch {
+    return null; // JSON parse failure → fall back to regex
+  }
+
+  const projectIds = new Set(allProjects.map((p) => p.id));
+  const partitionIds = new Set(allPartitions.map((t) => t.id));
+  const environmentIds = new Set(allEnvironments.map((e) => e.id));
+
+  // Validate and convert each field
+  const projectField = convertLlmEntity(parsed.projectId, projectIds, partialConfig?.projectId);
+  const partitionField = convertLlmEntity(parsed.partitionId, partitionIds, partialConfig?.partitionId);
+  const envField = convertLlmEntity(parsed.environmentId, environmentIds, partialConfig?.environmentId);
+  const versionField = convertLlmVersion(parsed.version, partialConfig?.version);
+  const variables = { ...(partialConfig?.variables ?? {}), ...(parsed.variables ?? {}) };
+
+  // If any field that the LLM claimed to resolve has an invalid ID, reject the whole response
+  if (
+    (parsed.projectId && !projectIds.has(parsed.projectId.id)) ||
+    (parsed.partitionId && !partitionIds.has(parsed.partitionId.id)) ||
+    (parsed.environmentId && !environmentIds.has(parsed.environmentId.id))
+  ) {
+    return null; // Hallucination detected → fall back to regex
+  }
+
+  const missingFields: string[] = [];
+  const uiUpdates: IntentResult["uiUpdates"] = [];
+
+  for (const [name, field] of Object.entries({
+    projectId: projectField,
+    partitionId: partitionField,
+    environmentId: envField,
+    version: versionField,
+  })) {
+    if (field.confidence === "missing") {
+      missingFields.push(name);
+    } else if (field.confidence === "exact") {
+      uiUpdates.push({ field: name, action: "set", value: field.value, message: `Matched: ${field.matchedFrom}` });
+    } else {
+      uiUpdates.push({ field: name, action: "set", value: field.value, message: `Inferred: ${field.matchedFrom}` });
+    }
+  }
+
+  // Add disambiguation warnings
+  if (parsed.disambiguation) {
+    for (const d of parsed.disambiguation) {
+      const names = d.candidates.map((c) => c.name).join(", ");
+      uiUpdates.push({
+        field: d.field,
+        action: "warn",
+        message: `Multiple matches: ${names}. Selected best match — verify this is correct.`,
+      });
+    }
+  }
+
+  return {
+    resolved: {
+      projectId: projectField,
+      partitionId: partitionField,
+      environmentId: envField,
+      version: versionField,
+      variables,
+    },
+    ready: missingFields.length === 0,
+    missingFields,
+    uiUpdates,
+  };
+}
+
+function convertLlmEntity(
+  entity: LlmEntityMatch | null,
+  validIds: Set<string>,
+  partialId?: string,
+): ResolvedField {
+  // Partial config takes precedence (user already selected)
+  if (partialId && validIds.has(partialId)) {
+    return { value: partialId, confidence: "exact", matchedFrom: `pre-selected by user` };
+  }
+
+  if (!entity) return { value: "", confidence: "missing" };
+  if (!validIds.has(entity.id)) return { value: "", confidence: "missing" };
+
+  return {
+    value: entity.id,
+    confidence: entity.confidence,
+    matchedFrom: entity.matchedFrom,
+  };
+}
+
+function convertLlmVersion(
+  version: { value: string; confidence: "exact" | "inferred"; matchedFrom: string } | null,
+  partialVersion?: string,
+): ResolvedField {
+  if (partialVersion) {
+    return { value: partialVersion, confidence: "exact", matchedFrom: `provided: ${partialVersion}` };
+  }
+
+  if (!version) return { value: "", confidence: "missing" };
+
+  return {
+    value: version.value,
+    confidence: version.confidence,
+    matchedFrom: version.matchedFrom,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Intent interpretation — pattern-based (fallback when LLM unavailable)
 // ---------------------------------------------------------------------------
 
 function interpretIntent(
@@ -130,23 +410,6 @@ function interpretIntent(
       uiUpdates.push({ field: name, action: "set", value: field.value, message: `Matched: ${field.matchedFrom}` });
     } else {
       uiUpdates.push({ field: name, action: "set", value: field.value, message: `Inferred: ${field.matchedFrom}` });
-    }
-  }
-
-  // Validate environment belongs to project if both resolved
-  if (
-    projectField.confidence !== "missing" &&
-    envField.confidence !== "missing"
-  ) {
-    const project = projects.list().find((p) => p.id === projectField.value);
-    if (project && !project.environmentIds.includes(envField.value)) {
-      uiUpdates.push({
-        field: "environmentId",
-        action: "warn",
-        message: `Environment is not linked to project "${project.name}". Choose a linked environment.`,
-      });
-      missingFields.push("environmentId");
-      envField = { value: "", confidence: "missing", matchedFrom: `not linked to project "${project.name}"` };
     }
   }
 
@@ -435,9 +698,11 @@ export function registerAgentRoutes(
   deployments: DeploymentStore,
   debrief: DebriefWriter & DebriefReader,
   settings: SettingsStore,
+  llm?: LlmClient,
 ): void {
   /**
    * Interpret a plain-language deployment intent.
+   * Uses LLM when available, falls back to regex extraction.
    * Returns resolved fields + UI update instructions.
    * Does NOT trigger a deployment — the UI confirms first.
    */
@@ -448,13 +713,82 @@ export function registerAgentRoutes(
       return reply.status(400).send({ error: "Intent string is required" });
     }
 
-    const result = interpretIntent(
-      body.intent,
-      body.partialConfig,
-      projects,
-      partitions,
-      environments,
-    );
+    const allProjects = projects.list();
+    const allPartitions = partitions.list();
+    const allEnvironments = environments.list();
+
+    let result: IntentResult;
+    let method: "llm" | "regex" = "regex";
+
+    // Try LLM-powered interpretation first
+    if (llm && llm.isAvailable()) {
+      const history = getConversationHistory(body.conversationId);
+      const llmResult = await llm.classify({
+        prompt: buildUserPrompt(
+          body.intent,
+          body.partialConfig,
+          allProjects,
+          allPartitions,
+          allEnvironments,
+          history,
+        ),
+        systemPrompt: buildSystemPrompt(),
+        promptSummary: `Intent interpretation: "${body.intent}"`,
+        partitionId: body.partialConfig?.partitionId ?? null,
+        maxTokens: 1024,
+      });
+
+      const llmParsed = parseLlmResponse(
+        llmResult,
+        allProjects,
+        allPartitions,
+        allEnvironments,
+        body.partialConfig,
+      );
+
+      if (llmParsed) {
+        result = llmParsed;
+        method = "llm";
+      } else {
+        // LLM failed or returned invalid data — fall back to regex
+        result = interpretIntent(
+          body.intent,
+          body.partialConfig,
+          projects,
+          partitions,
+          environments,
+        );
+      }
+    } else {
+      // LLM not available — use regex
+      result = interpretIntent(
+        body.intent,
+        body.partialConfig,
+        projects,
+        partitions,
+        environments,
+      );
+    }
+
+    // Validate environment belongs to project (runs for both LLM and regex paths)
+    if (
+      result.resolved.projectId.confidence !== "missing" &&
+      result.resolved.environmentId.confidence !== "missing"
+    ) {
+      const project = allProjects.find((p) => p.id === result.resolved.projectId.value);
+      if (project && !project.environmentIds.includes(result.resolved.environmentId.value)) {
+        result.uiUpdates.push({
+          field: "environmentId",
+          action: "warn",
+          message: `Environment is not linked to project "${project.name}". Choose a linked environment.`,
+        });
+        if (!result.missingFields.includes("environmentId")) {
+          result.missingFields.push("environmentId");
+        }
+        result.resolved.environmentId = { value: "", confidence: "missing", matchedFrom: `not linked to project "${project.name}"` };
+        result.ready = false;
+      }
+    }
 
     // When environments are disabled, auto-resolve environmentId
     const envEnabled = settings.get().environmentsEnabled;
@@ -465,11 +799,11 @@ export function registerAgentRoutes(
       result.ready = result.missingFields.length === 0;
     }
 
+    // Record conversation for follow-up support
+    recordConversation(body.conversationId, body.intent, result.resolved);
+
     // Build actionable reasoning that explains WHY fields are missing
-    const reasoningParts = [`Interpreted intent "${body.intent}".`];
-    const allProjects = projects.list();
-    const allPartitions = partitions.list();
-    const allEnvironments = environments.list();
+    const reasoningParts = [`Interpreted intent "${body.intent}" via ${method}.`];
 
     const fieldEntries: Array<[string, ResolvedField, string[]]> = [
       ["Project", result.resolved.projectId, allProjects.map((p: Project) => p.name)],
@@ -501,6 +835,8 @@ export function registerAgentRoutes(
         intent: body.intent,
         ready: result.ready,
         missingFields: result.missingFields,
+        method,
+        conversationId: body.conversationId ?? null,
       },
     });
 

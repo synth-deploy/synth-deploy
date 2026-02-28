@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useSearchParams, useNavigate } from "react-router";
 import {
   listProjects,
@@ -42,6 +42,7 @@ export default function NewDeployment() {
   // Agent mode state
   const [intentResult, setIntentResult] = useState<IntentResult | null>(null);
   const [lastIntent, setLastIntent] = useState("");
+  const conversationIdRef = useRef(crypto.randomUUID());
 
   useEffect(() => {
     Promise.all([listProjects(), listPartitions(), listEnvironments()]).then(([p, t, e]) => {
@@ -124,7 +125,7 @@ export default function NewDeployment() {
         environmentId: environmentId || undefined,
         version: version || undefined,
         variables: varEntries.length > 0 ? Object.fromEntries(varEntries) : undefined,
-      });
+      }, conversationIdRef.current);
 
       setIntentResult(result);
 

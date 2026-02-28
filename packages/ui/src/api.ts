@@ -363,10 +363,11 @@ export async function interpretIntent(
     version?: string;
     variables?: Record<string, string>;
   },
+  conversationId?: string,
 ): Promise<IntentResult> {
   return fetchJson("/api/agent/interpret-intent", {
     method: "POST",
-    body: JSON.stringify({ intent, partialConfig }),
+    body: JSON.stringify({ intent, partialConfig, conversationId }),
   });
 }
 
