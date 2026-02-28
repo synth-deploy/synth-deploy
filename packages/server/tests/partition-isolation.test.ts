@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
   DecisionDebrief,
-  TenantManager,
+  PartitionManager,
   OrderStore,
 } from "@deploystack/core";
 import type { Environment, DebriefEntry, Project } from "@deploystack/core";
@@ -77,12 +77,12 @@ function findDecisions(entries: DebriefEntry[], substr: string): DebriefEntry[] 
 // Tests
 // ---------------------------------------------------------------------------
 
-describe("Tenant Isolation", () => {
+describe("Partition Isolation", () => {
   let diary: DecisionDebrief;
   let deployments: InMemoryDeploymentStore;
   let healthChecker: MockHealthChecker;
   let agent: ServerAgent;
-  let manager: TenantManager;
+  let manager: PartitionManager;
 
   beforeEach(() => {
     diary = new DecisionDebrief();
@@ -92,7 +92,7 @@ describe("Tenant Isolation", () => {
       healthCheckBackoffMs: 1,
       executionDelayMs: 1,
     });
-    manager = new TenantManager(deployments, diary);
+    manager = new PartitionManager(deployments, diary);
   });
 
   // -----------------------------------------------------------------------
@@ -100,27 +100,27 @@ describe("Tenant Isolation", () => {
   // -----------------------------------------------------------------------
 
   describe("variable isolation", () => {
-    it("setting variables on Tenant A has zero effect on Tenant B", () => {
-      const tenantA = manager.createTenant("Acme Corp", {
+    it("setting variables on Partition A has zero effect on Partition B", () => {
+      const partitionA = manager.createPartition("Acme Corp", {
         DB_HOST: "acme-db",
         LOG_LEVEL: "warn",
       });
-      const tenantB = manager.createTenant("Beta Inc", {
+      const partitionB = manager.createPartition("Beta Inc", {
         DB_HOST: "beta-db",
         LOG_LEVEL: "info",
       });
 
       // Mutate A's variables
-      tenantA.setVariables({ DB_HOST: "acme-db-v2", NEW_VAR: "only-acme" });
+      partitionA.setVariables({ DB_HOST: "acme-db-v2", NEW_VAR: "only-acme" });
 
       // B is completely unaffected
-      expect(tenantB.getVariables()).toEqual({
+      expect(partitionB.getVariables()).toEqual({
         DB_HOST: "beta-db",
         LOG_LEVEL: "info",
       });
 
       // A has the updated values
-      expect(tenantA.getVariables()).toEqual({
+      expect(partitionA.getVariables()).toEqual({
         DB_HOST: "acme-db-v2",
         LOG_LEVEL: "warn",
         NEW_VAR: "only-acme",
@@ -128,14 +128,14 @@ describe("Tenant Isolation", () => {
     });
 
     it("getVariables returns a copy — external mutation cannot corrupt internal state", () => {
-      const tenant = manager.createTenant("Acme Corp", { DB_HOST: "acme-db" });
+      const partition = manager.createPartition("Acme Corp", { DB_HOST: "acme-db" });
 
-      const vars = tenant.getVariables();
+      const vars = partition.getVariables();
       vars.DB_HOST = "CORRUPTED";
       vars.INJECTED = "malicious";
 
       // Internal state is untouched
-      expect(tenant.getVariables()).toEqual({ DB_HOST: "acme-db" });
+      expect(partition.getVariables()).toEqual({ DB_HOST: "acme-db" });
     });
   });
 
@@ -144,62 +144,62 @@ describe("Tenant Isolation", () => {
   // -----------------------------------------------------------------------
 
   describe("deployment visibility isolation", () => {
-    it("Tenant A deployments are invisible to Tenant B", async () => {
-      const tenantA = manager.createTenant("Acme Corp");
-      const tenantB = manager.createTenant("Beta Inc");
+    it("Partition A deployments are invisible to Partition B", async () => {
+      const partitionA = manager.createPartition("Acme Corp");
+      const partitionB = manager.createPartition("Beta Inc");
       const env = makeEnvironment();
 
-      // Deploy to Tenant A
+      // Deploy to Partition A
       const triggerA = {
         projectId: "web-app",
-        tenantId: tenantA.id,
+        partitionId: partitionA.id,
         environmentId: env.id,
         version: "1.0.0",
       };
       const resultA = await agent.triggerDeployment(
         triggerA,
-        tenantA.toTenant(),
+        partitionA.toPartition(),
         env,
         makeProject(),
       );
       expect(resultA.status).toBe("succeeded");
 
-      // Tenant A sees its deployment
-      expect(tenantA.getDeployments()).toHaveLength(1);
-      expect(tenantA.getDeployments()[0].id).toBe(resultA.id);
+      // Partition A sees its deployment
+      expect(partitionA.getDeployments()).toHaveLength(1);
+      expect(partitionA.getDeployments()[0].id).toBe(resultA.id);
 
-      // Tenant B sees nothing
-      expect(tenantB.getDeployments()).toHaveLength(0);
+      // Partition B sees nothing
+      expect(partitionB.getDeployments()).toHaveLength(0);
     });
 
-    it("Tenant B cannot access Tenant A deployment by ID", async () => {
-      const tenantA = manager.createTenant("Acme Corp");
-      const tenantB = manager.createTenant("Beta Inc");
+    it("Partition B cannot access Partition A deployment by ID", async () => {
+      const partitionA = manager.createPartition("Acme Corp");
+      const partitionB = manager.createPartition("Beta Inc");
       const env = makeEnvironment();
 
       const resultA = await agent.triggerDeployment(
         {
           projectId: "web-app",
-          tenantId: tenantA.id,
+          partitionId: partitionA.id,
           environmentId: env.id,
           version: "1.0.0",
         },
-        tenantA.toTenant(),
+        partitionA.toPartition(),
         env,
         makeProject(),
       );
 
-      // Tenant A can access by ID
-      expect(tenantA.getDeployment(resultA.id)).toBeDefined();
-      expect(tenantA.getDeployment(resultA.id)!.id).toBe(resultA.id);
+      // Partition A can access by ID
+      expect(partitionA.getDeployment(resultA.id)).toBeDefined();
+      expect(partitionA.getDeployment(resultA.id)!.id).toBe(resultA.id);
 
-      // Tenant B cannot access A's deployment — returns undefined
-      expect(tenantB.getDeployment(resultA.id)).toBeUndefined();
+      // Partition B cannot access A's deployment — returns undefined
+      expect(partitionB.getDeployment(resultA.id)).toBeUndefined();
     });
 
-    it("multiple deployments across tenants stay fully partitioned", async () => {
-      const tenantA = manager.createTenant("Acme Corp");
-      const tenantB = manager.createTenant("Beta Inc");
+    it("multiple deployments across partitions stay fully partitioned", async () => {
+      const partitionA = manager.createPartition("Acme Corp");
+      const partitionB = manager.createPartition("Beta Inc");
       const env = makeEnvironment();
 
       // Deploy 3 times to A, 2 times to B
@@ -207,11 +207,11 @@ describe("Tenant Isolation", () => {
         await agent.triggerDeployment(
           {
             projectId: "web-app",
-            tenantId: tenantA.id,
+            partitionId: partitionA.id,
             environmentId: env.id,
             version: `a-${i}`,
           },
-          tenantA.toTenant(),
+          partitionA.toPartition(),
           env,
           makeProject(),
         );
@@ -220,26 +220,26 @@ describe("Tenant Isolation", () => {
         await agent.triggerDeployment(
           {
             projectId: "web-app",
-            tenantId: tenantB.id,
+            partitionId: partitionB.id,
             environmentId: env.id,
             version: `b-${i}`,
           },
-          tenantB.toTenant(),
+          partitionB.toPartition(),
           env,
           makeProject(),
         );
       }
 
-      expect(tenantA.getDeployments()).toHaveLength(3);
-      expect(tenantB.getDeployments()).toHaveLength(2);
+      expect(partitionA.getDeployments()).toHaveLength(3);
+      expect(partitionB.getDeployments()).toHaveLength(2);
 
       // Every deployment in A belongs to A
-      for (const d of tenantA.getDeployments()) {
-        expect(d.tenantId).toBe(tenantA.id);
+      for (const d of partitionA.getDeployments()) {
+        expect(d.partitionId).toBe(partitionA.id);
       }
       // Every deployment in B belongs to B
-      for (const d of tenantB.getDeployments()) {
-        expect(d.tenantId).toBe(tenantB.id);
+      for (const d of partitionB.getDeployments()) {
+        expect(d.partitionId).toBe(partitionB.id);
       }
     });
   });
@@ -249,33 +249,33 @@ describe("Tenant Isolation", () => {
   // -----------------------------------------------------------------------
 
   describe("diary entry isolation", () => {
-    it("Tenant A diary entries are invisible to Tenant B", async () => {
-      const tenantA = manager.createTenant("Acme Corp");
-      const tenantB = manager.createTenant("Beta Inc");
+    it("Partition A diary entries are invisible to Partition B", async () => {
+      const partitionA = manager.createPartition("Acme Corp");
+      const partitionB = manager.createPartition("Beta Inc");
       const env = makeEnvironment();
 
       await agent.triggerDeployment(
         {
           projectId: "web-app",
-          tenantId: tenantA.id,
+          partitionId: partitionA.id,
           environmentId: env.id,
           version: "1.0.0",
         },
-        tenantA.toTenant(),
+        partitionA.toPartition(),
         env,
         makeProject(),
       );
 
       // A has diary entries
-      const entriesA = tenantA.getDebriefEntries();
+      const entriesA = partitionA.getDebriefEntries();
       expect(entriesA.length).toBeGreaterThan(0);
 
       // B has none
-      expect(tenantB.getDebriefEntries()).toHaveLength(0);
+      expect(partitionB.getDebriefEntries()).toHaveLength(0);
 
-      // Every entry in A is tagged with A's tenantId
+      // Every entry in A is tagged with A's partitionId
       for (const entry of entriesA) {
-        expect(entry.tenantId).toBe(tenantA.id);
+        expect(entry.partitionId).toBe(partitionA.id);
       }
     });
   });
@@ -285,51 +285,51 @@ describe("Tenant Isolation", () => {
   // -----------------------------------------------------------------------
 
   describe("error containment", () => {
-    it("deployment failure on Tenant A does not prevent Tenant B deployment", async () => {
-      const tenantA = manager.createTenant("Acme Corp");
-      const tenantB = manager.createTenant("Beta Inc");
+    it("deployment failure on Partition A does not prevent Partition B deployment", async () => {
+      const partitionA = manager.createPartition("Acme Corp");
+      const partitionB = manager.createPartition("Beta Inc");
       const env = makeEnvironment();
 
-      // Tenant A: deployment fails (health check fails)
+      // Partition A: deployment fails (health check fails)
       healthChecker.willReturn(CONN_REFUSED, CONN_REFUSED);
       const resultA = await agent.triggerDeployment(
         {
           projectId: "web-app",
-          tenantId: tenantA.id,
+          partitionId: partitionA.id,
           environmentId: env.id,
           version: "1.0.0",
         },
-        tenantA.toTenant(),
+        partitionA.toPartition(),
         env,
         makeProject(),
       );
       expect(resultA.status).toBe("failed");
 
-      // Tenant B: deployment succeeds — A's failure had no effect
+      // Partition B: deployment succeeds — A's failure had no effect
       const resultB = await agent.triggerDeployment(
         {
           projectId: "web-app",
-          tenantId: tenantB.id,
+          partitionId: partitionB.id,
           environmentId: env.id,
           version: "1.0.0",
         },
-        tenantB.toTenant(),
+        partitionB.toPartition(),
         env,
         makeProject(),
       );
       expect(resultB.status).toBe("succeeded");
 
-      // Each tenant sees only their own result
-      expect(tenantA.getDeployments()).toHaveLength(1);
-      expect(tenantA.getDeployments()[0].status).toBe("failed");
+      // Each partition sees only their own result
+      expect(partitionA.getDeployments()).toHaveLength(1);
+      expect(partitionA.getDeployments()[0].status).toBe("failed");
 
-      expect(tenantB.getDeployments()).toHaveLength(1);
-      expect(tenantB.getDeployments()[0].status).toBe("succeeded");
+      expect(partitionB.getDeployments()).toHaveLength(1);
+      expect(partitionB.getDeployments()[0].status).toBe("succeeded");
     });
 
     it("A's failure diary entries don't leak into B's diary", async () => {
-      const tenantA = manager.createTenant("Acme Corp");
-      const tenantB = manager.createTenant("Beta Inc");
+      const partitionA = manager.createPartition("Acme Corp");
+      const partitionB = manager.createPartition("Beta Inc");
       const env = makeEnvironment();
 
       // A fails
@@ -337,11 +337,11 @@ describe("Tenant Isolation", () => {
       await agent.triggerDeployment(
         {
           projectId: "web-app",
-          tenantId: tenantA.id,
+          partitionId: partitionA.id,
           environmentId: env.id,
           version: "1.0.0",
         },
-        tenantA.toTenant(),
+        partitionA.toPartition(),
         env,
         makeProject(),
       );
@@ -350,32 +350,32 @@ describe("Tenant Isolation", () => {
       await agent.triggerDeployment(
         {
           projectId: "web-app",
-          tenantId: tenantB.id,
+          partitionId: partitionB.id,
           environmentId: env.id,
           version: "1.0.0",
         },
-        tenantB.toTenant(),
+        partitionB.toPartition(),
         env,
         makeProject(),
       );
 
       // A has failure entries
       const failEntries = findDecisions(
-        tenantA.getDebriefEntries(),
+        partitionA.getDebriefEntries(),
         "failed",
       );
       expect(failEntries.length).toBeGreaterThan(0);
 
       // B has zero failure entries
       const bFailEntries = findDecisions(
-        tenantB.getDebriefEntries(),
+        partitionB.getDebriefEntries(),
         "failed",
       );
       expect(bFailEntries).toHaveLength(0);
 
       // B only has success-path entries
       const bSuccess = findDecisions(
-        tenantB.getDebriefEntries(),
+        partitionB.getDebriefEntries(),
         "Marking deployment",
       );
       expect(bSuccess).toHaveLength(1);
@@ -383,19 +383,19 @@ describe("Tenant Isolation", () => {
   });
 
   // -----------------------------------------------------------------------
-  // 5. TenantManager access control
+  // 5. PartitionManager access control
   // -----------------------------------------------------------------------
 
   describe("manager access control", () => {
-    it("getTenant returns undefined for non-existent tenant", () => {
-      expect(manager.getTenant("does-not-exist")).toBeUndefined();
+    it("getPartition returns undefined for non-existent partition", () => {
+      expect(manager.getPartition("does-not-exist")).toBeUndefined();
     });
 
-    it("listTenants exposes metadata only — not data access paths", () => {
-      manager.createTenant("Acme Corp", { SECRET: "s3cret" });
-      manager.createTenant("Beta Inc");
+    it("listPartitions exposes metadata only — not data access paths", () => {
+      manager.createPartition("Acme Corp", { SECRET: "s3cret" });
+      manager.createPartition("Beta Inc");
 
-      const list = manager.listTenants();
+      const list = manager.listPartitions();
       expect(list).toHaveLength(2);
 
       // List contains id and name only
@@ -413,16 +413,16 @@ describe("Tenant Isolation", () => {
 describe("Variable Precedence Resolution", () => {
   let diary: DecisionDebrief;
   let deployments: InMemoryDeploymentStore;
-  let manager: TenantManager;
+  let manager: PartitionManager;
 
   beforeEach(() => {
     diary = new DecisionDebrief();
     deployments = new InMemoryDeploymentStore();
-    manager = new TenantManager(deployments, diary);
+    manager = new PartitionManager(deployments, diary);
   });
 
-  it("tenant-level values override environment defaults", () => {
-    const tenant = manager.createTenant("Acme Corp", {
+  it("partition-level values override environment defaults", () => {
+    const partition = manager.createPartition("Acme Corp", {
       LOG_LEVEL: "error",
       DB_HOST: "acme-db",
     });
@@ -430,16 +430,16 @@ describe("Variable Precedence Resolution", () => {
       variables: { LOG_LEVEL: "warn", APP_ENV: "production" },
     });
 
-    const { resolved, precedenceLog } = tenant.resolveVariables(env);
+    const { resolved, precedenceLog } = partition.resolveVariables(env);
 
-    expect(resolved.LOG_LEVEL).toBe("error"); // tenant wins
+    expect(resolved.LOG_LEVEL).toBe("error"); // partition wins
     expect(resolved.APP_ENV).toBe("production"); // env only
-    expect(resolved.DB_HOST).toBe("acme-db"); // tenant only
+    expect(resolved.DB_HOST).toBe("acme-db"); // partition only
 
     // Precedence log records the override
     const logOverride = precedenceLog.find((e) => e.variable === "LOG_LEVEL");
     expect(logOverride).toBeDefined();
-    expect(logOverride!.source).toBe("tenant");
+    expect(logOverride!.source).toBe("partition");
     expect(logOverride!.resolvedValue).toBe("error");
     expect(logOverride!.overrode).toEqual({
       value: "warn",
@@ -449,26 +449,26 @@ describe("Variable Precedence Resolution", () => {
     expect(logOverride!.reason).toContain("environment");
   });
 
-  it("trigger overrides both tenant and environment", () => {
-    const tenant = manager.createTenant("Acme Corp", {
+  it("trigger overrides both partition and environment", () => {
+    const partition = manager.createPartition("Acme Corp", {
       LOG_LEVEL: "error",
     });
     const env = makeEnvironment({
       variables: { LOG_LEVEL: "warn", APP_ENV: "production" },
     });
 
-    const { resolved, precedenceLog } = tenant.resolveVariables(env, {
+    const { resolved, precedenceLog } = partition.resolveVariables(env, {
       LOG_LEVEL: "debug",
       APP_ENV: "staging",
     });
 
-    expect(resolved.LOG_LEVEL).toBe("debug"); // trigger > tenant
+    expect(resolved.LOG_LEVEL).toBe("debug"); // trigger > partition
     expect(resolved.APP_ENV).toBe("staging"); // trigger > environment
 
-    // LOG_LEVEL trigger overrode tenant
+    // LOG_LEVEL trigger overrode partition
     const logLevel = precedenceLog.find((e) => e.variable === "LOG_LEVEL");
     expect(logLevel!.source).toBe("trigger");
-    expect(logLevel!.overrode).toEqual({ value: "error", source: "tenant" });
+    expect(logLevel!.overrode).toEqual({ value: "error", source: "partition" });
 
     // APP_ENV trigger overrode environment
     const appEnv = precedenceLog.find((e) => e.variable === "APP_ENV");
@@ -479,8 +479,8 @@ describe("Variable Precedence Resolution", () => {
     });
   });
 
-  it("full three-layer resolution: trigger > tenant > environment", () => {
-    const tenant = manager.createTenant("Acme Corp", {
+  it("full three-layer resolution: trigger > partition > environment", () => {
+    const partition = manager.createPartition("Acme Corp", {
       DB_HOST: "acme-db",
       LOG_LEVEL: "error",
     });
@@ -492,25 +492,25 @@ describe("Variable Precedence Resolution", () => {
       },
     });
 
-    const { resolved, precedenceLog } = tenant.resolveVariables(env, {
+    const { resolved, precedenceLog } = partition.resolveVariables(env, {
       LOG_LEVEL: "debug",
     });
 
     // Full merged result
     expect(resolved).toEqual({
       APP_ENV: "production", // env only
-      LOG_LEVEL: "debug", // trigger > tenant > env
+      LOG_LEVEL: "debug", // trigger > partition > env
       REGION: "us-east-1", // env only
-      DB_HOST: "acme-db", // tenant only
+      DB_HOST: "acme-db", // partition only
     });
 
     // Every variable has a log entry
     expect(precedenceLog).toHaveLength(4);
 
-    // LOG_LEVEL: trigger wins over tenant
+    // LOG_LEVEL: trigger wins over partition
     const logLevel = precedenceLog.find((e) => e.variable === "LOG_LEVEL")!;
     expect(logLevel.source).toBe("trigger");
-    expect(logLevel.overrode!.source).toBe("tenant");
+    expect(logLevel.overrode!.source).toBe("partition");
     expect(logLevel.overrode!.value).toBe("error");
 
     // REGION: environment default, no override
@@ -519,28 +519,28 @@ describe("Variable Precedence Resolution", () => {
     expect(region.overrode).toBeNull();
     expect(region.reason).toContain("no higher-level override");
 
-    // DB_HOST: tenant-only
+    // DB_HOST: partition-only
     const dbHost = precedenceLog.find((e) => e.variable === "DB_HOST")!;
-    expect(dbHost.source).toBe("tenant");
+    expect(dbHost.source).toBe("partition");
     expect(dbHost.overrode).toBeNull();
     expect(dbHost.reason).toContain("not defined at environment level");
   });
 
   it("non-conflicting variables from all levels merge correctly", () => {
-    const tenant = manager.createTenant("Acme Corp", {
-      TENANT_ONLY: "t-val",
+    const partition = manager.createPartition("Acme Corp", {
+      PARTITION_ONLY: "t-val",
     });
     const env = makeEnvironment({
       variables: { ENV_ONLY: "e-val" },
     });
 
-    const { resolved, precedenceLog } = tenant.resolveVariables(env, {
+    const { resolved, precedenceLog } = partition.resolveVariables(env, {
       TRIGGER_ONLY: "tr-val",
     });
 
     expect(resolved).toEqual({
       ENV_ONLY: "e-val",
-      TENANT_ONLY: "t-val",
+      PARTITION_ONLY: "t-val",
       TRIGGER_ONLY: "tr-val",
     });
 
@@ -551,25 +551,25 @@ describe("Variable Precedence Resolution", () => {
   });
 
   it("same value at multiple levels is not reported as an override", () => {
-    const tenant = manager.createTenant("Acme Corp", {
+    const partition = manager.createPartition("Acme Corp", {
       APP_ENV: "production",
     });
     const env = makeEnvironment({
       variables: { APP_ENV: "production" },
     });
 
-    const { resolved, precedenceLog } = tenant.resolveVariables(env);
+    const { resolved, precedenceLog } = partition.resolveVariables(env);
 
     expect(resolved.APP_ENV).toBe("production");
 
-    // Tenant "wins" by precedence but value is the same — no override reported
+    // Partition "wins" by precedence but value is the same — no override reported
     const appEnv = precedenceLog.find((e) => e.variable === "APP_ENV")!;
-    expect(appEnv.source).toBe("tenant");
+    expect(appEnv.source).toBe("partition");
     expect(appEnv.overrode).toBeNull();
   });
 
   it("precedence log entries have plain-language reason for every conflict", () => {
-    const tenant = manager.createTenant("Acme Corp", {
+    const partition = manager.createPartition("Acme Corp", {
       DB_HOST: "acme-db",
       LOG_LEVEL: "error",
     });
@@ -577,7 +577,7 @@ describe("Variable Precedence Resolution", () => {
       variables: { DB_HOST: "default-db", LOG_LEVEL: "warn", REGION: "us-east-1" },
     });
 
-    const { precedenceLog } = tenant.resolveVariables(env, {
+    const { precedenceLog } = partition.resolveVariables(env, {
       LOG_LEVEL: "debug",
     });
 
@@ -593,7 +593,7 @@ describe("Variable Precedence Resolution", () => {
 
     const logLevel = precedenceLog.find((e) => e.variable === "LOG_LEVEL")!;
     expect(logLevel.reason).toContain("takes precedence");
-    expect(logLevel.reason).toContain("tenant");
+    expect(logLevel.reason).toContain("partition");
   });
 });
 
@@ -606,7 +606,7 @@ describe("Precedence Recording in Decision Diary", () => {
   let deployments: InMemoryDeploymentStore;
   let healthChecker: MockHealthChecker;
   let agent: ServerAgent;
-  let manager: TenantManager;
+  let manager: PartitionManager;
 
   beforeEach(() => {
     diary = new DecisionDebrief();
@@ -616,11 +616,11 @@ describe("Precedence Recording in Decision Diary", () => {
       healthCheckBackoffMs: 1,
       executionDelayMs: 1,
     });
-    manager = new TenantManager(deployments, diary);
+    manager = new PartitionManager(deployments, diary);
   });
 
   it("ServerAgent records variable conflicts to the diary with full reasoning", async () => {
-    const tenant = manager.createTenant("Acme Corp", {
+    const partition = manager.createPartition("Acme Corp", {
       LOG_LEVEL: "error",
     });
     const env = makeEnvironment({
@@ -630,12 +630,12 @@ describe("Precedence Recording in Decision Diary", () => {
     const result = await agent.triggerDeployment(
       {
         projectId: "web-app",
-        tenantId: tenant.id,
+        partitionId: partition.id,
         environmentId: env.id,
         version: "1.0.0",
         variables: { LOG_LEVEL: "debug" },
       },
-      tenant.toTenant(),
+      partition.toPartition(),
       env,
       makeProject(),
     );
@@ -643,7 +643,7 @@ describe("Precedence Recording in Decision Diary", () => {
     expect(result.status).toBe("succeeded");
 
     // The agent's diary entries record the conflict resolution
-    const entries = tenant.getDebriefEntries();
+    const entries = partition.getDebriefEntries();
     const configEntries = findDecisions(entries, "Accepted configuration");
     expect(configEntries).toHaveLength(1);
     expect(configEntries[0].reasoning).toContain("precedence");
@@ -656,15 +656,15 @@ describe("Precedence Recording in Decision Diary", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Scale: 50 tenants
+// Scale: 50 partitions
 // ---------------------------------------------------------------------------
 
-describe("Scale: 50 Tenants", () => {
+describe("Scale: 50 Partitions", () => {
   let diary: DecisionDebrief;
   let deployments: InMemoryDeploymentStore;
   let healthChecker: MockHealthChecker;
   let agent: ServerAgent;
-  let manager: TenantManager;
+  let manager: PartitionManager;
 
   beforeEach(() => {
     diary = new DecisionDebrief();
@@ -674,58 +674,58 @@ describe("Scale: 50 Tenants", () => {
       healthCheckBackoffMs: 1,
       executionDelayMs: 1,
     });
-    manager = new TenantManager(deployments, diary);
+    manager = new PartitionManager(deployments, diary);
   });
 
-  it("creates 50 tenants without performance degradation", () => {
+  it("creates 50 partitions without performance degradation", () => {
     const start = performance.now();
 
-    const tenants = Array.from({ length: 50 }, (_, i) =>
-      manager.createTenant(`Tenant-${i}`, {
+    const partitions = Array.from({ length: 50 }, (_, i) =>
+      manager.createPartition(`Partition-${i}`, {
         DB_HOST: `db-${i}.internal`,
         APP_ENV: "production",
-        TENANT_ID: `t-${i}`,
+        PARTITION_ID: `t-${i}`,
       }),
     );
 
     const elapsed = performance.now() - start;
 
     expect(manager.size).toBe(50);
-    expect(tenants).toHaveLength(50);
+    expect(partitions).toHaveLength(50);
 
-    // Creation of 50 tenants should complete in well under 1 second
+    // Creation of 50 partitions should complete in well under 1 second
     expect(elapsed).toBeLessThan(1000);
 
-    // Each tenant has unique id
-    const ids = new Set(tenants.map((t) => t.id));
+    // Each partition has unique id
+    const ids = new Set(partitions.map((t) => t.id));
     expect(ids.size).toBe(50);
   });
 
-  it("50 tenants maintain full isolation across deployments", async () => {
+  it("50 partitions maintain full isolation across deployments", async () => {
     const env = makeEnvironment({
       variables: { APP_ENV: "production", LOG_LEVEL: "warn" },
     });
 
-    // Create 50 tenants with distinct variables
-    const tenants = Array.from({ length: 50 }, (_, i) =>
-      manager.createTenant(`Tenant-${i}`, {
+    // Create 50 partitions with distinct variables
+    const partitions = Array.from({ length: 50 }, (_, i) =>
+      manager.createPartition(`Partition-${i}`, {
         DB_HOST: `db-${i}.internal`,
-        TENANT_MARKER: `marker-${i}`,
+        PARTITION_MARKER: `marker-${i}`,
       }),
     );
 
-    // Deploy to all 50 tenants
+    // Deploy to all 50 partitions
     const start = performance.now();
     const results = await Promise.all(
-      tenants.map((tenant) =>
+      partitions.map((partition) =>
         agent.triggerDeployment(
           {
             projectId: "web-app",
-            tenantId: tenant.id,
+            partitionId: partition.id,
             environmentId: env.id,
             version: "1.0.0",
           },
-          tenant.toTenant(),
+          partition.toPartition(),
           env,
           makeProject(),
         ),
@@ -741,42 +741,42 @@ describe("Scale: 50 Tenants", () => {
     // 50 deployments in under 5 seconds (generous bound)
     expect(elapsed).toBeLessThan(5000);
 
-    // Isolation: each tenant sees exactly 1 deployment
+    // Isolation: each partition sees exactly 1 deployment
     for (let i = 0; i < 50; i++) {
-      const tenantDeployments = tenants[i].getDeployments();
-      expect(tenantDeployments).toHaveLength(1);
-      expect(tenantDeployments[0].tenantId).toBe(tenants[i].id);
+      const partitionDeployments = partitions[i].getDeployments();
+      expect(partitionDeployments).toHaveLength(1);
+      expect(partitionDeployments[0].partitionId).toBe(partitions[i].id);
 
-      // Variables resolved with this tenant's specific values
-      expect(tenantDeployments[0].variables.DB_HOST).toBe(
+      // Variables resolved with this partition's specific values
+      expect(partitionDeployments[0].variables.DB_HOST).toBe(
         `db-${i}.internal`,
       );
-      expect(tenantDeployments[0].variables.TENANT_MARKER).toBe(
+      expect(partitionDeployments[0].variables.PARTITION_MARKER).toBe(
         `marker-${i}`,
       );
-      expect(tenantDeployments[0].variables.APP_ENV).toBe("production");
+      expect(partitionDeployments[0].variables.APP_ENV).toBe("production");
     }
   });
 
-  it("tenant lookup is O(1) — constant time regardless of count", () => {
-    // Create 50 tenants
-    const tenants = Array.from({ length: 50 }, (_, i) =>
-      manager.createTenant(`Tenant-${i}`),
+  it("partition lookup is O(1) — constant time regardless of count", () => {
+    // Create 50 partitions
+    const partitions = Array.from({ length: 50 }, (_, i) =>
+      manager.createPartition(`Partition-${i}`),
     );
 
-    // Lookup the 1st, 25th, and 50th tenant — all should be fast
-    const ids = [tenants[0].id, tenants[24].id, tenants[49].id];
+    // Lookup the 1st, 25th, and 50th partition — all should be fast
+    const ids = [partitions[0].id, partitions[24].id, partitions[49].id];
     const times: number[] = [];
 
     for (const id of ids) {
       const start = performance.now();
       for (let i = 0; i < 1000; i++) {
-        manager.getTenant(id);
+        manager.getPartition(id);
       }
       times.push(performance.now() - start);
     }
 
-    // All 1000 lookups per tenant should be sub-millisecond territory
+    // All 1000 lookups per partition should be sub-millisecond territory
     // (generous bound: 50ms for 1000 lookups)
     for (const t of times) {
       expect(t).toBeLessThan(50);
@@ -787,24 +787,24 @@ describe("Scale: 50 Tenants", () => {
     expect(ratio).toBeLessThan(10);
   });
 
-  it("diary entries stay partitioned across all 50 tenants", async () => {
+  it("diary entries stay partitioned across all 50 partitions", async () => {
     const env = makeEnvironment();
 
-    const tenants = Array.from({ length: 50 }, (_, i) =>
-      manager.createTenant(`Tenant-${i}`),
+    const partitions = Array.from({ length: 50 }, (_, i) =>
+      manager.createPartition(`Partition-${i}`),
     );
 
     // Deploy to all 50
     await Promise.all(
-      tenants.map((tenant) =>
+      partitions.map((partition) =>
         agent.triggerDeployment(
           {
             projectId: "web-app",
-            tenantId: tenant.id,
+            partitionId: partition.id,
             environmentId: env.id,
             version: "1.0.0",
           },
-          tenant.toTenant(),
+          partition.toPartition(),
           env,
           makeProject(),
         ),
@@ -817,21 +817,21 @@ describe("Scale: 50 Tenants", () => {
 
     // But each container only sees its own
     for (let i = 0; i < 50; i++) {
-      const entries = tenants[i].getDebriefEntries();
+      const entries = partitions[i].getDebriefEntries();
       expect(entries.length).toBeGreaterThan(0);
       for (const entry of entries) {
-        expect(entry.tenantId).toBe(tenants[i].id);
+        expect(entry.partitionId).toBe(partitions[i].id);
       }
     }
 
-    // No tenant sees another tenant's entries
+    // No partition sees another partition's entries
     for (let i = 0; i < 50; i++) {
-      const myEntries = tenants[i].getDebriefEntries();
+      const myEntries = partitions[i].getDebriefEntries();
       for (const entry of myEntries) {
-        // This entry should NOT appear in any other tenant's view
+        // This entry should NOT appear in any other partition's view
         for (let j = 0; j < 50; j++) {
           if (j === i) continue;
-          const otherEntries = tenants[j].getDebriefEntries();
+          const otherEntries = partitions[j].getDebriefEntries();
           const leaked = otherEntries.find((e) => e.id === entry.id);
           expect(leaked).toBeUndefined();
         }
@@ -839,7 +839,7 @@ describe("Scale: 50 Tenants", () => {
     }
   });
 
-  it("variable resolution at scale — 50 tenants with different overrides", () => {
+  it("variable resolution at scale — 50 partitions with different overrides", () => {
     const env = makeEnvironment({
       variables: {
         APP_ENV: "production",
@@ -848,8 +848,8 @@ describe("Scale: 50 Tenants", () => {
       },
     });
 
-    const tenants = Array.from({ length: 50 }, (_, i) =>
-      manager.createTenant(`Tenant-${i}`, {
+    const partitions = Array.from({ length: 50 }, (_, i) =>
+      manager.createPartition(`Partition-${i}`, {
         LOG_LEVEL: i % 2 === 0 ? "error" : "info",
         DB_HOST: `db-${i}.internal`,
       }),
@@ -858,17 +858,17 @@ describe("Scale: 50 Tenants", () => {
     const start = performance.now();
 
     for (let i = 0; i < 50; i++) {
-      const { resolved, precedenceLog } = tenants[i].resolveVariables(env);
+      const { resolved, precedenceLog } = partitions[i].resolveVariables(env);
 
       // Correct precedence applied
       expect(resolved.APP_ENV).toBe("production"); // env
       expect(resolved.REGION).toBe("us-east-1"); // env
-      expect(resolved.DB_HOST).toBe(`db-${i}.internal`); // tenant
-      expect(resolved.LOG_LEVEL).toBe(i % 2 === 0 ? "error" : "info"); // tenant overrides env
+      expect(resolved.DB_HOST).toBe(`db-${i}.internal`); // partition
+      expect(resolved.LOG_LEVEL).toBe(i % 2 === 0 ? "error" : "info"); // partition overrides env
 
       // LOG_LEVEL override recorded
       const logEntry = precedenceLog.find((e) => e.variable === "LOG_LEVEL")!;
-      expect(logEntry.source).toBe("tenant");
+      expect(logEntry.source).toBe("partition");
       expect(logEntry.overrode).toEqual({ value: "warn", source: "environment" });
       expect(logEntry.reason).toContain("overrides");
     }

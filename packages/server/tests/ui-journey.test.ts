@@ -1,12 +1,12 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
-import { DecisionDebrief, TenantStore, ProjectStore, EnvironmentStore, OrderStore } from "@deploystack/core";
+import { DecisionDebrief, PartitionStore, ProjectStore, EnvironmentStore, OrderStore } from "@deploystack/core";
 import type { Deployment, DebriefEntry, PostmortemReport, ProjectHistory } from "@deploystack/core";
 import { ServerAgent, InMemoryDeploymentStore } from "../src/agent/server-agent.js";
 import { registerDeploymentRoutes } from "../src/api/deployments.js";
 import { registerProjectRoutes } from "../src/api/projects.js";
-import { registerTenantRoutes } from "../src/api/tenants.js";
+import { registerPartitionRoutes } from "../src/api/partitions.js";
 import { registerEnvironmentRoutes } from "../src/api/environments.js";
 
 // ---------------------------------------------------------------------------
@@ -15,7 +15,7 @@ import { registerEnvironmentRoutes } from "../src/api/environments.js";
 
 let app: FastifyInstance;
 let diary: DecisionDebrief;
-let tenants: TenantStore;
+let partitions: PartitionStore;
 let projects: ProjectStore;
 let environments: EnvironmentStore;
 let deployments: InMemoryDeploymentStore;
@@ -24,7 +24,7 @@ let agent: ServerAgent;
 
 beforeAll(async () => {
   diary = new DecisionDebrief();
-  tenants = new TenantStore();
+  partitions = new PartitionStore();
   projects = new ProjectStore();
   environments = new EnvironmentStore();
   deployments = new InMemoryDeploymentStore();
@@ -32,9 +32,9 @@ beforeAll(async () => {
   agent = new ServerAgent(diary, deployments, orders);
 
   app = Fastify();
-  registerDeploymentRoutes(app, agent, tenants, environments, deployments, diary, projects, orders);
+  registerDeploymentRoutes(app, agent, partitions, environments, deployments, diary, projects, orders);
   registerProjectRoutes(app, projects, environments);
-  registerTenantRoutes(app, tenants, deployments, diary);
+  registerPartitionRoutes(app, partitions, deployments, diary);
   registerEnvironmentRoutes(app, environments, projects);
 
   await app.ready();
@@ -46,7 +46,7 @@ beforeAll(async () => {
 
 describe("Complete UI user journey", () => {
   let projectId: string;
-  let tenantId: string;
+  let partitionId: string;
   let productionEnvId: string;
   let stagingEnvId: string;
   let firstDeploymentId: string;
@@ -110,41 +110,41 @@ describe("Complete UI user journey", () => {
     expect(body.environments.map((e: any) => e.name).sort()).toEqual(["production", "staging"]);
   });
 
-  // ---- Step 3: Create a tenant ----
+  // ---- Step 3: Create a partition ----
 
-  it("creates a tenant", async () => {
+  it("creates a partition", async () => {
     const res = await app.inject({
       method: "POST",
-      url: "/api/tenants",
+      url: "/api/partitions",
       payload: { name: "Acme Corp" },
     });
 
     expect(res.statusCode).toBe(201);
     const body = JSON.parse(res.payload);
-    expect(body.tenant.name).toBe("Acme Corp");
-    tenantId = body.tenant.id;
+    expect(body.partition.name).toBe("Acme Corp");
+    partitionId = body.partition.id;
   });
 
-  // ---- Step 4: Configure tenant variables ----
+  // ---- Step 4: Configure partition variables ----
 
-  it("updates tenant variables", async () => {
+  it("updates partition variables", async () => {
     const res = await app.inject({
       method: "PUT",
-      url: `/api/tenants/${tenantId}/variables`,
+      url: `/api/partitions/${partitionId}/variables`,
       payload: { variables: { DB_HOST: "acme-db-1", APP_ENV: "production" } },
     });
 
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.payload);
-    expect(body.tenant.variables.DB_HOST).toBe("acme-db-1");
-    expect(body.tenant.variables.APP_ENV).toBe("production");
+    expect(body.partition.variables.DB_HOST).toBe("acme-db-1");
+    expect(body.partition.variables.APP_ENV).toBe("production");
   });
 
-  it("gets tenant by ID with variables", async () => {
-    const res = await app.inject({ method: "GET", url: `/api/tenants/${tenantId}` });
+  it("gets partition by ID with variables", async () => {
+    const res = await app.inject({ method: "GET", url: `/api/partitions/${partitionId}` });
     const body = JSON.parse(res.payload);
-    expect(body.tenant.name).toBe("Acme Corp");
-    expect(body.tenant.variables.DB_HOST).toBe("acme-db-1");
+    expect(body.partition.name).toBe("Acme Corp");
+    expect(body.partition.variables.DB_HOST).toBe("acme-db-1");
   });
 
   // ---- Step 5: Trigger first deployment ----
@@ -155,7 +155,7 @@ describe("Complete UI user journey", () => {
       url: "/api/deployments",
       payload: {
         projectId,
-        tenantId,
+        partitionId,
         environmentId: productionEnvId,
         version: "1.0.0",
       },
@@ -171,10 +171,10 @@ describe("Complete UI user journey", () => {
 
   // ---- Step 6: Read deployment history ----
 
-  it("lists deployments filtered by tenant", async () => {
+  it("lists deployments filtered by partition", async () => {
     const res = await app.inject({
       method: "GET",
-      url: `/api/deployments?tenantId=${tenantId}`,
+      url: `/api/deployments?partitionId=${partitionId}`,
     });
 
     const body = JSON.parse(res.payload);
@@ -240,7 +240,7 @@ describe("Complete UI user journey", () => {
       url: "/api/deployments",
       payload: {
         projectId,
-        tenantId,
+        partitionId,
         environmentId: productionEnvId,
         version: "1.1.0",
         variables: { FEATURE_FLAG: "new-ui" },
@@ -254,12 +254,12 @@ describe("Complete UI user journey", () => {
     secondDeploymentId = body.deployment.id;
   });
 
-  // ---- Step 10: Read tenant history with both deployments ----
+  // ---- Step 10: Read partition history with both deployments ----
 
-  it("generates tenant deployment history", async () => {
+  it("generates partition deployment history", async () => {
     const res = await app.inject({
       method: "GET",
-      url: `/api/tenants/${tenantId}/history`,
+      url: `/api/partitions/${partitionId}/history`,
     });
 
     const body = JSON.parse(res.payload);
@@ -278,10 +278,10 @@ describe("Complete UI user journey", () => {
 
   // ---- Step 11: Verify full deployment list ----
 
-  it("lists all deployments for tenant showing both", async () => {
+  it("lists all deployments for partition showing both", async () => {
     const res = await app.inject({
       method: "GET",
-      url: `/api/deployments?tenantId=${tenantId}`,
+      url: `/api/deployments?partitionId=${partitionId}`,
     });
 
     const body = JSON.parse(res.payload);
@@ -305,11 +305,11 @@ describe("Complete UI user journey", () => {
 
   // ---- Step 13: List all entities (Dashboard queries) ----
 
-  it("lists all tenants", async () => {
-    const res = await app.inject({ method: "GET", url: "/api/tenants" });
+  it("lists all partitions", async () => {
+    const res = await app.inject({ method: "GET", url: "/api/partitions" });
     const body = JSON.parse(res.payload);
-    expect(body.tenants.length).toBeGreaterThanOrEqual(1);
-    expect(body.tenants.some((t: any) => t.name === "Acme Corp")).toBe(true);
+    expect(body.partitions.length).toBeGreaterThanOrEqual(1);
+    expect(body.partitions.some((t: any) => t.name === "Acme Corp")).toBe(true);
   });
 
   it("lists all environments", async () => {
@@ -344,8 +344,8 @@ describe("Complete UI user journey", () => {
     expect(res.statusCode).toBe(404);
   });
 
-  it("returns 404 for nonexistent tenant", async () => {
-    const res = await app.inject({ method: "GET", url: "/api/tenants/nonexistent" });
+  it("returns 404 for nonexistent partition", async () => {
+    const res = await app.inject({ method: "GET", url: "/api/partitions/nonexistent" });
     expect(res.statusCode).toBe(404);
   });
 
@@ -358,10 +358,10 @@ describe("Complete UI user journey", () => {
     expect(res.statusCode).toBe(400);
   });
 
-  it("returns 400 for tenant without name", async () => {
+  it("returns 400 for partition without name", async () => {
     const res = await app.inject({
       method: "POST",
-      url: "/api/tenants",
+      url: "/api/partitions",
       payload: {},
     });
     expect(res.statusCode).toBe(400);

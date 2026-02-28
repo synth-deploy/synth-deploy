@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import type { Environment, EnvironmentId } from "./types.js";
 
 /**
- * In-memory environment store. Same pattern as TenantStore and ProjectStore —
+ * In-memory environment store. Same pattern as PartitionStore and ProjectStore —
  * interface designed for later migration to persistent storage.
  */
 export class EnvironmentStore {

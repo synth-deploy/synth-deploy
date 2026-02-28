@@ -1,6 +1,6 @@
 import type {
-  TenantId,
-  Tenant,
+  PartitionId,
+  Partition,
   Environment,
   Deployment,
   DeploymentId,
@@ -14,10 +14,10 @@ import type {
 export interface PrecedenceEntry {
   variable: string;
   resolvedValue: string;
-  source: "environment" | "tenant" | "trigger";
+  source: "environment" | "partition" | "trigger";
   overrode: {
     value: string;
-    source: "environment" | "tenant";
+    source: "environment" | "partition";
   } | null;
   reason: string;
 }
@@ -32,9 +32,9 @@ export interface VariableResolution {
 // ---------------------------------------------------------------------------
 
 /**
- * Read-only deployment access scoped to a single tenant.
+ * Read-only deployment access scoped to a single partition.
  * Implementations MUST enforce that only deployments belonging
- * to the bound tenantId are returned.
+ * to the bound partitionId are returned.
  */
 export interface ScopedDeploymentReader {
   get(id: DeploymentId): Deployment | undefined;
@@ -42,31 +42,31 @@ export interface ScopedDeploymentReader {
 }
 
 /**
- * Read-only debrief access scoped to a single tenant.
+ * Read-only debrief access scoped to a single partition.
  */
 export interface ScopedDebriefReader {
   list(): DebriefEntry[];
 }
 
 // ---------------------------------------------------------------------------
-// TenantContainer -- the isolation boundary
+// PartitionContainer -- the isolation boundary
 // ---------------------------------------------------------------------------
 
 /**
- * The isolation boundary for a single tenant.
+ * The isolation boundary for a single partition.
  *
- * All access to tenant-specific data flows through this container.
+ * All access to partition-specific data flows through this container.
  * The container enforces:
- *   1. Data scoping -- only this tenant's data is accessible
+ *   1. Data scoping -- only this partition's data is accessible
  *   2. State isolation -- variables are owned copies, not shared references
  *   3. Variable precedence -- deterministic resolution with full audit trail
  *
- * A TenantContainer is NOT a copy of stored data. Scoped readers are live
- * views that delegate to shared stores but filter by tenantId. Variables
+ * A PartitionContainer is NOT a copy of stored data. Scoped readers are live
+ * views that delegate to shared stores but filter by partitionId. Variables
  * are owned copies that cannot affect other containers.
  */
-export class TenantContainer {
-  readonly id: TenantId;
+export class PartitionContainer {
+  readonly id: PartitionId;
   readonly name: string;
   readonly createdAt: Date;
 
@@ -75,14 +75,14 @@ export class TenantContainer {
   private _debrief: ScopedDebriefReader;
 
   constructor(
-    tenant: Tenant,
+    partition: Partition,
     deployments: ScopedDeploymentReader,
     debrief: ScopedDebriefReader,
   ) {
-    this.id = tenant.id;
-    this.name = tenant.name;
-    this.createdAt = tenant.createdAt;
-    this._variables = { ...tenant.variables };
+    this.id = partition.id;
+    this.name = partition.name;
+    this.createdAt = partition.createdAt;
+    this._variables = { ...partition.variables };
     this._deployments = deployments;
     this._debrief = debrief;
   }
@@ -100,37 +100,37 @@ export class TenantContainer {
   }
 
   /**
-   * Resolve variables using precedence: trigger > tenant > environment.
+   * Resolve variables using precedence: trigger > partition > environment.
    *
    * Returns the merged variable set and a complete precedence log that
    * records -- for every variable -- which value was used, where it came
    * from, what it overrode, and a plain-language explanation of why.
    *
    * This is the single source of truth for "what variables does this
-   * tenant get in this environment, and why."
+   * partition get in this environment, and why."
    */
   resolveVariables(
     environment: Environment,
     triggerOverrides?: Record<string, string>,
   ): VariableResolution {
     const envVars = environment.variables;
-    const tenantVars = this._variables;
+    const partitionVars = this._variables;
     const triggerVars = triggerOverrides ?? {};
 
     // Build the merged set -- last write wins per precedence
     const resolved: Record<string, string> = {};
     const finalSource: Map<
       string,
-      "environment" | "tenant" | "trigger"
+      "environment" | "partition" | "trigger"
     > = new Map();
 
     for (const [key, value] of Object.entries(envVars)) {
       resolved[key] = value;
       finalSource.set(key, "environment");
     }
-    for (const [key, value] of Object.entries(tenantVars)) {
+    for (const [key, value] of Object.entries(partitionVars)) {
       resolved[key] = value;
-      finalSource.set(key, "tenant");
+      finalSource.set(key, "partition");
     }
     for (const [key, value] of Object.entries(triggerVars)) {
       resolved[key] = value;
@@ -147,11 +147,11 @@ export class TenantContainer {
 
       if (source === "trigger") {
         // Trigger won -- check what it overrode
-        if (key in tenantVars && tenantVars[key] !== value) {
-          overrode = { value: tenantVars[key], source: "tenant" };
+        if (key in partitionVars && partitionVars[key] !== value) {
+          overrode = { value: partitionVars[key], source: "partition" };
           reason =
             `Trigger override "${value}" takes precedence over ` +
-            `tenant value "${tenantVars[key]}" for ${key}`;
+            `partition value "${partitionVars[key]}" for ${key}`;
         } else if (key in envVars && envVars[key] !== value) {
           overrode = { value: envVars[key], source: "environment" };
           reason =
@@ -160,14 +160,14 @@ export class TenantContainer {
         } else {
           reason = `Trigger-only variable ${key} -- not defined at lower levels`;
         }
-      } else if (source === "tenant") {
+      } else if (source === "partition") {
         if (key in envVars && envVars[key] !== value) {
           overrode = { value: envVars[key], source: "environment" };
           reason =
-            `Tenant value "${value}" overrides environment ` +
+            `Partition value "${value}" overrides environment ` +
             `default "${envVars[key]}" for ${key}`;
         } else {
-          reason = `Tenant-only variable ${key} -- not defined at environment level`;
+          reason = `Partition-only variable ${key} -- not defined at environment level`;
         }
       } else {
         reason = `Environment default applied for ${key} -- no higher-level override`;
@@ -180,7 +180,7 @@ export class TenantContainer {
   }
 
   // -----------------------------------------------------------------------
-  // Scoped data access -- only this tenant's data
+  // Scoped data access -- only this partition's data
   // -----------------------------------------------------------------------
 
   getDeployments(): Deployment[] {
@@ -196,10 +196,10 @@ export class TenantContainer {
   }
 
   /**
-   * Snapshot of tenant metadata. Safe to pass to code that needs a Tenant
+   * Snapshot of partition metadata. Safe to pass to code that needs a Partition
    * object without exposing container internals.
    */
-  toTenant(): Tenant {
+  toPartition(): Partition {
     return {
       id: this.id,
       name: this.name,

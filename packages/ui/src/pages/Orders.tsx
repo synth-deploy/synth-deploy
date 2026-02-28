@@ -1,13 +1,13 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router";
-import { listOrders, listProjects, listTenants, listEnvironments, createOrder } from "../api.js";
-import type { Order, Project, Tenant, Environment } from "../types.js";
+import { listOrders, listProjects, listPartitions, listEnvironments, createOrder } from "../api.js";
+import type { Order, Project, Partition, Environment } from "../types.js";
 import EnvBadge from "../components/EnvBadge.js";
 
 export default function Orders() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
-  const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [partitions, setPartitions] = useState<Partition[]>([]);
   const [environments, setEnvironments] = useState<Environment[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -15,20 +15,20 @@ export default function Orders() {
 
   // Form state
   const [projectId, setProjectId] = useState("");
-  const [tenantId, setTenantId] = useState("");
+  const [partitionId, setPartitionId] = useState("");
   const [environmentId, setEnvironmentId] = useState("");
   const [version, setVersion] = useState("");
 
   // Filters
   const [filterProject, setFilterProject] = useState("");
-  const [filterTenant, setFilterTenant] = useState("");
+  const [filterPartition, setFilterPartition] = useState("");
 
   useEffect(() => {
-    Promise.all([listOrders(), listProjects(), listTenants(), listEnvironments()]).then(
+    Promise.all([listOrders(), listProjects(), listPartitions(), listEnvironments()]).then(
       ([o, p, t, e]) => {
         setOrders(o);
         setProjects(p);
-        setTenants(t);
+        setPartitions(t);
         setEnvironments(e);
         setLoading(false);
       },
@@ -36,20 +36,20 @@ export default function Orders() {
   }, []);
 
   useEffect(() => {
-    const filters: { projectId?: string; tenantId?: string } = {};
+    const filters: { projectId?: string; partitionId?: string } = {};
     if (filterProject) filters.projectId = filterProject;
-    if (filterTenant) filters.tenantId = filterTenant;
+    if (filterPartition) filters.partitionId = filterPartition;
     listOrders(Object.keys(filters).length > 0 ? filters : undefined).then(setOrders);
-  }, [filterProject, filterTenant]);
+  }, [filterProject, filterPartition]);
 
   async function handleCreate() {
-    if (!projectId || !tenantId || !environmentId || !version.trim()) return;
+    if (!projectId || !partitionId || !environmentId || !version.trim()) return;
     setError(null);
     try {
-      const order = await createOrder({ projectId, tenantId, environmentId, version: version.trim() });
+      const order = await createOrder({ projectId, partitionId, environmentId, version: version.trim() });
       setOrders([order, ...orders]);
       setProjectId("");
-      setTenantId("");
+      setPartitionId("");
       setEnvironmentId("");
       setVersion("");
       setShowForm(false);
@@ -88,10 +88,10 @@ export default function Orders() {
             </select>
           </div>
           <div className="form-group">
-            <label>Tenant</label>
-            <select value={tenantId} onChange={(e) => setTenantId(e.target.value)}>
-              <option value="">Select tenant...</option>
-              {tenants.map((t) => (
+            <label>Partition</label>
+            <select value={partitionId} onChange={(e) => setPartitionId(e.target.value)}>
+              <option value="">Select partition...</option>
+              {partitions.map((t) => (
                 <option key={t.id} value={t.id}>{t.name}</option>
               ))}
             </select>
@@ -132,12 +132,12 @@ export default function Orders() {
             ))}
           </select>
           <select
-            value={filterTenant}
-            onChange={(e) => setFilterTenant(e.target.value)}
+            value={filterPartition}
+            onChange={(e) => setFilterPartition(e.target.value)}
             style={{ fontSize: 13, padding: "4px 8px" }}
           >
-            <option value="">All Tenants</option>
-            {tenants.map((t) => (
+            <option value="">All Partitions</option>
+            {partitions.map((t) => (
               <option key={t.id} value={t.id}>{t.name}</option>
             ))}
           </select>
@@ -153,14 +153,14 @@ export default function Orders() {
                 <th>Project</th>
                 <th>Version</th>
                 <th>Environment</th>
-                <th>Tenant</th>
+                <th>Partition</th>
                 <th>Steps</th>
                 <th>Created</th>
               </tr>
             </thead>
             <tbody>
               {orders.map((o) => {
-                const tenant = tenants.find((t) => t.id === o.tenantId);
+                const partition = partitions.find((t) => t.id === o.partitionId);
                 return (
                   <tr key={o.id}>
                     <td>
@@ -173,7 +173,7 @@ export default function Orders() {
                     </td>
                     <td className="mono">v{o.version}</td>
                     <td><EnvBadge name={o.environmentName} /></td>
-                    <td>{tenant?.name ?? o.tenantId.slice(0, 8)}</td>
+                    <td>{partition?.name ?? o.partitionId.slice(0, 8)}</td>
                     <td>{o.steps.length}</td>
                     <td className="text-muted" style={{ fontSize: 12 }}>
                       {new Date(o.createdAt).toLocaleString()}

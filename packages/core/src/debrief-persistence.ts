@@ -6,14 +6,14 @@ import type {
   DeploymentId,
   DebriefEntry,
   DebriefEntryId,
-  TenantId,
+  PartitionId,
 } from "./types.js";
 import type { DebriefRecordParams, DebriefWriter, DebriefReader } from "./debrief.js";
 
 interface DebriefRow {
   id: string;
   timestamp: string;
-  tenant_id: string | null;
+  partition_id: string | null;
   deployment_id: string | null;
   agent: string;
   decision_type: string;
@@ -26,7 +26,7 @@ function rowToEntry(row: DebriefRow): DebriefEntry {
   return {
     id: row.id,
     timestamp: new Date(row.timestamp),
-    tenantId: row.tenant_id,
+    partitionId: row.partition_id,
     deploymentId: row.deployment_id,
     agent: row.agent as AgentType,
     decisionType: row.decision_type as DecisionType,
@@ -45,7 +45,7 @@ function rowToEntry(row: DebriefRow): DebriefEntry {
  *
  * Indexes support all four query dimensions:
  *   - by deployment (idx_diary_deployment)
- *   - by tenant (idx_diary_tenant)
+ *   - by partition (idx_diary_partition)
  *   - by decision type (idx_diary_decision_type)
  *   - by time range (idx_diary_timestamp)
  */
@@ -55,7 +55,7 @@ export class PersistentDecisionDebrief implements DebriefWriter, DebriefReader {
     insert: Database.Statement;
     getById: Database.Statement;
     getByDeployment: Database.Statement;
-    getByTenant: Database.Statement;
+    getByPartition: Database.Statement;
     getByType: Database.Statement;
     getByTimeRange: Database.Statement;
     getRecent: Database.Statement;
@@ -71,7 +71,7 @@ export class PersistentDecisionDebrief implements DebriefWriter, DebriefReader {
       CREATE TABLE IF NOT EXISTS diary_entries (
         id TEXT PRIMARY KEY,
         timestamp TEXT NOT NULL,
-        tenant_id TEXT,
+        partition_id TEXT,
         deployment_id TEXT,
         agent TEXT NOT NULL,
         decision_type TEXT NOT NULL,
@@ -81,22 +81,22 @@ export class PersistentDecisionDebrief implements DebriefWriter, DebriefReader {
       );
 
       CREATE INDEX IF NOT EXISTS idx_diary_deployment ON diary_entries(deployment_id);
-      CREATE INDEX IF NOT EXISTS idx_diary_tenant ON diary_entries(tenant_id);
+      CREATE INDEX IF NOT EXISTS idx_diary_partition ON diary_entries(partition_id);
       CREATE INDEX IF NOT EXISTS idx_diary_decision_type ON diary_entries(decision_type);
       CREATE INDEX IF NOT EXISTS idx_diary_timestamp ON diary_entries(timestamp);
     `);
 
     this.stmts = {
       insert: this.db.prepare(`
-        INSERT INTO diary_entries (id, timestamp, tenant_id, deployment_id, agent, decision_type, decision, reasoning, context)
-        VALUES (@id, @timestamp, @tenant_id, @deployment_id, @agent, @decision_type, @decision, @reasoning, @context)
+        INSERT INTO diary_entries (id, timestamp, partition_id, deployment_id, agent, decision_type, decision, reasoning, context)
+        VALUES (@id, @timestamp, @partition_id, @deployment_id, @agent, @decision_type, @decision, @reasoning, @context)
       `),
       getById: this.db.prepare(`SELECT * FROM diary_entries WHERE id = ?`),
       getByDeployment: this.db.prepare(
         `SELECT * FROM diary_entries WHERE deployment_id = ? ORDER BY timestamp ASC`,
       ),
-      getByTenant: this.db.prepare(
-        `SELECT * FROM diary_entries WHERE tenant_id = ? ORDER BY timestamp ASC`,
+      getByPartition: this.db.prepare(
+        `SELECT * FROM diary_entries WHERE partition_id = ? ORDER BY timestamp ASC`,
       ),
       getByType: this.db.prepare(
         `SELECT * FROM diary_entries WHERE decision_type = ? ORDER BY timestamp ASC`,
@@ -114,7 +114,7 @@ export class PersistentDecisionDebrief implements DebriefWriter, DebriefReader {
     const entry: DebriefEntry = {
       id: crypto.randomUUID(),
       timestamp: new Date(),
-      tenantId: params.tenantId,
+      partitionId: params.partitionId,
       deploymentId: params.deploymentId,
       agent: params.agent,
       decisionType: params.decisionType,
@@ -126,7 +126,7 @@ export class PersistentDecisionDebrief implements DebriefWriter, DebriefReader {
     this.stmts.insert.run({
       id: entry.id,
       timestamp: entry.timestamp.toISOString(),
-      tenant_id: entry.tenantId,
+      partition_id: entry.partitionId,
       deployment_id: entry.deploymentId,
       agent: entry.agent,
       decision_type: entry.decisionType,
@@ -148,8 +148,8 @@ export class PersistentDecisionDebrief implements DebriefWriter, DebriefReader {
     return rows.map(rowToEntry);
   }
 
-  getByTenant(tenantId: TenantId): DebriefEntry[] {
-    const rows = this.stmts.getByTenant.all(tenantId) as DebriefRow[];
+  getByPartition(partitionId: PartitionId): DebriefEntry[] {
+    const rows = this.stmts.getByPartition.all(partitionId) as DebriefRow[];
     return rows.map(rowToEntry);
   }
 

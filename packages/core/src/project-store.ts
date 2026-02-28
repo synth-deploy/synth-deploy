@@ -3,7 +3,7 @@ import type { Project, ProjectId, EnvironmentId } from "./types.js";
 import { DEFAULT_PIPELINE_CONFIG } from "./types.js";
 
 /**
- * In-memory project store. Same pattern as TenantStore —
+ * In-memory project store. Same pattern as PartitionStore —
  * interface designed for later migration to persistent storage.
  */
 export class ProjectStore {

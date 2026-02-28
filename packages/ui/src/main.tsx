@@ -5,8 +5,8 @@ import App from "./App.js";
 import Dashboard from "./pages/Dashboard.js";
 import Projects from "./pages/Projects.js";
 import ProjectDetail from "./pages/ProjectDetail.js";
-import Tenants from "./pages/Tenants.js";
-import TenantDetail from "./pages/TenantDetail.js";
+import Partitions from "./pages/Partitions.js";
+import PartitionDetail from "./pages/PartitionDetail.js";
 import Environments from "./pages/Environments.js";
 import EnvironmentDetail from "./pages/EnvironmentDetail.js";
 import DeploymentDetail from "./pages/DeploymentDetail.js";
@@ -25,8 +25,8 @@ createRoot(document.getElementById("root")!).render(
           <Route index element={<Dashboard />} />
           <Route path="projects" element={<Projects />} />
           <Route path="projects/:id" element={<ProjectDetail />} />
-          <Route path="tenants" element={<Tenants />} />
-          <Route path="tenants/:id" element={<TenantDetail />} />
+          <Route path="partitions" element={<Partitions />} />
+          <Route path="partitions/:id" element={<PartitionDetail />} />
           <Route path="environments" element={<Environments />} />
           <Route path="environments/:id" element={<EnvironmentDetail />} />
           <Route path="deployments/:id" element={<DeploymentDetail />} />

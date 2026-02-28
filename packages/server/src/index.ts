@@ -6,14 +6,14 @@ import Fastify from "fastify";
 import fastifyCors from "@fastify/cors";
 import fastifyStatic from "@fastify/static";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { PersistentDecisionDebrief, TenantStore, ProjectStore, EnvironmentStore, SettingsStore, OrderStore } from "@deploystack/core";
+import { PersistentDecisionDebrief, PartitionStore, ProjectStore, EnvironmentStore, SettingsStore, OrderStore } from "@deploystack/core";
 import { ServerAgent, InMemoryDeploymentStore } from "./agent/server-agent.js";
 import { createMcpServer } from "./mcp/server.js";
 import { registerDeploymentRoutes } from "./api/deployments.js";
 import { registerHealthRoutes } from "./api/health.js";
 import { registerTentacleReportRoutes } from "./api/tentacle-reports.js";
 import { registerProjectRoutes } from "./api/projects.js";
-import { registerTenantRoutes } from "./api/tenants.js";
+import { registerPartitionRoutes } from "./api/partitions.js";
 import { registerEnvironmentRoutes } from "./api/environments.js";
 import { registerAgentRoutes } from "./api/agent.js";
 import { registerSettingsRoutes } from "./api/settings.js";
@@ -25,32 +25,32 @@ const DATA_DIR = path.resolve(process.env.DEPLOYSTACK_DATA_DIR ?? "data");
 mkdirSync(DATA_DIR, { recursive: true });
 
 const debrief = new PersistentDecisionDebrief(path.join(DATA_DIR, "debrief.db"));
-const tenants = new TenantStore();
+const partitions = new PartitionStore();
 const projects = new ProjectStore();
 const environments = new EnvironmentStore();
 const settings = new SettingsStore();
 const deployments = new InMemoryDeploymentStore();
 const orders = new OrderStore();
-const agent = new ServerAgent(debrief, deployments, orders);
+const agent = new ServerAgent(debrief, deployments, orders, undefined, {}, settings);
 
 // --- Seed demo data so the server is immediately usable ---
 
-const demoTenant = tenants.create("Acme Corp", { APP_ENV: "production", DB_HOST: "acme-db-1" });
+const demoPartition = partitions.create("Acme Corp", { APP_ENV: "production", DB_HOST: "acme-db-1" });
 const demoEnv = environments.create("production", { APP_ENV: "production", LOG_LEVEL: "warn" });
 const stagingEnv = environments.create("staging", { APP_ENV: "staging", LOG_LEVEL: "debug" });
 const demoProject = projects.create("web-app", [demoEnv.id, stagingEnv.id]);
 
 debrief.record({
-  tenantId: null,
+  partitionId: null,
   deploymentId: null,
   agent: "server",
   decisionType: "system",
   decision: "Server initialized with demo data",
   reasoning:
-    "Seeded one tenant (Acme Corp), two environments (production, staging), " +
+    "Seeded one partition (Acme Corp), two environments (production, staging), " +
     "one project (web-app) so the API and MCP tools are immediately testable without setup.",
   context: {
-    tenantId: demoTenant.id,
+    partitionId: demoPartition.id,
     productionEnvId: demoEnv.id,
     stagingEnvId: stagingEnv.id,
     projectId: demoProject.id,
@@ -59,7 +59,7 @@ debrief.record({
 
 // --- Create MCP server ---
 
-const mcp = createMcpServer({ agent, debrief, tenants, environments, deployments, projects });
+const mcp = createMcpServer({ agent, debrief, partitions, environments, deployments, projects });
 
 // --- Create Fastify HTTP server ---
 
@@ -72,14 +72,14 @@ await app.register(fastifyCors, {
 
 // Register REST routes
 registerHealthRoutes(app);
-registerDeploymentRoutes(app, agent, tenants, environments, deployments, debrief, projects, orders);
+registerDeploymentRoutes(app, agent, partitions, environments, deployments, debrief, projects, orders);
 registerTentacleReportRoutes(app, debrief);
 registerProjectRoutes(app, projects, environments);
-registerTenantRoutes(app, tenants, deployments, debrief);
+registerPartitionRoutes(app, partitions, deployments, debrief);
 registerEnvironmentRoutes(app, environments, projects);
-registerAgentRoutes(app, agent, tenants, environments, projects, deployments, debrief);
+registerAgentRoutes(app, agent, partitions, environments, projects, deployments, debrief);
 registerSettingsRoutes(app, settings);
-registerOrderRoutes(app, orders, agent, tenants, environments, projects, deployments, debrief);
+registerOrderRoutes(app, orders, agent, partitions, environments, projects, deployments, debrief);
 
 // --- Serve UI static files if built ---
 
@@ -173,7 +173,7 @@ app.listen({ port: PORT, host: HOST }, (err) => {
 ║  Health:    http://${HOST}:${PORT}/health              ║
 ║  ${uiStatus.padEnd(51)}║
 ║                                                      ║
-║  Demo tenant: ${demoTenant.id}  ║
+║  Demo partition: ${demoPartition.id}  ║
 ║  Demo project: ${demoProject.id}  ║
 ║  Environments: ${demoEnv.id} (prod)  ║
 ║                ${stagingEnv.id} (stg)  ║

@@ -10,7 +10,7 @@ import {
   formatDebriefEntries,
 } from "@deploystack/core";
 import type {
-  Tenant,
+  Partition,
   Environment,
   DebriefEntry,
   DecisionType,
@@ -57,9 +57,9 @@ const CONN_REFUSED: HealthCheckResult = {
   error: "ECONNREFUSED: Connection refused",
 };
 
-function makeTenant(overrides: Partial<Tenant> = {}): Tenant {
+function makePartition(overrides: Partial<Partition> = {}): Partition {
   return {
-    id: "tenant-1",
+    id: "partition-1",
     name: "Acme Corp",
     variables: {},
     createdAt: new Date(),
@@ -79,7 +79,7 @@ function makeEnvironment(overrides: Partial<Environment> = {}): Environment {
 function makeTrigger(overrides: Record<string, unknown> = {}) {
   return {
     projectId: "web-app",
-    tenantId: "tenant-1",
+    partitionId: "partition-1",
     environmentId: "env-prod",
     version: "2.0.0",
     ...overrides,
@@ -137,7 +137,7 @@ describe("Decision Diary — entry specificity", () => {
   });
 
   it("every decision text is specific — contains project, version, or environment names", async () => {
-    const tenant = makeTenant({
+    const partition = makePartition({
       variables: { APP_ENV: "production", DB_HOST: "acme-db-1" },
     });
     const env = makeEnvironment({
@@ -146,7 +146,7 @@ describe("Decision Diary — entry specificity", () => {
     const trigger = makeTrigger({ variables: { LOG_LEVEL: "error" } });
 
     healthChecker.willReturn(HEALTHY);
-    const result = await agent.triggerDeployment(trigger, tenant, env, makeProject());
+    const result = await agent.triggerDeployment(trigger, partition, env, makeProject());
 
     const entries = diary.getByDeployment(result.id);
     expect(entries.length).toBeGreaterThanOrEqual(5);
@@ -162,7 +162,7 @@ describe("Decision Diary — entry specificity", () => {
   });
 
   it("reasoning always references concrete values — never generic placeholder text", async () => {
-    const tenant = makeTenant({
+    const partition = makePartition({
       variables: { APP_ENV: "production", DB_HOST: "acme-db-1" },
     });
     const env = makeEnvironment({
@@ -172,7 +172,7 @@ describe("Decision Diary — entry specificity", () => {
     const trigger = makeTrigger({ variables: { LOG_LEVEL: "error" } });
 
     healthChecker.willReturn(HEALTHY);
-    const result = await agent.triggerDeployment(trigger, tenant, env, makeProject());
+    const result = await agent.triggerDeployment(trigger, partition, env, makeProject());
 
     const entries = diary.getByDeployment(result.id);
 
@@ -203,7 +203,7 @@ describe("Decision Diary — entry specificity", () => {
 
     const result = await agent.triggerDeployment(
       makeTrigger(),
-      makeTenant(),
+      makePartition(),
       makeEnvironment(),
       makeProject(),
     );
@@ -220,7 +220,7 @@ describe("Decision Diary — entry specificity", () => {
   });
 
   it("variable conflict entries name the specific variables involved", async () => {
-    const tenant = makeTenant({
+    const partition = makePartition({
       variables: { LOG_LEVEL: "error", APP_ENV: "production" },
     });
     const env = makeEnvironment({
@@ -229,7 +229,7 @@ describe("Decision Diary — entry specificity", () => {
     const trigger = makeTrigger({ variables: { LOG_LEVEL: "debug" } });
 
     healthChecker.willReturn(HEALTHY);
-    const result = await agent.triggerDeployment(trigger, tenant, env, makeProject());
+    const result = await agent.triggerDeployment(trigger, partition, env, makeProject());
 
     const entries = diary.getByDeployment(result.id);
     const conflictEntries = findDecisions(entries, "conflict");
@@ -270,7 +270,7 @@ describe("Decision Diary — orchestration completeness", () => {
 
     const result = await agent.triggerDeployment(
       makeTrigger(),
-      makeTenant(),
+      makePartition(),
       makeEnvironment(),
       makeProject(),
     );
@@ -291,7 +291,7 @@ describe("Decision Diary — orchestration completeness", () => {
 
     const result = await agent.triggerDeployment(
       makeTrigger(),
-      makeTenant(),
+      makePartition(),
       makeEnvironment(),
       makeProject(),
     );
@@ -312,7 +312,7 @@ describe("Decision Diary — orchestration completeness", () => {
   });
 
   it("variable conflict deployment produces variable-conflict entries", async () => {
-    const tenant = makeTenant({
+    const partition = makePartition({
       variables: { DB_HOST: "prod-db.internal" },
     });
     const env = makeEnvironment({
@@ -324,7 +324,7 @@ describe("Decision Diary — orchestration completeness", () => {
 
     const result = await agent.triggerDeployment(
       makeTrigger({ environmentId: "env-staging" }),
-      tenant,
+      partition,
       env,
       makeProject({ environmentIds: ["env-staging"] }),
     );
@@ -352,7 +352,7 @@ describe("Decision Diary — orchestration completeness", () => {
 
     healthChecker.willReturn(HEALTHY);
 
-    await agent.triggerDeployment(makeTrigger(), makeTenant(), makeEnvironment(), makeProject());
+    await agent.triggerDeployment(makeTrigger(), makePartition(), makeEnvironment(), makeProject());
 
     const entries = diary.getRecent(100);
     for (const entry of entries) {
@@ -386,13 +386,13 @@ describe("Decision Diary — retrieval dimensions", () => {
 
     const result1 = await agent.triggerDeployment(
       makeTrigger({ version: "1.0.0" }),
-      makeTenant(),
+      makePartition(),
       makeEnvironment(),
       makeProject(),
     );
     const result2 = await agent.triggerDeployment(
       makeTrigger({ version: "2.0.0" }),
-      makeTenant(),
+      makePartition(),
       makeEnvironment(),
       makeProject(),
     );
@@ -413,33 +413,33 @@ describe("Decision Diary — retrieval dimensions", () => {
     }
   });
 
-  it("retrieval by tenant — returns only entries for the specified tenant", async () => {
+  it("retrieval by partition — returns only entries for the specified partition", async () => {
     healthChecker.willReturn(HEALTHY, HEALTHY);
 
     await agent.triggerDeployment(
-      makeTrigger({ tenantId: "tenant-a" }),
-      makeTenant({ id: "tenant-a", name: "Tenant A" }),
+      makeTrigger({ partitionId: "partition-a" }),
+      makePartition({ id: "partition-a", name: "Partition A" }),
       makeEnvironment(),
       makeProject(),
     );
     await agent.triggerDeployment(
-      makeTrigger({ tenantId: "tenant-b" }),
-      makeTenant({ id: "tenant-b", name: "Tenant B" }),
+      makeTrigger({ partitionId: "partition-b" }),
+      makePartition({ id: "partition-b", name: "Partition B" }),
       makeEnvironment(),
       makeProject(),
     );
 
-    const entriesA = diary.getByTenant("tenant-a");
-    const entriesB = diary.getByTenant("tenant-b");
+    const entriesA = diary.getByPartition("partition-a");
+    const entriesB = diary.getByPartition("partition-b");
 
     expect(entriesA.length).toBeGreaterThanOrEqual(5);
     expect(entriesB.length).toBeGreaterThanOrEqual(5);
 
     for (const e of entriesA) {
-      expect(e.tenantId).toBe("tenant-a");
+      expect(e.partitionId).toBe("partition-a");
     }
     for (const e of entriesB) {
-      expect(e.tenantId).toBe("tenant-b");
+      expect(e.partitionId).toBe("partition-b");
     }
 
     // No overlap
@@ -456,13 +456,13 @@ describe("Decision Diary — retrieval dimensions", () => {
     // One success, one failure
     await agent.triggerDeployment(
       makeTrigger({ version: "1.0.0" }),
-      makeTenant(),
+      makePartition(),
       makeEnvironment(),
       makeProject(),
     );
     await agent.triggerDeployment(
       makeTrigger({ version: "2.0.0" }),
-      makeTenant(),
+      makePartition(),
       makeEnvironment(),
       makeProject(),
     );
@@ -495,7 +495,7 @@ describe("Decision Diary — retrieval dimensions", () => {
     healthChecker.willReturn(HEALTHY);
     await agent.triggerDeployment(
       makeTrigger(),
-      makeTenant(),
+      makePartition(),
       makeEnvironment(),
       makeProject(),
     );
@@ -523,7 +523,7 @@ describe("Decision Diary — retrieval dimensions", () => {
     healthChecker.willReturn(HEALTHY);
     await agent.triggerDeployment(
       makeTrigger(),
-      makeTenant(),
+      makePartition(),
       makeEnvironment(),
       makeProject(),
     );
@@ -568,7 +568,7 @@ describe("PersistentDecisionDebrief — SQLite backing store", () => {
 
   it("persists entries across close and reopen", () => {
     const entry = diary.record({
-      tenantId: "tenant-1",
+      partitionId: "partition-1",
       deploymentId: "deploy-1",
       agent: "server",
       decisionType: "pipeline-plan",
@@ -585,7 +585,7 @@ describe("PersistentDecisionDebrief — SQLite backing store", () => {
     expect(retrieved).toBeDefined();
     expect(retrieved!.decision).toBe(entry.decision);
     expect(retrieved!.reasoning).toBe(entry.reasoning);
-    expect(retrieved!.tenantId).toBe("tenant-1");
+    expect(retrieved!.partitionId).toBe("partition-1");
     expect(retrieved!.deploymentId).toBe("deploy-1");
     expect(retrieved!.decisionType).toBe("pipeline-plan");
     expect(retrieved!.context).toEqual({ projectId: "web-app", version: "1.0.0" });
@@ -594,7 +594,7 @@ describe("PersistentDecisionDebrief — SQLite backing store", () => {
 
   it("retrieval by deployment returns correct entries", () => {
     diary.record({
-      tenantId: "t1",
+      partitionId: "t1",
       deploymentId: "d1",
       agent: "server",
       decisionType: "pipeline-plan",
@@ -602,7 +602,7 @@ describe("PersistentDecisionDebrief — SQLite backing store", () => {
       reasoning: "Deploy web-app v1.0 to production for Acme.",
     });
     diary.record({
-      tenantId: "t1",
+      partitionId: "t1",
       deploymentId: "d2",
       agent: "server",
       decisionType: "pipeline-plan",
@@ -610,7 +610,7 @@ describe("PersistentDecisionDebrief — SQLite backing store", () => {
       reasoning: "Deploy web-app v2.0 to staging for Acme.",
     });
     diary.record({
-      tenantId: "t1",
+      partitionId: "t1",
       deploymentId: "d1",
       agent: "server",
       decisionType: "deployment-completion",
@@ -629,9 +629,9 @@ describe("PersistentDecisionDebrief — SQLite backing store", () => {
     expect(d2Entries[0].deploymentId).toBe("d2");
   });
 
-  it("retrieval by tenant returns correct entries", () => {
+  it("retrieval by partition returns correct entries", () => {
     diary.record({
-      tenantId: "acme",
+      partitionId: "acme",
       deploymentId: "d1",
       agent: "server",
       decisionType: "pipeline-plan",
@@ -639,7 +639,7 @@ describe("PersistentDecisionDebrief — SQLite backing store", () => {
       reasoning: "Standard pipeline for Acme Corp.",
     });
     diary.record({
-      tenantId: "beta",
+      partitionId: "beta",
       deploymentId: "d2",
       agent: "server",
       decisionType: "pipeline-plan",
@@ -647,18 +647,18 @@ describe("PersistentDecisionDebrief — SQLite backing store", () => {
       reasoning: "Standard pipeline for Beta Inc.",
     });
 
-    const acmeEntries = diary.getByTenant("acme");
+    const acmeEntries = diary.getByPartition("acme");
     expect(acmeEntries).toHaveLength(1);
-    expect(acmeEntries[0].tenantId).toBe("acme");
+    expect(acmeEntries[0].partitionId).toBe("acme");
 
-    const betaEntries = diary.getByTenant("beta");
+    const betaEntries = diary.getByPartition("beta");
     expect(betaEntries).toHaveLength(1);
-    expect(betaEntries[0].tenantId).toBe("beta");
+    expect(betaEntries[0].partitionId).toBe("beta");
   });
 
   it("retrieval by decision type filters correctly", () => {
     diary.record({
-      tenantId: "t1",
+      partitionId: "t1",
       deploymentId: "d1",
       agent: "server",
       decisionType: "health-check",
@@ -666,15 +666,15 @@ describe("PersistentDecisionDebrief — SQLite backing store", () => {
       reasoning: "Service responding in 5ms.",
     });
     diary.record({
-      tenantId: "t1",
+      partitionId: "t1",
       deploymentId: "d1",
       agent: "server",
       decisionType: "variable-conflict",
       decision: "LOG_LEVEL conflict resolved",
-      reasoning: "Trigger value 'debug' overrides tenant value 'error'.",
+      reasoning: "Trigger value 'debug' overrides partition value 'error'.",
     });
     diary.record({
-      tenantId: "t1",
+      partitionId: "t1",
       deploymentId: "d1",
       agent: "server",
       decisionType: "health-check",
@@ -702,7 +702,7 @@ describe("PersistentDecisionDebrief — SQLite backing store", () => {
     // and check the actual timestamps
     const before = new Date();
     diary.record({
-      tenantId: "t1",
+      partitionId: "t1",
       deploymentId: "d1",
       agent: "server",
       decisionType: "pipeline-plan",
@@ -710,7 +710,7 @@ describe("PersistentDecisionDebrief — SQLite backing store", () => {
       reasoning: "First reasoning.",
     });
     diary.record({
-      tenantId: "t1",
+      partitionId: "t1",
       deploymentId: "d1",
       agent: "server",
       decisionType: "deployment-completion",
@@ -731,7 +731,7 @@ describe("PersistentDecisionDebrief — SQLite backing store", () => {
   it("getRecent returns entries in reverse chronological order", () => {
     for (let i = 0; i < 5; i++) {
       diary.record({
-        tenantId: "t1",
+        partitionId: "t1",
         deploymentId: `d${i}`,
         agent: "server",
         decisionType: "pipeline-plan",
@@ -753,7 +753,7 @@ describe("PersistentDecisionDebrief — SQLite backing store", () => {
 
   it("context round-trips through JSON correctly", () => {
     const entry = diary.record({
-      tenantId: "t1",
+      partitionId: "t1",
       deploymentId: "d1",
       agent: "server",
       decisionType: "health-check",
@@ -816,7 +816,7 @@ describe("PersistentDecisionDebrief — integration with ServerAgent", () => {
 
     const result = await agent.triggerDeployment(
       makeTrigger(),
-      makeTenant({ name: "Acme Corp" }),
+      makePartition({ name: "Acme Corp" }),
       makeEnvironment(),
       makeProject(),
     );
@@ -849,16 +849,16 @@ describe("PersistentDecisionDebrief — integration with ServerAgent", () => {
   it("cross-dimension queries work correctly with real agent data", async () => {
     healthChecker.willReturn(HEALTHY, HEALTHY);
 
-    // Two deployments for different tenants
+    // Two deployments for different partitions
     const result1 = await agent.triggerDeployment(
-      makeTrigger({ tenantId: "acme" }),
-      makeTenant({ id: "acme", name: "Acme Corp" }),
+      makeTrigger({ partitionId: "acme" }),
+      makePartition({ id: "acme", name: "Acme Corp" }),
       makeEnvironment(),
       makeProject(),
     );
     const result2 = await agent.triggerDeployment(
-      makeTrigger({ tenantId: "beta" }),
-      makeTenant({ id: "beta", name: "Beta Inc" }),
+      makeTrigger({ partitionId: "beta" }),
+      makePartition({ id: "beta", name: "Beta Inc" }),
       makeEnvironment(),
       makeProject(),
     );
@@ -869,11 +869,11 @@ describe("PersistentDecisionDebrief — integration with ServerAgent", () => {
     expect(acmeEntries.length).toBeGreaterThanOrEqual(5);
     expect(betaEntries.length).toBeGreaterThanOrEqual(5);
 
-    // By tenant — same entries, different access path
-    const acmeTenantEntries = diary.getByTenant("acme");
-    const betaTenantEntries = diary.getByTenant("beta");
-    expect(acmeTenantEntries).toHaveLength(acmeEntries.length);
-    expect(betaTenantEntries).toHaveLength(betaEntries.length);
+    // By partition — same entries, different access path
+    const acmePartitionEntries = diary.getByPartition("acme");
+    const betaPartitionEntries = diary.getByPartition("beta");
+    expect(acmePartitionEntries).toHaveLength(acmeEntries.length);
+    expect(betaPartitionEntries).toHaveLength(betaEntries.length);
 
     // By type — across both deployments
     const plans = diary.getByType("pipeline-plan");
@@ -900,7 +900,7 @@ describe("Decision Diary — human-readable format", () => {
     const entry: DebriefEntry = {
       id: "abc-123-def-456",
       timestamp: new Date("2026-02-23T14:30:05.000Z"),
-      tenantId: "tenant-acme",
+      partitionId: "partition-acme",
       deploymentId: "deploy-789",
       agent: "server",
       decisionType: "health-check",
@@ -913,7 +913,7 @@ describe("Decision Diary — human-readable format", () => {
     const formatted = formatDebriefEntry(entry);
 
     expect(formatted).toContain("HEALTH-CHECK");
-    expect(formatted).toContain("tenant-acme");
+    expect(formatted).toContain("partition-acme");
     expect(formatted).toContain("deploy-7"); // truncated ID
     expect(formatted).toContain("server");
     expect(formatted).toContain("Pre-flight health check passed");
@@ -922,16 +922,16 @@ describe("Decision Diary — human-readable format", () => {
     expect(formatted).toContain("serviceId=web-app/production");
   });
 
-  it("formatDebriefEntry handles system-level entries (null tenant)", () => {
+  it("formatDebriefEntry handles system-level entries (null partition)", () => {
     const entry: DebriefEntry = {
       id: "sys-001",
       timestamp: new Date("2026-02-23T12:00:00.000Z"),
-      tenantId: null,
+      partitionId: null,
       deploymentId: null,
       agent: "server",
       decisionType: "system",
       decision: "Server initialized with demo data",
-      reasoning: "Seeded one tenant and two environments.",
+      reasoning: "Seeded one partition and two environments.",
       context: {},
     };
 
@@ -946,7 +946,7 @@ describe("Decision Diary — human-readable format", () => {
       {
         id: "e1",
         timestamp: new Date("2026-02-23T14:00:00.000Z"),
-        tenantId: "t1",
+        partitionId: "t1",
         deploymentId: "d1",
         agent: "server",
         decisionType: "pipeline-plan",
@@ -957,7 +957,7 @@ describe("Decision Diary — human-readable format", () => {
       {
         id: "e2",
         timestamp: new Date("2026-02-23T14:01:00.000Z"),
-        tenantId: "t1",
+        partitionId: "t1",
         deploymentId: "d1",
         agent: "server",
         decisionType: "deployment-completion",

@@ -1,6 +1,6 @@
 import type {
   Project,
-  Tenant,
+  Partition,
   Environment,
   Deployment,
   DebriefEntry,
@@ -122,44 +122,44 @@ export async function updateProjectPipeline(projectId: string, config: Partial<P
   return data.pipeline;
 }
 
-// --- Tenants ---
+// --- Partitions ---
 
-export async function listTenants(): Promise<Tenant[]> {
-  const data = await fetchJson<{ tenants: Tenant[] }>("/api/tenants");
-  return data.tenants;
+export async function listPartitions(): Promise<Partition[]> {
+  const data = await fetchJson<{ partitions: Partition[] }>("/api/partitions");
+  return data.partitions;
 }
 
-export async function getTenant(id: string): Promise<Tenant> {
-  const data = await fetchJson<{ tenant: Tenant }>(`/api/tenants/${id}`);
-  return data.tenant;
+export async function getPartition(id: string): Promise<Partition> {
+  const data = await fetchJson<{ partition: Partition }>(`/api/partitions/${id}`);
+  return data.partition;
 }
 
-export async function createTenant(name: string, variables?: Record<string, string>): Promise<Tenant> {
-  const data = await fetchJson<{ tenant: Tenant }>("/api/tenants", {
+export async function createPartition(name: string, variables?: Record<string, string>): Promise<Partition> {
+  const data = await fetchJson<{ partition: Partition }>("/api/partitions", {
     method: "POST",
     body: JSON.stringify({ name, variables: variables ?? {} }),
   });
-  return data.tenant;
+  return data.partition;
 }
 
-export async function updateTenantVariables(id: string, variables: Record<string, string>): Promise<Tenant> {
-  const data = await fetchJson<{ tenant: Tenant }>(`/api/tenants/${id}/variables`, {
+export async function updatePartitionVariables(id: string, variables: Record<string, string>): Promise<Partition> {
+  const data = await fetchJson<{ partition: Partition }>(`/api/partitions/${id}/variables`, {
     method: "PUT",
     body: JSON.stringify({ variables }),
   });
-  return data.tenant;
+  return data.partition;
 }
 
-export async function updateTenant(id: string, updates: { name?: string }): Promise<Tenant> {
-  const data = await fetchJson<{ tenant: Tenant }>(`/api/tenants/${id}`, {
+export async function updatePartition(id: string, updates: { name?: string }): Promise<Partition> {
+  const data = await fetchJson<{ partition: Partition }>(`/api/partitions/${id}`, {
     method: "PUT",
     body: JSON.stringify(updates),
   });
-  return data.tenant;
+  return data.partition;
 }
 
-export async function deleteTenant(id: string): Promise<void> {
-  await fetchJson(`/api/tenants/${id}`, { method: "DELETE" });
+export async function deletePartition(id: string): Promise<void> {
+  await fetchJson(`/api/partitions/${id}`, { method: "DELETE" });
 }
 
 // --- Environments ---
@@ -199,8 +199,8 @@ export async function deleteEnvironment(id: string): Promise<void> {
 
 // --- Deployments ---
 
-export async function listDeployments(tenantId?: string): Promise<Deployment[]> {
-  const url = tenantId ? `/api/deployments?tenantId=${tenantId}` : "/api/deployments";
+export async function listDeployments(partitionId?: string): Promise<Deployment[]> {
+  const url = partitionId ? `/api/deployments?partitionId=${partitionId}` : "/api/deployments";
   const data = await fetchJson<{ deployments: Deployment[] }>(url);
   return data.deployments;
 }
@@ -216,7 +216,7 @@ export async function getDeployment(id: string): Promise<{ deployment: Deploymen
 
 export async function triggerDeployment(trigger: {
   projectId: string;
-  tenantId: string;
+  partitionId: string;
   environmentId: string;
   version: string;
   variables?: Record<string, string>;
@@ -231,12 +231,12 @@ export async function triggerDeployment(trigger: {
 
 export async function getRecentDebrief(filters?: {
   limit?: number;
-  tenantId?: string;
+  partitionId?: string;
   decisionType?: string;
 }): Promise<DebriefEntry[]> {
   const params = new URLSearchParams();
   if (filters?.limit) params.set("limit", String(filters.limit));
-  if (filters?.tenantId) params.set("tenantId", filters.tenantId);
+  if (filters?.partitionId) params.set("partitionId", filters.partitionId);
   if (filters?.decisionType) params.set("decisionType", filters.decisionType);
   const qs = params.toString();
   const url = qs ? `/api/debrief?${qs}` : "/api/debrief";
@@ -249,8 +249,8 @@ export async function getPostmortem(deploymentId: string): Promise<PostmortemRep
   return data.postmortem;
 }
 
-export async function getTenantHistory(tenantId: string): Promise<ProjectHistory> {
-  const data = await fetchJson<{ history: ProjectHistory }>(`/api/tenants/${tenantId}/history`);
+export async function getPartitionHistory(partitionId: string): Promise<ProjectHistory> {
+  const data = await fetchJson<{ history: ProjectHistory }>(`/api/partitions/${partitionId}/history`);
   return data.history;
 }
 
@@ -258,11 +258,11 @@ export async function getTenantHistory(tenantId: string): Promise<ProjectHistory
 
 export async function listOrders(filters?: {
   projectId?: string;
-  tenantId?: string;
+  partitionId?: string;
 }): Promise<Order[]> {
   const params = new URLSearchParams();
   if (filters?.projectId) params.set("projectId", filters.projectId);
-  if (filters?.tenantId) params.set("tenantId", filters.tenantId);
+  if (filters?.partitionId) params.set("partitionId", filters.partitionId);
   const qs = params.toString();
   const url = qs ? `/api/orders?${qs}` : "/api/orders";
   const data = await fetchJson<{ orders: Order[] }>(url);
@@ -275,7 +275,7 @@ export async function getOrder(id: string): Promise<{ order: Order; deployments:
 
 export async function createOrder(params: {
   projectId: string;
-  tenantId: string;
+  partitionId: string;
   environmentId: string;
   version: string;
 }): Promise<Order> {
@@ -307,7 +307,7 @@ export interface ResolvedField {
 export interface IntentResult {
   resolved: {
     projectId: ResolvedField;
-    tenantId: ResolvedField;
+    partitionId: ResolvedField;
     environmentId: ResolvedField;
     version: ResolvedField;
     variables: Record<string, string>;
@@ -350,7 +350,7 @@ export async function interpretIntent(
   intent: string,
   partialConfig?: {
     projectId?: string;
-    tenantId?: string;
+    partitionId?: string;
     environmentId?: string;
     version?: string;
     variables?: Record<string, string>;

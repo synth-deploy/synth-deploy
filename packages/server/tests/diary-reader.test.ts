@@ -6,7 +6,7 @@ import {
   generateProjectHistory,
 } from "@deploystack/core";
 import type {
-  Tenant,
+  Partition,
   Environment,
   Deployment,
   DebriefEntry,
@@ -63,9 +63,9 @@ const TIMEOUT: HealthCheckResult = {
   error: "ETIMEDOUT: Connection timed out after 30000ms",
 };
 
-function makeTenant(overrides: Partial<Tenant> = {}): Tenant {
+function makePartition(overrides: Partial<Partition> = {}): Partition {
   return {
-    id: "tenant-1",
+    id: "partition-1",
     name: "Acme Corp",
     variables: {},
     createdAt: new Date(),
@@ -85,7 +85,7 @@ function makeEnvironment(overrides: Partial<Environment> = {}): Environment {
 function makeTrigger(overrides: Record<string, unknown> = {}) {
   return {
     projectId: "web-app",
-    tenantId: "tenant-1",
+    partitionId: "partition-1",
     environmentId: "env-prod",
     version: "2.0.0",
     ...overrides,
@@ -140,7 +140,7 @@ describe("Simulated Postmortem — failed deployment read experience", () => {
 
     const deployment = await agent.triggerDeployment(
       makeTrigger(),
-      makeTenant(),
+      makePartition(),
       makeEnvironment(),
       makeProject(),
     );
@@ -198,7 +198,7 @@ describe("Simulated Postmortem — failed deployment read experience", () => {
 
     const deployment = await agent.triggerDeployment(
       makeTrigger(),
-      makeTenant(),
+      makePartition(),
       makeEnvironment(),
       makeProject(),
     );
@@ -226,7 +226,7 @@ describe("Simulated Postmortem — failed deployment read experience", () => {
 
   it("configuration block postmortem — cross-env conflict explained", async () => {
     // Two connectivity variables pointing cross-environment → should block
-    const tenant = makeTenant({
+    const partition = makePartition({
       variables: {
         DB_HOST: "staging-db.internal",
         API_ENDPOINT: "https://staging-api.example.com",
@@ -244,7 +244,7 @@ describe("Simulated Postmortem — failed deployment read experience", () => {
 
     const deployment = await agent.triggerDeployment(
       makeTrigger(),
-      tenant,
+      partition,
       env,
       makeProject(),
     );
@@ -278,7 +278,7 @@ describe("Simulated Postmortem — failed deployment read experience", () => {
 
     const deployment = await agent.triggerDeployment(
       makeTrigger(),
-      makeTenant(),
+      makePartition(),
       makeEnvironment(),
       makeProject(),
     );
@@ -303,7 +303,7 @@ describe("Simulated Postmortem — failed deployment read experience", () => {
 
     const deployment = await agent.triggerDeployment(
       makeTrigger(),
-      makeTenant(),
+      makePartition(),
       makeEnvironment(),
       makeProject(),
     );
@@ -339,7 +339,7 @@ describe("Simulated Postmortem — failed deployment read experience", () => {
 
     const deployment = await agent.triggerDeployment(
       makeTrigger({ version: "3.1.0" }),
-      makeTenant({ name: "Widget Inc" }),
+      makePartition({ name: "Widget Inc" }),
       makeEnvironment({ name: "staging" }),
       makeProject(),
     );
@@ -370,7 +370,7 @@ describe("Simulated Postmortem — failed deployment read experience", () => {
     expect(text).toContain("Suggested Fix");
 
     // A reviewer reading this text can answer:
-    // - What was deployed? (project, version, environment, tenant)
+    // - What was deployed? (project, version, environment, partition)
     // - What did the agent decide? (timeline)
     // - Why did it fail? (failure analysis)
     // - What should I do? (suggested fix)
@@ -403,7 +403,7 @@ describe("Simulated Onboarding — project history read experience", () => {
   });
 
   async function runDeploymentHistory(): Promise<Deployment[]> {
-    const tenant = makeTenant({
+    const partition = makePartition({
       id: "acme",
       name: "Acme Corp",
       variables: { APP_ENV: "production", LOG_LEVEL: "warn" },
@@ -429,11 +429,11 @@ describe("Simulated Onboarding — project history read experience", () => {
     results.push(
       await agent.triggerDeployment(
         makeTrigger({
-          tenantId: "acme",
+          partitionId: "acme",
           environmentId: "env-staging",
           version: "1.0.0",
         }),
-        tenant,
+        partition,
         stagingEnv,
         stagingProject,
       ),
@@ -444,11 +444,11 @@ describe("Simulated Onboarding — project history read experience", () => {
     results.push(
       await agent.triggerDeployment(
         makeTrigger({
-          tenantId: "acme",
+          partitionId: "acme",
           environmentId: "env-prod",
           version: "1.0.0",
         }),
-        tenant,
+        partition,
         prodEnv,
         prodProject,
       ),
@@ -459,12 +459,12 @@ describe("Simulated Onboarding — project history read experience", () => {
     results.push(
       await agent.triggerDeployment(
         makeTrigger({
-          tenantId: "acme",
+          partitionId: "acme",
           environmentId: "env-staging",
           version: "1.1.0",
           variables: { LOG_LEVEL: "error" },
         }),
-        tenant,
+        partition,
         stagingEnv,
         stagingProject,
       ),
@@ -475,11 +475,11 @@ describe("Simulated Onboarding — project history read experience", () => {
     results.push(
       await agent.triggerDeployment(
         makeTrigger({
-          tenantId: "acme",
+          partitionId: "acme",
           environmentId: "env-prod",
           version: "1.1.0",
         }),
-        tenant,
+        partition,
         prodEnv,
         prodProject,
       ),
@@ -490,11 +490,11 @@ describe("Simulated Onboarding — project history read experience", () => {
     results.push(
       await agent.triggerDeployment(
         makeTrigger({
-          tenantId: "acme",
+          partitionId: "acme",
           environmentId: "env-staging",
           version: "1.2.0",
         }),
-        tenant,
+        partition,
         stagingEnv,
         stagingProject,
       ),
@@ -505,11 +505,11 @@ describe("Simulated Onboarding — project history read experience", () => {
     results.push(
       await agent.triggerDeployment(
         makeTrigger({
-          tenantId: "acme",
+          partitionId: "acme",
           environmentId: "env-prod",
           version: "1.2.0",
         }),
-        tenant,
+        partition,
         prodEnv,
         prodProject,
       ),
@@ -520,11 +520,11 @@ describe("Simulated Onboarding — project history read experience", () => {
     results.push(
       await agent.triggerDeployment(
         makeTrigger({
-          tenantId: "acme",
+          partitionId: "acme",
           environmentId: "env-prod",
           version: "1.2.0",
         }),
-        tenant,
+        partition,
         prodEnv,
         prodProject,
       ),
@@ -535,11 +535,11 @@ describe("Simulated Onboarding — project history read experience", () => {
     results.push(
       await agent.triggerDeployment(
         makeTrigger({
-          tenantId: "acme",
+          partitionId: "acme",
           environmentId: "env-staging",
           version: "2.0.0",
         }),
-        tenant,
+        partition,
         stagingEnv,
         stagingProject,
       ),
@@ -550,12 +550,12 @@ describe("Simulated Onboarding — project history read experience", () => {
     results.push(
       await agent.triggerDeployment(
         makeTrigger({
-          tenantId: "acme",
+          partitionId: "acme",
           environmentId: "env-prod",
           version: "2.0.0",
           variables: { LOG_LEVEL: "debug" },
         }),
-        tenant,
+        partition,
         prodEnv,
         prodProject,
       ),
@@ -566,11 +566,11 @@ describe("Simulated Onboarding — project history read experience", () => {
     results.push(
       await agent.triggerDeployment(
         makeTrigger({
-          tenantId: "acme",
+          partitionId: "acme",
           environmentId: "env-staging",
           version: "2.1.0",
         }),
-        tenant,
+        partition,
         stagingEnv,
         stagingProject,
       ),
@@ -581,7 +581,7 @@ describe("Simulated Onboarding — project history read experience", () => {
 
   it("new engineer can see overall project health at a glance", async () => {
     const deploymentResults = await runDeploymentHistory();
-    const allEntries = diary.getByTenant("acme");
+    const allEntries = diary.getByPartition("acme");
     const history = generateProjectHistory(allEntries, deploymentResults);
 
     // Overview tells the engineer the big picture
@@ -604,7 +604,7 @@ describe("Simulated Onboarding — project history read experience", () => {
 
   it("new engineer can trace every deployment outcome", async () => {
     const deploymentResults = await runDeploymentHistory();
-    const allEntries = diary.getByTenant("acme");
+    const allEntries = diary.getByPartition("acme");
     const history = generateProjectHistory(allEntries, deploymentResults);
 
     // All 10 deployments are listed
@@ -629,7 +629,7 @@ describe("Simulated Onboarding — project history read experience", () => {
 
   it("new engineer can see configuration patterns and recurring issues", async () => {
     const deploymentResults = await runDeploymentHistory();
-    const allEntries = diary.getByTenant("acme");
+    const allEntries = diary.getByPartition("acme");
     const history = generateProjectHistory(allEntries, deploymentResults);
 
     // Configuration patterns are surfaced
@@ -647,7 +647,7 @@ describe("Simulated Onboarding — project history read experience", () => {
 
   it("new engineer can understand per-environment behavior", async () => {
     const deploymentResults = await runDeploymentHistory();
-    const allEntries = diary.getByTenant("acme");
+    const allEntries = diary.getByPartition("acme");
     const history = generateProjectHistory(allEntries, deploymentResults);
 
     // Environment notes present for both environments
@@ -680,7 +680,7 @@ describe("Simulated Onboarding — project history read experience", () => {
 
   it("new engineer can read the formatted output and understand everything", async () => {
     const deploymentResults = await runDeploymentHistory();
-    const allEntries = diary.getByTenant("acme");
+    const allEntries = diary.getByPartition("acme");
     const history = generateProjectHistory(allEntries, deploymentResults);
 
     const text = history.formatted;
@@ -718,7 +718,7 @@ describe("Simulated Onboarding — project history read experience", () => {
 
   it("deployment timeline shows outcome markers (OK vs FAILED) for quick scanning", async () => {
     const deploymentResults = await runDeploymentHistory();
-    const allEntries = diary.getByTenant("acme");
+    const allEntries = diary.getByPartition("acme");
     const history = generateProjectHistory(allEntries, deploymentResults);
 
     const text = history.formatted;
@@ -733,7 +733,7 @@ describe("Simulated Onboarding — project history read experience", () => {
 
   it("deployment timeline shows conflict counts where they occurred", async () => {
     const deploymentResults = await runDeploymentHistory();
-    const allEntries = diary.getByTenant("acme");
+    const allEntries = diary.getByPartition("acme");
     const history = generateProjectHistory(allEntries, deploymentResults);
 
     // Deployments with conflicts should have conflict counts
@@ -785,7 +785,7 @@ describe("Postmortem report — structural guarantees", () => {
 
     const deployment = await agent.triggerDeployment(
       makeTrigger(),
-      makeTenant(),
+      makePartition(),
       makeEnvironment(),
       makeProject(),
     );
@@ -803,7 +803,7 @@ describe("Postmortem report — structural guarantees", () => {
   });
 
   it("configuration section accurately reflects variable and conflict counts", async () => {
-    const tenant = makeTenant({
+    const partition = makePartition({
       variables: { LOG_LEVEL: "error", APP_ENV: "production" },
     });
     const env = makeEnvironment({
@@ -813,12 +813,12 @@ describe("Postmortem report — structural guarantees", () => {
 
     healthChecker.willReturn(HEALTHY);
 
-    const deployment = await agent.triggerDeployment(trigger, tenant, env, makeProject());
+    const deployment = await agent.triggerDeployment(trigger, partition, env, makeProject());
 
     const entries = diary.getByDeployment(deployment.id);
     const postmortem = generatePostmortem(entries, deployment);
 
-    // LOG_LEVEL has three-way conflict (env → tenant → trigger), total vars = 3
+    // LOG_LEVEL has three-way conflict (env → partition → trigger), total vars = 3
     expect(postmortem.configuration.variableCount).toBeGreaterThanOrEqual(3);
     expect(postmortem.configuration.conflictCount).toBeGreaterThanOrEqual(1);
   });
@@ -828,7 +828,7 @@ describe("Postmortem report — structural guarantees", () => {
 
     const deployment = await agent.triggerDeployment(
       makeTrigger(),
-      makeTenant(),
+      makePartition(),
       makeEnvironment(),
       makeProject(),
     );
@@ -844,7 +844,7 @@ describe("Postmortem report — structural guarantees", () => {
 
     const deployment = await agent.triggerDeployment(
       makeTrigger(),
-      makeTenant(),
+      makePartition(),
       makeEnvironment(),
       makeProject(),
     );

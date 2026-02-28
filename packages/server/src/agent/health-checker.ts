@@ -18,7 +18,7 @@ export interface ServiceHealthChecker {
    */
   check(
     serviceId: string,
-    context: { tenantId: string; environmentName: string },
+    context: { partitionId: string; environmentName: string },
   ): Promise<HealthCheckResult>;
 }
 

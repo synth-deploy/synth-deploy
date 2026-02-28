@@ -73,9 +73,9 @@ export default function DebriefEntryCard({ entry }: { entry: DebriefEntry }) {
             {entry.deploymentId.slice(0, 8)}
           </Link>
         )}
-        {entry.tenantId && (
-          <span className="debrief-entry-tenant text-muted" style={{ fontSize: 11, marginLeft: "auto" }}>
-            tenant: {entry.tenantId.slice(0, 8)}
+        {entry.partitionId && (
+          <span className="debrief-entry-partition text-muted" style={{ fontSize: 11, marginLeft: "auto" }}>
+            partition: {entry.partitionId.slice(0, 8)}
           </span>
         )}
       </div>

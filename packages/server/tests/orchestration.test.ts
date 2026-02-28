@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { DecisionDebrief, OrderStore } from "@deploystack/core";
-import type { Tenant, Environment, DebriefEntry, Project } from "@deploystack/core";
+import type { Partition, Environment, DebriefEntry, Project } from "@deploystack/core";
 import {
   ServerAgent,
   InMemoryDeploymentStore,
@@ -60,9 +60,9 @@ const SERVER_ERROR: HealthCheckResult = {
   error: "HTTP 503 Service Unavailable",
 };
 
-function makeTenant(overrides: Partial<Tenant> = {}): Tenant {
+function makePartition(overrides: Partial<Partition> = {}): Partition {
   return {
-    id: "tenant-1",
+    id: "partition-1",
     name: "Acme Corp",
     variables: {},
     createdAt: new Date(),
@@ -82,7 +82,7 @@ function makeEnvironment(overrides: Partial<Environment> = {}): Environment {
 function makeTrigger(overrides: Record<string, unknown> = {}) {
   return {
     projectId: "web-app",
-    tenantId: "tenant-1",
+    partitionId: "partition-1",
     environmentId: "env-prod",
     version: "2.0.0",
     ...overrides,
@@ -137,7 +137,7 @@ describe("Deployment Orchestration Engine", () => {
 
   describe("successful deployment with variable resolution", () => {
     it("resolves variables, executes full pipeline, and records every decision", async () => {
-      const tenant = makeTenant({
+      const partition = makePartition({
         variables: { APP_ENV: "production", DB_HOST: "acme-db-1" },
       });
       const env = makeEnvironment({
@@ -149,7 +149,7 @@ describe("Deployment Orchestration Engine", () => {
 
       healthChecker.willReturn(HEALTHY);
 
-      const result = await agent.triggerDeployment(trigger, tenant, env, makeProject());
+      const result = await agent.triggerDeployment(trigger, partition, env, makeProject());
 
       expect(result.status).toBe("succeeded");
       expect(result.failureReason).toBeNull();
@@ -159,7 +159,7 @@ describe("Deployment Orchestration Engine", () => {
       expect(result.variables).toEqual({
         APP_ENV: "production",
         LOG_LEVEL: "error",     // trigger > environment
-        DB_HOST: "acme-db-1",   // tenant-only
+        DB_HOST: "acme-db-1",   // partition-only
       });
 
       // Diary records every pipeline step
@@ -181,17 +181,17 @@ describe("Deployment Orchestration Engine", () => {
     });
 
     it("handles deployment with no variable conflicts", async () => {
-      const tenant = makeTenant({ variables: { TENANT_SPECIFIC: "abc" } });
+      const partition = makePartition({ variables: { PARTITION_SPECIFIC: "abc" } });
       const env = makeEnvironment({ variables: { ENV_SPECIFIC: "xyz" } });
 
       healthChecker.willReturn(HEALTHY);
 
-      const result = await agent.triggerDeployment(makeTrigger(), tenant, env, makeProject());
+      const result = await agent.triggerDeployment(makeTrigger(), partition, env, makeProject());
 
       expect(result.status).toBe("succeeded");
       expect(result.variables).toEqual({
         ENV_SPECIFIC: "xyz",
-        TENANT_SPECIFIC: "abc",
+        PARTITION_SPECIFIC: "abc",
       });
 
       const entries = diary.getByDeployment(result.id);
@@ -210,7 +210,7 @@ describe("Deployment Orchestration Engine", () => {
 
       const result = await agent.triggerDeployment(
         makeTrigger(),
-        makeTenant(),
+        makePartition(),
         makeEnvironment({ name: "staging" }),
         makeProject(),
       );
@@ -238,7 +238,7 @@ describe("Deployment Orchestration Engine", () => {
 
       const result = await agent.triggerDeployment(
         makeTrigger(),
-        makeTenant(),
+        makePartition(),
         makeEnvironment({ name: "staging" }),
         makeProject(),
       );
@@ -269,7 +269,7 @@ describe("Deployment Orchestration Engine", () => {
 
       const result = await agent.triggerDeployment(
         makeTrigger(),
-        makeTenant(),
+        makePartition(),
         makeEnvironment({ name: "production" }),
         makeProject(),
       );
@@ -294,7 +294,7 @@ describe("Deployment Orchestration Engine", () => {
 
       const result = await agent.triggerDeployment(
         makeTrigger(),
-        makeTenant(),
+        makePartition(),
         makeEnvironment({ name: "staging" }),
         makeProject(),
       );
@@ -315,7 +315,7 @@ describe("Deployment Orchestration Engine", () => {
 
       const result = await agent.triggerDeployment(
         makeTrigger(),
-        makeTenant(),
+        makePartition(),
         makeEnvironment(),
         makeProject(),
       );
@@ -334,7 +334,7 @@ describe("Deployment Orchestration Engine", () => {
 
       const result = await agent.triggerDeployment(
         makeTrigger(),
-        makeTenant(),
+        makePartition(),
         makeEnvironment(),
         makeProject(),
       );
@@ -356,7 +356,7 @@ describe("Deployment Orchestration Engine", () => {
 
   describe("variable conflict reasoning", () => {
     it("single cross-env connectivity var → proceeds with warning", async () => {
-      const tenant = makeTenant({
+      const partition = makePartition({
         variables: { DB_HOST: "prod-db.internal" },
       });
       const env = makeEnvironment({
@@ -369,7 +369,7 @@ describe("Deployment Orchestration Engine", () => {
 
       const result = await agent.triggerDeployment(
         makeTrigger({ environmentId: "env-staging" }),
-        tenant,
+        partition,
         env,
         makeProject({ environmentIds: ["env-staging"] }),
       );
@@ -391,7 +391,7 @@ describe("Deployment Orchestration Engine", () => {
 
     it("multiple cross-env connectivity vars → BLOCKS deployment", async () => {
       // Two connectivity variables pointing at production from staging
-      const tenant = makeTenant({
+      const partition = makePartition({
         variables: {
           DB_HOST: "prod-db.internal",
           CACHE_HOST: "prod-cache:6379",
@@ -410,7 +410,7 @@ describe("Deployment Orchestration Engine", () => {
 
       const result = await agent.triggerDeployment(
         makeTrigger({ environmentId: "env-staging" }),
-        tenant,
+        partition,
         env,
         makeProject({ environmentIds: ["env-staging"] }),
       );
@@ -440,7 +440,7 @@ describe("Deployment Orchestration Engine", () => {
 
     it("cross-env non-connectivity vars → proceeds (lower risk)", async () => {
       // APP_LABEL contains "prod" but it's not a connectivity variable
-      const tenant = makeTenant({
+      const partition = makePartition({
         variables: { APP_LABEL: "production-canary" },
       });
       const env = makeEnvironment({
@@ -452,7 +452,7 @@ describe("Deployment Orchestration Engine", () => {
 
       const result = await agent.triggerDeployment(
         makeTrigger(),
-        tenant,
+        partition,
         env,
         makeProject(),
       );
@@ -462,8 +462,8 @@ describe("Deployment Orchestration Engine", () => {
     });
 
     it("sensitive variable overrides → audit logging without values", async () => {
-      const tenant = makeTenant({
-        variables: { API_SECRET: "tenant-secret-xyz" },
+      const partition = makePartition({
+        variables: { API_SECRET: "partition-secret-xyz" },
       });
       const env = makeEnvironment({
         variables: { API_SECRET: "default-env-secret" },
@@ -473,13 +473,13 @@ describe("Deployment Orchestration Engine", () => {
 
       const result = await agent.triggerDeployment(
         makeTrigger(),
-        tenant,
+        partition,
         env,
         makeProject(),
       );
 
       expect(result.status).toBe("succeeded");
-      expect(result.variables.API_SECRET).toBe("tenant-secret-xyz");
+      expect(result.variables.API_SECRET).toBe("partition-secret-xyz");
 
       const entries = diary.getByDeployment(result.id);
       const sensitiveEntries = findDecisions(entries, "Security-sensitive");
@@ -488,7 +488,7 @@ describe("Deployment Orchestration Engine", () => {
 
       // Values must NOT appear in context
       const contextStr = JSON.stringify(sensitiveEntries[0].context);
-      expect(contextStr).not.toContain("tenant-secret-xyz");
+      expect(contextStr).not.toContain("partition-secret-xyz");
       expect(contextStr).not.toContain("default-env-secret");
     });
   });
@@ -498,26 +498,26 @@ describe("Deployment Orchestration Engine", () => {
   // -----------------------------------------------------------------------
 
   describe("decision trail", () => {
-    it("every diary entry has tenant isolation via tenantId", async () => {
-      const tenant = makeTenant({ id: "isolated-tenant" });
-      const trigger = makeTrigger({ tenantId: "isolated-tenant" });
+    it("every diary entry has partition isolation via partitionId", async () => {
+      const partition = makePartition({ id: "isolated-partition" });
+      const trigger = makeTrigger({ partitionId: "isolated-partition" });
 
       healthChecker.willReturn(HEALTHY);
 
       const result = await agent.triggerDeployment(
         trigger,
-        tenant,
+        partition,
         makeEnvironment(),
         makeProject(),
       );
       const entries = diary.getByDeployment(result.id);
 
       for (const entry of entries) {
-        expect(entry.tenantId).toBe("isolated-tenant");
+        expect(entry.partitionId).toBe("isolated-partition");
       }
 
-      const tenantEntries = diary.getByTenant("isolated-tenant");
-      expect(tenantEntries.length).toBe(entries.length);
+      const partitionEntries = diary.getByPartition("isolated-partition");
+      expect(partitionEntries.length).toBe(entries.length);
     });
 
     it("failed deployment trail includes the failing step", async () => {
@@ -525,7 +525,7 @@ describe("Deployment Orchestration Engine", () => {
 
       const result = await agent.triggerDeployment(
         makeTrigger(),
-        makeTenant(),
+        makePartition(),
         makeEnvironment(),
         makeProject(),
       );
@@ -551,7 +551,7 @@ describe("Deployment Orchestration Engine", () => {
 
       const result = await agent.triggerDeployment(
         makeTrigger(),
-        makeTenant(),
+        makePartition(),
         makeEnvironment(),
         makeProject(),
       );

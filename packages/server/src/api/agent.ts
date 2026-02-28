@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import type { TenantStore, DebriefWriter, DebriefReader, Project, Tenant, Environment } from "@deploystack/core";
+import type { PartitionStore, DebriefWriter, DebriefReader, Project, Partition, Environment } from "@deploystack/core";
 import type { ServerAgent, DeploymentStore } from "../agent/server-agent.js";
 
 // ---------------------------------------------------------------------------
@@ -10,7 +10,7 @@ interface IntentRequest {
   intent: string;
   partialConfig?: {
     projectId?: string;
-    tenantId?: string;
+    partitionId?: string;
     environmentId?: string;
     version?: string;
     variables?: Record<string, string>;
@@ -26,7 +26,7 @@ interface ResolvedField {
 interface IntentResult {
   resolved: {
     projectId: ResolvedField;
-    tenantId: ResolvedField;
+    partitionId: ResolvedField;
     environmentId: ResolvedField;
     version: ResolvedField;
     variables: Record<string, string>;
@@ -87,19 +87,19 @@ function interpretIntent(
   intent: string,
   partialConfig: IntentRequest["partialConfig"],
   projects: ProjectStore,
-  tenantStore: TenantStore,
+  partitionStore: PartitionStore,
   environmentStore: EnvironmentStore,
 ): IntentResult {
   const lower = intent.toLowerCase();
   const allProjects = projects.list();
-  const allTenants = tenantStore.list();
+  const allPartitions = partitionStore.list();
   const allEnvironments = environmentStore.list();
 
   // --- Resolve project ---
   const projectField = resolveProject(lower, partialConfig?.projectId, allProjects);
 
-  // --- Resolve tenant ---
-  const tenantField = resolveTenant(lower, partialConfig?.tenantId, allTenants);
+  // --- Resolve partition ---
+  const partitionField = resolvePartition(lower, partialConfig?.partitionId, allPartitions);
 
   // --- Resolve environment ---
   let envField = resolveEnvironment(lower, partialConfig?.environmentId, allEnvironments);
@@ -120,7 +120,7 @@ function interpretIntent(
 
   for (const [name, field] of Object.entries({
     projectId: projectField,
-    tenantId: tenantField,
+    partitionId: partitionField,
     environmentId: envField,
     version: versionField,
   })) {
@@ -153,7 +153,7 @@ function interpretIntent(
   return {
     resolved: {
       projectId: projectField,
-      tenantId: tenantField,
+      partitionId: partitionField,
       environmentId: envField,
       version: versionField,
       variables,
@@ -188,24 +188,24 @@ function resolveProject(
   return { value: "", confidence: "missing" };
 }
 
-function resolveTenant(
+function resolvePartition(
   lower: string,
   partialId: string | undefined,
-  tenants: Tenant[],
+  partitions: Partition[],
 ): ResolvedField {
   if (partialId) {
-    const t = tenants.find((t) => t.id === partialId);
+    const t = partitions.find((t) => t.id === partialId);
     if (t) return { value: t.id, confidence: "exact", matchedFrom: t.name };
   }
 
-  for (const t of tenants) {
+  for (const t of partitions) {
     if (lower.includes(t.name.toLowerCase())) {
       return { value: t.id, confidence: "exact", matchedFrom: t.name };
     }
   }
 
-  if (tenants.length === 1) {
-    return { value: tenants[0].id, confidence: "inferred", matchedFrom: `only tenant: ${tenants[0].name}` };
+  if (partitions.length === 1) {
+    return { value: partitions[0].id, confidence: "inferred", matchedFrom: `only partition: ${partitions[0].name}` };
   }
 
   return { value: "", confidence: "missing" };
@@ -265,7 +265,7 @@ function resolveVersion(
 function generateContext(
   deployments: DeploymentStore,
   environmentStore: EnvironmentStore,
-  tenantStore: TenantStore,
+  partitionStore: PartitionStore,
 ): DeploymentContext {
   const allDeployments = deployments.list();
   const allEnvironments = environmentStore.list();
@@ -332,17 +332,17 @@ function generateContext(
   }
 
   // --- Configuration drift warnings ---
-  const tenants = tenantStore.list();
-  for (const tenant of tenants) {
+  const partitions = partitionStore.list();
+  for (const partition of partitions) {
     for (const env of allEnvironments) {
-      const conflicts = detectDrift(tenant, env);
+      const conflicts = detectDrift(partition, env);
       if (conflicts.length > 0) {
         signals.push({
           type: "drift",
           severity: "warning",
-          title: `Config drift: ${tenant.name} / ${env.name}`,
+          title: `Config drift: ${partition.name} / ${env.name}`,
           detail: `${conflicts.length} variable${conflicts.length > 1 ? "s" : ""} may conflict: ${conflicts.join(", ")}`,
-          relatedEntity: { type: "tenant", id: tenant.id, name: tenant.name },
+          relatedEntity: { type: "partition", id: partition.id, name: partition.name },
         });
       }
     }
@@ -390,7 +390,7 @@ function generateContext(
   };
 }
 
-function detectDrift(tenant: Tenant, environment: Environment): string[] {
+function detectDrift(partition: Partition, environment: Environment): string[] {
   const conflicts: string[] = [];
   const envPatterns: Record<string, RegExp[]> = {
     production: [/\bstag/i, /\bdev\b/i],
@@ -401,7 +401,7 @@ function detectDrift(tenant: Tenant, environment: Environment): string[] {
   const patternsToCheck = envPatterns[environment.name.toLowerCase()];
   if (!patternsToCheck) return conflicts;
 
-  for (const [key, value] of Object.entries(tenant.variables)) {
+  for (const [key, value] of Object.entries(partition.variables)) {
     if (patternsToCheck.some((p) => p.test(value))) {
       conflicts.push(key);
     }
@@ -429,7 +429,7 @@ function formatAgo(date: Date): string {
 export function registerAgentRoutes(
   app: FastifyInstance,
   agent: ServerAgent,
-  tenants: TenantStore,
+  partitions: PartitionStore,
   environments: EnvironmentStore,
   projects: ProjectStore,
   deployments: DeploymentStore,
@@ -451,19 +451,19 @@ export function registerAgentRoutes(
       body.intent,
       body.partialConfig,
       projects,
-      tenants,
+      partitions,
       environments,
     );
 
     // Build actionable reasoning that explains WHY fields are missing
     const reasoningParts = [`Interpreted intent "${body.intent}".`];
     const allProjects = projects.list();
-    const allTenants = tenants.list();
+    const allPartitions = partitions.list();
     const allEnvironments = environments.list();
 
     const fieldEntries: Array<[string, ResolvedField, string[]]> = [
       ["Project", result.resolved.projectId, allProjects.map((p: Project) => p.name)],
-      ["Tenant", result.resolved.tenantId, allTenants.map((t: Tenant) => t.name)],
+      ["Partition", result.resolved.partitionId, allPartitions.map((t: Partition) => t.name)],
       ["Environment", result.resolved.environmentId, allEnvironments.map((e: Environment) => e.name)],
       ["Version", result.resolved.version, []],
     ];
@@ -479,7 +479,7 @@ export function registerAgentRoutes(
     }
 
     debrief.record({
-      tenantId: result.resolved.tenantId.confidence !== "missing" ? result.resolved.tenantId.value : null,
+      partitionId: result.resolved.partitionId.confidence !== "missing" ? result.resolved.partitionId.value : null,
       deploymentId: null,
       agent: "server",
       decisionType: "system",
@@ -502,6 +502,6 @@ export function registerAgentRoutes(
    * Fills the space where manual action buttons collapse.
    */
   app.get("/api/agent/context", async () => {
-    return generateContext(deployments, environments, tenants);
+    return generateContext(deployments, environments, partitions);
   });
 }

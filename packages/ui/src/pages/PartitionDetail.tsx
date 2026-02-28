@@ -1,25 +1,25 @@
 import { useState, useEffect } from "react";
 import { useParams, Link, useNavigate } from "react-router";
 import {
-  getTenant,
-  updateTenantVariables,
-  updateTenant,
-  deleteTenant,
+  getPartition,
+  updatePartitionVariables,
+  updatePartition,
+  deletePartition,
   listDeployments,
-  getTenantHistory,
+  getPartitionHistory,
   listEnvironments,
   listProjects,
 } from "../api.js";
-import type { Tenant, Deployment, ProjectHistory, Environment, Project } from "../types.js";
+import type { Partition, Deployment, ProjectHistory, Environment, Project } from "../types.js";
 import VariableEditor from "../components/VariableEditor.js";
 import DeploymentTable from "../components/DeploymentTable.js";
 import InlineEdit from "../components/InlineEdit.js";
 import ConfirmDialog from "../components/ConfirmDialog.js";
 
-export default function TenantDetail() {
+export default function PartitionDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [tenant, setTenant] = useState<Tenant | null>(null);
+  const [partition, setPartition] = useState<Partition | null>(null);
   const [deployments, setDeployments] = useState<Deployment[]>([]);
   const [environments, setEnvironments] = useState<Environment[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -31,13 +31,13 @@ export default function TenantDetail() {
   useEffect(() => {
     if (!id) return;
     Promise.all([
-      getTenant(id),
+      getPartition(id),
       listDeployments(id),
-      getTenantHistory(id),
+      getPartitionHistory(id),
       listEnvironments(),
       listProjects(),
     ]).then(([t, d, h, e, p]) => {
-      setTenant(t);
+      setPartition(t);
       setDeployments(d);
       setHistory(h);
       setEnvironments(e);
@@ -51,25 +51,25 @@ export default function TenantDetail() {
 
   async function handleUpdateName(newName: string) {
     if (!id) return;
-    const updated = await updateTenant(id, { name: newName });
-    setTenant(updated);
+    const updated = await updatePartition(id, { name: newName });
+    setPartition(updated);
   }
 
   async function handleSaveVariables(variables: Record<string, string>) {
     if (!id) return;
-    const updated = await updateTenantVariables(id, variables);
-    setTenant(updated);
+    const updated = await updatePartitionVariables(id, variables);
+    setPartition(updated);
   }
 
   async function handleDelete() {
     if (!id) return;
-    await deleteTenant(id);
-    navigate("/tenants");
+    await deletePartition(id);
+    navigate("/partitions");
   }
 
   if (loading) return <div className="loading">Loading...</div>;
   if (error) return <div className="error-msg">{error}</div>;
-  if (!tenant) return <div className="error-msg">Tenant not found</div>;
+  if (!partition) return <div className="error-msg">Partition not found</div>;
 
   const sorted = [...deployments].sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
@@ -78,13 +78,13 @@ export default function TenantDetail() {
   return (
     <div>
       <div className="breadcrumb">
-        <Link to="/tenants">Tenants</Link> / {tenant.name}
+        <Link to="/partitions">Partitions</Link> / {partition.name}
       </div>
       <div className="page-header">
-        <InlineEdit value={tenant.name} onSave={handleUpdateName} />
+        <InlineEdit value={partition.name} onSave={handleUpdateName} />
         <div style={{ display: "flex", gap: 8 }}>
-          <Link to={`/deploy?tenantId=${tenant.id}`} className="btn btn-primary">
-            Deploy to Tenant
+          <Link to={`/deploy?partitionId=${partition.id}`} className="btn btn-primary">
+            Deploy to Partition
           </Link>
           <button className="btn btn-danger" onClick={() => setShowDeleteConfirm(true)}>
             Delete
@@ -97,7 +97,7 @@ export default function TenantDetail() {
           <div className="card-header">
             <h3>Variables</h3>
           </div>
-          <VariableEditor variables={tenant.variables} onSave={handleSaveVariables} />
+          <VariableEditor variables={partition.variables} onSave={handleSaveVariables} />
         </div>
       </div>
 
@@ -138,8 +138,8 @@ export default function TenantDetail() {
 
       {showDeleteConfirm && (
         <ConfirmDialog
-          title="Delete Tenant"
-          message={`Are you sure you want to delete "${tenant.name}"? This cannot be undone.`}
+          title="Delete Partition"
+          message={`Are you sure you want to delete "${partition.name}"? This cannot be undone.`}
           onConfirm={handleDelete}
           onCancel={() => setShowDeleteConfirm(false)}
         />

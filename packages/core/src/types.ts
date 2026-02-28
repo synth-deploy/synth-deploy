@@ -2,7 +2,7 @@ import { z } from "zod";
 
 // --- Identifiers ---
 
-export type TenantId = string;
+export type PartitionId = string;
 export type DeploymentId = string;
 export type ProjectId = string;
 export type EnvironmentId = string;
@@ -22,7 +22,7 @@ export type DeploymentStatus = z.infer<typeof DeploymentStatus>;
 
 export const DeploymentTriggerSchema = z.object({
   projectId: z.string(),
-  tenantId: z.string(),
+  partitionId: z.string(),
   environmentId: z.string(),
   version: z.string(),
   variables: z.record(z.string()).optional(),
@@ -32,7 +32,7 @@ export type DeploymentTrigger = z.infer<typeof DeploymentTriggerSchema>;
 export interface Deployment {
   id: DeploymentId;
   projectId: ProjectId;
-  tenantId: TenantId;
+  partitionId: PartitionId;
   environmentId: EnvironmentId;
   version: string;
   status: DeploymentStatus;
@@ -69,7 +69,7 @@ export type DecisionType = z.infer<typeof DecisionType>;
 export interface DebriefEntry {
   id: DebriefEntryId;
   timestamp: Date;
-  tenantId: TenantId | null;
+  partitionId: PartitionId | null;
   deploymentId: DeploymentId | null;
   agent: AgentType;
   decisionType: DecisionType;
@@ -78,10 +78,10 @@ export interface DebriefEntry {
   context: Record<string, unknown>;
 }
 
-// --- Tenant ---
+// --- Partition ---
 
-export interface Tenant {
-  id: TenantId;
+export interface Partition {
+  id: PartitionId;
   name: string;
   variables: Record<string, string>;
   createdAt: Date;
@@ -137,7 +137,7 @@ export interface Order {
   id: OrderId;
   projectId: ProjectId;
   projectName: string;
-  tenantId: TenantId;
+  partitionId: PartitionId;
   environmentId: EnvironmentId;
   environmentName: string;
   version: string;
@@ -159,7 +159,6 @@ export interface AgentSettings {
 }
 
 export interface DeploymentDefaults {
-  defaultVariableTemplates: Record<string, string>;
   defaultPipelineConfig: PipelineConfig;
 }
 
@@ -182,7 +181,6 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     defaultVerificationStrategy: "basic",
   },
   deploymentDefaults: {
-    defaultVariableTemplates: {},
     defaultPipelineConfig: DEFAULT_PIPELINE_CONFIG,
   },
   tentacle: {

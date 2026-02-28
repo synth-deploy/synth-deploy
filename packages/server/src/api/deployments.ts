@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { DeploymentTriggerSchema, generatePostmortem } from "@deploystack/core";
-import type { TenantStore, DebriefWriter, DebriefReader, OrderStore, Project } from "@deploystack/core";
+import type { PartitionStore, DebriefWriter, DebriefReader, OrderStore, Project } from "@deploystack/core";
 import type { ServerAgent, DeploymentStore } from "../agent/server-agent.js";
 
 interface EnvironmentStore {
@@ -18,7 +18,7 @@ interface ProjectStore {
 export function registerDeploymentRoutes(
   app: FastifyInstance,
   agent: ServerAgent,
-  tenants: TenantStore,
+  partitions: PartitionStore,
   environments: EnvironmentStore,
   deployments: DeploymentStore,
   debrief: DebriefWriter & DebriefReader,
@@ -51,9 +51,9 @@ export function registerDeploymentRoutes(
       });
     }
 
-    const tenant = tenants.get(trigger.tenantId);
-    if (!tenant) {
-      return reply.status(404).send({ error: `Tenant not found: ${trigger.tenantId}` });
+    const partition = partitions.get(trigger.partitionId);
+    if (!partition) {
+      return reply.status(404).send({ error: `Partition not found: ${trigger.partitionId}` });
     }
 
     const environment = environments.get(trigger.environmentId);
@@ -70,7 +70,7 @@ export function registerDeploymentRoutes(
       }
     }
 
-    const deployment = await agent.triggerDeployment(trigger, tenant, environment, project, existingOrder);
+    const deployment = await agent.triggerDeployment(trigger, partition, environment, project, existingOrder);
 
     return reply.status(201).send({
       deployment,
@@ -91,10 +91,10 @@ export function registerDeploymentRoutes(
     };
   });
 
-  // List deployments (optionally filtered by tenant)
+  // List deployments (optionally filtered by partition)
   app.get("/api/deployments", async (request) => {
-    const { tenantId } = request.query as { tenantId?: string };
-    const list = tenantId ? deployments.getByTenant(tenantId) : deployments.list();
+    const { partitionId } = request.query as { partitionId?: string };
+    const list = partitionId ? deployments.getByPartition(partitionId) : deployments.list();
 
     return { deployments: list };
   });
@@ -122,29 +122,29 @@ export function registerDeploymentRoutes(
     },
   );
 
-  // Get recent debrief entries (supports filtering by tenant and decision type)
+  // Get recent debrief entries (supports filtering by partition and decision type)
   app.get("/api/debrief", async (request) => {
-    const { limit, tenantId, decisionType } = request.query as {
+    const { limit, partitionId, decisionType } = request.query as {
       limit?: string;
-      tenantId?: string;
+      partitionId?: string;
       decisionType?: string;
     };
 
     const max = limit ? parseInt(limit, 10) : 50;
 
     // No filters — fast path
-    if (!tenantId && !decisionType) {
+    if (!partitionId && !decisionType) {
       return { entries: debrief.getRecent(max) };
     }
 
     // Start with the most selective filter, then narrow
-    let entries: ReturnType<typeof debrief.getByTenant>;
-    if (tenantId && decisionType) {
-      entries = debrief.getByTenant(tenantId).filter(
+    let entries: ReturnType<typeof debrief.getByPartition>;
+    if (partitionId && decisionType) {
+      entries = debrief.getByPartition(partitionId).filter(
         (e) => e.decisionType === decisionType,
       );
-    } else if (tenantId) {
-      entries = debrief.getByTenant(tenantId);
+    } else if (partitionId) {
+      entries = debrief.getByPartition(partitionId);
     } else {
       entries = debrief.getByType(decisionType as Parameters<typeof debrief.getByType>[0]);
     }

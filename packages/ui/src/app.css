@@ -574,7 +574,7 @@ table a:hover {
   text-decoration: underline;
 }
 
-.debrief-entry-tenant {
+.debrief-entry-partition {
   font-family: var(--font-mono);
 }
 

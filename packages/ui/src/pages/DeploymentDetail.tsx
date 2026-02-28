@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router";
-import { getDeployment, getPostmortem, listEnvironments, listTenants } from "../api.js";
-import type { Deployment, DebriefEntry, PostmortemReport, Environment, Tenant } from "../types.js";
+import { getDeployment, getPostmortem, listEnvironments, listPartitions } from "../api.js";
+import type { Deployment, DebriefEntry, PostmortemReport, Environment, Partition } from "../types.js";
 import StatusBadge from "../components/StatusBadge.js";
 import EnvBadge from "../components/EnvBadge.js";
 import DebriefTimeline from "../components/DebriefTimeline.js";
@@ -13,7 +13,7 @@ export default function DeploymentDetail() {
   const [debrief, setDebrief] = useState<DebriefEntry[]>([]);
   const [postmortem, setPostmortem] = useState<PostmortemReport | null>(null);
   const [environments, setEnvironments] = useState<Environment[]>([]);
-  const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [partitions, setPartitions] = useState<Partition[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -23,13 +23,13 @@ export default function DeploymentDetail() {
       getDeployment(id),
       getPostmortem(id),
       listEnvironments(),
-      listTenants(),
+      listPartitions(),
     ]).then(([data, pm, envs, ts]) => {
       setDeployment(data.deployment);
       setDebrief(data.debrief);
       setPostmortem(pm);
       setEnvironments(envs);
-      setTenants(ts);
+      setPartitions(ts);
       setLoading(false);
     }).catch((e) => {
       setError(e.message);
@@ -42,7 +42,7 @@ export default function DeploymentDetail() {
   if (!deployment) return <div className="error-msg">Deployment not found</div>;
 
   const env = environments.find((e) => e.id === deployment.environmentId);
-  const tenant = tenants.find((t) => t.id === deployment.tenantId);
+  const partition = partitions.find((t) => t.id === deployment.partitionId);
 
   const durationMs = deployment.completedAt
     ? new Date(deployment.completedAt).getTime() - new Date(deployment.createdAt).getTime()
@@ -70,11 +70,11 @@ export default function DeploymentDetail() {
               </Link>
             </div>
             <div className="meta-item">
-              <span className="meta-label">Tenant</span>
-              {tenant ? (
-                <Link to={`/tenants/${tenant.id}`} className="meta-value">{tenant.name}</Link>
+              <span className="meta-label">Partition</span>
+              {partition ? (
+                <Link to={`/partitions/${partition.id}`} className="meta-value">{partition.name}</Link>
               ) : (
-                <span className="meta-value">{deployment.tenantId.slice(0, 8)}</span>
+                <span className="meta-value">{deployment.partitionId.slice(0, 8)}</span>
               )}
             </div>
             <div className="meta-item">

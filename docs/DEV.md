@@ -81,7 +81,7 @@ npm run clean
 
 ```
 packages/
-  core/       Shared types, Decision Diary, tenant isolation, stores
+  core/       Shared types, Decision Diary, partition isolation, stores
   server/     Fastify server, REST API, MCP, Server Agent
   tentacle/   Local deployment agent, diagnostics, query engine
   ui/         React SPA (Vite)
@@ -91,7 +91,7 @@ packages/
 
 The server boots with demo data:
 - 1 project (web-app)
-- 1 tenant (Acme Corp)
+- 1 partition (Acme Corp)
 - 2 environments (production, staging)
 
 IDs are printed to the console on startup.
@@ -102,7 +102,7 @@ IDs are printed to the console on startup.
 |-----|------|
 | `http://localhost:5173` | UI (Vite dev server) |
 | `http://localhost:3000/api/projects` | Projects API |
-| `http://localhost:3000/api/tenants` | Tenants API |
+| `http://localhost:3000/api/partitions` | Partitions API |
 | `http://localhost:3000/api/environments` | Environments API |
 | `http://localhost:3000/api/deployments` | Deployments API |
 | `http://localhost:3000/api/diary?limit=10` | Recent diary entries |

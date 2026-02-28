@@ -139,14 +139,14 @@ function buildSummary(entries: DebriefEntry[], deployment: Deployment): string {
   const version = (planEntry?.context?.version as string) ?? deployment.version;
   const environment =
     (planEntry?.context?.environmentName as string) ?? deployment.environmentId;
-  const tenant =
-    (planEntry?.context?.tenantName as string) ?? deployment.tenantId;
+  const partition =
+    (planEntry?.context?.partitionName as string) ?? deployment.partitionId;
 
   const statusLabel = deployment.status === "succeeded" ? "SUCCEEDED" : "FAILED";
 
   return (
     `Deployment of ${project} v${version} to "${environment}" ` +
-    `for tenant "${tenant}" -- ${statusLabel}`
+    `for partition "${partition}" -- ${statusLabel}`
   );
 }
 
@@ -244,7 +244,7 @@ function extractSuggestedFix(entries: DebriefEntry[], failedStep: string): strin
         return conflictEntry.reasoning.slice(recIdx).trim();
       }
     }
-    return "Review and correct the tenant's variable bindings for the target environment, then re-trigger.";
+    return "Review and correct the partition's variable bindings for the target environment, then re-trigger.";
   }
 
   return "Review the debrief entries above for details on what failed, then address the root cause and re-trigger.";
@@ -570,7 +570,7 @@ function buildConfigurationPatterns(
       occurrences: blockEntries.length,
       detail:
         `${blockEntries.length} deployment(s) were blocked due to high-risk ` +
-        `variable configurations. These indicate misconfigured tenant ` +
+        `variable configurations. These indicate misconfigured partition ` +
         `variable bindings for the target environment.`,
     });
   }

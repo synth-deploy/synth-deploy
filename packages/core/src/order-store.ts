@@ -3,7 +3,7 @@ import type {
   Order,
   OrderId,
   ProjectId,
-  TenantId,
+  PartitionId,
   EnvironmentId,
   DeploymentStep,
   PipelineConfig,
@@ -12,7 +12,7 @@ import type {
 export interface CreateOrderParams {
   projectId: ProjectId;
   projectName: string;
-  tenantId: TenantId;
+  partitionId: PartitionId;
   environmentId: EnvironmentId;
   environmentName: string;
   version: string;
@@ -36,7 +36,7 @@ export class OrderStore {
       id: crypto.randomUUID(),
       projectId: params.projectId,
       projectName: params.projectName,
-      tenantId: params.tenantId,
+      partitionId: params.partitionId,
       environmentId: params.environmentId,
       environmentName: params.environmentName,
       version: params.version,
@@ -64,9 +64,9 @@ export class OrderStore {
       .map((o) => structuredClone(o));
   }
 
-  getByTenant(tenantId: TenantId): Order[] {
+  getByPartition(partitionId: PartitionId): Order[] {
     return [...this.orders.values()]
-      .filter((o) => o.tenantId === tenantId)
+      .filter((o) => o.partitionId === partitionId)
       .map((o) => structuredClone(o));
   }
 }

@@ -9,12 +9,12 @@ import type { DebriefEntry } from "./types.js";
 export function formatDebriefEntry(entry: DebriefEntry): string {
   const ts = entry.timestamp.toISOString().replace("T", " ").replace(/\.\d+Z$/, " UTC");
   const type = entry.decisionType.toUpperCase();
-  const tenant = entry.tenantId ?? "system";
+  const partition = entry.partitionId ?? "system";
   const deployment = entry.deploymentId ? entry.deploymentId.slice(0, 8) : "n/a";
 
   const lines = [
     `[${ts}] ${type}`,
-    `  Tenant: ${tenant} | Deployment: ${deployment} | Agent: ${entry.agent}`,
+    `  Partition: ${partition} | Deployment: ${deployment} | Agent: ${entry.agent}`,
     `  Decision: ${entry.decision}`,
     `  Reasoning: ${entry.reasoning}`,
   ];

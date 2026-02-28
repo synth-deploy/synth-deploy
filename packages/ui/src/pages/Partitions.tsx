@@ -1,18 +1,18 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router";
-import { listTenants, createTenant } from "../api.js";
-import type { Tenant } from "../types.js";
+import { listPartitions, createPartition } from "../api.js";
+import type { Partition } from "../types.js";
 
-export default function Tenants() {
-  const [tenants, setTenants] = useState<Tenant[]>([]);
+export default function Partitions() {
+  const [partitions, setPartitions] = useState<Partition[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    listTenants().then((t) => {
-      setTenants(t);
+    listPartitions().then((t) => {
+      setPartitions(t);
       setLoading(false);
     });
   }, []);
@@ -21,8 +21,8 @@ export default function Tenants() {
     if (!name.trim()) return;
     setError(null);
     try {
-      const tenant = await createTenant(name.trim());
-      setTenants([...tenants, tenant]);
+      const partition = await createPartition(name.trim());
+      setPartitions([...partitions, partition]);
       setName("");
       setShowForm(false);
     } catch (e: any) {
@@ -35,9 +35,9 @@ export default function Tenants() {
   return (
     <div>
       <div className="page-header">
-        <h2>Tenants</h2>
+        <h2>Partitions</h2>
         <button className="btn btn-primary" onClick={() => setShowForm(!showForm)}>
-          {showForm ? "Cancel" : "Create Tenant"}
+          {showForm ? "Cancel" : "Create Partition"}
         </button>
       </div>
 
@@ -47,7 +47,7 @@ export default function Tenants() {
         <div className="card mb-16">
           <div className="inline-form">
             <div className="form-group">
-              <label>Tenant Name</label>
+              <label>Partition Name</label>
               <input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
@@ -72,10 +72,10 @@ export default function Tenants() {
               </tr>
             </thead>
             <tbody>
-              {tenants.map((t) => (
+              {partitions.map((t) => (
                 <tr key={t.id}>
                   <td>
-                    <Link to={`/tenants/${t.id}`} style={{ fontWeight: 500 }}>
+                    <Link to={`/partitions/${t.id}`} style={{ fontWeight: 500 }}>
                       {t.name}
                     </Link>
                   </td>
@@ -90,10 +90,10 @@ export default function Tenants() {
                   <td className="mono text-muted">{t.id.slice(0, 8)}</td>
                 </tr>
               ))}
-              {tenants.length === 0 && (
+              {partitions.length === 0 && (
                 <tr>
                   <td colSpan={4} className="empty-state">
-                    <p>No tenants yet. Create one to get started.</p>
+                    <p>No partitions yet. Create one to get started.</p>
                   </td>
                 </tr>
               )}

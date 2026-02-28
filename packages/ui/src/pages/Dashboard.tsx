@@ -1,13 +1,13 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router";
-import { listDeployments, listTenants, listEnvironments, listProjects } from "../api.js";
-import type { Deployment, Tenant, Environment, Project } from "../types.js";
+import { listDeployments, listPartitions, listEnvironments, listProjects } from "../api.js";
+import type { Deployment, Partition, Environment, Project } from "../types.js";
 import DeploymentTable from "../components/DeploymentTable.js";
 import TentacleHealth from "../components/TentacleHealth.js";
 
 export default function Dashboard() {
   const [deployments, setDeployments] = useState<Deployment[]>([]);
-  const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [partitions, setPartitions] = useState<Partition[]>([]);
   const [environments, setEnvironments] = useState<Environment[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
@@ -15,12 +15,12 @@ export default function Dashboard() {
   useEffect(() => {
     Promise.all([
       listDeployments(),
-      listTenants(),
+      listPartitions(),
       listEnvironments(),
       listProjects(),
     ]).then(([d, t, e, p]) => {
       setDeployments(d);
-      setTenants(t);
+      setPartitions(t);
       setEnvironments(e);
       setProjects(p);
       setLoading(false);
@@ -60,8 +60,8 @@ export default function Dashboard() {
           <div className="value">{projects.length}</div>
         </div>
         <div className="summary-card">
-          <div className="label">Tenants</div>
-          <div className="value">{tenants.length}</div>
+          <div className="label">Partitions</div>
+          <div className="value">{partitions.length}</div>
         </div>
         <div className="summary-card">
           <div className="label">Environments</div>

@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useParams, Link, useNavigate } from "react-router";
-import { getOrder, executeOrder, listTenants } from "../api.js";
-import type { Order, Deployment, Tenant } from "../types.js";
+import { getOrder, executeOrder, listPartitions } from "../api.js";
+import type { Order, Deployment, Partition } from "../types.js";
 import EnvBadge from "../components/EnvBadge.js";
 import VariableEditor from "../components/VariableEditor.js";
 import DeploymentTable from "../components/DeploymentTable.js";
@@ -11,18 +11,18 @@ export default function OrderDetail() {
   const navigate = useNavigate();
   const [order, setOrder] = useState<Order | null>(null);
   const [deployments, setDeployments] = useState<Deployment[]>([]);
-  const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [partitions, setPartitions] = useState<Partition[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [executing, setExecuting] = useState(false);
 
   useEffect(() => {
     if (!id) return;
-    Promise.all([getOrder(id), listTenants()])
+    Promise.all([getOrder(id), listPartitions()])
       .then(([data, ts]) => {
         setOrder(data.order);
         setDeployments(data.deployments);
-        setTenants(ts);
+        setPartitions(ts);
         setLoading(false);
       })
       .catch((e) => {
@@ -48,7 +48,7 @@ export default function OrderDetail() {
   if (error && !order) return <div className="error-msg">{error}</div>;
   if (!order) return <div className="error-msg">Order not found</div>;
 
-  const tenant = tenants.find((t) => t.id === order.tenantId);
+  const partition = partitions.find((t) => t.id === order.partitionId);
   const stepTypeLabel = (type: string) =>
     type === "pre-deploy" ? "Pre-deploy" : type === "post-deploy" ? "Post-deploy" : "Verification";
 
@@ -80,11 +80,11 @@ export default function OrderDetail() {
               <Link to={`/projects/${order.projectId}`} className="meta-value">{order.projectName}</Link>
             </div>
             <div className="meta-item">
-              <span className="meta-label">Tenant</span>
-              {tenant ? (
-                <Link to={`/tenants/${tenant.id}`} className="meta-value">{tenant.name}</Link>
+              <span className="meta-label">Partition</span>
+              {partition ? (
+                <Link to={`/partitions/${partition.id}`} className="meta-value">{partition.name}</Link>
               ) : (
-                <span className="meta-value">{order.tenantId.slice(0, 8)}</span>
+                <span className="meta-value">{order.partitionId.slice(0, 8)}</span>
               )}
             </div>
             <div className="meta-item">

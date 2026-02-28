@@ -36,7 +36,6 @@ export interface AgentSettings {
 }
 
 export interface DeploymentDefaults {
-  defaultVariableTemplates: Record<string, string>;
   defaultPipelineConfig: PipelineConfig;
 }
 
@@ -58,7 +57,7 @@ export interface ServerInfo {
   startedAt: string;
 }
 
-export interface Tenant {
+export interface Partition {
   id: string;
   name: string;
   variables: Record<string, string>;
@@ -76,7 +75,7 @@ export type DeploymentStatus = "pending" | "running" | "succeeded" | "failed" | 
 export interface Deployment {
   id: string;
   projectId: string;
-  tenantId: string;
+  partitionId: string;
   environmentId: string;
   version: string;
   status: DeploymentStatus;
@@ -107,7 +106,7 @@ export type AgentType = "server" | "tentacle";
 export interface DebriefEntry {
   id: string;
   timestamp: string;
-  tenantId: string | null;
+  partitionId: string | null;
   deploymentId: string | null;
   agent: AgentType;
   decisionType: DecisionType;
@@ -120,7 +119,7 @@ export interface Order {
   id: string;
   projectId: string;
   projectName: string;
-  tenantId: string;
+  partitionId: string;
   environmentId: string;
   environmentName: string;
   version: string;

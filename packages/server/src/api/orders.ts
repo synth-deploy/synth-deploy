@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import type {
   OrderStore,
   ProjectStore,
-  TenantStore,
+  PartitionStore,
   DebriefWriter,
   DebriefReader,
 } from "@deploystack/core";
@@ -20,24 +20,24 @@ export function registerOrderRoutes(
   app: FastifyInstance,
   orders: OrderStore,
   agent: ServerAgent,
-  tenants: TenantStore,
+  partitions: PartitionStore,
   environments: EnvironmentStore,
   projects: ProjectStore,
   deployments: DeploymentStore,
   debrief: DebriefWriter & DebriefReader,
 ): void {
-  // List orders (supports ?projectId and ?tenantId filters)
+  // List orders (supports ?projectId and ?partitionId filters)
   app.get("/api/orders", async (request) => {
-    const { projectId, tenantId } = request.query as {
+    const { projectId, partitionId } = request.query as {
       projectId?: string;
-      tenantId?: string;
+      partitionId?: string;
     };
 
     let list;
     if (projectId) {
       list = orders.getByProject(projectId);
-    } else if (tenantId) {
-      list = orders.getByTenant(tenantId);
+    } else if (partitionId) {
+      list = orders.getByPartition(partitionId);
     } else {
       list = orders.list();
     }
@@ -62,16 +62,16 @@ export function registerOrderRoutes(
 
   // Create an order manually (pre-stage without deploying)
   app.post("/api/orders", async (request, reply) => {
-    const { projectId, tenantId, environmentId, version } = request.body as {
+    const { projectId, partitionId, environmentId, version } = request.body as {
       projectId?: string;
-      tenantId?: string;
+      partitionId?: string;
       environmentId?: string;
       version?: string;
     };
 
-    if (!projectId || !tenantId || !environmentId || !version) {
+    if (!projectId || !partitionId || !environmentId || !version) {
       return reply.status(400).send({
-        error: "Missing required fields: projectId, tenantId, environmentId, version",
+        error: "Missing required fields: projectId, partitionId, environmentId, version",
       });
     }
 
@@ -80,9 +80,9 @@ export function registerOrderRoutes(
       return reply.status(404).send({ error: `Project not found: ${projectId}` });
     }
 
-    const tenant = tenants.get(tenantId);
-    if (!tenant) {
-      return reply.status(404).send({ error: `Tenant not found: ${tenantId}` });
+    const partition = partitions.get(partitionId);
+    if (!partition) {
+      return reply.status(404).send({ error: `Partition not found: ${partitionId}` });
     }
 
     const environment = environments.get(environmentId);
@@ -92,14 +92,14 @@ export function registerOrderRoutes(
 
     // Resolve variables using the same precedence as deployments
     const resolved: Record<string, string> = { ...environment.variables };
-    for (const [key, value] of Object.entries(tenant.variables)) {
+    for (const [key, value] of Object.entries(partition.variables)) {
       resolved[key] = value;
     }
 
     const order = orders.create({
       projectId: project.id,
       projectName: project.name,
-      tenantId: tenant.id,
+      partitionId: partition.id,
       environmentId: environment.id,
       environmentName: environment.name,
       version,
@@ -118,9 +118,9 @@ export function registerOrderRoutes(
       return reply.status(404).send({ error: "Order not found" });
     }
 
-    const tenant = tenants.get(order.tenantId);
-    if (!tenant) {
-      return reply.status(404).send({ error: `Tenant not found: ${order.tenantId}` });
+    const partition = partitions.get(order.partitionId);
+    if (!partition) {
+      return reply.status(404).send({ error: `Partition not found: ${order.partitionId}` });
     }
 
     const environment = environments.get(order.environmentId);
@@ -135,14 +135,14 @@ export function registerOrderRoutes(
 
     const trigger = {
       projectId: order.projectId,
-      tenantId: order.tenantId,
+      partitionId: order.partitionId,
       environmentId: order.environmentId,
       version: order.version,
     };
 
     const deployment = await agent.triggerDeployment(
       trigger,
-      tenant,
+      partition,
       environment,
       project,
       order,

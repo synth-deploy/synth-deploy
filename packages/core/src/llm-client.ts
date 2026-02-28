@@ -18,8 +18,8 @@ export interface LlmCallParams {
   systemPrompt: string;
   /** One-line summary for debrief recording (never the full prompt) */
   promptSummary: string;
-  /** Tenant context for debrief */
-  tenantId?: string | null;
+  /** Partition context for debrief */
+  partitionId?: string | null;
   /** Deployment context for debrief */
   deploymentId?: string | null;
   /** Max tokens for response */
@@ -155,7 +155,7 @@ export class LlmClient {
     fallbackUsed: boolean,
   ): void {
     this._debrief.record({
-      tenantId: params.tenantId ?? null,
+      partitionId: params.partitionId ?? null,
       deploymentId: params.deploymentId ?? null,
       agent: this._agent,
       decisionType: "llm-call",

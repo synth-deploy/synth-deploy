@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { ServerAgent, DeploymentStore } from "../agent/server-agent.js";
-import type { TenantStore, ProjectStore } from "@deploystack/core";
+import type { PartitionStore, ProjectStore } from "@deploystack/core";
 
 interface EnvironmentStore {
   get(id: string): { id: string; name: string; variables: Record<string, string> } | undefined;
@@ -14,7 +14,7 @@ interface EnvironmentStore {
 export function registerTools(
   mcp: McpServer,
   agent: ServerAgent,
-  tenants: TenantStore,
+  partitions: PartitionStore,
   environments: EnvironmentStore,
   deployments: DeploymentStore,
   projects: ProjectStore,
@@ -24,21 +24,21 @@ export function registerTools(
     {
       title: "Trigger Deployment",
       description:
-        "Trigger a deployment for a project to a specific tenant and environment. " +
+        "Trigger a deployment for a project to a specific partition and environment. " +
         "The server agent will resolve variables, make decisions, and record everything to the Debrief.",
       inputSchema: {
         projectId: z.string().describe("The project to deploy"),
-        tenantId: z.string().describe("Target tenant ID"),
+        partitionId: z.string().describe("Target partition ID"),
         environmentId: z.string().describe("Target environment ID"),
         version: z.string().describe("Version to deploy"),
         variables: z.record(z.string()).optional().describe("Override variables for this deployment"),
       },
     },
-    async ({ projectId, tenantId, environmentId, version, variables }) => {
-      const tenant = tenants.get(tenantId);
-      if (!tenant) {
+    async ({ projectId, partitionId, environmentId, version, variables }) => {
+      const partition = partitions.get(partitionId);
+      if (!partition) {
         return {
-          content: [{ type: "text", text: `Error: Tenant not found: ${tenantId}` }],
+          content: [{ type: "text", text: `Error: Partition not found: ${partitionId}` }],
           isError: true,
         };
       }
@@ -60,8 +60,8 @@ export function registerTools(
       }
 
       const deployment = await agent.triggerDeployment(
-        { projectId, tenantId, environmentId, version, variables },
-        tenant,
+        { projectId, partitionId: partitionId, environmentId, version, variables },
+        partition,
         environment,
         project,
       );

@@ -1,12 +1,12 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
-import { DecisionDebrief, TenantStore, ProjectStore, EnvironmentStore, OrderStore } from "@deploystack/core";
+import { DecisionDebrief, PartitionStore, ProjectStore, EnvironmentStore, OrderStore } from "@deploystack/core";
 import type { Deployment, DebriefEntry } from "@deploystack/core";
 import { ServerAgent, InMemoryDeploymentStore } from "../src/agent/server-agent.js";
 import { registerDeploymentRoutes } from "../src/api/deployments.js";
 import { registerProjectRoutes } from "../src/api/projects.js";
-import { registerTenantRoutes } from "../src/api/tenants.js";
+import { registerPartitionRoutes } from "../src/api/partitions.js";
 import { registerEnvironmentRoutes } from "../src/api/environments.js";
 import { registerAgentRoutes } from "../src/api/agent.js";
 
@@ -16,7 +16,7 @@ import { registerAgentRoutes } from "../src/api/agent.js";
 
 let app: FastifyInstance;
 let diary: DecisionDebrief;
-let tenants: TenantStore;
+let partitions: PartitionStore;
 let projects: ProjectStore;
 let environments: EnvironmentStore;
 let deployments: InMemoryDeploymentStore;
@@ -24,13 +24,13 @@ let orders: OrderStore;
 let agent: ServerAgent;
 
 let projectId: string;
-let tenantId: string;
+let partitionId: string;
 let productionEnvId: string;
 let stagingEnvId: string;
 
 beforeAll(async () => {
   diary = new DecisionDebrief();
-  tenants = new TenantStore();
+  partitions = new PartitionStore();
   projects = new ProjectStore();
   environments = new EnvironmentStore();
   deployments = new InMemoryDeploymentStore();
@@ -38,11 +38,11 @@ beforeAll(async () => {
   agent = new ServerAgent(diary, deployments, orders);
 
   app = Fastify();
-  registerDeploymentRoutes(app, agent, tenants, environments, deployments, diary, projects, orders);
+  registerDeploymentRoutes(app, agent, partitions, environments, deployments, diary, projects, orders);
   registerProjectRoutes(app, projects, environments);
-  registerTenantRoutes(app, tenants, deployments, diary);
+  registerPartitionRoutes(app, partitions, deployments, diary);
   registerEnvironmentRoutes(app, environments, projects);
-  registerAgentRoutes(app, agent, tenants, environments, projects, deployments, diary);
+  registerAgentRoutes(app, agent, partitions, environments, projects, deployments, diary);
 
   await app.ready();
 
@@ -68,16 +68,16 @@ beforeAll(async () => {
   });
   projectId = JSON.parse(projRes.payload).project.id;
 
-  const tenantRes = await app.inject({
+  const partitionRes = await app.inject({
     method: "POST",
-    url: "/api/tenants",
+    url: "/api/partitions",
     payload: { name: "Acme Corp" },
   });
-  tenantId = JSON.parse(tenantRes.payload).tenant.id;
+  partitionId = JSON.parse(partitionRes.payload).partition.id;
 
   await app.inject({
     method: "PUT",
-    url: `/api/tenants/${tenantId}/variables`,
+    url: `/api/partitions/${partitionId}/variables`,
     payload: { variables: { DB_HOST: "acme-db-1", APP_ENV: "production" } },
   });
 });
@@ -103,8 +103,8 @@ describe("Agent mode — intent interpretation", () => {
     expect(result.missingFields).toHaveLength(0);
     expect(result.resolved.projectId.value).toBe(projectId);
     expect(result.resolved.projectId.confidence).toBe("exact");
-    expect(result.resolved.tenantId.value).toBe(tenantId);
-    expect(result.resolved.tenantId.confidence).toBe("exact");
+    expect(result.resolved.partitionId.value).toBe(partitionId);
+    expect(result.resolved.partitionId.confidence).toBe("exact");
     expect(result.resolved.environmentId.value).toBe(productionEnvId);
     expect(result.resolved.environmentId.confidence).toBe("exact");
     expect(result.resolved.version.value).toBe("2.0.0");
@@ -135,7 +135,7 @@ describe("Agent mode — intent interpretation", () => {
         intent: "Deploy version 3.0.0",
         partialConfig: {
           projectId,
-          tenantId,
+          partitionId,
           environmentId: productionEnvId,
         },
       },
@@ -217,7 +217,7 @@ describe("Agent mode — deployment context", () => {
     await app.inject({
       method: "POST",
       url: "/api/deployments",
-      payload: { projectId, tenantId, environmentId: productionEnvId, version: "1.0.0" },
+      payload: { projectId, partitionId, environmentId: productionEnvId, version: "1.0.0" },
     });
 
     const res = await app.inject({ method: "GET", url: "/api/agent/context" });
@@ -256,7 +256,7 @@ describe("Identical artifacts — traditional vs agent mode", () => {
       url: "/api/deployments",
       payload: {
         projectId,
-        tenantId,
+        partitionId,
         environmentId: productionEnvId,
         version: "5.0.0",
         variables: { CACHE_TTL: "3600" },
@@ -285,7 +285,7 @@ describe("Identical artifacts — traditional vs agent mode", () => {
       url: "/api/deployments",
       payload: {
         projectId: intent.resolved.projectId.value,
-        tenantId: intent.resolved.tenantId.value,
+        partitionId: intent.resolved.partitionId.value,
         environmentId: intent.resolved.environmentId.value,
         version: intent.resolved.version.value,
         variables: intent.resolved.variables,
@@ -299,11 +299,11 @@ describe("Identical artifacts — traditional vs agent mode", () => {
 
     // Same trigger inputs
     expect(agentDeploy.projectId).toBe(traditionalDeploy.projectId);
-    expect(agentDeploy.tenantId).toBe(traditionalDeploy.tenantId);
+    expect(agentDeploy.partitionId).toBe(traditionalDeploy.partitionId);
     expect(agentDeploy.environmentId).toBe(traditionalDeploy.environmentId);
     expect(agentDeploy.version).toBe(traditionalDeploy.version);
 
-    // Same resolved variables (after merge with tenant/environment)
+    // Same resolved variables (after merge with partition/environment)
     expect(agentDeploy.variables).toEqual(traditionalDeploy.variables);
 
     // Same status
@@ -338,7 +338,7 @@ describe("Identical artifacts — traditional vs agent mode", () => {
       url: "/api/deployments",
       payload: {
         projectId: intent.resolved.projectId.value,
-        tenantId: intent.resolved.tenantId.value,
+        partitionId: intent.resolved.partitionId.value,
         environmentId: intent.resolved.environmentId.value,
         version: intent.resolved.version.value,
       },
@@ -361,7 +361,7 @@ describe("Identical artifacts — traditional vs agent mode", () => {
         intent: "deploy version 7.0.0 to production",
         partialConfig: {
           projectId,
-          tenantId,
+          partitionId,
         },
       },
     });
@@ -369,7 +369,7 @@ describe("Identical artifacts — traditional vs agent mode", () => {
     const intent = JSON.parse(intentRes.payload);
     expect(intent.ready).toBe(true);
     expect(intent.resolved.projectId.value).toBe(projectId);
-    expect(intent.resolved.tenantId.value).toBe(tenantId);
+    expect(intent.resolved.partitionId.value).toBe(partitionId);
     expect(intent.resolved.version.value).toBe("7.0.0");
     expect(intent.resolved.environmentId.value).toBe(productionEnvId);
   });

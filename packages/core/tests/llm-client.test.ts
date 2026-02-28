@@ -100,7 +100,7 @@ describe("LlmClient — fallback behavior", () => {
     const result = await client.reason(
       makeParams({
         promptSummary: "Risk assessment for deployment",
-        tenantId: "tenant-1",
+        partitionId: "partition-1",
         deploymentId: "deploy-1",
       }),
     );
@@ -125,7 +125,7 @@ describe("LlmClient — debrief recording", () => {
     await client.reason(
       makeParams({
         promptSummary: "Postmortem generation",
-        tenantId: "tenant-1",
+        partitionId: "partition-1",
         deploymentId: "deploy-1",
       }),
     );
@@ -136,7 +136,7 @@ describe("LlmClient — debrief recording", () => {
     const entry = entries[0];
     expect(entry.decisionType).toBe("llm-call");
     expect(entry.agent).toBe("server");
-    expect(entry.tenantId).toBe("tenant-1");
+    expect(entry.partitionId).toBe("partition-1");
     expect(entry.deploymentId).toBe("deploy-1");
     expect(entry.decision).toContain("Postmortem generation");
     expect(entry.decision).toContain("falling back");

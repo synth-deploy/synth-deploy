@@ -2,12 +2,12 @@ import { useState, useEffect } from "react";
 import { useSearchParams, useNavigate } from "react-router";
 import {
   listProjects,
-  listTenants,
+  listPartitions,
   listEnvironments,
   triggerDeployment,
   interpretIntent,
 } from "../api.js";
-import type { Project, Tenant, Environment } from "../types.js";
+import type { Project, Partition, Environment } from "../types.js";
 import type { IntentResult } from "../api.js";
 import { useMode } from "../context/ModeContext.js";
 import DeploymentContextPanel from "../components/DeploymentContextPanel.js";
@@ -20,7 +20,7 @@ export default function NewDeployment() {
   const isAgent = mode === "agent";
 
   const [projects, setProjects] = useState<Project[]>([]);
-  const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [partitions, setPartitions] = useState<Partition[]>([]);
   const [environments, setEnvironments] = useState<Environment[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -29,7 +29,7 @@ export default function NewDeployment() {
 
   // Shared pipeline config state — used by both modes
   const [projectId, setProjectId] = useState(searchParams.get("projectId") ?? "");
-  const [tenantId, setTenantId] = useState(searchParams.get("tenantId") ?? "");
+  const [partitionId, setPartitionId] = useState(searchParams.get("partitionId") ?? "");
   const [environmentId, setEnvironmentId] = useState("");
   const [version, setVersion] = useState("");
   const [varEntries, setVarEntries] = useState<Array<[string, string]>>([]);
@@ -41,9 +41,9 @@ export default function NewDeployment() {
   const [lastIntent, setLastIntent] = useState("");
 
   useEffect(() => {
-    Promise.all([listProjects(), listTenants(), listEnvironments()]).then(([p, t, e]) => {
+    Promise.all([listProjects(), listPartitions(), listEnvironments()]).then(([p, t, e]) => {
       setProjects(p);
-      setTenants(t);
+      setPartitions(t);
       setEnvironments(e);
       setLoading(false);
     });
@@ -58,7 +58,7 @@ export default function NewDeployment() {
   // --- Shared deploy logic (both modes call this) ---
 
   async function deployWithCurrentConfig() {
-    if (!projectId || !tenantId || !environmentId || !version.trim()) {
+    if (!projectId || !partitionId || !environmentId || !version.trim()) {
       setError("All fields are required");
       return;
     }
@@ -75,7 +75,7 @@ export default function NewDeployment() {
       // Same triggerDeployment call regardless of mode — identical artifacts
       const result = await triggerDeployment({
         projectId,
-        tenantId,
+        partitionId,
         environmentId,
         version: version.trim(),
         variables: Object.keys(variables).length > 0 ? variables : undefined,
@@ -117,7 +117,7 @@ export default function NewDeployment() {
       // Pass current partial config so agent can fill gaps
       const result = await interpretIntent(intent, {
         projectId: projectId || undefined,
-        tenantId: tenantId || undefined,
+        partitionId: partitionId || undefined,
         environmentId: environmentId || undefined,
         version: version || undefined,
         variables: varEntries.length > 0 ? Object.fromEntries(varEntries) : undefined,
@@ -131,8 +131,8 @@ export default function NewDeployment() {
           case "projectId":
             if (update.value) setProjectId(update.value);
             break;
-          case "tenantId":
-            if (update.value) setTenantId(update.value);
+          case "partitionId":
+            if (update.value) setPartitionId(update.value);
             break;
           case "environmentId":
             if (update.value) setEnvironmentId(update.value);
@@ -170,7 +170,7 @@ export default function NewDeployment() {
     try {
       const deployResult = await triggerDeployment({
         projectId: result.resolved.projectId.value,
-        tenantId: result.resolved.tenantId.value,
+        partitionId: result.resolved.partitionId.value,
         environmentId: result.resolved.environmentId.value,
         version: result.resolved.version.value,
         variables: Object.keys(result.resolved.variables).length > 0
@@ -191,8 +191,8 @@ export default function NewDeployment() {
     return projects.find((p) => p.id === id)?.name ?? id;
   }
 
-  function tenantName(id: string): string {
-    return tenants.find((t) => t.id === id)?.name ?? id;
+  function partitionName(id: string): string {
+    return partitions.find((t) => t.id === id)?.name ?? id;
   }
 
   function envName(id: string): string {
@@ -234,9 +234,9 @@ export default function NewDeployment() {
                 displayValue={intentResult.resolved.projectId.value ? projectName(intentResult.resolved.projectId.value) : ""}
               />
               <ResolvedFieldDisplay
-                label="Tenant"
-                field={intentResult.resolved.tenantId}
-                displayValue={intentResult.resolved.tenantId.value ? tenantName(intentResult.resolved.tenantId.value) : ""}
+                label="Partition"
+                field={intentResult.resolved.partitionId}
+                displayValue={intentResult.resolved.partitionId.value ? partitionName(intentResult.resolved.partitionId.value) : ""}
               />
               <ResolvedFieldDisplay
                 label="Environment"
@@ -268,7 +268,7 @@ export default function NewDeployment() {
                 <div style={{ marginTop: 4, fontSize: 12 }}>
                   Try including {intentResult.missingFields.map((f) => {
                     if (f === "projectId") return "the project name";
-                    if (f === "tenantId") return "the tenant name";
+                    if (f === "partitionId") return "the partition name";
                     if (f === "environmentId") return '"production" or "staging"';
                     if (f === "version") return 'a version like "v1.2.3"';
                     return f;
@@ -326,10 +326,10 @@ export default function NewDeployment() {
           </div>
 
           <div className="form-group">
-            <label>Tenant</label>
-            <select value={tenantId} onChange={(e) => setTenantId(e.target.value)}>
-              <option value="">Select a tenant...</option>
-              {tenants.map((t) => (
+            <label>Partition</label>
+            <select value={partitionId} onChange={(e) => setPartitionId(e.target.value)}>
+              <option value="">Select a partition...</option>
+              {partitions.map((t) => (
                 <option key={t.id} value={t.id}>{t.name}</option>
               ))}
             </select>

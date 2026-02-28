@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { getSettings, updateSettings, getServerInfo } from "../api.js";
 import type { AppSettings, ServerInfo, ConflictPolicy } from "../types.js";
-import VariableEditor from "../components/VariableEditor.js";
 import PipelineConfigEditor from "../components/PipelineConfigEditor.js";
 
 export default function Settings() {
@@ -33,14 +32,6 @@ export default function Settings() {
     if (!settings) return;
     const updated = await updateSettings({
       deploymentDefaults: { ...settings.deploymentDefaults, defaultPipelineConfig: config },
-    });
-    setSettings(updated);
-  }
-
-  async function handleSaveDefaultVariables(variables: Record<string, string>) {
-    if (!settings) return;
-    const updated = await updateSettings({
-      deploymentDefaults: { ...settings.deploymentDefaults, defaultVariableTemplates: variables },
     });
     setSettings(updated);
   }
@@ -147,18 +138,6 @@ export default function Settings() {
       </div>
 
       {/* Deployment Defaults */}
-      <div className="section">
-        <div className="card">
-          <div className="card-header">
-            <h3>Default Variable Templates</h3>
-          </div>
-          <VariableEditor
-            variables={settings.deploymentDefaults.defaultVariableTemplates}
-            onSave={handleSaveDefaultVariables}
-          />
-        </div>
-      </div>
-
       <div className="section">
         <div className="card">
           <div className="card-header">

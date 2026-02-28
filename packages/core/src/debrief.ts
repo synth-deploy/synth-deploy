@@ -5,11 +5,11 @@ import type {
   DeploymentId,
   DebriefEntry,
   DebriefEntryId,
-  TenantId,
+  PartitionId,
 } from "./types.js";
 
 export interface DebriefRecordParams {
-  tenantId: TenantId | null;
+  partitionId: PartitionId | null;
   deploymentId: DeploymentId | null;
   agent: AgentType;
   decisionType: DecisionType;
@@ -25,7 +25,7 @@ export interface DebriefWriter {
 export interface DebriefReader {
   getById(id: DebriefEntryId): DebriefEntry | undefined;
   getByDeployment(deploymentId: DeploymentId): DebriefEntry[];
-  getByTenant(tenantId: TenantId): DebriefEntry[];
+  getByPartition(partitionId: PartitionId): DebriefEntry[];
   getByType(decisionType: DecisionType): DebriefEntry[];
   getByTimeRange(from: Date, to: Date): DebriefEntry[];
   getRecent(limit?: number): DebriefEntry[];
@@ -42,7 +42,7 @@ export class DecisionDebrief implements DebriefWriter, DebriefReader {
     const entry: DebriefEntry = {
       id: crypto.randomUUID(),
       timestamp: new Date(),
-      tenantId: params.tenantId,
+      partitionId: params.partitionId,
       deploymentId: params.deploymentId,
       agent: params.agent,
       decisionType: params.decisionType,
@@ -64,8 +64,8 @@ export class DecisionDebrief implements DebriefWriter, DebriefReader {
     );
   }
 
-  getByTenant(tenantId: TenantId): DebriefEntry[] {
-    return [...this.entries.values()].filter((e) => e.tenantId === tenantId);
+  getByPartition(partitionId: PartitionId): DebriefEntry[] {
+    return [...this.entries.values()].filter((e) => e.partitionId === partitionId);
   }
 
   getByType(decisionType: DecisionType): DebriefEntry[] {
