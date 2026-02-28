@@ -22,8 +22,8 @@ export class SettingsStore {
         ...partial.deploymentDefaults,
       };
     }
-    if (partial.tentacle) {
-      this.settings.tentacle = { ...this.settings.tentacle, ...partial.tentacle };
+    if (partial.envoy) {
+      this.settings.envoy = { ...this.settings.envoy, ...partial.envoy };
     }
     return structuredClone(this.settings);
   }

@@ -11,7 +11,7 @@ import { ServerAgent, InMemoryDeploymentStore } from "./agent/server-agent.js";
 import { createMcpServer } from "./mcp/server.js";
 import { registerDeploymentRoutes } from "./api/deployments.js";
 import { registerHealthRoutes } from "./api/health.js";
-import { registerTentacleReportRoutes } from "./api/tentacle-reports.js";
+import { registerEnvoyReportRoutes } from "./api/envoy-reports.js";
 import { registerProjectRoutes } from "./api/projects.js";
 import { registerPartitionRoutes } from "./api/partitions.js";
 import { registerEnvironmentRoutes } from "./api/environments.js";
@@ -73,7 +73,7 @@ await app.register(fastifyCors, {
 // Register REST routes
 registerHealthRoutes(app);
 registerDeploymentRoutes(app, agent, partitions, environments, deployments, debrief, projects, orders);
-registerTentacleReportRoutes(app, debrief);
+registerEnvoyReportRoutes(app, debrief);
 registerProjectRoutes(app, projects, environments);
 registerPartitionRoutes(app, partitions, deployments, debrief);
 registerEnvironmentRoutes(app, environments, projects);

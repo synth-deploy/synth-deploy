@@ -39,7 +39,7 @@ export interface DeploymentDefaults {
   defaultPipelineConfig: PipelineConfig;
 }
 
-export interface TentacleEndpointConfig {
+export interface EnvoyEndpointConfig {
   url: string;
   timeoutMs: number;
 }
@@ -47,7 +47,7 @@ export interface TentacleEndpointConfig {
 export interface AppSettings {
   agent: AgentSettings;
   deploymentDefaults: DeploymentDefaults;
-  tentacle: TentacleEndpointConfig;
+  envoy: EnvoyEndpointConfig;
 }
 
 export interface ServerInfo {
@@ -101,7 +101,7 @@ export type DecisionType =
   | "system"
   | "order-created";
 
-export type AgentType = "server" | "tentacle";
+export type AgentType = "server" | "envoy";
 
 export interface DebriefEntry {
   id: string;

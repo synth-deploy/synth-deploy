@@ -46,7 +46,7 @@ export interface Deployment {
 
 // --- Debrief ---
 
-export const AgentType = z.enum(["server", "tentacle"]);
+export const AgentType = z.enum(["server", "envoy"]);
 export type AgentType = z.infer<typeof AgentType>;
 
 export const DecisionType = z.enum([
@@ -162,7 +162,7 @@ export interface DeploymentDefaults {
   defaultPipelineConfig: PipelineConfig;
 }
 
-export interface TentacleEndpointConfig {
+export interface EnvoyEndpointConfig {
   url: string;
   timeoutMs: number;
 }
@@ -170,7 +170,7 @@ export interface TentacleEndpointConfig {
 export interface AppSettings {
   agent: AgentSettings;
   deploymentDefaults: DeploymentDefaults;
-  tentacle: TentacleEndpointConfig;
+  envoy: EnvoyEndpointConfig;
 }
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
@@ -183,7 +183,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   deploymentDefaults: {
     defaultPipelineConfig: DEFAULT_PIPELINE_CONFIG,
   },
-  tentacle: {
+  envoy: {
     url: "http://localhost:3001",
     timeoutMs: 10000,
   },

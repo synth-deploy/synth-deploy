@@ -21,7 +21,7 @@ export type {
   ConflictPolicy,
   AgentSettings,
   DeploymentDefaults,
-  TentacleEndpointConfig,
+  EnvoyEndpointConfig,
   AppSettings,
 } from "./types.js";
 

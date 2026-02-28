@@ -3,7 +3,7 @@
  *
  * Injected into the Server Agent so tests can control health check outcomes
  * without real network calls. In later phases, a real implementation will
- * make HTTP calls to Tentacle health endpoints.
+ * make HTTP calls to Envoy health endpoints.
  */
 
 export interface HealthCheckResult {

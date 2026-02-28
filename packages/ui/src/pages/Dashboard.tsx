@@ -3,7 +3,7 @@ import { Link } from "react-router";
 import { listDeployments, listPartitions, listEnvironments, listProjects } from "../api.js";
 import type { Deployment, Partition, Environment, Project } from "../types.js";
 import DeploymentTable from "../components/DeploymentTable.js";
-import TentacleHealth from "../components/TentacleHealth.js";
+import CommandHealth from "../components/CommandHealth.js";
 
 export default function Dashboard() {
   const [deployments, setDeployments] = useState<Deployment[]>([]);
@@ -76,7 +76,7 @@ export default function Dashboard() {
           </div>
           <DeploymentTable deployments={recent} environments={environments} projects={projects} />
         </div>
-        <TentacleHealth />
+        <CommandHealth />
       </div>
     </div>
   );

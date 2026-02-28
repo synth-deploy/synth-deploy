@@ -49,12 +49,12 @@ describe("LlmClient — initialization", () => {
     expect(client.isAvailable()).toBe(true);
   });
 
-  it("accepts both server and tentacle agent types", () => {
+  it("accepts both server and envoy agent types", () => {
     const debrief = new DecisionDebrief();
     const serverClient = new LlmClient(debrief, "server");
-    const tentacleClient = new LlmClient(debrief, "tentacle");
+    const envoyClient = new LlmClient(debrief, "envoy");
     expect(serverClient).toBeDefined();
-    expect(tentacleClient).toBeDefined();
+    expect(envoyClient).toBeDefined();
   });
 });
 
@@ -146,12 +146,12 @@ describe("LlmClient — debrief recording", () => {
 
   it("records debrief entry with correct agent type", async () => {
     const debrief = new DecisionDebrief();
-    const client = new LlmClient(debrief, "tentacle", { apiKey: undefined });
+    const client = new LlmClient(debrief, "envoy", { apiKey: undefined });
 
     await client.classify(makeParams({ promptSummary: "Error classification" }));
 
     const entries = debrief.getByType("llm-call");
-    expect(entries[0].agent).toBe("tentacle");
+    expect(entries[0].agent).toBe("envoy");
   });
 
   it("debrief entry contains model information", async () => {

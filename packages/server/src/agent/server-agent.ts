@@ -1111,14 +1111,14 @@ export class ServerAgent {
       deploymentId: deployment.id,
       agent: "server",
       decisionType: "deployment-execution",
-      decision: `Executing ${deployment.projectId} v${deployment.version} on "${environment.name}" for partition "${partition.name}" — delegating to Tentacle`,
+      decision: `Executing ${deployment.projectId} v${deployment.version} on "${environment.name}" for partition "${partition.name}" — delegating to Envoy`,
       reasoning:
         `All preconditions passed: configuration accepted (${Object.keys(deployment.variables).length} variable(s), ` +
         `conflicts resolved), health check confirmed "${environment.name}" is reachable. ` +
-        `Delegating execution to the Tentacle agent on the target machine. The Tentacle will ` +
+        `Delegating execution to the Envoy agent on the target machine. The Envoy will ` +
         `write deployment artifacts (manifest, variables, version marker), verify them locally, ` +
-        `and report back. If the Tentacle is unreachable, this step will fail with a connection ` +
-        `error — check that the Tentacle process is running on the target host.`,
+        `and report back. If the Envoy is unreachable, this step will fail with a connection ` +
+        `error — check that the Envoy process is running on the target host.`,
       context: {
         step: "execute-deployment",
         projectId: deployment.projectId,
@@ -1146,10 +1146,10 @@ export class ServerAgent {
       decision: `Verified: ${deployment.projectId} v${deployment.version} deployed successfully to "${environment.name}" for partition "${partition.name}"`,
       reasoning:
         `Deployment execution completed without errors. Verification confirms: (1) no ` +
-        `execution errors were raised, (2) no rollback was triggered, (3) the Tentacle ` +
+        `execution errors were raised, (2) no rollback was triggered, (3) the Envoy ` +
         `reported successful artifact placement. ${Object.keys(deployment.variables).length} ` +
         `variable(s) applied. Note: this is server-side verification based on execution ` +
-        `outcome — the Tentacle's own local verification (artifact checksums, service ` +
+        `outcome — the Envoy's own local verification (artifact checksums, service ` +
         `health) provides the ground-truth confirmation in its debrief entries.`,
       context: {
         step: "post-deploy-verify",

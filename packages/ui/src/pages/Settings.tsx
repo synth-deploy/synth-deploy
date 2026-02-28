@@ -8,7 +8,7 @@ export default function Settings() {
   const [serverInfo, setServerInfo] = useState<ServerInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [agentSaved, setAgentSaved] = useState(false);
-  const [tentacleSaved, setTentacleSaved] = useState(false);
+  const [envoySaved, setEnvoySaved] = useState(false);
 
   useEffect(() => {
     Promise.all([getSettings(), getServerInfo()])
@@ -36,12 +36,12 @@ export default function Settings() {
     setSettings(updated);
   }
 
-  async function handleSaveTentacle() {
+  async function handleSaveEnvoy() {
     if (!settings) return;
-    const updated = await updateSettings({ tentacle: settings.tentacle });
+    const updated = await updateSettings({ envoy: settings.envoy });
     setSettings(updated);
-    setTentacleSaved(true);
-    setTimeout(() => setTentacleSaved(false), 2000);
+    setEnvoySaved(true);
+    setTimeout(() => setEnvoySaved(false), 2000);
   }
 
   if (loading) return <div className="loading">Loading...</div>;
@@ -181,20 +181,20 @@ export default function Settings() {
         </div>
       )}
 
-      {/* Tentacle Configuration */}
+      {/* Envoy Configuration */}
       <div className="section">
         <div className="card">
           <div className="card-header">
-            <h3>Tentacle Configuration</h3>
+            <h3>Envoy Configuration</h3>
           </div>
           <div className="form-group">
-            <label>Tentacle URL</label>
+            <label>Envoy URL</label>
             <input
-              value={settings.tentacle.url}
+              value={settings.envoy.url}
               onChange={(e) =>
                 setSettings({
                   ...settings,
-                  tentacle: { ...settings.tentacle, url: e.target.value },
+                  envoy: { ...settings.envoy, url: e.target.value },
                 })
               }
               placeholder="http://localhost:3001"
@@ -207,18 +207,18 @@ export default function Settings() {
               type="number"
               min={1000}
               step={1000}
-              value={settings.tentacle.timeoutMs}
+              value={settings.envoy.timeoutMs}
               onChange={(e) =>
                 setSettings({
                   ...settings,
-                  tentacle: { ...settings.tentacle, timeoutMs: Number(e.target.value) },
+                  envoy: { ...settings.envoy, timeoutMs: Number(e.target.value) },
                 })
               }
               style={{ maxWidth: 300 }}
             />
           </div>
-          <button className="btn btn-primary" onClick={handleSaveTentacle}>
-            {tentacleSaved ? "Saved" : "Save Tentacle Settings"}
+          <button className="btn btn-primary" onClick={handleSaveEnvoy}>
+            {envoySaved ? "Saved" : "Save Envoy Settings"}
           </button>
         </div>
       </div>
