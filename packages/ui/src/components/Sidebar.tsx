@@ -1,9 +1,10 @@
 import { NavLink } from "react-router";
 import { useMode } from "../context/ModeContext.js";
 import { useSettings } from "../context/SettingsContext.js";
+import ModeToggle from "./ModeToggle.js";
 
 export default function Sidebar() {
-  const { mode, toggleMode } = useMode();
+  const { mode } = useMode();
   const { settings } = useSettings();
   const isAgent = mode === "agent";
   const environmentsEnabled = settings?.environmentsEnabled ?? true;
@@ -12,22 +13,10 @@ export default function Sidebar() {
     <aside className={`sidebar ${isAgent ? "sidebar-agent" : ""}`}>
       <div className="sidebar-logo">
         <h1>DeployStack</h1>
-        <span>{isAgent ? "Agent Mode" : "Traditional Mode"}</span>
       </div>
 
       <div className="mode-toggle-container">
-        <button
-          className={`mode-toggle ${isAgent ? "mode-toggle-active" : ""}`}
-          onClick={toggleMode}
-          aria-label={`Switch to ${isAgent ? "traditional" : "agent"} mode`}
-        >
-          <span className="mode-toggle-track">
-            <span className="mode-toggle-thumb" />
-          </span>
-          <span className="mode-toggle-label">
-            {isAgent ? "Agent" : "Traditional"}
-          </span>
-        </button>
+        <ModeToggle />
       </div>
 
       <nav className="sidebar-nav">

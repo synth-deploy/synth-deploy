@@ -777,70 +777,6 @@ table a:hover {
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-.mode-toggle {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  padding: 6px 8px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: var(--radius);
-  background: rgba(255, 255, 255, 0.04);
-  cursor: pointer;
-  transition: all 0.2s;
-  font-family: var(--font);
-}
-
-.mode-toggle:hover {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.2);
-}
-
-.mode-toggle-track {
-  position: relative;
-  width: 36px;
-  height: 20px;
-  background: rgba(255, 255, 255, 0.15);
-  border-radius: 10px;
-  transition: background 0.2s;
-  flex-shrink: 0;
-}
-
-.mode-toggle-active .mode-toggle-track {
-  background: var(--dt-plan);
-}
-
-.mode-toggle-thumb {
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 16px;
-  height: 16px;
-  background: #fff;
-  border-radius: 50%;
-  transition: transform 0.2s;
-}
-
-.mode-toggle-active .mode-toggle-thumb {
-  transform: translateX(16px);
-}
-
-.mode-toggle-label {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--sidebar-text);
-}
-
-.mode-toggle-active .mode-toggle-label {
-  color: var(--sidebar-active);
-}
-
-/* ---- Sidebar agent accent ---- */
-
-.sidebar-agent {
-  border-right: 2px solid var(--dt-plan);
-}
-
 /* ---- Mode badges ---- */
 
 .mode-badge {
@@ -1089,6 +1025,11 @@ table a:hover {
 
 @keyframes slideIn {
   from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(16px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
@@ -1466,4 +1407,660 @@ table a:hover {
 
 .env-remove-btn:hover {
   color: var(--status-failed);
+}
+
+/* =====================================================================
+   Agent Mode — Physical UI Transformation
+   ===================================================================== */
+
+/* ---- Agent-mode CSS variables ---- */
+
+:root {
+  --agent-accent: #63e1be;
+  --agent-accent-dim: rgba(99, 225, 190, 0.15);
+  --agent-bg: #0f1219;
+  --agent-surface: rgba(15, 20, 30, 0.6);
+  --agent-border: rgba(140, 150, 165, 0.1);
+  --agent-text: #e2e8f0;
+  --agent-text-secondary: #8c96a5;
+  --agent-text-muted: #6b7280;
+}
+
+/* ---- Global agent-active theme ---- */
+
+.layout.agent-active .content {
+  background: var(--agent-bg);
+  color: var(--agent-text);
+  transition: background 0.5s cubic-bezier(0.4, 0, 0.2, 1),
+              color 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.layout .content {
+  transition: background 0.5s cubic-bezier(0.4, 0, 0.2, 1),
+              color 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.layout.agent-active .page-header h2 {
+  color: var(--agent-text);
+}
+
+.layout.agent-active .card {
+  background: var(--agent-surface);
+  border-color: var(--agent-border);
+  color: var(--agent-text);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.layout.agent-active .card-header h3 {
+  color: var(--agent-text);
+}
+
+.layout.agent-active .summary-card {
+  background: var(--agent-surface);
+  border-color: var(--agent-border);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.layout.agent-active .summary-card .label {
+  color: var(--agent-text-muted);
+}
+
+.layout.agent-active .summary-card .value {
+  color: var(--agent-text);
+}
+
+.layout.agent-active table th {
+  color: var(--agent-text-muted);
+  border-bottom-color: var(--agent-border);
+}
+
+.layout.agent-active table td {
+  color: var(--agent-text);
+  border-bottom-color: var(--agent-border);
+}
+
+.layout.agent-active table tr:hover td {
+  background: rgba(99, 225, 190, 0.04);
+}
+
+.layout.agent-active table a {
+  color: var(--agent-text);
+}
+
+.layout.agent-active table a:hover {
+  color: var(--agent-accent);
+}
+
+/* ---- Sidebar agent accent ---- */
+
+.sidebar-agent {
+  border-right: 2px solid var(--agent-accent);
+}
+
+/* ---- Content layout with diary panel ---- */
+
+.content-with-diary {
+  display: flex;
+  gap: 0;
+  min-height: calc(100vh - 48px);
+}
+
+.content-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.layout.agent-active .content {
+  padding-bottom: 80px;
+}
+
+/* ---- Dot-matrix mode toggle ---- */
+
+.mode-toggle-dot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid rgba(160, 164, 184, 0.25);
+  border-radius: var(--radius);
+  background: none;
+  cursor: pointer;
+  transition: all 0.4s ease;
+  font-family: var(--font);
+}
+
+.mode-toggle-dot:hover {
+  border-color: rgba(160, 164, 184, 0.4);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.mode-toggle-dot-active {
+  border-color: rgba(99, 225, 190, 0.4);
+}
+
+.mode-toggle-dot-active:hover {
+  border-color: rgba(99, 225, 190, 0.6);
+}
+
+.mode-toggle-canvas {
+  display: block;
+}
+
+.mode-toggle-dot-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--sidebar-text);
+  transition: color 0.4s ease;
+  user-select: none;
+}
+
+.mode-toggle-dot-active .mode-toggle-dot-label {
+  color: var(--agent-accent);
+}
+
+/* ---- Agent banner ---- */
+
+.agent-banner {
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+              opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.agent-banner-visible {
+  max-height: 44px;
+  opacity: 1;
+}
+
+.agent-banner-inner {
+  background: linear-gradient(90deg, rgba(99, 225, 190, 0.06), rgba(56, 152, 236, 0.06));
+  border-bottom: 1px solid rgba(99, 225, 190, 0.1);
+  padding: 10px 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.agent-banner-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--agent-accent);
+  box-shadow: 0 0 8px rgba(99, 225, 190, 0.5);
+  animation: agentPulse 2s ease-in-out infinite;
+}
+
+.agent-banner-text {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--agent-accent);
+  letter-spacing: 0.06em;
+}
+
+@keyframes agentPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+/* ---- Diary panel ---- */
+
+.diary-panel {
+  width: 0;
+  opacity: 0;
+  overflow: hidden;
+  flex-shrink: 0;
+  transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1),
+              opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.diary-panel-visible {
+  width: 320px;
+  opacity: 1;
+}
+
+.diary-panel-content {
+  width: 320px;
+  padding: 0 0 0 24px;
+}
+
+.diary-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.diary-panel-title {
+  font-family: var(--font);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--agent-text);
+}
+
+.diary-panel-link {
+  font-size: 11px;
+  color: var(--agent-accent);
+  text-decoration: none;
+  font-family: var(--font-mono);
+}
+
+.diary-panel-link:hover {
+  text-decoration: underline;
+}
+
+.diary-panel-loading,
+.diary-panel-empty {
+  font-size: 12px;
+  color: var(--agent-text-muted);
+  padding: 12px 0;
+}
+
+.diary-panel-entry {
+  border-left: 2px solid var(--agent-border);
+  padding: 8px 0 8px 14px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: background 0.15s;
+  border-radius: 0 var(--radius) var(--radius) 0;
+}
+
+.diary-panel-entry:hover {
+  background: rgba(99, 225, 190, 0.04);
+}
+
+.diary-panel-entry-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.diary-panel-entry-time {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--agent-text-muted);
+}
+
+.diary-panel-entry-agent {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.diary-panel-entry-decision {
+  font-size: 12px;
+  color: var(--agent-text);
+  line-height: 1.4;
+}
+
+.diary-panel-entry-reasoning {
+  font-size: 11px;
+  color: var(--agent-text-muted);
+  line-height: 1.4;
+  font-style: italic;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--agent-border);
+}
+
+/* ---- Agent collapse utility ---- */
+
+.agent-collapse {
+  max-width: 0;
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ---- Global intent bar (fixed bottom) ---- */
+
+.global-intent-bar {
+  position: fixed;
+  bottom: 0;
+  left: var(--sidebar-width);
+  right: 0;
+  padding: 0 32px 16px;
+  z-index: 50;
+  background: linear-gradient(to top, var(--agent-bg) 60%, transparent);
+  animation: fadeInUp 0.4s ease-out;
+}
+
+.global-intent-bar .intent-bar {
+  margin-top: 0;
+  padding-top: 0;
+  max-width: 720px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.global-intent-bar .intent-bar-inner {
+  background: var(--agent-surface);
+  border-color: rgba(99, 225, 190, 0.3);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  box-shadow: 0 -4px 30px rgba(99, 225, 190, 0.06),
+              0 4px 20px rgba(0, 0, 0, 0.4);
+}
+
+.global-intent-bar .intent-bar-icon {
+  color: var(--agent-accent);
+}
+
+.global-intent-bar .intent-bar-input {
+  color: var(--agent-text);
+}
+
+.global-intent-bar .intent-bar-input::placeholder {
+  color: var(--agent-text-muted);
+}
+
+.global-intent-bar .intent-bar-submit {
+  background: var(--agent-accent-dim);
+  color: var(--agent-accent);
+  border: 1px solid rgba(99, 225, 190, 0.3);
+  border-radius: 12px;
+}
+
+.global-intent-bar .intent-bar-submit:hover:not(:disabled) {
+  background: rgba(99, 225, 190, 0.25);
+}
+
+/* ---- Expanded environment badges ---- */
+
+.env-badge-expanded {
+  border: 1px solid;
+  border-radius: 10px;
+  padding: 12px 16px;
+  min-width: 160px;
+  transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.env-badge-expanded.env-badge-production {
+  background: rgba(220, 38, 38, 0.08);
+  border-color: rgba(220, 38, 38, 0.3);
+}
+
+.env-badge-expanded.env-badge-staging {
+  background: rgba(202, 138, 4, 0.08);
+  border-color: rgba(202, 138, 4, 0.3);
+}
+
+.env-badge-expanded.env-badge-default {
+  background: rgba(37, 99, 235, 0.08);
+  border-color: rgba(37, 99, 235, 0.3);
+}
+
+.env-badge-expanded-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.env-badge-expanded-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.env-badge-expanded-name {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+
+.env-badge-expanded-body {
+  border-top: 1px solid var(--agent-border);
+  padding-top: 8px;
+}
+
+.env-badge-expanded-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--agent-text-secondary);
+  margin-bottom: 4px;
+}
+
+.env-badge-expanded-drift {
+  background: rgba(251, 191, 36, 0.1);
+  border: 1px solid rgba(251, 191, 36, 0.25);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: #fbbf24;
+  margin-top: 4px;
+}
+
+.env-badge-expanded-history {
+  display: flex;
+  gap: 3px;
+  margin-top: 6px;
+}
+
+.env-badge-history-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  display: inline-block;
+}
+
+.history-pass {
+  background: rgba(52, 211, 153, 0.25);
+}
+
+.history-fail {
+  background: rgba(248, 113, 113, 0.25);
+}
+
+/* ---- Partition rows (agent dashboard) ---- */
+
+.partition-rows {
+  margin-bottom: 24px;
+}
+
+.partition-row {
+  background: var(--agent-surface);
+  border: 1px solid var(--agent-border);
+  border-radius: 14px;
+  padding: 18px 22px;
+  margin-bottom: 12px;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.partition-row-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.partition-row-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, rgba(99, 225, 190, 0.15), rgba(56, 152, 236, 0.15));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--agent-accent);
+  font-weight: 700;
+}
+
+.partition-row-name {
+  font-size: 15px;
+  color: var(--agent-text);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.partition-row-badges {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* ---- Agent mode intent bar on NewDeployment ---- */
+
+.layout.agent-active .intent-bar-inner {
+  background: var(--agent-surface);
+  border-color: rgba(99, 225, 190, 0.3);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.layout.agent-active .intent-bar-icon {
+  color: var(--agent-accent);
+}
+
+.layout.agent-active .intent-bar-input {
+  color: var(--agent-text);
+}
+
+.layout.agent-active .intent-bar-input::placeholder {
+  color: var(--agent-text-muted);
+}
+
+.layout.agent-active .intent-bar-submit {
+  background: var(--agent-accent-dim);
+  color: var(--agent-accent);
+}
+
+.layout.agent-active .intent-bar-submit:hover:not(:disabled) {
+  background: rgba(99, 225, 190, 0.25);
+}
+
+/* ---- Agent mode context panel adjustments ---- */
+
+.layout.agent-active .context-activity-strip {
+  background: var(--agent-surface);
+  border-color: var(--agent-border);
+}
+
+.layout.agent-active .context-env-card {
+  background: var(--agent-surface);
+  border-color: var(--agent-border);
+}
+
+.layout.agent-active .context-env-name {
+  color: var(--agent-text);
+}
+
+/* ---- Agent mode resolved config card ---- */
+
+.layout.agent-active .resolved-field {
+  background: rgba(15, 20, 30, 0.4);
+}
+
+.layout.agent-active .resolved-field-value {
+  color: var(--agent-text);
+}
+
+.layout.agent-active .resolved-missing {
+  background: rgba(251, 191, 36, 0.08);
+  color: #fbbf24;
+}
+
+/* ---- Agent mode debrief entries ---- */
+
+.layout.agent-active .debrief-entry {
+  background: var(--agent-surface);
+  border-color: var(--agent-border);
+}
+
+.layout.agent-active .debrief-entry-decision {
+  color: var(--agent-text);
+}
+
+.layout.agent-active .debrief-entry-reasoning {
+  color: var(--agent-text-secondary);
+  border-top-color: var(--agent-border);
+}
+
+.layout.agent-active .debrief-entry-context {
+  background: rgba(15, 20, 30, 0.4);
+  color: var(--agent-text-secondary);
+}
+
+/* ---- Agent mode signals ---- */
+
+.layout.agent-active .signal-critical {
+  background: rgba(220, 38, 38, 0.08);
+}
+
+.layout.agent-active .signal-warning {
+  background: rgba(251, 191, 36, 0.08);
+}
+
+.layout.agent-active .signal-info {
+  background: rgba(37, 99, 235, 0.08);
+}
+
+/* ---- Agent mode forms ---- */
+
+.layout.agent-active .form-group input,
+.layout.agent-active .form-group select {
+  background: var(--agent-surface);
+  border-color: var(--agent-border);
+  color: var(--agent-text);
+}
+
+.layout.agent-active .form-group label {
+  color: var(--agent-text-muted);
+}
+
+/* ---- Agent mode buttons ---- */
+
+.layout.agent-active .btn {
+  background: var(--agent-surface);
+  border-color: var(--agent-border);
+  color: var(--agent-text);
+}
+
+.layout.agent-active .btn:hover {
+  background: rgba(99, 225, 190, 0.08);
+  border-color: rgba(99, 225, 190, 0.2);
+}
+
+.layout.agent-active .btn-primary {
+  background: var(--agent-accent-dim);
+  border-color: rgba(99, 225, 190, 0.3);
+  color: var(--agent-accent);
+}
+
+.layout.agent-active .btn-primary:hover {
+  background: rgba(99, 225, 190, 0.25);
+}
+
+/* ---- Agent mode mode-badge ---- */
+
+.layout.agent-active .mode-badge-agent {
+  background: var(--agent-accent-dim);
+  color: var(--agent-accent);
+}
+
+/* ---- Command health widget agent mode ---- */
+
+.layout.agent-active .command-health {
+  background: var(--agent-surface);
+  border-color: var(--agent-border);
 }

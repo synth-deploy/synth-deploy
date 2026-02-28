@@ -21,7 +21,9 @@ export default function IntentBar({ onIntentResolved, onSubmitIntent, disabled, 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!intent.trim() || disabled || processing) return;
-    await onSubmitIntent(intent.trim());
+    const text = intent.trim();
+    setIntent("");
+    await onSubmitIntent(text);
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {
@@ -42,7 +44,7 @@ export default function IntentBar({ onIntentResolved, onSubmitIntent, disabled, 
           value={intent}
           onChange={(e) => setIntent(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder='Describe what you want to deploy, e.g. "Deploy web-app v2.0.0 to production for Acme Corp"'
+          placeholder="Issue intent... e.g. deploy Acme to staging"
           disabled={disabled || processing}
         />
         <button

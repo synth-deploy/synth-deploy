@@ -44,6 +44,9 @@ export default function NewDeployment() {
   const [lastIntent, setLastIntent] = useState("");
   const conversationIdRef = useRef(crypto.randomUUID());
 
+  const intentFromUrl = searchParams.get("intent");
+  const intentSubmittedRef = useRef(false);
+
   useEffect(() => {
     Promise.all([listProjects(), listPartitions(), listEnvironments()]).then(([p, t, e]) => {
       setProjects(p);
@@ -52,6 +55,16 @@ export default function NewDeployment() {
       setLoading(false);
     });
   }, []);
+
+  // Auto-submit intent from URL query param (from global intent bar).
+  // handleIntentSubmit is intentionally omitted — ref guard prevents re-execution.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (intentFromUrl && isAgent && !loading && !intentSubmittedRef.current) {
+      intentSubmittedRef.current = true;
+      handleIntentSubmit(intentFromUrl);
+    }
+  }, [intentFromUrl, isAgent, loading]);
 
   // Filter environments to those linked to selected project
   const selectedProject = projects.find((p) => p.id === projectId);
