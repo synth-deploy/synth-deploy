@@ -1,7 +1,6 @@
 import { NavLink } from "react-router";
 import { useMode } from "../context/ModeContext.js";
 import { useSettings } from "../context/SettingsContext.js";
-import ModeToggle from "./ModeToggle.js";
 
 export default function Sidebar() {
   const { mode } = useMode();
@@ -13,10 +12,6 @@ export default function Sidebar() {
     <aside className={`sidebar ${isAgent ? "sidebar-agent" : ""}`}>
       <div className="sidebar-logo">
         <h1>DeployStack</h1>
-      </div>
-
-      <div className="mode-toggle-container">
-        <ModeToggle />
       </div>
 
       <nav className="sidebar-nav">

@@ -1,6 +1,7 @@
 import { Outlet } from "react-router";
 import Sidebar from "./components/Sidebar.js";
 import AgentCanvas from "./components/AgentCanvas.js";
+import ModeToggle from "./components/ModeToggle.js";
 import { ModeProvider, useMode } from "./context/ModeContext.js";
 import { SettingsProvider } from "./context/SettingsContext.js";
 import { CanvasProvider } from "./context/CanvasContext.js";
@@ -20,11 +21,14 @@ function AppLayout() {
     );
   }
 
-  // --- Traditional mode: sidebar + page routing (unchanged) ---
+  // --- Traditional mode: sidebar + page routing ---
   return (
     <div className="layout">
       <Sidebar />
       <main className="content">
+        <div className="content-mode-toggle">
+          <ModeToggle />
+        </div>
         <div className="content-with-diary">
           <div className="content-main">
             <Outlet />

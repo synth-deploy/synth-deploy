@@ -1,6 +1,6 @@
 /* =====================================================================
-   DeployStack — Traditional Mode UI
-   Professional deployment tool look. Dark sidebar, light content area.
+   DeployStack — Unified Dark Theme
+   Professional deployment tool. Dark glassmorphism across all modes.
    ===================================================================== */
 
 :root {
@@ -12,24 +12,24 @@
   --sidebar-width: 220px;
 
   /* Content */
-  --bg: #f5f6f8;
-  --surface: #ffffff;
-  --border: #e2e4e9;
-  --text: #1a1a2e;
-  --text-secondary: #6b7080;
-  --text-muted: #9ca0af;
+  --bg: #0f1219;
+  --surface: rgba(15, 20, 30, 0.6);
+  --border: rgba(140, 150, 165, 0.1);
+  --text: #e2e8f0;
+  --text-secondary: #8c96a5;
+  --text-muted: #6b7280;
 
   /* Status colors */
   --status-succeeded: #16a34a;
-  --status-succeeded-bg: #dcfce7;
+  --status-succeeded-bg: rgba(22, 163, 74, 0.12);
   --status-failed: #dc2626;
-  --status-failed-bg: #fee2e2;
+  --status-failed-bg: rgba(220, 38, 38, 0.12);
   --status-running: #2563eb;
-  --status-running-bg: #dbeafe;
+  --status-running-bg: rgba(37, 99, 235, 0.12);
   --status-pending: #6b7280;
-  --status-pending-bg: #f3f4f6;
+  --status-pending-bg: rgba(107, 114, 128, 0.12);
   --status-rolled-back: #ea580c;
-  --status-rolled-back-bg: #ffedd5;
+  --status-rolled-back-bg: rgba(234, 88, 12, 0.12);
 
   /* Environment badges */
   --env-production: #dc2626;
@@ -53,6 +53,12 @@
   /* Agent badges */
   --agent-server: #7c3aed;
   --agent-tentacle: #0891b2;
+
+  /* Accent */
+  --accent: #63e1be;
+  --accent-dim: rgba(99, 225, 190, 0.15);
+  --accent-hover: rgba(99, 225, 190, 0.25);
+  --surface-hover: rgba(99, 225, 190, 0.04);
 
   /* Spacing */
   --radius: 6px;
@@ -142,7 +148,7 @@ body {
 }
 
 .sidebar-nav a.active {
-  background: rgba(99, 102, 241, 0.15);
+  background: var(--accent-dim);
   color: var(--sidebar-active);
 }
 
@@ -163,6 +169,13 @@ body {
   margin-left: var(--sidebar-width);
   padding: 24px 32px;
   min-height: 100vh;
+  position: relative;
+}
+
+.content-mode-toggle {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 16px;
 }
 
 /* ---- Page headers ---- */
@@ -203,6 +216,8 @@ body {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   padding: 20px;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
 .card-header {
@@ -232,6 +247,8 @@ body {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   padding: 16px 20px;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
 .summary-card .label {
@@ -279,7 +296,7 @@ table td {
 }
 
 table tr:hover td {
-  background: #f9fafb;
+  background: var(--surface-hover);
 }
 
 table a {
@@ -288,7 +305,7 @@ table a {
 }
 
 table a:hover {
-  color: var(--dt-plan);
+  color: var(--accent);
   text-decoration: underline;
 }
 
@@ -413,19 +430,19 @@ table a:hover {
 }
 
 .btn:hover {
-  background: #f3f4f6;
-  border-color: #d1d5db;
+  background: rgba(99, 225, 190, 0.08);
+  border-color: rgba(99, 225, 190, 0.2);
 }
 
 .btn-primary {
-  background: var(--dt-plan);
-  color: #fff;
-  border-color: var(--dt-plan);
+  background: var(--accent-dim);
+  color: var(--accent);
+  border-color: rgba(99, 225, 190, 0.3);
 }
 
 .btn-primary:hover {
-  background: #4f46e5;
-  border-color: #4f46e5;
+  background: var(--accent-hover);
+  border-color: rgba(99, 225, 190, 0.4);
 }
 
 .btn-sm {
@@ -465,8 +482,8 @@ table a:hover {
 .form-group input:focus,
 .form-group select:focus {
   outline: none;
-  border-color: var(--dt-plan);
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(99, 225, 190, 0.1);
 }
 
 /* ---- Debrief Timeline ---- */
@@ -551,7 +568,7 @@ table a:hover {
 .debrief-entry-context {
   margin-top: 8px;
   padding: 8px 10px;
-  background: #f8f9fa;
+  background: rgba(15, 20, 30, 0.4);
   border-radius: var(--radius);
   font-family: var(--font-mono);
   font-size: 11px;
@@ -659,7 +676,7 @@ table a:hover {
 
 .failure-card {
   background: var(--status-failed-bg);
-  border: 1px solid #fca5a5;
+  border: 1px solid rgba(248, 113, 113, 0.2);
   border-radius: var(--radius-lg);
   padding: 16px 20px;
   margin-bottom: 20px;
@@ -690,7 +707,7 @@ table a:hover {
 }
 
 .failure-card .suggested-fix {
-  background: rgba(255, 255, 255, 0.7);
+  background: rgba(15, 20, 30, 0.4);
   border-radius: var(--radius);
   padding: 10px 12px;
   margin-top: 12px;
@@ -770,13 +787,6 @@ table a:hover {
    Agent Mode
    ===================================================================== */
 
-/* ---- Mode toggle in sidebar ---- */
-
-.mode-toggle-container {
-  padding: 8px 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-}
-
 /* ---- Mode badges ---- */
 
 .mode-badge {
@@ -796,8 +806,8 @@ table a:hover {
 }
 
 .mode-badge-agent {
-  color: #fff;
-  background: var(--dt-plan);
+  color: var(--accent);
+  background: var(--accent-dim);
 }
 
 /* ---- Agent deploy layout ---- */
@@ -866,12 +876,12 @@ table a:hover {
 }
 
 .signal-warning {
-  background: #fef9c3;
+  background: rgba(251, 191, 36, 0.08);
   border-left-color: #ca8a04;
 }
 
 .signal-info {
-  background: #f0f9ff;
+  background: rgba(37, 99, 235, 0.08);
   border-left-color: #2563eb;
 }
 
@@ -897,7 +907,7 @@ table a:hover {
   letter-spacing: 0.5px;
   padding: 1px 5px;
   border-radius: var(--radius);
-  background: rgba(0, 0, 0, 0.06);
+  background: rgba(255, 255, 255, 0.06);
   color: var(--text-secondary);
 }
 
@@ -960,14 +970,16 @@ table a:hover {
   align-items: center;
   gap: 0;
   background: var(--surface);
-  border: 2px solid var(--dt-plan);
+  border: 2px solid var(--accent);
   border-radius: var(--radius-lg);
   padding: 4px;
   transition: border-color 0.15s, box-shadow 0.15s;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
 .intent-bar-inner:focus-within {
-  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.12);
+  box-shadow: 0 0 0 4px rgba(99, 225, 190, 0.12);
 }
 
 .intent-bar-icon {
@@ -975,7 +987,7 @@ table a:hover {
   font-family: var(--font-mono);
   font-size: 16px;
   font-weight: 700;
-  color: var(--dt-plan);
+  color: var(--accent);
   user-select: none;
 }
 
@@ -997,8 +1009,8 @@ table a:hover {
 
 .intent-bar-submit {
   padding: 8px 20px;
-  background: var(--dt-plan);
-  color: #fff;
+  background: var(--accent-dim);
+  color: var(--accent);
   border: none;
   border-radius: var(--radius);
   font-size: 13px;
@@ -1009,7 +1021,7 @@ table a:hover {
 }
 
 .intent-bar-submit:hover:not(:disabled) {
-  background: #4f46e5;
+  background: var(--accent-hover);
 }
 
 .intent-bar-submit:disabled {
@@ -1045,7 +1057,7 @@ table a:hover {
   gap: 2px;
   padding: 8px 10px;
   border-radius: var(--radius);
-  background: #f8f9fa;
+  background: rgba(15, 20, 30, 0.4);
   position: relative;
 }
 
@@ -1126,10 +1138,10 @@ table a:hover {
 .resolved-missing {
   margin-top: 12px;
   padding: 10px 14px;
-  background: #fef9c3;
+  background: rgba(251, 191, 36, 0.08);
   border-radius: var(--radius);
   font-size: 12px;
-  color: #854d0e;
+  color: #fbbf24;
 }
 
 /* =====================================================================
@@ -1231,7 +1243,7 @@ table a:hover {
 }
 
 .inline-edit-input {
-  border: 1px solid var(--dt-plan);
+  border: 1px solid var(--accent);
   border-radius: var(--radius);
   padding: 4px 8px;
   outline: none;
@@ -1266,18 +1278,18 @@ table a:hover {
 }
 
 .step-type-pre-deploy {
-  background: #dbeafe;
-  color: #1d4ed8;
+  background: rgba(37, 99, 235, 0.12);
+  color: #60a5fa;
 }
 
 .step-type-post-deploy {
-  background: #dcfce7;
-  color: #15803d;
+  background: rgba(22, 163, 74, 0.12);
+  color: #4ade80;
 }
 
 .step-type-verification {
-  background: #fef9c3;
-  color: #854d0e;
+  background: rgba(251, 191, 36, 0.08);
+  color: #fbbf24;
 }
 
 /* ---- Step add form ---- */
@@ -1321,7 +1333,7 @@ table a:hover {
 .toggle-field input[type="checkbox"] {
   width: 16px;
   height: 16px;
-  accent-color: var(--dt-plan);
+  accent-color: var(--accent);
 }
 
 /* ---- Settings page ---- */
@@ -1362,12 +1374,12 @@ table a:hover {
 /* ---- Warning callout ---- */
 
 .warning-callout {
-  background: #fef9c3;
-  border: 1px solid #fde68a;
+  background: rgba(251, 191, 36, 0.08);
+  border: 1px solid rgba(251, 191, 36, 0.25);
   border-radius: var(--radius);
   padding: 10px 14px;
   font-size: 13px;
-  color: #854d0e;
+  color: #fbbf24;
   margin-bottom: 12px;
 }
 
@@ -1413,84 +1425,24 @@ table a:hover {
    Agent Mode — Physical UI Transformation
    ===================================================================== */
 
-/* ---- Agent-mode CSS variables ---- */
+/* ---- Agent-mode variable aliases (canvas components reference these) ---- */
 
 :root {
-  --agent-accent: #63e1be;
-  --agent-accent-dim: rgba(99, 225, 190, 0.15);
-  --agent-bg: #0f1219;
-  --agent-surface: rgba(15, 20, 30, 0.6);
-  --agent-border: rgba(140, 150, 165, 0.1);
-  --agent-text: #e2e8f0;
-  --agent-text-secondary: #8c96a5;
-  --agent-text-muted: #6b7280;
+  --agent-accent: var(--accent);
+  --agent-accent-dim: var(--accent-dim);
+  --agent-bg: var(--bg);
+  --agent-surface: var(--surface);
+  --agent-border: var(--border);
+  --agent-text: var(--text);
+  --agent-text-secondary: var(--text-secondary);
+  --agent-text-muted: var(--text-muted);
 }
 
-/* ---- Global agent-active theme ---- */
-
-.layout.agent-active .content {
-  background: var(--agent-bg);
-  color: var(--agent-text);
-  transition: background 0.5s cubic-bezier(0.4, 0, 0.2, 1),
-              color 0.5s cubic-bezier(0.4, 0, 0.2, 1);
-}
+/* ---- Content transition (retained for smooth mode switching) ---- */
 
 .layout .content {
   transition: background 0.5s cubic-bezier(0.4, 0, 0.2, 1),
               color 0.5s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.layout.agent-active .page-header h2 {
-  color: var(--agent-text);
-}
-
-.layout.agent-active .card {
-  background: var(--agent-surface);
-  border-color: var(--agent-border);
-  color: var(--agent-text);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-}
-
-.layout.agent-active .card-header h3 {
-  color: var(--agent-text);
-}
-
-.layout.agent-active .summary-card {
-  background: var(--agent-surface);
-  border-color: var(--agent-border);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-}
-
-.layout.agent-active .summary-card .label {
-  color: var(--agent-text-muted);
-}
-
-.layout.agent-active .summary-card .value {
-  color: var(--agent-text);
-}
-
-.layout.agent-active table th {
-  color: var(--agent-text-muted);
-  border-bottom-color: var(--agent-border);
-}
-
-.layout.agent-active table td {
-  color: var(--agent-text);
-  border-bottom-color: var(--agent-border);
-}
-
-.layout.agent-active table tr:hover td {
-  background: rgba(99, 225, 190, 0.04);
-}
-
-.layout.agent-active table a {
-  color: var(--agent-text);
-}
-
-.layout.agent-active table a:hover {
-  color: var(--agent-accent);
 }
 
 /* ---- Sidebar agent accent ---- */
@@ -1522,8 +1474,7 @@ table a:hover {
   display: flex;
   align-items: center;
   gap: 10px;
-  width: 100%;
-  padding: 6px 8px;
+  padding: 6px 10px;
   border: 1px solid rgba(160, 164, 184, 0.25);
   border-radius: var(--radius);
   background: none;
@@ -1554,7 +1505,7 @@ table a:hover {
   font-size: 11px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--sidebar-text);
+  color: var(--text-muted);
   transition: color 0.4s ease;
   user-select: none;
 }
@@ -1919,152 +1870,6 @@ table a:hover {
   flex-wrap: wrap;
 }
 
-/* ---- Agent mode intent bar on NewDeployment ---- */
-
-.layout.agent-active .intent-bar-inner {
-  background: var(--agent-surface);
-  border-color: rgba(99, 225, 190, 0.3);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-}
-
-.layout.agent-active .intent-bar-icon {
-  color: var(--agent-accent);
-}
-
-.layout.agent-active .intent-bar-input {
-  color: var(--agent-text);
-}
-
-.layout.agent-active .intent-bar-input::placeholder {
-  color: var(--agent-text-muted);
-}
-
-.layout.agent-active .intent-bar-submit {
-  background: var(--agent-accent-dim);
-  color: var(--agent-accent);
-}
-
-.layout.agent-active .intent-bar-submit:hover:not(:disabled) {
-  background: rgba(99, 225, 190, 0.25);
-}
-
-/* ---- Agent mode context panel adjustments ---- */
-
-.layout.agent-active .context-activity-strip {
-  background: var(--agent-surface);
-  border-color: var(--agent-border);
-}
-
-.layout.agent-active .context-env-card {
-  background: var(--agent-surface);
-  border-color: var(--agent-border);
-}
-
-.layout.agent-active .context-env-name {
-  color: var(--agent-text);
-}
-
-/* ---- Agent mode resolved config card ---- */
-
-.layout.agent-active .resolved-field {
-  background: rgba(15, 20, 30, 0.4);
-}
-
-.layout.agent-active .resolved-field-value {
-  color: var(--agent-text);
-}
-
-.layout.agent-active .resolved-missing {
-  background: rgba(251, 191, 36, 0.08);
-  color: #fbbf24;
-}
-
-/* ---- Agent mode debrief entries ---- */
-
-.layout.agent-active .debrief-entry {
-  background: var(--agent-surface);
-  border-color: var(--agent-border);
-}
-
-.layout.agent-active .debrief-entry-decision {
-  color: var(--agent-text);
-}
-
-.layout.agent-active .debrief-entry-reasoning {
-  color: var(--agent-text-secondary);
-  border-top-color: var(--agent-border);
-}
-
-.layout.agent-active .debrief-entry-context {
-  background: rgba(15, 20, 30, 0.4);
-  color: var(--agent-text-secondary);
-}
-
-/* ---- Agent mode signals ---- */
-
-.layout.agent-active .signal-critical {
-  background: rgba(220, 38, 38, 0.08);
-}
-
-.layout.agent-active .signal-warning {
-  background: rgba(251, 191, 36, 0.08);
-}
-
-.layout.agent-active .signal-info {
-  background: rgba(37, 99, 235, 0.08);
-}
-
-/* ---- Agent mode forms ---- */
-
-.layout.agent-active .form-group input,
-.layout.agent-active .form-group select {
-  background: var(--agent-surface);
-  border-color: var(--agent-border);
-  color: var(--agent-text);
-}
-
-.layout.agent-active .form-group label {
-  color: var(--agent-text-muted);
-}
-
-/* ---- Agent mode buttons ---- */
-
-.layout.agent-active .btn {
-  background: var(--agent-surface);
-  border-color: var(--agent-border);
-  color: var(--agent-text);
-}
-
-.layout.agent-active .btn:hover {
-  background: rgba(99, 225, 190, 0.08);
-  border-color: rgba(99, 225, 190, 0.2);
-}
-
-.layout.agent-active .btn-primary {
-  background: var(--agent-accent-dim);
-  border-color: rgba(99, 225, 190, 0.3);
-  color: var(--agent-accent);
-}
-
-.layout.agent-active .btn-primary:hover {
-  background: rgba(99, 225, 190, 0.25);
-}
-
-/* ---- Agent mode mode-badge ---- */
-
-.layout.agent-active .mode-badge-agent {
-  background: var(--agent-accent-dim);
-  color: var(--agent-accent);
-}
-
-/* ---- Command health widget agent mode ---- */
-
-.layout.agent-active .command-health {
-  background: var(--agent-surface);
-  border-color: var(--agent-border);
-}
-
 /* ==========================================================================
    AGENT CANVAS — Full-screen dynamic canvas layout
    ========================================================================== */
@@ -2076,6 +1881,23 @@ table a:hover {
   width: 100vw;
   background: var(--agent-bg);
   color: var(--agent-text);
+  position: relative;
+}
+
+.agent-canvas::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(circle, rgba(99, 225, 190, 0.07) 1px, transparent 1px);
+  background-size: 24px 24px;
+  animation: dotMatrixPulse 6s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 0;
+}
+
+@keyframes dotMatrixPulse {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
 }
 
 /* ---- Canvas top bar ---- */
@@ -2090,6 +1912,8 @@ table a:hover {
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   flex-shrink: 0;
+  position: relative;
+  z-index: 1;
 }
 
 .canvas-topbar-left {
@@ -2142,6 +1966,8 @@ table a:hover {
   flex: 1;
   overflow-y: auto;
   padding-bottom: 80px; /* space for intent bar */
+  position: relative;
+  z-index: 1;
 }
 
 /* ---- Canvas panel chrome ---- */
@@ -2785,7 +2611,7 @@ table a:hover {
   font-size: 14px;
 }
 
-/* ---- Canvas intent bar agent-mode overrides ---- */
+/* ---- Canvas intent bar overrides ---- */
 
 .canvas-intent-bar .intent-bar-inner {
   background: var(--agent-surface);
@@ -2810,3 +2636,4 @@ table a:hover {
 .canvas-intent-bar .intent-bar-submit:hover {
   background: rgba(99, 225, 190, 0.25);
 }
+

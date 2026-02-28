@@ -25,7 +25,8 @@ export default function ModeToggle() {
         for (let c = 0; c < cols; c++) {
           const x = c * gap + dotSize + 2;
           const y = r * gap + dotSize + 2;
-          if (isAgent) {
+          if (!isAgent) {
+            // In manual mode: show animated teal dots (inviting switch to agent)
             const phase = frame * 0.04 + r * 0.8 + c * 0.5;
             const pulse = 0.4 + 0.6 * Math.sin(phase);
             ctx.fillStyle = `rgba(99, 225, 190, ${pulse})`;
@@ -33,6 +34,7 @@ export default function ModeToggle() {
             ctx.arc(x, y, dotSize * (0.8 + 0.3 * Math.sin(phase + 1)), 0, Math.PI * 2);
             ctx.fill();
           } else {
+            // In agent mode: show static gray dots (inviting switch to manual)
             ctx.fillStyle = "rgba(160, 164, 184, 0.5)";
             ctx.beginPath();
             ctx.arc(x, y, dotSize * 0.7, 0, Math.PI * 2);
@@ -50,14 +52,14 @@ export default function ModeToggle() {
 
   return (
     <button
-      className={`mode-toggle-dot ${isAgent ? "mode-toggle-dot-active" : ""}`}
+      className={`mode-toggle-dot ${!isAgent ? "mode-toggle-dot-active" : ""}`}
       onClick={toggleMode}
-      aria-label={`Switch to ${isAgent ? "traditional" : "agent"} mode`}
-      title={isAgent ? "Switch to Traditional Mode" : "Switch to Agent Mode"}
+      aria-label={`Switch to ${isAgent ? "manual" : "agent"} mode`}
+      title={isAgent ? "Switch to Manual Mode" : "Switch to Agent Mode"}
     >
       <canvas ref={canvasRef} width={46} height={26} className="mode-toggle-canvas" />
       <span className="mode-toggle-dot-label">
-        {isAgent ? "Agent" : "Manual"}
+        {isAgent ? "Manual" : "Agent"}
       </span>
     </button>
   );
