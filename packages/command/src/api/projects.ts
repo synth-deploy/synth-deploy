@@ -205,6 +205,38 @@ export function registerProjectRoutes(
     },
   );
 
+  // Reorder steps
+  app.post<{ Params: { id: string } }>(
+    "/api/projects/:id/steps/reorder",
+    async (request, reply) => {
+      const project = projects.get(request.params.id);
+      if (!project) {
+        return reply.status(404).send({ error: "Project not found" });
+      }
+
+      const { stepIds } = request.body as { stepIds?: string[] };
+      if (!stepIds || !Array.isArray(stepIds)) {
+        return reply.status(400).send({ error: "stepIds array is required" });
+      }
+
+      // Validate all step IDs exist
+      const stepMap = new Map(project.steps.map((s) => [s.id, s]));
+      for (const sid of stepIds) {
+        if (!stepMap.has(sid)) {
+          return reply.status(400).send({ error: `Step not found: ${sid}` });
+        }
+      }
+
+      // Renumber steps 0..N-1 in the provided order
+      for (let i = 0; i < stepIds.length; i++) {
+        stepMap.get(stepIds[i])!.order = i;
+      }
+      project.steps.sort((a, b) => a.order - b.order);
+
+      return { steps: project.steps };
+    },
+  );
+
   // Delete step
   app.delete<{ Params: { id: string; stepId: string } }>(
     "/api/projects/:id/steps/:stepId",

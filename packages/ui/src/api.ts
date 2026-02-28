@@ -109,6 +109,14 @@ export async function deleteProjectStep(projectId: string, stepId: string): Prom
   await fetchJson(`/api/projects/${projectId}/steps/${stepId}`, { method: "DELETE" });
 }
 
+export async function reorderProjectSteps(projectId: string, stepIds: string[]): Promise<DeploymentStep[]> {
+  const data = await fetchJson<{ steps: DeploymentStep[] }>(`/api/projects/${projectId}/steps/reorder`, {
+    method: "POST",
+    body: JSON.stringify({ stepIds }),
+  });
+  return data.steps;
+}
+
 export async function getProjectDeployConfig(projectId: string): Promise<DeployConfig> {
   const data = await fetchJson<{ deployConfig: DeployConfig }>(`/api/projects/${projectId}/deploy-config`);
   return data.deployConfig;

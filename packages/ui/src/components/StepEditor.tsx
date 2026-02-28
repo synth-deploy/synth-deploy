@@ -6,11 +6,12 @@ interface Props {
   onAdd: (step: { name: string; type: DeploymentStepType; command: string; order?: number }) => Promise<void>;
   onUpdate: (stepId: string, updates: Partial<DeploymentStep>) => Promise<void>;
   onDelete: (stepId: string) => Promise<void>;
+  onReorder: (stepIds: string[]) => Promise<void>;
 }
 
 const STEP_TYPES: DeploymentStepType[] = ["pre-deploy", "post-deploy", "verification"];
 
-export default function StepEditor({ steps, onAdd, onUpdate, onDelete }: Props) {
+export default function StepEditor({ steps, onAdd, onUpdate, onDelete, onReorder }: Props) {
   const [name, setName] = useState("");
   const [type, setType] = useState<DeploymentStepType>("pre-deploy");
   const [command, setCommand] = useState("");
@@ -33,7 +34,31 @@ export default function StepEditor({ steps, onAdd, onUpdate, onDelete }: Props) 
 
   function startEdit(step: DeploymentStep) {
     setEditingId(step.id);
-    setEditDraft({ name: step.name, type: step.type, command: step.command, order: step.order });
+    setEditDraft({ name: step.name, type: step.type, command: step.command });
+  }
+
+  async function handleMoveUp(index: number) {
+    if (index <= 0) return;
+    const ids = sorted.map((s) => s.id);
+    [ids[index - 1], ids[index]] = [ids[index], ids[index - 1]];
+    setError(null);
+    try {
+      await onReorder(ids);
+    } catch (e: any) {
+      setError(e.message);
+    }
+  }
+
+  async function handleMoveDown(index: number) {
+    if (index >= sorted.length - 1) return;
+    const ids = sorted.map((s) => s.id);
+    [ids[index], ids[index + 1]] = [ids[index + 1], ids[index]];
+    setError(null);
+    try {
+      await onReorder(ids);
+    } catch (e: any) {
+      setError(e.message);
+    }
   }
 
   async function saveEdit(stepId: string) {
@@ -61,21 +86,15 @@ export default function StepEditor({ steps, onAdd, onUpdate, onDelete }: Props) 
                 <th>Name</th>
                 <th>Type</th>
                 <th>Command</th>
+                <th style={{ width: 60 }}>Order</th>
                 <th style={{ width: 100 }}>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {sorted.map((step) =>
+              {sorted.map((step, i) =>
                 editingId === step.id ? (
                   <tr key={step.id}>
-                    <td>
-                      <input
-                        type="number"
-                        value={editDraft.order ?? 0}
-                        onChange={(e) => setEditDraft({ ...editDraft, order: Number(e.target.value) })}
-                        style={{ width: 40 }}
-                      />
-                    </td>
+                    <td className="text-muted">{i + 1}</td>
                     <td>
                       <input
                         value={editDraft.name ?? ""}
@@ -99,6 +118,7 @@ export default function StepEditor({ steps, onAdd, onUpdate, onDelete }: Props) 
                         className="mono"
                       />
                     </td>
+                    <td />
                     <td>
                       <button className="btn btn-sm" onClick={() => saveEdit(step.id)}>Save</button>
                       <button className="btn btn-sm" onClick={() => setEditingId(null)} style={{ marginLeft: 4 }}>Cancel</button>
@@ -106,7 +126,7 @@ export default function StepEditor({ steps, onAdd, onUpdate, onDelete }: Props) 
                   </tr>
                 ) : (
                   <tr key={step.id}>
-                    <td className="text-muted">{step.order}</td>
+                    <td className="text-muted">{i + 1}</td>
                     <td style={{ fontWeight: 500 }}>{step.name}</td>
                     <td>
                       <span className={`step-type-badge step-type-${step.type}`}>
@@ -114,6 +134,22 @@ export default function StepEditor({ steps, onAdd, onUpdate, onDelete }: Props) 
                       </span>
                     </td>
                     <td className="mono">{step.command}</td>
+                    <td>
+                      <button
+                        className="btn btn-sm"
+                        onClick={() => handleMoveUp(i)}
+                        disabled={i === 0}
+                        title="Move up"
+                        style={{ padding: "2px 6px" }}
+                      >&#9650;</button>
+                      <button
+                        className="btn btn-sm"
+                        onClick={() => handleMoveDown(i)}
+                        disabled={i === sorted.length - 1}
+                        title="Move down"
+                        style={{ padding: "2px 6px", marginLeft: 2 }}
+                      >&#9660;</button>
+                    </td>
                     <td>
                       <button className="btn btn-sm" onClick={() => startEdit(step)}>Edit</button>
                       <button className="btn btn-sm btn-danger-text" onClick={() => onDelete(step.id)} style={{ marginLeft: 4 }}>Delete</button>

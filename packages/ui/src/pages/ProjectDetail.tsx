@@ -13,6 +13,7 @@ import {
   updateProjectStep,
   deleteProjectStep,
   updateProjectDeployConfig,
+  reorderProjectSteps,
 } from "../api.js";
 import type { Project, Environment, Deployment, DeploymentStep, DeploymentStepType, DeployConfig, Order } from "../types.js";
 import EnvBadge from "../components/EnvBadge.js";
@@ -104,6 +105,12 @@ export default function ProjectDetail() {
     setProject({ ...project, steps: project.steps.filter((s) => s.id !== stepId) });
   }
 
+  async function handleReorderSteps(stepIds: string[]) {
+    if (!id || !project) return;
+    const reordered = await reorderProjectSteps(id, stepIds);
+    setProject({ ...project, steps: reordered });
+  }
+
   async function handleSaveDeployConfig(config: DeployConfig) {
     if (!id || !project) return;
     const updated = await updateProjectDeployConfig(id, config);
@@ -188,6 +195,7 @@ export default function ProjectDetail() {
             onAdd={handleAddStep}
             onUpdate={handleUpdateStep}
             onDelete={handleDeleteStep}
+            onReorder={handleReorderSteps}
           />
         </div>
       </div>
