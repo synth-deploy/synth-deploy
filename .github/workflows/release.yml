@@ -1,0 +1,168 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  # ─── Build & Test Gate ─────────────────────────────────────
+  ci:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build all packages
+        run: npm run build
+
+      - name: Run tests
+        run: npm test
+
+  # ─── Publish npm packages to GitHub Packages ──────────────
+  publish-npm:
+    name: Publish npm Packages
+    needs: ci
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js for GitHub Packages
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+          registry-url: 'https://npm.pkg.github.com'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build all packages
+        run: npm run build
+
+      # Prerequisite: @deploystack/command and @deploystack/envoy must have
+      # "private": false and the following in their package.json:
+      #
+      #   "publishConfig": {
+      #     "registry": "https://npm.pkg.github.com"
+      #   }
+      #
+      # Until then, publish will emit a warning but not fail the workflow.
+      - name: Publish @deploystack/command
+        run: npm publish --workspace=packages/command || echo "::warning::Publish skipped for @deploystack/command — package may still be private"
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish @deploystack/envoy
+        run: npm publish --workspace=packages/envoy || echo "::warning::Publish skipped for @deploystack/envoy — package may still be private"
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ─── Docker: Command ───────────────────────────────────────
+  # Auto-activates when packages/command/Dockerfile lands (issue #27)
+  docker-command:
+    name: Docker — Command
+    needs: ci
+    runs-on: ubuntu-latest
+    if: hashFiles('packages/command/Dockerfile') != ''
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push Command image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: packages/command/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/deploystack-command:${{ steps.version.outputs.VERSION }}
+            ghcr.io/${{ github.repository_owner }}/deploystack-command:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ─── Docker: Envoy ─────────────────────────────────────────
+  # Auto-activates when packages/envoy/Dockerfile lands (issue #27)
+  docker-envoy:
+    name: Docker — Envoy
+    needs: ci
+    runs-on: ubuntu-latest
+    if: hashFiles('packages/envoy/Dockerfile') != ''
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push Envoy image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: packages/envoy/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/deploystack-envoy:${{ steps.version.outputs.VERSION }}
+            ghcr.io/${{ github.repository_owner }}/deploystack-envoy:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ─── GitHub Release ─────────────────────────────────────────
+  github-release:
+    name: Create GitHub Release
+    needs: [ci, publish-npm]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ contains(github.ref, '-') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

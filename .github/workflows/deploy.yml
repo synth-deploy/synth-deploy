@@ -1,0 +1,46 @@
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+      version:
+        description: 'Version tag to deploy (e.g., v0.2.0)'
+        required: true
+        type: string
+
+# Deploy target TBD — this workflow is structured for easy wiring
+# to SSH, Kubernetes (kubectl/helm), or cloud CLI (AWS/GCP/Azure).
+#
+# When a deploy target is chosen, replace the placeholder step below
+# with the appropriate deployment commands.
+
+jobs:
+  deploy:
+    name: Deploy to ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.version }}
+
+      - name: Deploy (placeholder)
+        run: |
+          echo "================================================"
+          echo "  Deploy target not yet configured."
+          echo "  Environment: ${{ inputs.environment }}"
+          echo "  Version:     ${{ inputs.version }}"
+          echo "================================================"
+          echo ""
+          echo "To wire this up, replace this step with one of:"
+          echo "  - SSH commands to a remote server"
+          echo "  - kubectl apply / helm upgrade"
+          echo "  - aws ecs update-service / gcloud run deploy"
