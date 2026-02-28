@@ -17,7 +17,7 @@ export type {
   Order,
   DeploymentStepType,
   DeploymentStep,
-  PipelineConfig,
+  DeployConfig,
   ConflictPolicy,
   AgentSettings,
   DeploymentDefaults,
@@ -30,7 +30,7 @@ export {
   DeploymentStatus as DeploymentStatusEnum,
   AgentType as AgentTypeEnum,
   DecisionType as DecisionTypeEnum,
-  DEFAULT_PIPELINE_CONFIG,
+  DEFAULT_DEPLOY_CONFIG,
   DEFAULT_APP_SETTINGS,
 } from "./types.js";
 export { DecisionDebrief } from "./debrief.js";

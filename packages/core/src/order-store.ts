@@ -6,7 +6,7 @@ import type {
   PartitionId,
   EnvironmentId,
   DeploymentStep,
-  PipelineConfig,
+  DeployConfig,
 } from "./types.js";
 
 export interface CreateOrderParams {
@@ -17,7 +17,7 @@ export interface CreateOrderParams {
   environmentName: string;
   version: string;
   steps: DeploymentStep[];
-  pipelineConfig: PipelineConfig;
+  deployConfig: DeployConfig;
   variables: Record<string, string>;
 }
 
@@ -41,7 +41,7 @@ export class OrderStore {
       environmentName: params.environmentName,
       version: params.version,
       steps: structuredClone(params.steps),
-      pipelineConfig: structuredClone(params.pipelineConfig),
+      deployConfig: structuredClone(params.deployConfig),
       variables: { ...params.variables },
       createdAt: new Date(),
     };

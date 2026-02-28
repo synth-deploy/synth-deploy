@@ -12,15 +12,15 @@ import {
   createProjectStep,
   updateProjectStep,
   deleteProjectStep,
-  updateProjectPipeline,
+  updateProjectDeployConfig,
 } from "../api.js";
-import type { Project, Environment, Deployment, DeploymentStep, DeploymentStepType, PipelineConfig, Order } from "../types.js";
+import type { Project, Environment, Deployment, DeploymentStep, DeploymentStepType, DeployConfig, Order } from "../types.js";
 import EnvBadge from "../components/EnvBadge.js";
 import DeploymentTable from "../components/DeploymentTable.js";
 import InlineEdit from "../components/InlineEdit.js";
 import ConfirmDialog from "../components/ConfirmDialog.js";
 import StepEditor from "../components/StepEditor.js";
-import PipelineConfigEditor from "../components/PipelineConfigEditor.js";
+import DeployConfigEditor from "../components/DeployConfigEditor.js";
 
 export default function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
@@ -104,10 +104,10 @@ export default function ProjectDetail() {
     setProject({ ...project, steps: project.steps.filter((s) => s.id !== stepId) });
   }
 
-  async function handleSavePipeline(config: PipelineConfig) {
+  async function handleSaveDeployConfig(config: DeployConfig) {
     if (!id || !project) return;
-    const updated = await updateProjectPipeline(id, config);
-    setProject({ ...project, pipelineConfig: updated });
+    const updated = await updateProjectDeployConfig(id, config);
+    setProject({ ...project, deployConfig: updated });
   }
 
   if (loading) return <div className="loading">Loading...</div>;
@@ -192,15 +192,15 @@ export default function ProjectDetail() {
         </div>
       </div>
 
-      {/* Pipeline Configuration */}
+      {/* Deployment Configuration */}
       <div className="section">
         <div className="card">
           <div className="card-header">
-            <h3>Pipeline Configuration</h3>
+            <h3>Deployment Configuration</h3>
           </div>
-          <PipelineConfigEditor
-            config={project.pipelineConfig}
-            onSave={handleSavePipeline}
+          <DeployConfigEditor
+            config={project.deployConfig}
+            onSave={handleSaveDeployConfig}
           />
         </div>
       </div>

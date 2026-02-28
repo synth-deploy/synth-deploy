@@ -155,25 +155,25 @@ export default function OrderDetail() {
       <div className="section">
         <div className="card">
           <div className="card-header">
-            <h3>Pipeline Configuration</h3>
+            <h3>Deployment Configuration</h3>
             <span className="text-muted" style={{ fontSize: 12 }}>frozen at order creation</span>
           </div>
           <div className="deploy-header-meta" style={{ padding: "8px 0" }}>
             <div className="meta-item">
               <span className="meta-label">Health Check</span>
-              <span className="meta-value">{order.pipelineConfig.healthCheckEnabled ? "Enabled" : "Disabled"}</span>
+              <span className="meta-value">{order.deployConfig.healthCheckEnabled ? "Enabled" : "Disabled"}</span>
             </div>
             <div className="meta-item">
               <span className="meta-label">Retries</span>
-              <span className="meta-value">{order.pipelineConfig.healthCheckRetries}</span>
+              <span className="meta-value">{order.deployConfig.healthCheckRetries}</span>
             </div>
             <div className="meta-item">
               <span className="meta-label">Timeout</span>
-              <span className="meta-value">{order.pipelineConfig.timeoutMs}ms</span>
+              <span className="meta-value">{order.deployConfig.timeoutMs}ms</span>
             </div>
             <div className="meta-item">
               <span className="meta-label">Verification</span>
-              <span className="meta-value">{order.pipelineConfig.verificationStrategy}</span>
+              <span className="meta-value">{order.deployConfig.verificationStrategy}</span>
             </div>
           </div>
         </div>

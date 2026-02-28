@@ -11,7 +11,7 @@ export interface DeploymentStep {
   order: number;
 }
 
-export interface PipelineConfig {
+export interface DeployConfig {
   healthCheckEnabled: boolean;
   healthCheckRetries: number;
   timeoutMs: number;
@@ -23,7 +23,7 @@ export interface Project {
   name: string;
   environmentIds: string[];
   steps: DeploymentStep[];
-  pipelineConfig: PipelineConfig;
+  deployConfig: DeployConfig;
 }
 
 export type ConflictPolicy = "strict" | "permissive";
@@ -36,7 +36,7 @@ export interface AgentSettings {
 }
 
 export interface DeploymentDefaults {
-  defaultPipelineConfig: PipelineConfig;
+  defaultDeployConfig: DeployConfig;
 }
 
 export interface EnvoyEndpointConfig {
@@ -124,7 +124,7 @@ export interface Order {
   environmentName: string;
   version: string;
   steps: DeploymentStep[];
-  pipelineConfig: PipelineConfig;
+  deployConfig: DeployConfig;
   variables: Record<string, string>;
   createdAt: string;
 }

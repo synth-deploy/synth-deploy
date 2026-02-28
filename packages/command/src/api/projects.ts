@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import type { FastifyInstance } from "fastify";
-import type { ProjectStore, EnvironmentStore, DeploymentStep, DeploymentStepType, PipelineConfig } from "@deploystack/core";
+import type { ProjectStore, EnvironmentStore, DeploymentStep, DeploymentStepType, DeployConfig } from "@deploystack/core";
 
 export function registerProjectRoutes(
   app: FastifyInstance,
@@ -224,33 +224,33 @@ export function registerProjectRoutes(
     },
   );
 
-  // --- Pipeline configuration ---
+  // --- Deployment configuration ---
 
-  // Get pipeline config
+  // Get deploy config
   app.get<{ Params: { id: string } }>(
-    "/api/projects/:id/pipeline",
+    "/api/projects/:id/deploy-config",
     async (request, reply) => {
       const project = projects.get(request.params.id);
       if (!project) {
         return reply.status(404).send({ error: "Project not found" });
       }
-      return { pipeline: project.pipelineConfig };
+      return { deployConfig: project.deployConfig };
     },
   );
 
-  // Update pipeline config
+  // Update deploy config
   app.put<{ Params: { id: string } }>(
-    "/api/projects/:id/pipeline",
+    "/api/projects/:id/deploy-config",
     async (request, reply) => {
       const project = projects.get(request.params.id);
       if (!project) {
         return reply.status(404).send({ error: "Project not found" });
       }
 
-      const updates = request.body as Partial<PipelineConfig>;
-      project.pipelineConfig = { ...project.pipelineConfig, ...updates };
+      const updates = request.body as Partial<DeployConfig>;
+      project.deployConfig = { ...project.deployConfig, ...updates };
 
-      return { pipeline: project.pipelineConfig };
+      return { deployConfig: project.deployConfig };
     },
   );
 }

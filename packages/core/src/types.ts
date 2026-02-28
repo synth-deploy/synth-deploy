@@ -95,7 +95,7 @@ export interface Environment {
   variables: Record<string, string>;
 }
 
-// --- Deployment Steps & Pipeline ---
+// --- Deployment Steps & Configuration ---
 
 export type DeploymentStepType = "pre-deploy" | "post-deploy" | "verification";
 
@@ -107,14 +107,14 @@ export interface DeploymentStep {
   order: number;
 }
 
-export interface PipelineConfig {
+export interface DeployConfig {
   healthCheckEnabled: boolean;
   healthCheckRetries: number;
   timeoutMs: number;
   verificationStrategy: "basic" | "full" | "none";
 }
 
-export const DEFAULT_PIPELINE_CONFIG: PipelineConfig = {
+export const DEFAULT_DEPLOY_CONFIG: DeployConfig = {
   healthCheckEnabled: true,
   healthCheckRetries: 1,
   timeoutMs: 30000,
@@ -128,7 +128,7 @@ export interface Project {
   name: string;
   environmentIds: EnvironmentId[];
   steps: DeploymentStep[];
-  pipelineConfig: PipelineConfig;
+  deployConfig: DeployConfig;
 }
 
 // --- Order (immutable deployment snapshot) ---
@@ -142,7 +142,7 @@ export interface Order {
   environmentName: string;
   version: string;
   steps: DeploymentStep[];
-  pipelineConfig: PipelineConfig;
+  deployConfig: DeployConfig;
   variables: Record<string, string>;
   createdAt: Date;
 }
@@ -159,7 +159,7 @@ export interface AgentSettings {
 }
 
 export interface DeploymentDefaults {
-  defaultPipelineConfig: PipelineConfig;
+  defaultDeployConfig: DeployConfig;
 }
 
 export interface EnvoyEndpointConfig {
@@ -181,7 +181,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     defaultVerificationStrategy: "basic",
   },
   deploymentDefaults: {
-    defaultPipelineConfig: DEFAULT_PIPELINE_CONFIG,
+    defaultDeployConfig: DEFAULT_DEPLOY_CONFIG,
   },
   envoy: {
     url: "http://localhost:3001",

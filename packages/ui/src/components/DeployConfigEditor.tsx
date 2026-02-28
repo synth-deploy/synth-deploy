@@ -1,13 +1,13 @@
 import { useState, useEffect } from "react";
-import type { PipelineConfig } from "../types.js";
+import type { DeployConfig } from "../types.js";
 
 interface Props {
-  config: PipelineConfig;
-  onSave: (config: PipelineConfig) => Promise<void>;
+  config: DeployConfig;
+  onSave: (config: DeployConfig) => Promise<void>;
 }
 
-export default function PipelineConfigEditor({ config, onSave }: Props) {
-  const [draft, setDraft] = useState<PipelineConfig>(config);
+export default function DeployConfigEditor({ config, onSave }: Props) {
+  const [draft, setDraft] = useState<DeployConfig>(config);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
@@ -34,7 +34,7 @@ export default function PipelineConfigEditor({ config, onSave }: Props) {
     draft.verificationStrategy !== config.verificationStrategy;
 
   return (
-    <div className="pipeline-config-form">
+    <div className="deploy-config-form">
       <div className="toggle-field">
         <label>
           <input
@@ -73,7 +73,7 @@ export default function PipelineConfigEditor({ config, onSave }: Props) {
         <label>Verification Strategy</label>
         <select
           value={draft.verificationStrategy}
-          onChange={(e) => setDraft({ ...draft, verificationStrategy: e.target.value as PipelineConfig["verificationStrategy"] })}
+          onChange={(e) => setDraft({ ...draft, verificationStrategy: e.target.value as DeployConfig["verificationStrategy"] })}
         >
           <option value="basic">Basic</option>
           <option value="full">Full</option>

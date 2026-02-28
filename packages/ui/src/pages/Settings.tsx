@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { getSettings, updateSettings, getCommandInfo } from "../api.js";
 import type { AppSettings, CommandInfo, ConflictPolicy } from "../types.js";
-import PipelineConfigEditor from "../components/PipelineConfigEditor.js";
+import DeployConfigEditor from "../components/DeployConfigEditor.js";
 
 export default function Settings() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
@@ -28,10 +28,10 @@ export default function Settings() {
     setTimeout(() => setAgentSaved(false), 2000);
   }
 
-  async function handleSaveDefaultPipeline(config: AppSettings["deploymentDefaults"]["defaultPipelineConfig"]) {
+  async function handleSaveDefaultDeployConfig(config: AppSettings["deploymentDefaults"]["defaultDeployConfig"]) {
     if (!settings) return;
     const updated = await updateSettings({
-      deploymentDefaults: { ...settings.deploymentDefaults, defaultPipelineConfig: config },
+      deploymentDefaults: { ...settings.deploymentDefaults, defaultDeployConfig: config },
     });
     setSettings(updated);
   }
@@ -141,11 +141,11 @@ export default function Settings() {
       <div className="section">
         <div className="card">
           <div className="card-header">
-            <h3>Default Pipeline Configuration</h3>
+            <h3>Default Deployment Configuration</h3>
           </div>
-          <PipelineConfigEditor
-            config={settings.deploymentDefaults.defaultPipelineConfig}
-            onSave={handleSaveDefaultPipeline}
+          <DeployConfigEditor
+            config={settings.deploymentDefaults.defaultDeployConfig}
+            onSave={handleSaveDefaultDeployConfig}
           />
         </div>
       </div>

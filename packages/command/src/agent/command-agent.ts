@@ -382,10 +382,10 @@ export class CommandAgent {
   ): Order {
     // Merge global deployment defaults under project-level config.
     // Project-specific values win; global defaults fill gaps.
-    const globalDefaults = this.settingsReader?.get()?.deploymentDefaults?.defaultPipelineConfig;
-    const effectivePipelineConfig = globalDefaults
-      ? { ...globalDefaults, ...project.pipelineConfig }
-      : project.pipelineConfig;
+    const globalDefaults = this.settingsReader?.get()?.deploymentDefaults?.defaultDeployConfig;
+    const effectiveDeployConfig = globalDefaults
+      ? { ...globalDefaults, ...project.deployConfig }
+      : project.deployConfig;
 
     const order = this.orders.create({
       projectId: project.id,
@@ -395,7 +395,7 @@ export class CommandAgent {
       environmentName: environment.name,
       version: trigger.version,
       steps: project.steps,
-      pipelineConfig: effectivePipelineConfig,
+      deployConfig: effectiveDeployConfig,
       variables: {}, // populated after resolve — we snapshot inputs here
     });
 
@@ -407,10 +407,10 @@ export class CommandAgent {
       decision: `Created Order ${order.id.slice(0, 8)} — immutable snapshot of "${project.name}" configuration`,
       reasoning:
         `Snapshotted project "${project.name}" (${project.steps.length} step(s), ` +
-        `verification: ${effectivePipelineConfig.verificationStrategy}) for deployment ` +
+        `verification: ${effectiveDeployConfig.verificationStrategy}) for deployment ` +
         `v${trigger.version} to "${environment.name}". ` +
         (globalDefaults
-          ? `Global deployment defaults were merged as a base under project-level pipeline config. `
+          ? `Global deployment defaults were merged as a base under project-level deploy config. `
           : ``) +
         `This Order freezes the project configuration so the deployment can be reproduced ` +
         `exactly, even if the project is modified later.`,
@@ -418,7 +418,7 @@ export class CommandAgent {
         orderId: order.id,
         reused: false,
         stepCount: project.steps.length,
-        pipelineConfig: effectivePipelineConfig,
+        deployConfig: effectiveDeployConfig,
         appliedGlobalDefaults: !!globalDefaults,
       },
     });

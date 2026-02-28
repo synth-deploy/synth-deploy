@@ -57,7 +57,7 @@ function makeProject(overrides: Partial<Project> = {}): Project {
     name: "web-app",
     environmentIds: ["env-prod"],
     steps: [],
-    pipelineConfig: {
+    deployConfig: {
       healthCheckEnabled: true,
       healthCheckRetries: 1,
       timeoutMs: 30000,

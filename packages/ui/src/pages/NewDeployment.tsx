@@ -27,7 +27,7 @@ export default function NewDeployment() {
   const [interpreting, setInterpreting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Shared pipeline config state — used by both modes
+  // Shared deployment config state — used by both modes
   const [projectId, setProjectId] = useState(searchParams.get("projectId") ?? "");
   const [partitionId, setPartitionId] = useState(searchParams.get("partitionId") ?? "");
   const [environmentId, setEnvironmentId] = useState("");

@@ -104,7 +104,7 @@ export function registerOrderRoutes(
       environmentName: environment.name,
       version,
       steps: project.steps,
-      pipelineConfig: project.pipelineConfig,
+      deployConfig: project.deployConfig,
       variables: resolved,
     });
 

@@ -8,7 +8,7 @@ import type {
   ProjectHistory,
   DeploymentStep,
   DeploymentStepType,
-  PipelineConfig,
+  DeployConfig,
   AppSettings,
   CommandInfo,
   Order,
@@ -109,17 +109,17 @@ export async function deleteProjectStep(projectId: string, stepId: string): Prom
   await fetchJson(`/api/projects/${projectId}/steps/${stepId}`, { method: "DELETE" });
 }
 
-export async function getProjectPipeline(projectId: string): Promise<PipelineConfig> {
-  const data = await fetchJson<{ pipeline: PipelineConfig }>(`/api/projects/${projectId}/pipeline`);
-  return data.pipeline;
+export async function getProjectDeployConfig(projectId: string): Promise<DeployConfig> {
+  const data = await fetchJson<{ deployConfig: DeployConfig }>(`/api/projects/${projectId}/deploy-config`);
+  return data.deployConfig;
 }
 
-export async function updateProjectPipeline(projectId: string, config: Partial<PipelineConfig>): Promise<PipelineConfig> {
-  const data = await fetchJson<{ pipeline: PipelineConfig }>(`/api/projects/${projectId}/pipeline`, {
+export async function updateProjectDeployConfig(projectId: string, config: Partial<DeployConfig>): Promise<DeployConfig> {
+  const data = await fetchJson<{ deployConfig: DeployConfig }>(`/api/projects/${projectId}/deploy-config`, {
     method: "PUT",
     body: JSON.stringify(config),
   });
-  return data.pipeline;
+  return data.deployConfig;
 }
 
 // --- Partitions ---

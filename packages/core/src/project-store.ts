@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import type { Project, ProjectId, EnvironmentId } from "./types.js";
-import { DEFAULT_PIPELINE_CONFIG } from "./types.js";
+import { DEFAULT_DEPLOY_CONFIG } from "./types.js";
 
 /**
  * In-memory project store. Same pattern as PartitionStore —
@@ -15,7 +15,7 @@ export class ProjectStore {
       name,
       environmentIds,
       steps: [],
-      pipelineConfig: { ...DEFAULT_PIPELINE_CONFIG },
+      deployConfig: { ...DEFAULT_DEPLOY_CONFIG },
     };
     this.projects.set(project.id, project);
     return project;
