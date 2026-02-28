@@ -130,11 +130,11 @@ export class OrchestrationError extends Error {
 }
 
 // ---------------------------------------------------------------------------
-// ServerAgent — the deployment orchestration engine
+// CommandAgent — the deployment orchestration engine
 // ---------------------------------------------------------------------------
 
 /**
- * Server Agent — the reasoning engine that orchestrates deployments.
+ * Command Agent — the reasoning engine that orchestrates deployments.
  *
  * Processes deployment requests through a structured pipeline. When a step
  * encounters an unexpected situation, the agent evaluates the specifics —
@@ -156,7 +156,7 @@ export class OrchestrationError extends Error {
  *
  * Every decision is recorded to the Debrief. No silent actions.
  */
-export class ServerAgent {
+export class CommandAgent {
   private options: AgentOptions;
   private explicitOptions: Partial<AgentOptions>;
 
@@ -209,7 +209,7 @@ export class ServerAgent {
       this.debrief.record({
         partitionId: trigger.partitionId,
         deploymentId,
-        agent: "server",
+        agent: "command",
         decisionType: "order-created",
         decision: `Re-executing existing Order ${order.id.slice(0, 8)}`,
         reasoning:
@@ -240,7 +240,7 @@ export class ServerAgent {
     const planEntry = this.debrief.record({
       partitionId: trigger.partitionId,
       deploymentId,
-      agent: "server",
+      agent: "command",
       decisionType: "pipeline-plan",
       decision: `Planned deployment pipeline: ${pipelineSteps.join(" → ")}`,
       reasoning:
@@ -309,7 +309,7 @@ export class ServerAgent {
       const completionEntry = this.debrief.record({
         partitionId: deployment.partitionId,
         deploymentId: deployment.id,
-        agent: "server",
+        agent: "command",
         decisionType: "deployment-completion",
         decision: `Marking deployment of ${deployment.projectId} v${deployment.version} as succeeded on "${environment.name}"`,
         reasoning:
@@ -339,7 +339,7 @@ export class ServerAgent {
       const failEntry = this.debrief.record({
         partitionId: deployment.partitionId,
         deploymentId: deployment.id,
-        agent: "server",
+        agent: "command",
         decisionType: "deployment-failure",
         decision: `Deployment failed: ${deployment.failureReason}`,
         reasoning:
@@ -402,7 +402,7 @@ export class ServerAgent {
     this.debrief.record({
       partitionId: trigger.partitionId,
       deploymentId,
-      agent: "server",
+      agent: "command",
       decisionType: "order-created",
       decision: `Created Order ${order.id.slice(0, 8)} — immutable snapshot of "${project.name}" configuration`,
       reasoning:
@@ -486,7 +486,7 @@ export class ServerAgent {
     const configEntry = this.debrief.record({
       partitionId: deployment.partitionId,
       deploymentId: deployment.id,
-      agent: "server",
+      agent: "command",
       decisionType: "configuration-resolved",
       decision:
         conflicts.length === 0
@@ -665,7 +665,7 @@ export class ServerAgent {
       const entry = this.debrief.record({
         partitionId: deployment.partitionId,
         deploymentId: deployment.id,
-        agent: "server",
+        agent: "command",
         decisionType: "variable-conflict",
         decision:
           assessment.action === "block"
@@ -696,7 +696,7 @@ export class ServerAgent {
       const entry = this.debrief.record({
         partitionId: deployment.partitionId,
         deploymentId: deployment.id,
-        agent: "server",
+        agent: "command",
         decisionType: "variable-conflict",
         decision: `Cross-environment variable pattern in ${crossEnv.length} non-connectivity variable(s)`,
         reasoning:
@@ -721,7 +721,7 @@ export class ServerAgent {
       const entry = this.debrief.record({
         partitionId: deployment.partitionId,
         deploymentId: deployment.id,
-        agent: "server",
+        agent: "command",
         decisionType: "variable-conflict",
         decision: `Security-sensitive variable(s) overridden: ${sensitiveDetails.map((d) => d.conflict.variable).join(", ")}`,
         reasoning:
@@ -756,7 +756,7 @@ export class ServerAgent {
       const entry = this.debrief.record({
         partitionId: deployment.partitionId,
         deploymentId: deployment.id,
-        agent: "server",
+        agent: "command",
         decisionType: "variable-conflict",
         decision: `Resolved ${standardDetails.length} variable conflict(s) via precedence rules`,
         reasoning:
@@ -829,7 +829,7 @@ export class ServerAgent {
       const entry = this.debrief.record({
         partitionId: deployment.partitionId,
         deploymentId: deployment.id,
-        agent: "server",
+        agent: "command",
         decisionType: "health-check",
         decision: `Proceeding with deployment — target environment "${environment.name}" confirmed healthy in ${firstCheck.responseTimeMs}ms`,
         reasoning:
@@ -861,7 +861,7 @@ export class ServerAgent {
       const abortEntry = this.debrief.record({
         partitionId: deployment.partitionId,
         deploymentId: deployment.id,
-        agent: "server",
+        agent: "command",
         decisionType: "health-check",
         decision: "Pre-flight health check failed — aborting without retry",
         reasoning: decision.reasoning,
@@ -886,7 +886,7 @@ export class ServerAgent {
     const retryEntry = this.debrief.record({
       partitionId: deployment.partitionId,
       deploymentId: deployment.id,
-      agent: "server",
+      agent: "command",
       decisionType: "health-check",
       decision: "Pre-flight health check failed — attempting retry",
       reasoning: decision.reasoning,
@@ -915,7 +915,7 @@ export class ServerAgent {
         const recoveryEntry = this.debrief.record({
           partitionId: deployment.partitionId,
           deploymentId: deployment.id,
-          agent: "server",
+          agent: "command",
           decisionType: "health-check",
           decision:
             "Health check recovered on retry — proceeding with deployment",
@@ -1109,7 +1109,7 @@ export class ServerAgent {
     const entry = this.debrief.record({
       partitionId: deployment.partitionId,
       deploymentId: deployment.id,
-      agent: "server",
+      agent: "command",
       decisionType: "deployment-execution",
       decision: `Executing ${deployment.projectId} v${deployment.version} on "${environment.name}" for partition "${partition.name}" — delegating to Envoy`,
       reasoning:
@@ -1141,7 +1141,7 @@ export class ServerAgent {
     const entry = this.debrief.record({
       partitionId: deployment.partitionId,
       deploymentId: deployment.id,
-      agent: "server",
+      agent: "command",
       decisionType: "deployment-verification",
       decision: `Verified: ${deployment.projectId} v${deployment.version} deployed successfully to "${environment.name}" for partition "${partition.name}"`,
       reasoning:

@@ -1,7 +1,7 @@
 /**
  * Service health check abstraction.
  *
- * Injected into the Server Agent so tests can control health check outcomes
+ * Injected into the Command Agent so tests can control health check outcomes
  * without real network calls. In later phases, a real implementation will
  * make HTTP calls to Envoy health endpoints.
  */

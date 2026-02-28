@@ -50,7 +50,7 @@ export interface AppSettings {
   envoy: EnvoyEndpointConfig;
 }
 
-export interface ServerInfo {
+export interface CommandInfo {
   version: string;
   host: string;
   port: number;
@@ -101,7 +101,7 @@ export type DecisionType =
   | "system"
   | "order-created";
 
-export type AgentType = "server" | "envoy";
+export type AgentType = "command" | "envoy";
 
 export interface DebriefEntry {
   id: string;

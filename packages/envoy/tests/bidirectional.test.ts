@@ -45,25 +45,25 @@ function makeInstruction(
 }
 
 /**
- * Creates a minimal mock Server that accepts Envoy reports.
+ * Creates a minimal mock Command that accepts Envoy reports.
  * Returns the Fastify instance and a list of received reports.
  */
-function createMockServer(): {
+function createMockCommand(): {
   app: FastifyInstance;
   receivedReports: any[];
-  serverDiary: DecisionDebrief;
+  commandDiary: DecisionDebrief;
 } {
   const app = Fastify({ logger: false });
   const receivedReports: any[] = [];
-  const serverDiary = new DecisionDebrief();
+  const commandDiary = new DecisionDebrief();
 
   app.post("/api/envoy/report", async (request, reply) => {
     const report = request.body as any;
     receivedReports.push(report);
 
-    // Ingest diary entries into the Server diary — same as the real endpoint
+    // Ingest diary entries into the Command diary — same as the real endpoint
     for (const entry of report.debriefEntries) {
-      serverDiary.record({
+      commandDiary.record({
         partitionId: entry.partitionId,
         deploymentId: entry.deploymentId,
         agent: entry.agent,
@@ -88,7 +88,7 @@ function createMockServer(): {
     });
   });
 
-  return { app, receivedReports, serverDiary };
+  return { app, receivedReports, commandDiary };
 }
 
 // ---------------------------------------------------------------------------
@@ -157,15 +157,15 @@ describe("DeploymentResult carries full diary entries", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Test Suite: Envoy→Server Reporting
+// Test Suite: Envoy→Command Reporting
 // ---------------------------------------------------------------------------
 
-describe("Envoy→Server bidirectional communication", () => {
+describe("Envoy→Command bidirectional communication", () => {
   let baseDir: string;
   let envoyDiary: DecisionDebrief;
   let state: LocalStateStore;
-  let mockServer: ReturnType<typeof createMockServer>;
-  let serverAddress: string;
+  let mockCommand: ReturnType<typeof createMockCommand>;
+  let commandAddress: string;
 
   beforeEach(async () => {
     baseDir = makeTmpDir();
@@ -173,24 +173,24 @@ describe("Envoy→Server bidirectional communication", () => {
     envoyDiary = new DecisionDebrief();
     state = new LocalStateStore();
 
-    // Start mock Server
-    mockServer = createMockServer();
-    await mockServer.app.ready();
-    await mockServer.app.listen({ port: 0, host: "127.0.0.1" });
-    const addr = mockServer.app.server.address();
+    // Start mock Command
+    mockCommand = createMockCommand();
+    await mockCommand.app.ready();
+    await mockCommand.app.listen({ port: 0, host: "127.0.0.1" });
+    const addr = mockCommand.app.server.address();
     if (typeof addr === "object" && addr) {
-      serverAddress = `http://127.0.0.1:${addr.port}`;
+      commandAddress = `http://127.0.0.1:${addr.port}`;
     }
   });
 
   afterEach(async () => {
-    await mockServer.app.close();
+    await mockCommand.app.close();
     cleanDir(baseDir);
   });
 
-  it("Envoy pushes deployment result to the Server", async () => {
+  it("Envoy pushes deployment result to Command", async () => {
     const reporter = new CommandReporter(
-      serverAddress,
+      commandAddress,
       "envoy-test-01",
     );
     const agent = new EnvoyAgent(
@@ -207,8 +207,8 @@ describe("Envoy→Server bidirectional communication", () => {
     // Wait briefly for the async report to land
     await new Promise((r) => setTimeout(r, 100));
 
-    expect(mockServer.receivedReports.length).toBe(1);
-    const report = mockServer.receivedReports[0];
+    expect(mockCommand.receivedReports.length).toBe(1);
+    const report = mockCommand.receivedReports[0];
     expect(report.type).toBe("deployment-result");
     expect(report.envoyId).toBe("envoy-test-01");
     expect(report.deploymentId).toBe("push-test");
@@ -216,9 +216,9 @@ describe("Envoy→Server bidirectional communication", () => {
     expect(report.debriefEntries.length).toBeGreaterThanOrEqual(5);
   });
 
-  it("Server diary receives Envoy's diary entries", async () => {
+  it("Command diary receives Envoy's diary entries", async () => {
     const reporter = new CommandReporter(
-      serverAddress,
+      commandAddress,
       "envoy-test-02",
     );
     const agent = new EnvoyAgent(
@@ -234,16 +234,16 @@ describe("Envoy→Server bidirectional communication", () => {
 
     await new Promise((r) => setTimeout(r, 100));
 
-    // Server diary now has the Envoy's entries
-    const serverEntries =
-      mockServer.serverDiary.getByDeployment("ingest-test");
-    expect(serverEntries.length).toBeGreaterThanOrEqual(5);
+    // Command diary now has the Envoy's entries
+    const commandEntries =
+      mockCommand.commandDiary.getByDeployment("ingest-test");
+    expect(commandEntries.length).toBeGreaterThanOrEqual(5);
 
     // All entries are tagged as envoy agent
-    expect(serverEntries.every((e) => e.agent === "envoy")).toBe(true);
+    expect(commandEntries.every((e) => e.agent === "envoy")).toBe(true);
 
     // All entries carry traceability back to the Envoy
-    for (const entry of serverEntries) {
+    for (const entry of commandEntries) {
       const meta = entry.context._envoyReport as any;
       expect(meta).toBeDefined();
       expect(meta.envoyId).toBe("envoy-test-02");
@@ -252,9 +252,9 @@ describe("Envoy→Server bidirectional communication", () => {
     }
   });
 
-  it("Server diary has decision types from Envoy pipeline", async () => {
+  it("Command diary has decision types from Envoy pipeline", async () => {
     const reporter = new CommandReporter(
-      serverAddress,
+      commandAddress,
       "envoy-test-03",
     );
     const agent = new EnvoyAgent(
@@ -270,9 +270,9 @@ describe("Envoy→Server bidirectional communication", () => {
 
     await new Promise((r) => setTimeout(r, 100));
 
-    const serverEntries =
-      mockServer.serverDiary.getByDeployment("types-test");
-    const types = serverEntries.map((e) => e.decisionType);
+    const commandEntries =
+      mockCommand.commandDiary.getByDeployment("types-test");
+    const types = commandEntries.map((e) => e.decisionType);
 
     expect(types).toContain("pipeline-plan");
     expect(types).toContain("environment-scan");
@@ -281,9 +281,9 @@ describe("Envoy→Server bidirectional communication", () => {
     expect(types).toContain("deployment-completion");
   });
 
-  it("combined Server + Envoy diary tells unified story", async () => {
+  it("combined Command + Envoy diary tells unified story", async () => {
     const reporter = new CommandReporter(
-      serverAddress,
+      commandAddress,
       "envoy-test-04",
     );
     const agent = new EnvoyAgent(
@@ -295,32 +295,32 @@ describe("Envoy→Server bidirectional communication", () => {
 
     const deploymentId = "unified-story";
 
-    // Simulate Server's orchestration decisions
-    mockServer.serverDiary.record({
+    // Simulate Command's orchestration decisions
+    mockCommand.commandDiary.record({
       partitionId: "partition-1",
       deploymentId,
-      agent: "server",
+      agent: "command",
       decisionType: "pipeline-plan",
       decision: "Planned deployment pipeline",
       reasoning:
-        "Server orchestrating web-app v2.0.0 to production for Acme Corp",
+        "Command orchestrating web-app v2.0.0 to production for Acme Corp",
       context: {},
     });
 
-    mockServer.serverDiary.record({
+    mockCommand.commandDiary.record({
       partitionId: "partition-1",
       deploymentId,
-      agent: "server",
+      agent: "command",
       decisionType: "configuration-resolved",
       decision: "Configuration accepted — 2 variables, no conflicts",
       reasoning: "Standard precedence applied",
       context: {},
     });
 
-    mockServer.serverDiary.record({
+    mockCommand.commandDiary.record({
       partitionId: "partition-1",
       deploymentId,
-      agent: "server",
+      agent: "command",
       decisionType: "health-check",
       decision: "Envoy is healthy — delegating execution",
       reasoning: "Pre-flight health check to Envoy passed",
@@ -331,11 +331,11 @@ describe("Envoy→Server bidirectional communication", () => {
     await agent.executeDeployment(makeInstruction({ deploymentId }));
     await new Promise((r) => setTimeout(r, 100));
 
-    // Server records its own completion
-    mockServer.serverDiary.record({
+    // Command records its own completion
+    mockCommand.commandDiary.record({
       partitionId: "partition-1",
       deploymentId,
-      agent: "server",
+      agent: "command",
       decisionType: "deployment-completion",
       decision: "Deployment confirmed — Envoy reported success",
       reasoning: "All verification checks passed on the target machine",
@@ -344,29 +344,29 @@ describe("Envoy→Server bidirectional communication", () => {
 
     // Now query the unified diary
     const allEntries =
-      mockServer.serverDiary.getByDeployment(deploymentId);
+      mockCommand.commandDiary.getByDeployment(deploymentId);
 
-    // Server entries (4) + Envoy entries (5+) = 9+
+    // Command entries (4) + Envoy entries (5+) = 9+
     expect(allEntries.length).toBeGreaterThanOrEqual(9);
 
     // Both agents are represented
-    const serverEntries = allEntries.filter((e) => e.agent === "server");
+    const commandEntries = allEntries.filter((e) => e.agent === "command");
     const envoyEntries = allEntries.filter(
       (e) => e.agent === "envoy",
     );
 
-    expect(serverEntries.length).toBeGreaterThanOrEqual(4);
+    expect(commandEntries.length).toBeGreaterThanOrEqual(4);
     expect(envoyEntries.length).toBeGreaterThanOrEqual(5);
 
     // An engineer reading the diary sees the full story:
-    // Server planned, resolved config, checked health, delegated.
+    // Command planned, resolved config, checked health, delegated.
     // Envoy received, scanned, executed, verified, completed.
-    // Server confirmed.
-    const serverTypes = serverEntries.map((e) => e.decisionType);
-    expect(serverTypes).toContain("pipeline-plan");
-    expect(serverTypes).toContain("configuration-resolved");
-    expect(serverTypes).toContain("health-check");
-    expect(serverTypes).toContain("deployment-completion");
+    // Command confirmed.
+    const commandTypes = commandEntries.map((e) => e.decisionType);
+    expect(commandTypes).toContain("pipeline-plan");
+    expect(commandTypes).toContain("configuration-resolved");
+    expect(commandTypes).toContain("health-check");
+    expect(commandTypes).toContain("deployment-completion");
 
     const envoyTypes = envoyEntries.map((e) => e.decisionType);
     expect(envoyTypes).toContain("pipeline-plan");
@@ -376,8 +376,8 @@ describe("Envoy→Server bidirectional communication", () => {
     expect(envoyTypes).toContain("deployment-completion");
   });
 
-  it("reporter handles server being unreachable gracefully", async () => {
-    // Reporter pointing at a non-existent server
+  it("reporter handles command being unreachable gracefully", async () => {
+    // Reporter pointing at a non-existent command
     const reporter = new CommandReporter(
       "http://127.0.0.1:1",
       "envoy-test-05",
@@ -391,7 +391,7 @@ describe("Envoy→Server bidirectional communication", () => {
 
     // Should not throw — deployment still completes
     const result = await agent.executeDeployment(
-      makeInstruction({ deploymentId: "unreachable-server" }),
+      makeInstruction({ deploymentId: "unreachable-command" }),
     );
 
     expect(result.success).toBe(true);
@@ -399,11 +399,11 @@ describe("Envoy→Server bidirectional communication", () => {
 
     // The deployment worked locally; the report just didn't land
     await new Promise((r) => setTimeout(r, 200));
-    expect(mockServer.receivedReports.length).toBe(0);
+    expect(mockCommand.receivedReports.length).toBe(0);
   });
 
-  it("Envoy without reporter still works (no Server configured)", async () => {
-    // No reporter — simulates DEPLOYSTACK_SERVER_URL not being set
+  it("Envoy without reporter still works (no Command configured)", async () => {
+    // No reporter — simulates DEPLOYSTACK_COMMAND_URL not being set
     const agent = new EnvoyAgent(envoyDiary, state, baseDir);
 
     const result = await agent.executeDeployment(

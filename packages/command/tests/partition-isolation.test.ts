@@ -6,9 +6,9 @@ import {
 } from "@deploystack/core";
 import type { Environment, DebriefEntry, Project } from "@deploystack/core";
 import {
-  ServerAgent,
+  CommandAgent,
   InMemoryDeploymentStore,
-} from "../src/agent/server-agent.js";
+} from "../src/agent/command-agent.js";
 import type {
   ServiceHealthChecker,
   HealthCheckResult,
@@ -81,14 +81,14 @@ describe("Partition Isolation", () => {
   let diary: DecisionDebrief;
   let deployments: InMemoryDeploymentStore;
   let healthChecker: MockHealthChecker;
-  let agent: ServerAgent;
+  let agent: CommandAgent;
   let manager: PartitionManager;
 
   beforeEach(() => {
     diary = new DecisionDebrief();
     deployments = new InMemoryDeploymentStore();
     healthChecker = new MockHealthChecker();
-    agent = new ServerAgent(diary, deployments, new OrderStore(), healthChecker, {
+    agent = new CommandAgent(diary, deployments, new OrderStore(), healthChecker, {
       healthCheckBackoffMs: 1,
       executionDelayMs: 1,
     });
@@ -598,28 +598,28 @@ describe("Variable Precedence Resolution", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Variable precedence integrated with ServerAgent + Decision Diary
+// Variable precedence integrated with CommandAgent + Decision Diary
 // ---------------------------------------------------------------------------
 
 describe("Precedence Recording in Decision Diary", () => {
   let diary: DecisionDebrief;
   let deployments: InMemoryDeploymentStore;
   let healthChecker: MockHealthChecker;
-  let agent: ServerAgent;
+  let agent: CommandAgent;
   let manager: PartitionManager;
 
   beforeEach(() => {
     diary = new DecisionDebrief();
     deployments = new InMemoryDeploymentStore();
     healthChecker = new MockHealthChecker();
-    agent = new ServerAgent(diary, deployments, new OrderStore(), healthChecker, {
+    agent = new CommandAgent(diary, deployments, new OrderStore(), healthChecker, {
       healthCheckBackoffMs: 1,
       executionDelayMs: 1,
     });
     manager = new PartitionManager(deployments, diary);
   });
 
-  it("ServerAgent records variable conflicts to the diary with full reasoning", async () => {
+  it("CommandAgent records variable conflicts to the diary with full reasoning", async () => {
     const partition = manager.createPartition("Acme Corp", {
       LOG_LEVEL: "error",
     });
@@ -663,14 +663,14 @@ describe("Scale: 50 Partitions", () => {
   let diary: DecisionDebrief;
   let deployments: InMemoryDeploymentStore;
   let healthChecker: MockHealthChecker;
-  let agent: ServerAgent;
+  let agent: CommandAgent;
   let manager: PartitionManager;
 
   beforeEach(() => {
     diary = new DecisionDebrief();
     deployments = new InMemoryDeploymentStore();
     healthChecker = new MockHealthChecker();
-    agent = new ServerAgent(diary, deployments, new OrderStore(), healthChecker, {
+    agent = new CommandAgent(diary, deployments, new OrderStore(), healthChecker, {
       healthCheckBackoffMs: 1,
       executionDelayMs: 1,
     });

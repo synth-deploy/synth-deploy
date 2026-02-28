@@ -19,9 +19,9 @@ import type {
   Project,
 } from "@deploystack/core";
 import {
-  ServerAgent,
+  CommandAgent,
   InMemoryDeploymentStore,
-} from "../src/agent/server-agent.js";
+} from "../src/agent/command-agent.js";
 import type {
   ServiceHealthChecker,
   HealthCheckResult,
@@ -124,13 +124,13 @@ describe("Decision Diary — entry specificity", () => {
   let diary: DecisionDebrief;
   let deployments: InMemoryDeploymentStore;
   let healthChecker: MockHealthChecker;
-  let agent: ServerAgent;
+  let agent: CommandAgent;
 
   beforeEach(() => {
     diary = new DecisionDebrief();
     deployments = new InMemoryDeploymentStore();
     healthChecker = new MockHealthChecker();
-    agent = new ServerAgent(diary, deployments, new OrderStore(), healthChecker, {
+    agent = new CommandAgent(diary, deployments, new OrderStore(), healthChecker, {
       healthCheckBackoffMs: 1,
       executionDelayMs: 1,
     });
@@ -253,13 +253,13 @@ describe("Decision Diary — orchestration completeness", () => {
   let diary: DecisionDebrief;
   let deployments: InMemoryDeploymentStore;
   let healthChecker: MockHealthChecker;
-  let agent: ServerAgent;
+  let agent: CommandAgent;
 
   beforeEach(() => {
     diary = new DecisionDebrief();
     deployments = new InMemoryDeploymentStore();
     healthChecker = new MockHealthChecker();
-    agent = new ServerAgent(diary, deployments, new OrderStore(), healthChecker, {
+    agent = new CommandAgent(diary, deployments, new OrderStore(), healthChecker, {
       healthCheckBackoffMs: 1,
       executionDelayMs: 1,
     });
@@ -369,13 +369,13 @@ describe("Decision Diary — retrieval dimensions", () => {
   let diary: DecisionDebrief;
   let deployments: InMemoryDeploymentStore;
   let healthChecker: MockHealthChecker;
-  let agent: ServerAgent;
+  let agent: CommandAgent;
 
   beforeEach(() => {
     diary = new DecisionDebrief();
     deployments = new InMemoryDeploymentStore();
     healthChecker = new MockHealthChecker();
-    agent = new ServerAgent(diary, deployments, new OrderStore(), healthChecker, {
+    agent = new CommandAgent(diary, deployments, new OrderStore(), healthChecker, {
       healthCheckBackoffMs: 1,
       executionDelayMs: 1,
     });
@@ -570,7 +570,7 @@ describe("PersistentDecisionDebrief — SQLite backing store", () => {
     const entry = diary.record({
       partitionId: "partition-1",
       deploymentId: "deploy-1",
-      agent: "server",
+      agent: "command",
       decisionType: "pipeline-plan",
       decision: "Planned deployment pipeline: resolve → execute → verify",
       reasoning: "Standard three-step pipeline for web-app v1.0.0 to production.",
@@ -596,7 +596,7 @@ describe("PersistentDecisionDebrief — SQLite backing store", () => {
     diary.record({
       partitionId: "t1",
       deploymentId: "d1",
-      agent: "server",
+      agent: "command",
       decisionType: "pipeline-plan",
       decision: "Planned pipeline for d1",
       reasoning: "Deploy web-app v1.0 to production for Acme.",
@@ -604,7 +604,7 @@ describe("PersistentDecisionDebrief — SQLite backing store", () => {
     diary.record({
       partitionId: "t1",
       deploymentId: "d2",
-      agent: "server",
+      agent: "command",
       decisionType: "pipeline-plan",
       decision: "Planned pipeline for d2",
       reasoning: "Deploy web-app v2.0 to staging for Acme.",
@@ -612,7 +612,7 @@ describe("PersistentDecisionDebrief — SQLite backing store", () => {
     diary.record({
       partitionId: "t1",
       deploymentId: "d1",
-      agent: "server",
+      agent: "command",
       decisionType: "deployment-completion",
       decision: "Deployment d1 completed",
       reasoning: "All steps passed.",
@@ -633,7 +633,7 @@ describe("PersistentDecisionDebrief — SQLite backing store", () => {
     diary.record({
       partitionId: "acme",
       deploymentId: "d1",
-      agent: "server",
+      agent: "command",
       decisionType: "pipeline-plan",
       decision: "Acme deployment plan",
       reasoning: "Standard pipeline for Acme Corp.",
@@ -641,7 +641,7 @@ describe("PersistentDecisionDebrief — SQLite backing store", () => {
     diary.record({
       partitionId: "beta",
       deploymentId: "d2",
-      agent: "server",
+      agent: "command",
       decisionType: "pipeline-plan",
       decision: "Beta deployment plan",
       reasoning: "Standard pipeline for Beta Inc.",
@@ -660,7 +660,7 @@ describe("PersistentDecisionDebrief — SQLite backing store", () => {
     diary.record({
       partitionId: "t1",
       deploymentId: "d1",
-      agent: "server",
+      agent: "command",
       decisionType: "health-check",
       decision: "Health check passed",
       reasoning: "Service responding in 5ms.",
@@ -668,7 +668,7 @@ describe("PersistentDecisionDebrief — SQLite backing store", () => {
     diary.record({
       partitionId: "t1",
       deploymentId: "d1",
-      agent: "server",
+      agent: "command",
       decisionType: "variable-conflict",
       decision: "LOG_LEVEL conflict resolved",
       reasoning: "Trigger value 'debug' overrides partition value 'error'.",
@@ -676,7 +676,7 @@ describe("PersistentDecisionDebrief — SQLite backing store", () => {
     diary.record({
       partitionId: "t1",
       deploymentId: "d1",
-      agent: "server",
+      agent: "command",
       decisionType: "health-check",
       decision: "Post-flight check passed",
       reasoning: "Service healthy after deploy.",
@@ -704,7 +704,7 @@ describe("PersistentDecisionDebrief — SQLite backing store", () => {
     diary.record({
       partitionId: "t1",
       deploymentId: "d1",
-      agent: "server",
+      agent: "command",
       decisionType: "pipeline-plan",
       decision: "First entry",
       reasoning: "First reasoning.",
@@ -712,7 +712,7 @@ describe("PersistentDecisionDebrief — SQLite backing store", () => {
     diary.record({
       partitionId: "t1",
       deploymentId: "d1",
-      agent: "server",
+      agent: "command",
       decisionType: "deployment-completion",
       decision: "Second entry",
       reasoning: "Second reasoning.",
@@ -733,7 +733,7 @@ describe("PersistentDecisionDebrief — SQLite backing store", () => {
       diary.record({
         partitionId: "t1",
         deploymentId: `d${i}`,
-        agent: "server",
+        agent: "command",
         decisionType: "pipeline-plan",
         decision: `Entry ${i}`,
         reasoning: `Reasoning for entry ${i}.`,
@@ -755,7 +755,7 @@ describe("PersistentDecisionDebrief — SQLite backing store", () => {
     const entry = diary.record({
       partitionId: "t1",
       deploymentId: "d1",
-      agent: "server",
+      agent: "command",
       decisionType: "health-check",
       decision: "Health check with complex context",
       reasoning: "Detailed reasoning here.",
@@ -776,15 +776,15 @@ describe("PersistentDecisionDebrief — SQLite backing store", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Test suite: Integration — PersistentDecisionDebrief with ServerAgent
+// Test suite: Integration — PersistentDecisionDebrief with CommandAgent
 // ---------------------------------------------------------------------------
 
-describe("PersistentDecisionDebrief — integration with ServerAgent", () => {
+describe("PersistentDecisionDebrief — integration with CommandAgent", () => {
   let dbPath: string;
   let diary: PersistentDecisionDebrief;
   let deployments: InMemoryDeploymentStore;
   let healthChecker: MockHealthChecker;
-  let agent: ServerAgent;
+  let agent: CommandAgent;
 
   beforeEach(() => {
     dbPath = path.join(
@@ -794,7 +794,7 @@ describe("PersistentDecisionDebrief — integration with ServerAgent", () => {
     diary = new PersistentDecisionDebrief(dbPath);
     deployments = new InMemoryDeploymentStore();
     healthChecker = new MockHealthChecker();
-    agent = new ServerAgent(diary, deployments, new OrderStore(), healthChecker, {
+    agent = new CommandAgent(diary, deployments, new OrderStore(), healthChecker, {
       healthCheckBackoffMs: 1,
       executionDelayMs: 1,
     });
@@ -902,7 +902,7 @@ describe("Decision Diary — human-readable format", () => {
       timestamp: new Date("2026-02-23T14:30:05.000Z"),
       partitionId: "partition-acme",
       deploymentId: "deploy-789",
-      agent: "server",
+      agent: "command",
       decisionType: "health-check",
       decision: "Pre-flight health check passed",
       reasoning:
@@ -915,7 +915,7 @@ describe("Decision Diary — human-readable format", () => {
     expect(formatted).toContain("HEALTH-CHECK");
     expect(formatted).toContain("partition-acme");
     expect(formatted).toContain("deploy-7"); // truncated ID
-    expect(formatted).toContain("server");
+    expect(formatted).toContain("command");
     expect(formatted).toContain("Pre-flight health check passed");
     expect(formatted).toContain("production");
     expect(formatted).toContain("response time: 5ms");
@@ -928,9 +928,9 @@ describe("Decision Diary — human-readable format", () => {
       timestamp: new Date("2026-02-23T12:00:00.000Z"),
       partitionId: null,
       deploymentId: null,
-      agent: "server",
+      agent: "command",
       decisionType: "system",
-      decision: "Server initialized with demo data",
+      decision: "Command initialized with demo data",
       reasoning: "Seeded one partition and two environments.",
       context: {},
     };
@@ -948,7 +948,7 @@ describe("Decision Diary — human-readable format", () => {
         timestamp: new Date("2026-02-23T14:00:00.000Z"),
         partitionId: "t1",
         deploymentId: "d1",
-        agent: "server",
+        agent: "command",
         decisionType: "pipeline-plan",
         decision: "Entry one",
         reasoning: "First reasoning.",
@@ -959,7 +959,7 @@ describe("Decision Diary — human-readable format", () => {
         timestamp: new Date("2026-02-23T14:01:00.000Z"),
         partitionId: "t1",
         deploymentId: "d1",
-        agent: "server",
+        agent: "command",
         decisionType: "deployment-completion",
         decision: "Entry two",
         reasoning: "Second reasoning.",

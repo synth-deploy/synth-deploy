@@ -23,25 +23,25 @@ function makeParams(overrides: Partial<LlmCallParams> = {}): LlmCallParams {
 describe("LlmClient — initialization", () => {
   it("isAvailable returns false when no API key is provided", () => {
     const debrief = new DecisionDebrief();
-    const client = new LlmClient(debrief, "server", { apiKey: undefined });
+    const client = new LlmClient(debrief, "command", { apiKey: undefined });
     expect(client.isAvailable()).toBe(false);
   });
 
   it("isAvailable returns false when API key is empty string", () => {
     const debrief = new DecisionDebrief();
-    const client = new LlmClient(debrief, "server", { apiKey: "" });
+    const client = new LlmClient(debrief, "command", { apiKey: "" });
     expect(client.isAvailable()).toBe(false);
   });
 
   it("isAvailable returns true when API key is provided", () => {
     const debrief = new DecisionDebrief();
-    const client = new LlmClient(debrief, "server", { apiKey: "sk-test-key" });
+    const client = new LlmClient(debrief, "command", { apiKey: "sk-test-key" });
     expect(client.isAvailable()).toBe(true);
   });
 
   it("accepts custom model configuration", () => {
     const debrief = new DecisionDebrief();
-    const client = new LlmClient(debrief, "server", {
+    const client = new LlmClient(debrief, "command", {
       apiKey: "sk-test",
       reasoningModel: "custom-model",
       classificationModel: "custom-classifier",
@@ -49,11 +49,11 @@ describe("LlmClient — initialization", () => {
     expect(client.isAvailable()).toBe(true);
   });
 
-  it("accepts both server and envoy agent types", () => {
+  it("accepts both command and envoy agent types", () => {
     const debrief = new DecisionDebrief();
-    const serverClient = new LlmClient(debrief, "server");
+    const commandClient = new LlmClient(debrief, "command");
     const envoyClient = new LlmClient(debrief, "envoy");
-    expect(serverClient).toBeDefined();
+    expect(commandClient).toBeDefined();
     expect(envoyClient).toBeDefined();
   });
 });
@@ -68,7 +68,7 @@ describe("LlmClient — fallback behavior", () => {
 
   beforeEach(() => {
     debrief = new DecisionDebrief();
-    client = new LlmClient(debrief, "server", { apiKey: undefined });
+    client = new LlmClient(debrief, "command", { apiKey: undefined });
   });
 
   it("reason() returns fallback result when no API key", async () => {
@@ -120,7 +120,7 @@ describe("LlmClient — fallback behavior", () => {
 describe("LlmClient — debrief recording", () => {
   it("records debrief entry for fallback calls", async () => {
     const debrief = new DecisionDebrief();
-    const client = new LlmClient(debrief, "server", { apiKey: undefined });
+    const client = new LlmClient(debrief, "command", { apiKey: undefined });
 
     await client.reason(
       makeParams({
@@ -135,7 +135,7 @@ describe("LlmClient — debrief recording", () => {
 
     const entry = entries[0];
     expect(entry.decisionType).toBe("llm-call");
-    expect(entry.agent).toBe("server");
+    expect(entry.agent).toBe("command");
     expect(entry.partitionId).toBe("partition-1");
     expect(entry.deploymentId).toBe("deploy-1");
     expect(entry.decision).toContain("Postmortem generation");
@@ -156,7 +156,7 @@ describe("LlmClient — debrief recording", () => {
 
   it("debrief entry contains model information", async () => {
     const debrief = new DecisionDebrief();
-    const client = new LlmClient(debrief, "server", { apiKey: undefined });
+    const client = new LlmClient(debrief, "command", { apiKey: undefined });
 
     await client.reason(makeParams());
 
@@ -167,7 +167,7 @@ describe("LlmClient — debrief recording", () => {
 
   it("records separate entries for each call", async () => {
     const debrief = new DecisionDebrief();
-    const client = new LlmClient(debrief, "server", { apiKey: undefined });
+    const client = new LlmClient(debrief, "command", { apiKey: undefined });
 
     await client.reason(makeParams({ promptSummary: "Call 1" }));
     await client.classify(makeParams({ promptSummary: "Call 2" }));
@@ -180,7 +180,7 @@ describe("LlmClient — debrief recording", () => {
 
   it("debrief reasoning explains fallback in plain language", async () => {
     const debrief = new DecisionDebrief();
-    const client = new LlmClient(debrief, "server", { apiKey: undefined });
+    const client = new LlmClient(debrief, "command", { apiKey: undefined });
 
     await client.reason(makeParams());
 
@@ -194,7 +194,7 @@ describe("LlmClient — debrief recording", () => {
 
   it("reason() uses default reasoning model in debrief context", async () => {
     const debrief = new DecisionDebrief();
-    const client = new LlmClient(debrief, "server", { apiKey: undefined });
+    const client = new LlmClient(debrief, "command", { apiKey: undefined });
 
     await client.reason(makeParams());
 
@@ -204,7 +204,7 @@ describe("LlmClient — debrief recording", () => {
 
   it("classify() uses default classification model in debrief context", async () => {
     const debrief = new DecisionDebrief();
-    const client = new LlmClient(debrief, "server", { apiKey: undefined });
+    const client = new LlmClient(debrief, "command", { apiKey: undefined });
 
     await client.classify(makeParams());
 

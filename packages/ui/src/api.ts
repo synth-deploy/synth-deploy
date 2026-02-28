@@ -10,7 +10,7 @@ import type {
   DeploymentStepType,
   PipelineConfig,
   AppSettings,
-  ServerInfo,
+  CommandInfo,
   Order,
 } from "./types.js";
 
@@ -381,7 +381,7 @@ export async function updateSettings(updates: Partial<AppSettings>): Promise<App
   return data.settings;
 }
 
-export async function getServerInfo(): Promise<ServerInfo> {
-  const data = await fetchJson<{ info: ServerInfo }>("/api/settings/server-info");
+export async function getCommandInfo(): Promise<CommandInfo> {
+  const data = await fetchJson<{ info: CommandInfo }>("/api/settings/command-info");
   return data.info;
 }

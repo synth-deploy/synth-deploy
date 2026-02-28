@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import type { PartitionStore, DebriefWriter, DebriefReader, Project, Partition, Environment } from "@deploystack/core";
-import type { ServerAgent, DeploymentStore } from "../agent/server-agent.js";
+import type { CommandAgent, DeploymentStore } from "../agent/command-agent.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -428,7 +428,7 @@ function formatAgo(date: Date): string {
 
 export function registerAgentRoutes(
   app: FastifyInstance,
-  agent: ServerAgent,
+  agent: CommandAgent,
   partitions: PartitionStore,
   environments: EnvironmentStore,
   projects: ProjectStore,
@@ -481,7 +481,7 @@ export function registerAgentRoutes(
     debrief.record({
       partitionId: result.resolved.partitionId.confidence !== "missing" ? result.resolved.partitionId.value : null,
       deploymentId: null,
-      agent: "server",
+      agent: "command",
       decisionType: "system",
       decision: result.ready
         ? `Intent fully resolved: ready to deploy ${result.resolved.projectId.matchedFrom ?? result.resolved.projectId.value} v${result.resolved.version.value}`

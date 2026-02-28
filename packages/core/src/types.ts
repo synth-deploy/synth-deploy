@@ -46,7 +46,7 @@ export interface Deployment {
 
 // --- Debrief ---
 
-export const AgentType = z.enum(["server", "envoy"]);
+export const AgentType = z.enum(["command", "envoy"]);
 export type AgentType = z.infer<typeof AgentType>;
 
 export const DecisionType = z.enum([

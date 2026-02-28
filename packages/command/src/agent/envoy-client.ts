@@ -18,13 +18,13 @@ export interface EnvoyDeployResult {
   verificationChecks: Array<{ name: string; passed: boolean; detail: string }>;
   failureReason: string | null;
   debriefEntryIds: string[];
-  /** Full debrief entries from the Envoy — the Server can ingest these */
+  /** Full debrief entries from the Envoy — Command can ingest these */
   debriefEntries: Array<{
     id: string;
     timestamp: string;
     partitionId: string | null;
     deploymentId: string | null;
-    agent: "server" | "envoy";
+    agent: "command" | "envoy";
     decisionType: string;
     decision: string;
     reasoning: string;
@@ -48,13 +48,13 @@ export interface EnvoyHealthResponse {
 }
 
 // ---------------------------------------------------------------------------
-// EnvoyClient — Server's interface to a remote Envoy
+// EnvoyClient — Command's interface to a remote Envoy
 // ---------------------------------------------------------------------------
 
 /**
  * HTTP client for communicating with a Envoy agent.
  *
- * The Server uses this to:
+ * Command uses this to:
  * 1. Check if the Envoy is healthy (pre-flight health check)
  * 2. Delegate deployment execution to the Envoy
  * 3. Query the Envoy's local state
@@ -67,7 +67,7 @@ export class EnvoyClient {
 
   /**
    * Check Envoy health — used as the ServiceHealthChecker for the
-   * Server Agent's pre-flight health check step.
+   * Command Agent's pre-flight health check step.
    */
   async checkHealth(): Promise<EnvoyHealthResponse> {
     const controller = new AbortController();
@@ -131,9 +131,9 @@ export class EnvoyClient {
 
 /**
  * Adapts the EnvoyClient to the ServiceHealthChecker interface used by
- * the Server Agent's pre-flight health check step.
+ * the Command Agent's pre-flight health check step.
  *
- * When a Envoy is registered for an environment, the Server's health
+ * When a Envoy is registered for an environment, Command's health
  * check actually reaches out to the Envoy instead of using the
  * DefaultHealthChecker (which always returns healthy).
  */
@@ -180,7 +180,7 @@ export class EnvoyHealthChecker implements ServiceHealthChecker {
       const message =
         err instanceof Error ? err.message : String(err);
 
-      // Map fetch errors to recognizable categories for the Server Agent
+      // Map fetch errors to recognizable categories for the Command Agent
       if (message.includes("abort")) {
         return {
           reachable: false,

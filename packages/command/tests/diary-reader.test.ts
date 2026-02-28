@@ -13,9 +13,9 @@ import type {
   Project,
 } from "@deploystack/core";
 import {
-  ServerAgent,
+  CommandAgent,
   InMemoryDeploymentStore,
-} from "../src/agent/server-agent.js";
+} from "../src/agent/command-agent.js";
 import type {
   ServiceHealthChecker,
   HealthCheckResult,
@@ -122,13 +122,13 @@ describe("Simulated Postmortem — failed deployment read experience", () => {
   let diary: DecisionDebrief;
   let deployments: InMemoryDeploymentStore;
   let healthChecker: MockHealthChecker;
-  let agent: ServerAgent;
+  let agent: CommandAgent;
 
   beforeEach(() => {
     diary = new DecisionDebrief();
     deployments = new InMemoryDeploymentStore();
     healthChecker = new MockHealthChecker();
-    agent = new ServerAgent(diary, deployments, new OrderStore(), healthChecker, {
+    agent = new CommandAgent(diary, deployments, new OrderStore(), healthChecker, {
       healthCheckBackoffMs: 1,
       executionDelayMs: 1,
     });
@@ -390,13 +390,13 @@ describe("Simulated Onboarding — project history read experience", () => {
   let diary: DecisionDebrief;
   let deploymentStore: InMemoryDeploymentStore;
   let healthChecker: MockHealthChecker;
-  let agent: ServerAgent;
+  let agent: CommandAgent;
 
   beforeEach(() => {
     diary = new DecisionDebrief();
     deploymentStore = new InMemoryDeploymentStore();
     healthChecker = new MockHealthChecker();
-    agent = new ServerAgent(diary, deploymentStore, new OrderStore(), healthChecker, {
+    agent = new CommandAgent(diary, deploymentStore, new OrderStore(), healthChecker, {
       healthCheckBackoffMs: 1,
       executionDelayMs: 1,
     });
@@ -768,13 +768,13 @@ describe("Postmortem report — structural guarantees", () => {
   let diary: DecisionDebrief;
   let deployments: InMemoryDeploymentStore;
   let healthChecker: MockHealthChecker;
-  let agent: ServerAgent;
+  let agent: CommandAgent;
 
   beforeEach(() => {
     diary = new DecisionDebrief();
     deployments = new InMemoryDeploymentStore();
     healthChecker = new MockHealthChecker();
-    agent = new ServerAgent(diary, deployments, new OrderStore(), healthChecker, {
+    agent = new CommandAgent(diary, deployments, new OrderStore(), healthChecker, {
       healthCheckBackoffMs: 1,
       executionDelayMs: 1,
     });

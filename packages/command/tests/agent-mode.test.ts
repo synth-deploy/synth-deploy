@@ -3,7 +3,7 @@ import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
 import { DecisionDebrief, PartitionStore, ProjectStore, EnvironmentStore, OrderStore } from "@deploystack/core";
 import type { Deployment, DebriefEntry } from "@deploystack/core";
-import { ServerAgent, InMemoryDeploymentStore } from "../src/agent/server-agent.js";
+import { CommandAgent, InMemoryDeploymentStore } from "../src/agent/command-agent.js";
 import { registerDeploymentRoutes } from "../src/api/deployments.js";
 import { registerProjectRoutes } from "../src/api/projects.js";
 import { registerPartitionRoutes } from "../src/api/partitions.js";
@@ -21,7 +21,7 @@ let projects: ProjectStore;
 let environments: EnvironmentStore;
 let deployments: InMemoryDeploymentStore;
 let orders: OrderStore;
-let agent: ServerAgent;
+let agent: CommandAgent;
 
 let projectId: string;
 let partitionId: string;
@@ -35,7 +35,7 @@ beforeAll(async () => {
   environments = new EnvironmentStore();
   deployments = new InMemoryDeploymentStore();
   orders = new OrderStore();
-  agent = new ServerAgent(diary, deployments, orders);
+  agent = new CommandAgent(diary, deployments, orders);
 
   app = Fastify();
   registerDeploymentRoutes(app, agent, partitions, environments, deployments, diary, projects, orders);

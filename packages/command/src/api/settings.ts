@@ -17,17 +17,17 @@ export function registerSettingsRoutes(
     return { settings: updated };
   });
 
-  // Read-only server info
-  app.get("/api/settings/server-info", async () => {
+  // Read-only command info
+  app.get("/api/settings/command-info", async () => {
     return {
       info: {
         version: "0.1.0",
         host: process.env.HOST ?? "0.0.0.0",
         port: parseInt(process.env.PORT ?? "3000", 10),
-        startedAt: serverStartTime,
+        startedAt: commandStartTime,
       },
     };
   });
 }
 
-const serverStartTime = new Date().toISOString();
+const commandStartTime = new Date().toISOString();

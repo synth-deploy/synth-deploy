@@ -11,7 +11,7 @@ const DebriefEntrySchema = z.object({
   timestamp: z.string(),
   partitionId: z.string().nullable(),
   deploymentId: z.string().nullable(),
-  agent: z.enum(["server", "envoy"]),
+  agent: z.enum(["command", "envoy"]),
   decisionType: z.string(),
   decision: z.string(),
   reasoning: z.string(),
@@ -46,15 +46,15 @@ const EnvoyReportSchema = z.object({
 // ---------------------------------------------------------------------------
 
 /**
- * Endpoint for Envoys to push reports back to the Server.
+ * Endpoint for Envoys to push reports back to Command.
  *
  * When a Envoy completes a deployment (success or failure), it pushes
- * a report containing its full debrief entries. The Server ingests these
+ * a report containing its full debrief entries. Command ingests these
  * into its own debrief so there is one unified Debrief that contains
- * both the Server's orchestration decisions and the Envoy's execution
+ * both Command's orchestration decisions and the Envoy's execution
  * decisions.
  *
- * This is the Envoy->Server direction of bidirectional communication.
+ * This is the Envoy->Command direction of bidirectional communication.
  */
 export function registerEnvoyReportRoutes(
   app: FastifyInstance,
@@ -72,15 +72,15 @@ export function registerEnvoyReportRoutes(
     const report = parsed.data;
     let ingested = 0;
 
-    // Ingest each Envoy debrief entry into the Server's debrief.
-    // We re-record them (rather than inserting raw) so the Server's debrief
+    // Ingest each Envoy debrief entry into Command's debrief.
+    // We re-record them (rather than inserting raw) so Command's debrief
     // assigns its own IDs and timestamps. The original Envoy entry data
     // is preserved in the context field for traceability.
     for (const entry of report.debriefEntries) {
       debrief.record({
         partitionId: entry.partitionId,
         deploymentId: entry.deploymentId,
-        agent: entry.agent as "server" | "envoy",
+        agent: entry.agent as "command" | "envoy",
         decisionType: entry.decisionType as DecisionType,
         decision: entry.decision,
         reasoning: entry.reasoning,

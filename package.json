@@ -7,10 +7,10 @@
   ],
   "scripts": {
     "build": "npm run build --workspaces",
-    "dev": "npm run dev --workspace=packages/server",
+    "dev": "npm run dev --workspace=packages/command",
     "dev:ui": "npm run dev --workspace=packages/ui",
     "build:ui": "npm run build --workspace=packages/ui",
-    "test": "npm test --workspace=packages/core --workspace=packages/server --workspace=packages/envoy",
+    "test": "npm test --workspace=packages/core --workspace=packages/command --workspace=packages/envoy",
     "clean": "rm -rf packages/*/dist"
   },
   "engines": {

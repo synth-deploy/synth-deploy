@@ -17,17 +17,17 @@ const BASE_DIR = process.env.ENVOY_BASE_DIR ?? path.join(process.cwd(), ".envoy"
 fs.mkdirSync(BASE_DIR, { recursive: true });
 fs.mkdirSync(path.join(BASE_DIR, "deployments"), { recursive: true });
 
-const SERVER_URL = process.env.DEPLOYSTACK_SERVER_URL ?? "";
+const COMMAND_URL = process.env.DEPLOYSTACK_COMMAND_URL ?? "";
 
 const debrief = new DecisionDebrief();
 const state = new LocalStateStore();
 
-// Connect the CommandReporter if a Server URL is configured
+// Connect the CommandReporter if a Command URL is configured
 let reporter: import("./agent/command-reporter.js").CommandReporter | undefined;
-if (SERVER_URL) {
+if (COMMAND_URL) {
   const { CommandReporter } = await import("./agent/command-reporter.js");
   const envoyId = `envoy-${HOST}:${PORT}`;
-  reporter = new CommandReporter(SERVER_URL, envoyId);
+  reporter = new CommandReporter(COMMAND_URL, envoyId);
 }
 
 const agent = new EnvoyAgent(debrief, state, BASE_DIR, reporter);
@@ -40,13 +40,13 @@ debrief.record({
   decision: "Envoy initialized",
   reasoning:
     `Envoy agent started with workspace at "${BASE_DIR}". ` +
-    `Ready to receive deployment instructions from the Server. ` +
+    `Ready to receive deployment instructions from Command. ` +
     `Local state store is empty — this is a fresh start.`,
   context: {
     baseDir: BASE_DIR,
     port: PORT,
     host: HOST,
-    serverUrl: SERVER_URL || "(not configured — Envoy will not push reports to Server)",
+    commandUrl: COMMAND_URL || "(not configured — Envoy will not push reports to Command)",
   },
 });
 

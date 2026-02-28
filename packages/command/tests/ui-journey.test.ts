@@ -3,7 +3,7 @@ import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
 import { DecisionDebrief, PartitionStore, ProjectStore, EnvironmentStore, OrderStore } from "@deploystack/core";
 import type { Deployment, DebriefEntry, PostmortemReport, ProjectHistory } from "@deploystack/core";
-import { ServerAgent, InMemoryDeploymentStore } from "../src/agent/server-agent.js";
+import { CommandAgent, InMemoryDeploymentStore } from "../src/agent/command-agent.js";
 import { registerDeploymentRoutes } from "../src/api/deployments.js";
 import { registerProjectRoutes } from "../src/api/projects.js";
 import { registerPartitionRoutes } from "../src/api/partitions.js";
@@ -20,7 +20,7 @@ let projects: ProjectStore;
 let environments: EnvironmentStore;
 let deployments: InMemoryDeploymentStore;
 let orders: OrderStore;
-let agent: ServerAgent;
+let agent: CommandAgent;
 
 beforeAll(async () => {
   diary = new DecisionDebrief();
@@ -29,7 +29,7 @@ beforeAll(async () => {
   environments = new EnvironmentStore();
   deployments = new InMemoryDeploymentStore();
   orders = new OrderStore();
-  agent = new ServerAgent(diary, deployments, orders);
+  agent = new CommandAgent(diary, deployments, orders);
 
   app = Fastify();
   registerDeploymentRoutes(app, agent, partitions, environments, deployments, diary, projects, orders);
@@ -203,7 +203,7 @@ describe("Complete UI user journey", () => {
     expect(entry.decision).toBeDefined();
     expect(entry.reasoning).toBeDefined();
     expect(entry.decisionType).toBeDefined();
-    expect(entry.agent).toBe("server");
+    expect(entry.agent).toBe("command");
 
     // Every entry should be tagged with our deployment
     for (const de of body.debrief) {

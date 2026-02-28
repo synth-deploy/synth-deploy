@@ -7,7 +7,7 @@ import fastifyCors from "@fastify/cors";
 import fastifyStatic from "@fastify/static";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { PersistentDecisionDebrief, PartitionStore, ProjectStore, EnvironmentStore, SettingsStore, OrderStore } from "@deploystack/core";
-import { ServerAgent, InMemoryDeploymentStore } from "./agent/server-agent.js";
+import { CommandAgent, InMemoryDeploymentStore } from "./agent/command-agent.js";
 import { createMcpServer } from "./mcp/server.js";
 import { registerDeploymentRoutes } from "./api/deployments.js";
 import { registerHealthRoutes } from "./api/health.js";
@@ -31,7 +31,7 @@ const environments = new EnvironmentStore();
 const settings = new SettingsStore();
 const deployments = new InMemoryDeploymentStore();
 const orders = new OrderStore();
-const agent = new ServerAgent(debrief, deployments, orders, undefined, {}, settings);
+const agent = new CommandAgent(debrief, deployments, orders, undefined, {}, settings);
 
 // --- Seed demo data so the server is immediately usable ---
 
@@ -43,9 +43,9 @@ const demoProject = projects.create("web-app", [demoEnv.id, stagingEnv.id]);
 debrief.record({
   partitionId: null,
   deploymentId: null,
-  agent: "server",
+  agent: "command",
   decisionType: "system",
-  decision: "Server initialized with demo data",
+  decision: "Command initialized with demo data",
   reasoning:
     "Seeded one partition (Acme Corp), two environments (production, staging), " +
     "one project (web-app) so the API and MCP tools are immediately testable without setup.",
@@ -166,7 +166,7 @@ app.listen({ port: PORT, host: HOST }, (err) => {
 
   console.log(`
 ╔══════════════════════════════════════════════════════╗
-║  DeployStack Server v0.1.0                           ║
+║  DeployStack Command v0.1.0                           ║
 ║                                                      ║
 ║  REST API:  http://${HOST}:${PORT}/api                ║
 ║  MCP:       http://${HOST}:${PORT}/mcp                ║

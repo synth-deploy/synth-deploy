@@ -500,9 +500,9 @@ export class EnvoyAgent {
     if (!this.reporter) return;
     this.reporter.reportDeploymentResult(result).catch((err) => {
       // Log but don't fail — the synchronous response already went back.
-      // The Server can also pull this data via GET /deployments/:id.
+      // Command can also pull this data via GET /deployments/:id.
       console.error(
-        `[Envoy] Failed to report deployment ${result.deploymentId} to Server:`,
+        `[Envoy] Failed to report deployment ${result.deploymentId} to Command:`,
         err instanceof Error ? err.message : err,
       );
     });

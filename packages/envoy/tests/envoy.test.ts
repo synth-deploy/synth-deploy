@@ -589,12 +589,12 @@ describe("Envoy HTTP Server", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Test Suite 6: Full Server → Envoy Deployment Cycle
+// Test Suite 6: Full Command → Envoy Deployment Cycle
 // ---------------------------------------------------------------------------
 
-describe("Full Deployment Cycle — Server triggers, Envoy executes", () => {
+describe("Full Deployment Cycle — Command triggers, Envoy executes", () => {
   let baseDir: string;
-  let serverDiary: DecisionDebrief;
+  let commandDiary: DecisionDebrief;
   let envoyDiary: DecisionDebrief;
   let state: LocalStateStore;
   let envoyAgent: EnvoyAgent;
@@ -603,7 +603,7 @@ describe("Full Deployment Cycle — Server triggers, Envoy executes", () => {
   beforeEach(async () => {
     baseDir = makeTmpDir();
     fs.mkdirSync(path.join(baseDir, "deployments"), { recursive: true });
-    serverDiary = new DecisionDebrief();
+    commandDiary = new DecisionDebrief();
     envoyDiary = new DecisionDebrief();
     state = new LocalStateStore();
     envoyAgent = new EnvoyAgent(envoyDiary, state, baseDir);
@@ -616,26 +616,26 @@ describe("Full Deployment Cycle — Server triggers, Envoy executes", () => {
     cleanDir(baseDir);
   });
 
-  it("simulates complete Server→Envoy deployment flow", async () => {
-    // Step 1: Server decides to deploy (simulated — we record the Server's decision)
+  it("simulates complete Command→Envoy deployment flow", async () => {
+    // Step 1: Command decides to deploy (simulated — we record Command's decision)
     const deploymentId = "full-cycle-001";
-    serverDiary.record({
+    commandDiary.record({
       partitionId: "partition-1",
       deploymentId,
-      agent: "server",
+      agent: "command",
       decisionType: "pipeline-plan",
       decision: "Planned deployment pipeline: resolve-configuration → preflight-health-check → execute-deployment → post-deploy-verify",
-      reasoning: "Server orchestrating deployment of web-app v3.0.0 to production",
+      reasoning: "Command orchestrating deployment of web-app v3.0.0 to production",
       context: { projectId: "web-app", version: "3.0.0" },
     });
 
-    // Step 2: Server checks Envoy health via HTTP
+    // Step 2: Command checks Envoy health via HTTP
     const healthResponse = await app.inject({ method: "GET", url: "/health" });
     const health = JSON.parse(healthResponse.body);
     expect(health.status).toBe("healthy");
     expect(health.readiness.ready).toBe(true);
 
-    // Step 3: Server delegates execution to Envoy via HTTP
+    // Step 3: Command delegates execution to Envoy via HTTP
     const deployResponse = await app.inject({
       method: "POST",
       url: "/deploy",
@@ -655,11 +655,11 @@ describe("Full Deployment Cycle — Server triggers, Envoy executes", () => {
     expect(deployResult.success).toBe(true);
     expect(deployResult.verificationPassed).toBe(true);
 
-    // Step 4: Server records Envoy's result (simulated)
-    serverDiary.record({
+    // Step 4: Command records Envoy's result (simulated)
+    commandDiary.record({
       partitionId: "partition-1",
       deploymentId,
-      agent: "server",
+      agent: "command",
       decisionType: "deployment-completion",
       decision: `Envoy confirmed deployment: ${deployResult.artifacts.length} artifacts, all verification checks passed`,
       reasoning:
@@ -673,19 +673,19 @@ describe("Full Deployment Cycle — Server triggers, Envoy executes", () => {
     });
 
     // Verify: both diaries have entries for this deployment
-    const serverEntries = serverDiary.getByDeployment(deploymentId);
+    const commandEntries = commandDiary.getByDeployment(deploymentId);
     const envoyEntries = envoyDiary.getByDeployment(deploymentId);
 
-    expect(serverEntries.length).toBeGreaterThanOrEqual(2);
+    expect(commandEntries.length).toBeGreaterThanOrEqual(2);
     expect(envoyEntries.length).toBeGreaterThanOrEqual(5);
 
-    // Server entries use "server" agent
-    expect(serverEntries.every((e) => e.agent === "server")).toBe(true);
+    // Command entries use "command" agent
+    expect(commandEntries.every((e) => e.agent === "command")).toBe(true);
     // Envoy entries use "envoy" agent
     expect(envoyEntries.every((e) => e.agent === "envoy")).toBe(true);
 
     // Both reference the same deployment
-    expect(serverEntries.every((e) => e.deploymentId === deploymentId)).toBe(true);
+    expect(commandEntries.every((e) => e.deploymentId === deploymentId)).toBe(true);
     expect(envoyEntries.every((e) => e.deploymentId === deploymentId)).toBe(true);
   });
 
@@ -732,22 +732,22 @@ describe("Full Deployment Cycle — Server triggers, Envoy executes", () => {
   it("combined diary tells the complete story across both agents", async () => {
     const deploymentId = "combined-story";
 
-    // Server plan
-    serverDiary.record({
+    // Command plan
+    commandDiary.record({
       partitionId: "partition-1",
       deploymentId,
-      agent: "server",
+      agent: "command",
       decisionType: "pipeline-plan",
       decision: "Planned deployment pipeline",
-      reasoning: "Server orchestrating web-app v2.0.0 to production",
+      reasoning: "Command orchestrating web-app v2.0.0 to production",
       context: {},
     });
 
-    // Server config resolution
-    serverDiary.record({
+    // Command config resolution
+    commandDiary.record({
       partitionId: "partition-1",
       deploymentId,
-      agent: "server",
+      agent: "command",
       decisionType: "configuration-resolved",
       decision: "Configuration accepted",
       reasoning: "3 variables merged, no conflicts",
@@ -761,11 +761,11 @@ describe("Full Deployment Cycle — Server triggers, Envoy executes", () => {
       payload: makeInstruction({ deploymentId }),
     });
 
-    // Server records completion
-    serverDiary.record({
+    // Command records completion
+    commandDiary.record({
       partitionId: "partition-1",
       deploymentId,
-      agent: "server",
+      agent: "command",
       decisionType: "deployment-completion",
       decision: "Deployment confirmed by Envoy",
       reasoning: "All checks passed",
@@ -773,18 +773,18 @@ describe("Full Deployment Cycle — Server triggers, Envoy executes", () => {
     });
 
     // Combined view: server decisions + envoy decisions
-    const serverEntries = serverDiary.getByDeployment(deploymentId);
+    const commandEntries = commandDiary.getByDeployment(deploymentId);
     const envoyEntries = envoyDiary.getByDeployment(deploymentId);
 
     // Both diaries recorded entries for this deployment
-    expect(serverEntries.length).toBeGreaterThanOrEqual(3);
+    expect(commandEntries.length).toBeGreaterThanOrEqual(3);
     expect(envoyEntries.length).toBeGreaterThanOrEqual(5);
 
-    // Server entries cover the orchestration story
-    const serverTypes = serverEntries.map((e) => e.decisionType);
-    expect(serverTypes).toContain("pipeline-plan");
-    expect(serverTypes).toContain("configuration-resolved");
-    expect(serverTypes).toContain("deployment-completion");
+    // Command entries cover the orchestration story
+    const commandTypes = commandEntries.map((e) => e.decisionType);
+    expect(commandTypes).toContain("pipeline-plan");
+    expect(commandTypes).toContain("configuration-resolved");
+    expect(commandTypes).toContain("deployment-completion");
 
     // Envoy entries cover the local execution story
     const envoyTypes = envoyEntries.map((e) => e.decisionType);
@@ -795,18 +795,18 @@ describe("Full Deployment Cycle — Server triggers, Envoy executes", () => {
     expect(envoyTypes).toContain("deployment-completion");
 
     // Together they tell the complete story — 8+ entries total
-    const totalEntries = serverEntries.length + envoyEntries.length;
+    const totalEntries = commandEntries.length + envoyEntries.length;
     expect(totalEntries).toBeGreaterThanOrEqual(8);
 
     // Agent attribution is correct
-    expect(serverEntries.every((e) => e.agent === "server")).toBe(true);
+    expect(commandEntries.every((e) => e.agent === "command")).toBe(true);
     expect(envoyEntries.every((e) => e.agent === "envoy")).toBe(true);
 
-    // The server's final entry references Envoy completion
-    const serverCompletion = serverEntries.find(
+    // Command's final entry references Envoy completion
+    const commandCompletion = commandEntries.find(
       (e) => e.decisionType === "deployment-completion",
     );
-    expect(serverCompletion).toBeDefined();
-    expect(serverCompletion!.decision).toContain("confirmed");
+    expect(commandCompletion).toBeDefined();
+    expect(commandCompletion!.decision).toContain("confirmed");
   });
 });

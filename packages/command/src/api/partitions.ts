@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import type { PartitionStore, DebriefReader } from "@deploystack/core";
 import { generateProjectHistory } from "@deploystack/core";
-import type { DeploymentStore } from "../agent/server-agent.js";
+import type { DeploymentStore } from "../agent/command-agent.js";
 
 export function registerPartitionRoutes(
   app: FastifyInstance,

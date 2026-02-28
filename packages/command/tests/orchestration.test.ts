@@ -2,9 +2,9 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { DecisionDebrief, OrderStore } from "@deploystack/core";
 import type { Partition, Environment, DebriefEntry, Project } from "@deploystack/core";
 import {
-  ServerAgent,
+  CommandAgent,
   InMemoryDeploymentStore,
-} from "../src/agent/server-agent.js";
+} from "../src/agent/command-agent.js";
 import type {
   ServiceHealthChecker,
   HealthCheckResult,
@@ -119,13 +119,13 @@ describe("Deployment Orchestration Engine", () => {
   let diary: DecisionDebrief;
   let deployments: InMemoryDeploymentStore;
   let healthChecker: MockHealthChecker;
-  let agent: ServerAgent;
+  let agent: CommandAgent;
 
   beforeEach(() => {
     diary = new DecisionDebrief();
     deployments = new InMemoryDeploymentStore();
     healthChecker = new MockHealthChecker();
-    agent = new ServerAgent(diary, deployments, new OrderStore(), healthChecker, {
+    agent = new CommandAgent(diary, deployments, new OrderStore(), healthChecker, {
       healthCheckBackoffMs: 1,
       executionDelayMs: 1,
     });

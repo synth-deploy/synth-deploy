@@ -6,7 +6,7 @@ import type {
   DebriefWriter,
   DebriefReader,
 } from "@deploystack/core";
-import type { ServerAgent, DeploymentStore } from "../agent/server-agent.js";
+import type { CommandAgent, DeploymentStore } from "../agent/command-agent.js";
 
 interface EnvironmentStore {
   get(id: string): { id: string; name: string; variables: Record<string, string> } | undefined;
@@ -19,7 +19,7 @@ interface EnvironmentStore {
 export function registerOrderRoutes(
   app: FastifyInstance,
   orders: OrderStore,
-  agent: ServerAgent,
+  agent: CommandAgent,
   partitions: PartitionStore,
   environments: EnvironmentStore,
   projects: ProjectStore,

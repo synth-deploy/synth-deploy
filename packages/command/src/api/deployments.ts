@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { DeploymentTriggerSchema, generatePostmortem } from "@deploystack/core";
 import type { PartitionStore, DebriefWriter, DebriefReader, OrderStore, Project } from "@deploystack/core";
-import type { ServerAgent, DeploymentStore } from "../agent/server-agent.js";
+import type { CommandAgent, DeploymentStore } from "../agent/command-agent.js";
 
 interface EnvironmentStore {
   get(id: string): { id: string; name: string; variables: Record<string, string> } | undefined;
@@ -13,11 +13,11 @@ interface ProjectStore {
 
 /**
  * REST API routes for deployments. These are the traditional (non-MCP) interface
- * for the web UI and integrations. They call the same ServerAgent as MCP tools.
+ * for the web UI and integrations. They call the same CommandAgent as MCP tools.
  */
 export function registerDeploymentRoutes(
   app: FastifyInstance,
-  agent: ServerAgent,
+  agent: CommandAgent,
   partitions: PartitionStore,
   environments: EnvironmentStore,
   deployments: DeploymentStore,

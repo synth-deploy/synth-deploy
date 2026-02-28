@@ -1,20 +1,20 @@
 import { useState, useEffect } from "react";
-import { getSettings, updateSettings, getServerInfo } from "../api.js";
-import type { AppSettings, ServerInfo, ConflictPolicy } from "../types.js";
+import { getSettings, updateSettings, getCommandInfo } from "../api.js";
+import type { AppSettings, CommandInfo, ConflictPolicy } from "../types.js";
 import PipelineConfigEditor from "../components/PipelineConfigEditor.js";
 
 export default function Settings() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
-  const [serverInfo, setServerInfo] = useState<ServerInfo | null>(null);
+  const [commandInfo, setCommandInfo] = useState<CommandInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [agentSaved, setAgentSaved] = useState(false);
   const [envoySaved, setEnvoySaved] = useState(false);
 
   useEffect(() => {
-    Promise.all([getSettings(), getServerInfo()])
+    Promise.all([getSettings(), getCommandInfo()])
       .then(([s, info]) => {
         setSettings(s);
-        setServerInfo(info);
+        setCommandInfo(info);
         setLoading(false);
       })
       .catch(() => setLoading(false));
@@ -150,30 +150,30 @@ export default function Settings() {
         </div>
       </div>
 
-      {/* Server Connection Info */}
-      {serverInfo && (
+      {/* Command Connection Info */}
+      {commandInfo && (
         <div className="section">
           <div className="card">
             <div className="card-header">
-              <h3>Server Connection</h3>
+              <h3>Command Connection</h3>
             </div>
-            <div className="server-info-grid">
-              <div className="server-info-item">
-                <div className="server-info-label">Version</div>
-                <div className="server-info-value">{serverInfo.version}</div>
+            <div className="command-info-grid">
+              <div className="command-info-item">
+                <div className="command-info-label">Version</div>
+                <div className="command-info-value">{commandInfo.version}</div>
               </div>
-              <div className="server-info-item">
-                <div className="server-info-label">Host</div>
-                <div className="server-info-value">{serverInfo.host}</div>
+              <div className="command-info-item">
+                <div className="command-info-label">Host</div>
+                <div className="command-info-value">{commandInfo.host}</div>
               </div>
-              <div className="server-info-item">
-                <div className="server-info-label">Port</div>
-                <div className="server-info-value">{serverInfo.port}</div>
+              <div className="command-info-item">
+                <div className="command-info-label">Port</div>
+                <div className="command-info-value">{commandInfo.port}</div>
               </div>
-              <div className="server-info-item">
-                <div className="server-info-label">Started</div>
-                <div className="server-info-value">
-                  {new Date(serverInfo.startedAt).toLocaleString()}
+              <div className="command-info-item">
+                <div className="command-info-label">Started</div>
+                <div className="command-info-value">
+                  {new Date(commandInfo.startedAt).toLocaleString()}
                 </div>
               </div>
             </div>
