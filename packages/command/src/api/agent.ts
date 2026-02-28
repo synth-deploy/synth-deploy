@@ -850,4 +850,196 @@ export function registerAgentRoutes(
   app.get("/api/agent/context", async () => {
     return generateContext(deployments, environments, partitions);
   });
+
+  /**
+   * Canvas query — classifies a natural language query and returns
+   * a structured action telling the UI what view to render.
+   * Deploy intents delegate to interpret-intent logic.
+   * Navigation/data intents resolve entities and return view params.
+   */
+  app.post("/api/agent/query", async (request, reply) => {
+    const body = request.body as { query: string; conversationId?: string };
+
+    if (!body.query || typeof body.query !== "string") {
+      return reply.status(400).send({ error: "Query string is required" });
+    }
+
+    const query = body.query.trim();
+    const lower = query.toLowerCase();
+    const allProjects = projects.list();
+    const allPartitions = partitions.list();
+    const allEnvironments = environments.list();
+
+    // --- LLM classification (when available) ---
+    if (llm && llm.isAvailable()) {
+      const llmAction = await classifyQueryWithLlm(
+        llm, query, allProjects, allPartitions, allEnvironments,
+        deployments, debrief,
+      );
+      if (llmAction) {
+        debrief.record({
+          partitionId: null,
+          deploymentId: null,
+          agent: "command",
+          decisionType: "system",
+          decision: `Canvas query classified as ${llmAction.action}: ${llmAction.view}`,
+          reasoning: `LLM classified "${query}" → ${llmAction.action}/${llmAction.view}`,
+          context: { query, action: llmAction },
+        });
+        return llmAction;
+      }
+    }
+
+    // --- Regex fallback classification ---
+
+    // Deploy intents: contains "deploy" or version-like patterns with entity names
+    const deployPatterns = /\b(deploy|release|ship|push|rollout)\b/;
+    if (deployPatterns.test(lower)) {
+      return { action: "deploy" as const, view: "deployment-authoring", params: { intent: query } };
+    }
+
+    // Show specific partition
+    for (const p of allPartitions) {
+      const name = p.name.toLowerCase();
+      if (lower.includes(name) && (lower.includes("partition") || lower.includes("show"))) {
+        return { action: "navigate" as const, view: "partition-detail", params: { id: p.id }, title: p.name };
+      }
+    }
+
+    // Show specific environment
+    for (const e of allEnvironments) {
+      const name = e.name.toLowerCase();
+      if (lower.includes(name) && (lower.includes("environment") || lower.includes("env"))) {
+        return { action: "navigate" as const, view: "environment-detail", params: { id: e.id }, title: e.name };
+      }
+    }
+
+    // Show specific deployment by ID
+    const deployIdMatch = lower.match(/(?:deployment|deploy)\s+([a-f0-9-]{36})/);
+    if (deployIdMatch) {
+      return { action: "navigate" as const, view: "deployment-detail", params: { id: deployIdMatch[1] }, title: "Deployment" };
+    }
+
+    // Failed deployments / what failed
+    if (/\b(fail|failed|failures|what failed|broken)\b/.test(lower)) {
+      return { action: "navigate" as const, view: "deployment-list", params: { status: "failed" }, title: "Failed Deployments" };
+    }
+
+    // Deployment history / recent deployments
+    if (/\b(deployment|history|recent|deployments)\b/.test(lower)) {
+      const partitionParam: Record<string, string> = {};
+      for (const p of allPartitions) {
+        if (lower.includes(p.name.toLowerCase())) {
+          partitionParam.partitionId = p.id;
+          break;
+        }
+      }
+      return { action: "navigate" as const, view: "deployment-list", params: partitionParam, title: "Deployments" };
+    }
+
+    // Signals / drift / health
+    if (/\b(signal|signals|drift|health|alert|alerts)\b/.test(lower)) {
+      return { action: "navigate" as const, view: "overview", params: { focus: "signals" }, title: "Signals" };
+    }
+
+    // Show all partitions
+    if (/\b(partitions|all partitions)\b/.test(lower)) {
+      return { action: "navigate" as const, view: "overview", params: { focus: "partitions" }, title: "Partitions" };
+    }
+
+    // Fallback: treat as deploy intent
+    return { action: "deploy" as const, view: "deployment-authoring", params: { intent: query } };
+  });
+}
+
+// ---------------------------------------------------------------------------
+// LLM-powered query classification
+// ---------------------------------------------------------------------------
+
+function buildQueryClassificationPrompt(): string {
+  return `You are a query classifier for DeployStack's agent canvas. Given a natural language query from a deployment engineer, classify it into one of these actions:
+
+1. "deploy" — The user wants to trigger a deployment (e.g., "deploy Acme to staging", "release v1.2.3")
+2. "navigate" — The user wants to see details about a specific entity (e.g., "show partition Alpha", "environment staging")
+3. "data" — The user wants to see a list or filtered view of data (e.g., "what failed", "recent deployments", "deployment history for Alpha")
+
+Return a JSON object with this exact schema:
+{
+  "action": "deploy" | "navigate" | "data",
+  "view": "<view-name>",
+  "params": { ... },
+  "title": "<human-readable title for the panel>"
+}
+
+View names:
+- "deployment-authoring" — for deploy actions
+- "partition-detail" — show specific partition (params: { "id": "<partition-id>" })
+- "environment-detail" — show specific environment (params: { "id": "<environment-id>" })
+- "deployment-detail" — show specific deployment (params: { "id": "<deployment-id>" })
+- "deployment-list" — show list of deployments (params: { "partitionId"?: "...", "status"?: "failed"|"succeeded" })
+- "overview" — show the operational overview (params: { "focus"?: "signals"|"partitions" })
+
+Rules:
+- ONLY use entity IDs from the provided lists. Never invent IDs.
+- If the query mentions an entity by name, resolve it to its ID.
+- If the query is ambiguous, default to "overview".
+- Return ONLY valid JSON, no markdown, no explanation.`;
+}
+
+async function classifyQueryWithLlm(
+  llm: LlmClient,
+  query: string,
+  allProjects: Project[],
+  allPartitions: Partition[],
+  allEnvironments: Environment[],
+  deploymentStore: DeploymentStore,
+  _debrief: DebriefReader,
+): Promise<{ action: string; view: string; params: Record<string, string>; title?: string } | null> {
+  const parts: string[] = [`Query: "${query}"`];
+
+  parts.push(`\nKnown partitions:`);
+  for (const t of allPartitions) parts.push(`  - id: "${t.id}", name: "${t.name}"`);
+  if (allPartitions.length === 0) parts.push("  (none)");
+
+  parts.push(`\nKnown environments:`);
+  for (const e of allEnvironments) parts.push(`  - id: "${e.id}", name: "${e.name}"`);
+  if (allEnvironments.length === 0) parts.push("  (none)");
+
+  parts.push(`\nKnown projects:`);
+  for (const p of allProjects) parts.push(`  - id: "${p.id}", name: "${p.name}"`);
+  if (allProjects.length === 0) parts.push("  (none)");
+
+  const llmResult = await llm.classify({
+    prompt: parts.join("\n"),
+    systemPrompt: buildQueryClassificationPrompt(),
+    promptSummary: `Canvas query classification: "${query}"`,
+    partitionId: null,
+    maxTokens: 512,
+  });
+
+  if (!llmResult.ok) return null;
+
+  try {
+    let text = llmResult.text.trim();
+    if (text.startsWith("```")) {
+      text = text.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "");
+    }
+    const parsed = JSON.parse(text);
+    if (!parsed.action || !parsed.view) return null;
+
+    // Validate entity IDs if present
+    const partitionIds = new Set(allPartitions.map((t) => t.id));
+    const environmentIds = new Set(allEnvironments.map((e) => e.id));
+    if (parsed.params?.id) {
+      if (parsed.view === "partition-detail" && !partitionIds.has(parsed.params.id)) return null;
+      if (parsed.view === "environment-detail" && !environmentIds.has(parsed.params.id)) return null;
+    }
+    if (parsed.params?.partitionId && !partitionIds.has(parsed.params.partitionId)) {
+      delete parsed.params.partitionId;
+    }
+
+    return parsed;
+  } catch {
+    return null;
+  }
 }

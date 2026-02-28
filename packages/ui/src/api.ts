@@ -375,6 +375,22 @@ export async function getDeploymentContext(): Promise<DeploymentContext> {
   return fetchJson("/api/agent/context");
 }
 
+// --- Canvas Query ---
+
+export interface CanvasQueryResult {
+  action: "deploy" | "navigate" | "data";
+  view: string;
+  params: Record<string, string>;
+  title?: string;
+}
+
+export async function queryAgent(query: string, conversationId?: string): Promise<CanvasQueryResult> {
+  return fetchJson("/api/agent/query", {
+    method: "POST",
+    body: JSON.stringify({ query, conversationId }),
+  });
+}
+
 // --- Settings ---
 
 export async function getSettings(): Promise<AppSettings> {

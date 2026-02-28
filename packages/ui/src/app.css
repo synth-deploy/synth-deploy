@@ -2064,3 +2064,749 @@ table a:hover {
   background: var(--agent-surface);
   border-color: var(--agent-border);
 }
+
+/* ==========================================================================
+   AGENT CANVAS — Full-screen dynamic canvas layout
+   ========================================================================== */
+
+.agent-canvas {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  width: 100vw;
+  background: var(--agent-bg);
+  color: var(--agent-text);
+}
+
+/* ---- Canvas top bar ---- */
+
+.canvas-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 24px;
+  border-bottom: 1px solid var(--agent-border);
+  background: rgba(15, 20, 30, 0.8);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  flex-shrink: 0;
+}
+
+.canvas-topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.canvas-logo {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--agent-text);
+  margin: 0;
+  letter-spacing: 0.5px;
+}
+
+.canvas-mode-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: var(--agent-accent-dim);
+  border-radius: 4px;
+}
+
+.canvas-pulse-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--agent-accent);
+  animation: agentPulse 2s ease-in-out infinite;
+}
+
+.canvas-mode-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  color: var(--agent-accent);
+  font-family: 'SF Mono', 'Fira Code', monospace;
+}
+
+.canvas-topbar-right {
+  display: flex;
+  align-items: center;
+}
+
+/* ---- Canvas panel stack ---- */
+
+.canvas-panel-stack {
+  flex: 1;
+  overflow-y: auto;
+  padding-bottom: 80px; /* space for intent bar */
+}
+
+/* ---- Canvas panel chrome ---- */
+
+.canvas-panel {
+  animation: canvasPanelIn 0.3s ease-out;
+}
+
+@keyframes canvasPanelIn {
+  from {
+    opacity: 0;
+    transform: translateX(40px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.canvas-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--agent-border);
+}
+
+.canvas-panel-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.canvas-panel-back {
+  background: none;
+  border: 1px solid var(--agent-border);
+  color: var(--agent-text-secondary);
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  transition: all 0.15s;
+}
+
+.canvas-panel-back:hover {
+  background: var(--agent-accent-dim);
+  border-color: rgba(99, 225, 190, 0.3);
+  color: var(--agent-accent);
+}
+
+.canvas-panel-title {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0;
+  color: var(--agent-text);
+}
+
+.canvas-panel-dismiss {
+  background: none;
+  border: 1px solid var(--agent-border);
+  color: var(--agent-text-secondary);
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+
+.canvas-panel-dismiss:hover {
+  background: rgba(248, 113, 113, 0.15);
+  border-color: rgba(248, 113, 113, 0.3);
+  color: #f87171;
+}
+
+.canvas-panel-body {
+  padding: 24px;
+}
+
+/* ---- Canvas intent bar (bottom) ---- */
+
+.canvas-intent-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 0 24px 16px;
+  background: linear-gradient(transparent, var(--agent-bg) 40%);
+  z-index: 50;
+}
+
+.canvas-intent-bar .intent-bar {
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+/* ---- Canvas overview ---- */
+
+.canvas-overview {
+  padding: 0;
+}
+
+/* ---- Summary strip ---- */
+
+.canvas-summary-strip {
+  display: flex;
+  gap: 0;
+  border: 1px solid var(--agent-border);
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 24px;
+}
+
+.canvas-summary-item {
+  flex: 1;
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border-right: 1px solid var(--agent-border);
+  background: var(--agent-surface);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.canvas-summary-item:last-child {
+  border-right: none;
+}
+
+.canvas-summary-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--agent-text);
+}
+
+.canvas-summary-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--agent-text-muted);
+}
+
+/* ---- Canvas sections ---- */
+
+.canvas-section {
+  margin-bottom: 24px;
+}
+
+.canvas-section-title {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--agent-text-muted);
+  margin: 0 0 12px 0;
+}
+
+/* ---- Signal grid ---- */
+
+.canvas-signal-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.canvas-signal-card {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 16px;
+  border-radius: 8px;
+  border: 1px solid var(--agent-border);
+  background: var(--agent-surface);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  cursor: pointer;
+  transition: all 0.15s;
+  color: var(--agent-text);
+}
+
+.canvas-signal-card:hover {
+  border-color: rgba(99, 225, 190, 0.3);
+  background: rgba(99, 225, 190, 0.04);
+}
+
+.canvas-signal-critical {
+  border-left: 3px solid #dc2626;
+}
+
+.canvas-signal-warning {
+  border-left: 3px solid #f59e0b;
+}
+
+.canvas-signal-info {
+  border-left: 3px solid #3b82f6;
+}
+
+.canvas-signal-severity {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  margin-bottom: 4px;
+}
+
+.canvas-signal-critical .canvas-signal-severity { color: #dc2626; }
+.canvas-signal-warning .canvas-signal-severity { color: #f59e0b; }
+.canvas-signal-info .canvas-signal-severity { color: #3b82f6; }
+
+.canvas-signal-title {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 4px;
+  color: var(--agent-text);
+}
+
+.canvas-signal-detail {
+  font-size: 12px;
+  color: var(--agent-text-secondary);
+  line-height: 1.4;
+}
+
+/* ---- Partition grid ---- */
+
+.canvas-partition-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 12px;
+}
+
+.canvas-partition-card {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 16px;
+  border-radius: 8px;
+  border: 1px solid var(--agent-border);
+  background: var(--agent-surface);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  cursor: pointer;
+  transition: all 0.15s;
+  color: var(--agent-text);
+}
+
+.canvas-partition-card:hover {
+  border-color: rgba(99, 225, 190, 0.3);
+  background: rgba(99, 225, 190, 0.04);
+}
+
+.canvas-partition-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.canvas-partition-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  background: var(--agent-accent-dim);
+  color: var(--agent-accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.canvas-partition-name {
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.canvas-partition-envs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* ---- Activity list ---- */
+
+.canvas-activity-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.canvas-activity-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: background 0.15s;
+  width: 100%;
+  text-align: left;
+  color: var(--agent-text);
+  font-size: 13px;
+}
+
+.canvas-activity-row:hover {
+  background: rgba(99, 225, 190, 0.04);
+}
+
+.canvas-activity-version {
+  font-weight: 600;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  min-width: 80px;
+}
+
+.canvas-activity-project,
+.canvas-activity-partition {
+  color: var(--agent-text-secondary);
+  min-width: 100px;
+}
+
+.canvas-activity-env {
+  color: var(--agent-text-secondary);
+  min-width: 80px;
+}
+
+.canvas-activity-time {
+  color: var(--agent-text-muted);
+  font-size: 12px;
+  margin-left: auto;
+}
+
+/* ---- Canvas detail layout ---- */
+
+.canvas-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+/* ---- Variable table ---- */
+
+.canvas-var-table {
+  border: 1px solid var(--agent-border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.canvas-var-row {
+  display: flex;
+  gap: 24px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--agent-border);
+  font-size: 13px;
+}
+
+.canvas-var-row:last-child {
+  border-bottom: none;
+}
+
+.canvas-var-row .mono:first-child {
+  font-weight: 600;
+  min-width: 160px;
+  color: var(--agent-accent);
+}
+
+.canvas-var-row .mono:last-child {
+  color: var(--agent-text-secondary);
+}
+
+/* ---- Environment grid ---- */
+
+.canvas-env-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.canvas-env-card {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  color: inherit;
+}
+
+.canvas-env-card:hover .env-badge-expanded {
+  border-color: rgba(99, 225, 190, 0.3);
+}
+
+/* ---- Deployment detail ---- */
+
+.canvas-deploy-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.canvas-deploy-version {
+  font-size: 20px;
+  font-weight: 700;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+}
+
+.canvas-deploy-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 24px;
+  font-size: 13px;
+  color: var(--agent-text-secondary);
+}
+
+.canvas-meta-link {
+  background: none;
+  border: none;
+  color: var(--agent-accent);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 0;
+  text-decoration: underline;
+  text-decoration-color: rgba(99, 225, 190, 0.3);
+}
+
+.canvas-meta-link:hover {
+  text-decoration-color: var(--agent-accent);
+}
+
+/* ---- Failure card ---- */
+
+.canvas-failure-card {
+  padding: 16px;
+  border-radius: 8px;
+  border: 1px solid rgba(248, 113, 113, 0.2);
+  background: rgba(248, 113, 113, 0.05);
+}
+
+.canvas-failure-row {
+  font-size: 13px;
+  margin-bottom: 8px;
+  line-height: 1.5;
+  color: var(--agent-text);
+}
+
+.canvas-failure-row:last-child {
+  margin-bottom: 0;
+}
+
+.canvas-failure-row strong {
+  color: #f87171;
+}
+
+/* ---- Timeline ---- */
+
+.canvas-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding-left: 12px;
+  border-left: 2px solid var(--agent-border);
+}
+
+.canvas-timeline-entry {
+  display: flex;
+  gap: 12px;
+  padding: 10px 0 10px 12px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  color: var(--agent-text);
+  width: 100%;
+  position: relative;
+  transition: background 0.15s;
+}
+
+.canvas-timeline-entry:hover {
+  background: rgba(99, 225, 190, 0.02);
+}
+
+.canvas-timeline-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 5px;
+  margin-left: -17px;
+}
+
+.canvas-timeline-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.canvas-timeline-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.canvas-timeline-type {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--agent-text-muted);
+}
+
+.canvas-timeline-time {
+  font-size: 11px;
+  color: var(--agent-text-muted);
+  margin-left: auto;
+}
+
+.canvas-timeline-decision {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--agent-text);
+}
+
+.canvas-timeline-reasoning {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: rgba(99, 225, 190, 0.04);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--agent-text-secondary);
+}
+
+/* ---- Canvas empty state ---- */
+
+.canvas-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 64px 24px;
+  text-align: center;
+  color: var(--agent-text-muted);
+}
+
+.canvas-empty p {
+  margin: 4px 0;
+}
+
+/* ---- Signal detail panel ---- */
+
+.canvas-signal-detail-card {
+  padding: 24px;
+  border-radius: 8px;
+  border: 1px solid var(--agent-border);
+  background: var(--agent-surface);
+  margin-bottom: 24px;
+}
+
+.canvas-signal-detail-card h3 {
+  margin: 12px 0 8px;
+  color: var(--agent-text);
+}
+
+.canvas-signal-detail-card p {
+  color: var(--agent-text-secondary);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.canvas-signal-severity-large {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  margin-bottom: 8px;
+}
+
+.canvas-signal-type-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--agent-accent-dim);
+  color: var(--agent-accent);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.canvas-entity-link {
+  background: none;
+  border: 1px solid var(--agent-border);
+  color: var(--agent-accent);
+  padding: 12px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.15s;
+  width: 100%;
+  text-align: left;
+}
+
+.canvas-entity-link:hover {
+  background: var(--agent-accent-dim);
+  border-color: rgba(99, 225, 190, 0.3);
+}
+
+/* ---- Deployment authoring ---- */
+
+.canvas-resolved-config {
+  border: 1px solid var(--agent-border);
+  border-radius: 8px;
+  padding: 20px;
+  background: var(--agent-surface);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.canvas-resolved-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.canvas-resolved-header h3 {
+  margin: 0;
+  font-size: 16px;
+  color: var(--agent-text);
+}
+
+.canvas-interpreting {
+  text-align: center;
+  padding: 32px;
+  color: var(--agent-text-secondary);
+  font-size: 14px;
+}
+
+/* ---- Canvas intent bar agent-mode overrides ---- */
+
+.canvas-intent-bar .intent-bar-inner {
+  background: var(--agent-surface);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-color: rgba(99, 225, 190, 0.3);
+}
+
+.canvas-intent-bar .intent-bar-icon {
+  color: var(--agent-accent);
+}
+
+.canvas-intent-bar .intent-bar-input {
+  color: var(--agent-text);
+}
+
+.canvas-intent-bar .intent-bar-submit {
+  background: var(--agent-accent-dim);
+  color: var(--agent-accent);
+}
+
+.canvas-intent-bar .intent-bar-submit:hover {
+  background: rgba(99, 225, 190, 0.25);
+}
