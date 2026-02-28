@@ -6,12 +6,12 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "npm run build --workspaces",
+    "build": "npm run build -w packages/core && npm run build -w packages/command -w packages/envoy -w packages/ui",
     "dev": "npm run dev --workspace=packages/command",
     "dev:ui": "npm run dev --workspace=packages/ui",
     "build:ui": "npm run build --workspace=packages/ui",
     "test": "npm test --workspace=packages/core --workspace=packages/command --workspace=packages/envoy",
-    "clean": "rm -rf packages/*/dist"
+    "clean": "rm -rf packages/*/dist packages/*/*.tsbuildinfo"
   },
   "engines": {
     "node": ">=22.0.0"
