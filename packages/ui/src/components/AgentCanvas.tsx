@@ -10,6 +10,12 @@ import EnvironmentDetailPanel from "./canvas/EnvironmentDetailPanel.js";
 import DeploymentDetailPanel from "./canvas/DeploymentDetailPanel.js";
 import DeploymentListPanel from "./canvas/DeploymentListPanel.js";
 import DeploymentAuthoringPanel from "./canvas/DeploymentAuthoringPanel.js";
+import ProjectListPanel from "./canvas/ProjectListPanel.js";
+import PartitionListPanel from "./canvas/PartitionListPanel.js";
+import OrderListPanel from "./canvas/OrderListPanel.js";
+import OrderDetailPanel from "./canvas/OrderDetailPanel.js";
+import DebriefPanel from "./canvas/DebriefPanel.js";
+import SettingsPanel from "./canvas/SettingsPanel.js";
 
 export default function AgentCanvas() {
   const { currentPanel, pushPanel } = useCanvas();
@@ -101,6 +107,44 @@ export default function AgentCanvas() {
             initialIntent={panel.params.intent}
           />
         );
+
+      case "project-list":
+        return <ProjectListPanel key={panel.id} title={panel.title} />;
+
+      case "partition-list":
+        return <PartitionListPanel key={panel.id} title={panel.title} />;
+
+      case "order-list":
+        return (
+          <OrderListPanel
+            key={panel.id}
+            title={panel.title}
+            filterProjectId={panel.params.projectId}
+            filterPartitionId={panel.params.partitionId}
+          />
+        );
+
+      case "order-detail":
+        return (
+          <OrderDetailPanel
+            key={panel.id}
+            orderId={panel.params.id}
+            title={panel.title}
+          />
+        );
+
+      case "debrief":
+        return (
+          <DebriefPanel
+            key={panel.id}
+            title={panel.title}
+            filterPartitionId={panel.params.partitionId}
+            filterDecisionType={panel.params.decisionType}
+          />
+        );
+
+      case "settings":
+        return <SettingsPanel key={panel.id} title={panel.title} />;
 
       default:
         return (

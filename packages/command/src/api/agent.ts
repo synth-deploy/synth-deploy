@@ -74,6 +74,7 @@ interface DeploymentContext {
 interface ProjectStore {
   get(id: string): Project | undefined;
   list(): Project[];
+  create(name: string, environmentIds?: string[]): Project;
 }
 
 interface EnvironmentStore {
@@ -877,6 +878,37 @@ export function registerAgentRoutes(
         deployments, debrief,
       );
       if (llmAction) {
+        // Handle create actions: perform the creation, then navigate to the result
+        if (llmAction.action === "create" && llmAction.params?.name) {
+          const entityName = llmAction.params.name;
+          if (llmAction.view === "partition-list" || llmAction.view === "partition-detail") {
+            const created = partitions.create(entityName);
+            debrief.record({
+              partitionId: created.id,
+              deploymentId: null,
+              agent: "command",
+              decisionType: "system",
+              decision: `Created partition "${created.name}" via intent bar`,
+              reasoning: `LLM classified "${query}" as create-partition`,
+              context: { query, partitionId: created.id },
+            });
+            return { action: "navigate" as const, view: "partition-detail", params: { id: created.id }, title: created.name };
+          }
+          if (llmAction.view === "project-list") {
+            const created = projects.create(entityName, []);
+            debrief.record({
+              partitionId: null,
+              deploymentId: null,
+              agent: "command",
+              decisionType: "system",
+              decision: `Created project "${created.name}" via intent bar`,
+              reasoning: `LLM classified "${query}" as create-project`,
+              context: { query, projectId: created.id },
+            });
+            return { action: "navigate" as const, view: "project-list", params: {}, title: "Projects" };
+          }
+        }
+
         debrief.record({
           partitionId: null,
           deploymentId: null,
@@ -891,6 +923,40 @@ export function registerAgentRoutes(
     }
 
     // --- Regex fallback classification ---
+
+    // Create partition: "create partition Acme Corp" → create and navigate to detail
+    const createPartitionMatch = query.match(/\bcreate\s+partition\s+(.+)/i);
+    if (createPartitionMatch) {
+      const partitionName = createPartitionMatch[1].trim();
+      const created = partitions.create(partitionName);
+      debrief.record({
+        partitionId: created.id,
+        deploymentId: null,
+        agent: "command",
+        decisionType: "system",
+        decision: `Created partition "${created.name}" via intent bar`,
+        reasoning: `User requested partition creation: "${query}"`,
+        context: { query, partitionId: created.id },
+      });
+      return { action: "navigate" as const, view: "partition-detail", params: { id: created.id }, title: created.name };
+    }
+
+    // Create project: "create project api-service" → create and navigate to project list
+    const createProjectMatch = query.match(/\bcreate\s+project\s+(.+)/i);
+    if (createProjectMatch) {
+      const projectName = createProjectMatch[1].trim();
+      const created = projects.create(projectName, []);
+      debrief.record({
+        partitionId: null,
+        deploymentId: null,
+        agent: "command",
+        decisionType: "system",
+        decision: `Created project "${created.name}" via intent bar`,
+        reasoning: `User requested project creation: "${query}"`,
+        context: { query, projectId: created.id },
+      });
+      return { action: "navigate" as const, view: "project-list", params: {}, title: "Projects" };
+    }
 
     // Deploy intents: contains "deploy" or version-like patterns with entity names
     const deployPatterns = /\b(deploy|release|ship|push|rollout)\b/;
@@ -925,6 +991,46 @@ export function registerAgentRoutes(
       return { action: "navigate" as const, view: "deployment-list", params: { status: "failed" }, title: "Failed Deployments" };
     }
 
+    // Settings / configuration
+    if (/\b(settings|preferences|configure)\b/.test(lower) || (lower.includes("config") && !/\bconfiguration-resolved\b/.test(lower))) {
+      return { action: "navigate" as const, view: "settings", params: {}, title: "Settings" };
+    }
+
+    // Projects list
+    if (/\b(projects|project list|manage projects)\b/.test(lower)) {
+      return { action: "navigate" as const, view: "project-list", params: {}, title: "Projects" };
+    }
+
+    // Debrief / decision diary
+    if (/\b(debrief|decision diary|decisions|decision log|decision history)\b/.test(lower)) {
+      const debriefParams: Record<string, string> = {};
+      for (const p of allPartitions) {
+        if (lower.includes(p.name.toLowerCase())) {
+          debriefParams.partitionId = p.id;
+          break;
+        }
+      }
+      return { action: "navigate" as const, view: "debrief", params: debriefParams, title: "Debrief" };
+    }
+
+    // Specific order by ID
+    const orderIdMatch = lower.match(/\border\s+([a-f0-9-]{8,36})\b/);
+    if (orderIdMatch) {
+      return { action: "navigate" as const, view: "order-detail", params: { id: orderIdMatch[1] }, title: "Order" };
+    }
+
+    // Orders list
+    if (/\b(orders|order list|all orders|manage orders)\b/.test(lower)) {
+      const orderParams: Record<string, string> = {};
+      for (const p of allProjects) {
+        if (lower.includes(p.name.toLowerCase())) {
+          orderParams.projectId = p.id;
+          break;
+        }
+      }
+      return { action: "navigate" as const, view: "order-list", params: orderParams, title: "Orders" };
+    }
+
     // Deployment history / recent deployments
     if (/\b(deployment|history|recent|deployments)\b/.test(lower)) {
       const partitionParam: Record<string, string> = {};
@@ -943,8 +1049,8 @@ export function registerAgentRoutes(
     }
 
     // Show all partitions
-    if (/\b(partitions|all partitions)\b/.test(lower)) {
-      return { action: "navigate" as const, view: "overview", params: { focus: "partitions" }, title: "Partitions" };
+    if (/\b(partitions|all partitions|partition list|manage partitions)\b/.test(lower)) {
+      return { action: "navigate" as const, view: "partition-list", params: {}, title: "Partitions" };
     }
 
     // Fallback: treat as deploy intent
@@ -962,10 +1068,11 @@ function buildQueryClassificationPrompt(): string {
 1. "deploy" — The user wants to trigger a deployment (e.g., "deploy Acme to staging", "release v1.2.3")
 2. "navigate" — The user wants to see details about a specific entity (e.g., "show partition Alpha", "environment staging")
 3. "data" — The user wants to see a list or filtered view of data (e.g., "what failed", "recent deployments", "deployment history for Alpha")
+4. "create" — The user wants to create a new entity (e.g., "create partition Acme Corp", "create project api-service")
 
 Return a JSON object with this exact schema:
 {
-  "action": "deploy" | "navigate" | "data",
+  "action": "deploy" | "navigate" | "data" | "create",
   "view": "<view-name>",
   "params": { ... },
   "title": "<human-readable title for the panel>"
@@ -978,11 +1085,18 @@ View names:
 - "deployment-detail" — show specific deployment (params: { "id": "<deployment-id>" })
 - "deployment-list" — show list of deployments (params: { "partitionId"?: "...", "status"?: "failed"|"succeeded" })
 - "overview" — show the operational overview (params: { "focus"?: "signals"|"partitions" })
+- "project-list" — show all projects (params: {})
+- "partition-list" — show all partitions with create option (params: {})
+- "order-list" — show deployment orders (params: { "projectId"?: "...", "partitionId"?: "..." })
+- "order-detail" — show a specific order (params: { "id": "<order-id>" })
+- "debrief" — show the decision diary / debrief timeline (params: { "partitionId"?: "...", "decisionType"?: "..." })
+- "settings" — show application settings and configuration (params: {})
 
 Rules:
 - ONLY use entity IDs from the provided lists. Never invent IDs.
 - If the query mentions an entity by name, resolve it to its ID.
 - If the query is ambiguous, default to "overview".
+- For "create" actions, include the entity name in params: { "name": "..." } and use view "partition-list" for partitions or "project-list" for projects.
 - Return ONLY valid JSON, no markdown, no explanation.`;
 }
 
