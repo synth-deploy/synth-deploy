@@ -377,9 +377,18 @@ const mcp = createMcpServer({ agent, debrief, partitions, environments, deployme
 
 const app = Fastify({ logger: true });
 
-// Enable CORS for development (UI on port 5173, server on 3000)
+// Configure CORS origin from DEPLOYSTACK_CORS_ORIGIN env var.
+// If unset or empty: permissive (true). Single value: string. Comma-separated: string[].
+const rawCorsOrigin = process.env.DEPLOYSTACK_CORS_ORIGIN;
+const corsOrigin: true | string | string[] =
+  !rawCorsOrigin || rawCorsOrigin.trim() === ''
+    ? true
+    : rawCorsOrigin.includes(',')
+      ? rawCorsOrigin.split(',').map((o) => o.trim())
+      : rawCorsOrigin.trim();
+
 await app.register(fastifyCors, {
-  origin: true,
+  origin: corsOrigin,
 });
 
 // Register REST routes
