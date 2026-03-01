@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { DecisionDebrief } from "../src/debrief.js";
-import { LlmClient, DEFAULT_TIMEOUT_MS, DEFAULT_RATE_LIMIT_PER_MINUTE } from "../src/llm-client.js";
-import type { LlmCallParams } from "../src/llm-client.js";
+import { LlmClient, DEFAULT_TIMEOUT_MS, DEFAULT_RATE_LIMIT_PER_MINUTE, createOpenAICompatibleAdapter } from "../src/llm-client.js";
+import type { LlmCallParams, LlmProvider } from "../src/llm-client.js";
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -577,5 +577,565 @@ describe("LlmClient — error scenarios", () => {
     expect(classifyResult.ok).toBe(false);
     if (!reasonResult.ok) expect(typeof reasonResult.reason).toBe("string");
     if (!classifyResult.ok) expect(typeof classifyResult.reason).toBe("string");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Provider detection from env vars
+// ---------------------------------------------------------------------------
+
+describe("LlmClient — provider detection", () => {
+  afterEach(() => {
+    delete process.env.DEPLOYSTACK_LLM_PROVIDER;
+    delete process.env.DEPLOYSTACK_LLM_BASE_URL;
+    delete process.env.DEPLOYSTACK_LLM_MODEL;
+  });
+
+  it("defaults to anthropic provider when no config or env var", () => {
+    const debrief = new DecisionDebrief();
+    const client = new LlmClient(debrief, "command");
+    const internal = client as unknown as { _provider: LlmProvider };
+    expect(internal._provider).toBe("anthropic");
+  });
+
+  it("reads provider from DEPLOYSTACK_LLM_PROVIDER env var", () => {
+    process.env.DEPLOYSTACK_LLM_PROVIDER = "bedrock";
+    const debrief = new DecisionDebrief();
+    const client = new LlmClient(debrief, "command");
+    const internal = client as unknown as { _provider: LlmProvider };
+    expect(internal._provider).toBe("bedrock");
+  });
+
+  it("explicit config.provider takes precedence over env var", () => {
+    process.env.DEPLOYSTACK_LLM_PROVIDER = "bedrock";
+    const debrief = new DecisionDebrief();
+    const client = new LlmClient(debrief, "command", { provider: "vertex" });
+    const internal = client as unknown as { _provider: LlmProvider };
+    expect(internal._provider).toBe("vertex");
+  });
+
+  it("reads base URL from DEPLOYSTACK_LLM_BASE_URL env var", () => {
+    process.env.DEPLOYSTACK_LLM_BASE_URL = "http://my-ollama:11434/v1";
+    const debrief = new DecisionDebrief();
+    const client = new LlmClient(debrief, "command");
+    const internal = client as unknown as { _baseUrl: string | undefined };
+    expect(internal._baseUrl).toBe("http://my-ollama:11434/v1");
+  });
+
+  it("explicit config.baseUrl takes precedence over env var", () => {
+    process.env.DEPLOYSTACK_LLM_BASE_URL = "http://env-url/v1";
+    const debrief = new DecisionDebrief();
+    const client = new LlmClient(debrief, "command", {
+      baseUrl: "http://config-url/v1",
+    });
+    const internal = client as unknown as { _baseUrl: string | undefined };
+    expect(internal._baseUrl).toBe("http://config-url/v1");
+  });
+
+  it("config.model overrides reasoning model (but not classification)", () => {
+    const debrief = new DecisionDebrief();
+    const client = new LlmClient(debrief, "command", {
+      model: "llama3.2",
+    });
+    const internal = client as unknown as {
+      _reasoningModel: string;
+      _classificationModel: string;
+    };
+    expect(internal._reasoningModel).toBe("llama3.2");
+    // classification model should still be the default
+    expect(internal._classificationModel).toBe("claude-haiku-4-5-20251001");
+  });
+
+  it("config.reasoningModel takes precedence over config.model", () => {
+    const debrief = new DecisionDebrief();
+    const client = new LlmClient(debrief, "command", {
+      model: "llama3.2",
+      reasoningModel: "custom-sonnet",
+    });
+    const internal = client as unknown as { _reasoningModel: string };
+    expect(internal._reasoningModel).toBe("custom-sonnet");
+  });
+
+  it("sets all four provider types correctly via config", () => {
+    const debrief = new DecisionDebrief();
+    const providers: LlmProvider[] = ["anthropic", "bedrock", "vertex", "openai-compatible"];
+    for (const p of providers) {
+      const client = new LlmClient(debrief, "command", { provider: p });
+      const internal = client as unknown as { _provider: LlmProvider };
+      expect(internal._provider).toBe(p);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// isAvailable() for each provider type
+// ---------------------------------------------------------------------------
+
+describe("LlmClient — isAvailable per provider", () => {
+  afterEach(() => {
+    delete process.env.AWS_REGION;
+    delete process.env.AWS_ACCESS_KEY_ID;
+    delete process.env.AWS_SECRET_ACCESS_KEY;
+    delete process.env.CLOUD_ML_REGION;
+    delete process.env.ANTHROPIC_VERTEX_PROJECT_ID;
+    delete process.env.DEPLOYSTACK_LLM_BASE_URL;
+  });
+
+  // --- anthropic ---
+  it("anthropic: available when API key is set", () => {
+    const debrief = new DecisionDebrief();
+    const client = new LlmClient(debrief, "command", {
+      provider: "anthropic",
+      apiKey: "sk-test-key",
+    });
+    expect(client.isAvailable()).toBe(true);
+  });
+
+  it("anthropic: not available when API key is missing", () => {
+    const debrief = new DecisionDebrief();
+    const client = new LlmClient(debrief, "command", {
+      provider: "anthropic",
+      apiKey: undefined,
+    });
+    expect(client.isAvailable()).toBe(false);
+  });
+
+  // --- bedrock ---
+  it("bedrock: available when AWS_REGION is set", () => {
+    process.env.AWS_REGION = "us-east-1";
+    const debrief = new DecisionDebrief();
+    const client = new LlmClient(debrief, "command", { provider: "bedrock" });
+    expect(client.isAvailable()).toBe(true);
+  });
+
+  it("bedrock: not available when AWS_REGION is missing", () => {
+    delete process.env.AWS_REGION;
+    const debrief = new DecisionDebrief();
+    const client = new LlmClient(debrief, "command", { provider: "bedrock" });
+    expect(client.isAvailable()).toBe(false);
+  });
+
+  it("bedrock: not available when AWS_REGION is empty string", () => {
+    process.env.AWS_REGION = "";
+    const debrief = new DecisionDebrief();
+    const client = new LlmClient(debrief, "command", { provider: "bedrock" });
+    expect(client.isAvailable()).toBe(false);
+  });
+
+  // --- vertex ---
+  it("vertex: available when both CLOUD_ML_REGION and ANTHROPIC_VERTEX_PROJECT_ID are set", () => {
+    process.env.CLOUD_ML_REGION = "us-central1";
+    process.env.ANTHROPIC_VERTEX_PROJECT_ID = "my-project";
+    const debrief = new DecisionDebrief();
+    const client = new LlmClient(debrief, "command", { provider: "vertex" });
+    expect(client.isAvailable()).toBe(true);
+  });
+
+  it("vertex: not available when CLOUD_ML_REGION is missing", () => {
+    delete process.env.CLOUD_ML_REGION;
+    process.env.ANTHROPIC_VERTEX_PROJECT_ID = "my-project";
+    const debrief = new DecisionDebrief();
+    const client = new LlmClient(debrief, "command", { provider: "vertex" });
+    expect(client.isAvailable()).toBe(false);
+  });
+
+  it("vertex: not available when ANTHROPIC_VERTEX_PROJECT_ID is missing", () => {
+    process.env.CLOUD_ML_REGION = "us-central1";
+    delete process.env.ANTHROPIC_VERTEX_PROJECT_ID;
+    const debrief = new DecisionDebrief();
+    const client = new LlmClient(debrief, "command", { provider: "vertex" });
+    expect(client.isAvailable()).toBe(false);
+  });
+
+  it("vertex: not available when both env vars are missing", () => {
+    delete process.env.CLOUD_ML_REGION;
+    delete process.env.ANTHROPIC_VERTEX_PROJECT_ID;
+    const debrief = new DecisionDebrief();
+    const client = new LlmClient(debrief, "command", { provider: "vertex" });
+    expect(client.isAvailable()).toBe(false);
+  });
+
+  // --- openai-compatible ---
+  it("openai-compatible: available when baseUrl is set via config", () => {
+    const debrief = new DecisionDebrief();
+    const client = new LlmClient(debrief, "command", {
+      provider: "openai-compatible",
+      baseUrl: "http://localhost:11434/v1",
+    });
+    expect(client.isAvailable()).toBe(true);
+  });
+
+  it("openai-compatible: available when DEPLOYSTACK_LLM_BASE_URL env var is set", () => {
+    process.env.DEPLOYSTACK_LLM_BASE_URL = "http://localhost:11434/v1";
+    const debrief = new DecisionDebrief();
+    const client = new LlmClient(debrief, "command", {
+      provider: "openai-compatible",
+    });
+    expect(client.isAvailable()).toBe(true);
+  });
+
+  it("openai-compatible: not available when baseUrl is missing", () => {
+    delete process.env.DEPLOYSTACK_LLM_BASE_URL;
+    const debrief = new DecisionDebrief();
+    const client = new LlmClient(debrief, "command", {
+      provider: "openai-compatible",
+    });
+    expect(client.isAvailable()).toBe(false);
+  });
+
+  it("openai-compatible: not available when baseUrl is empty string", () => {
+    const debrief = new DecisionDebrief();
+    const client = new LlmClient(debrief, "command", {
+      provider: "openai-compatible",
+      baseUrl: "",
+    });
+    expect(client.isAvailable()).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Provider recorded in debrief
+// ---------------------------------------------------------------------------
+
+describe("LlmClient — provider in debrief", () => {
+  it("records provider in debrief context for anthropic", async () => {
+    const debrief = new DecisionDebrief();
+    const client = new LlmClient(debrief, "command", {
+      provider: "anthropic",
+      apiKey: undefined,
+    });
+
+    await client.reason(makeParams());
+
+    const entries = debrief.getByType("llm-call");
+    expect(entries[0].context.provider).toBe("anthropic");
+  });
+
+  it("records provider in debrief context for bedrock", async () => {
+    const debrief = new DecisionDebrief();
+    const client = new LlmClient(debrief, "command", { provider: "bedrock" });
+
+    await client.reason(makeParams());
+
+    const entries = debrief.getByType("llm-call");
+    expect(entries[0].context.provider).toBe("bedrock");
+  });
+
+  it("records provider in debrief context for openai-compatible", async () => {
+    const debrief = new DecisionDebrief();
+    const client = new LlmClient(debrief, "command", {
+      provider: "openai-compatible",
+    });
+
+    await client.reason(makeParams());
+
+    const entries = debrief.getByType("llm-call");
+    expect(entries[0].context.provider).toBe("openai-compatible");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// OpenAI-compatible adapter
+// ---------------------------------------------------------------------------
+
+describe("createOpenAICompatibleAdapter — response parsing", () => {
+  it("converts OpenAI chat-completion response to Anthropic format", async () => {
+    // Mock fetch globally
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () =>
+      new Response(
+        JSON.stringify({
+          id: "chatcmpl-abc",
+          choices: [
+            {
+              index: 0,
+              message: { role: "assistant", content: "Hello from Ollama!" },
+              finish_reason: "stop",
+            },
+          ],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+
+    try {
+      const adapter = createOpenAICompatibleAdapter("http://localhost:11434/v1");
+      const result = await adapter.messages.create({
+        model: "llama3.2",
+        max_tokens: 1024,
+        system: "You are a helpful assistant.",
+        messages: [{ role: "user", content: "Say hello" }],
+      });
+
+      expect(result.content).toHaveLength(1);
+      expect(result.content[0].type).toBe("text");
+      expect(result.content[0].text).toBe("Hello from Ollama!");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("sends system prompt as first message with role system", async () => {
+    const originalFetch = globalThis.fetch;
+    let capturedBody: string | undefined;
+
+    globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
+      capturedBody = init?.body as string;
+      return new Response(
+        JSON.stringify({ choices: [{ message: { content: "ok" } }] }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    };
+
+    try {
+      const adapter = createOpenAICompatibleAdapter("http://localhost:11434/v1");
+      await adapter.messages.create({
+        model: "test-model",
+        max_tokens: 100,
+        system: "Be concise.",
+        messages: [{ role: "user", content: "Hi" }],
+      });
+
+      const parsed = JSON.parse(capturedBody!);
+      expect(parsed.messages[0]).toEqual({
+        role: "system",
+        content: "Be concise.",
+      });
+      expect(parsed.messages[1]).toEqual({
+        role: "user",
+        content: "Hi",
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("sends Authorization header when apiKey is provided", async () => {
+    const originalFetch = globalThis.fetch;
+    let capturedHeaders: Record<string, string> = {};
+
+    globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
+      const h = init?.headers as Record<string, string>;
+      capturedHeaders = { ...h };
+      return new Response(
+        JSON.stringify({ choices: [{ message: { content: "ok" } }] }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    };
+
+    try {
+      const adapter = createOpenAICompatibleAdapter(
+        "http://localhost:11434/v1",
+        "sk-my-api-key",
+      );
+      await adapter.messages.create({
+        model: "test-model",
+        max_tokens: 100,
+        system: "test",
+        messages: [{ role: "user", content: "Hi" }],
+      });
+
+      expect(capturedHeaders["Authorization"]).toBe("Bearer sk-my-api-key");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("does not send Authorization header when apiKey is not provided", async () => {
+    const originalFetch = globalThis.fetch;
+    let capturedHeaders: Record<string, string> = {};
+
+    globalThis.fetch = async (_url: string | URL | Request, init?: RequestInit) => {
+      const h = init?.headers as Record<string, string>;
+      capturedHeaders = { ...h };
+      return new Response(
+        JSON.stringify({ choices: [{ message: { content: "ok" } }] }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    };
+
+    try {
+      const adapter = createOpenAICompatibleAdapter("http://localhost:11434/v1");
+      await adapter.messages.create({
+        model: "test-model",
+        max_tokens: 100,
+        system: "test",
+        messages: [{ role: "user", content: "Hi" }],
+      });
+
+      expect(capturedHeaders["Authorization"]).toBeUndefined();
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("constructs correct URL from base URL", async () => {
+    const originalFetch = globalThis.fetch;
+    let capturedUrl = "";
+
+    globalThis.fetch = async (url: string | URL | Request, _init?: RequestInit) => {
+      capturedUrl = typeof url === "string" ? url : url.toString();
+      return new Response(
+        JSON.stringify({ choices: [{ message: { content: "ok" } }] }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    };
+
+    try {
+      const adapter = createOpenAICompatibleAdapter("http://localhost:11434/v1/");
+      await adapter.messages.create({
+        model: "test-model",
+        max_tokens: 100,
+        system: "test",
+        messages: [{ role: "user", content: "Hi" }],
+      });
+
+      // Trailing slash should be stripped and /chat/completions appended
+      expect(capturedUrl).toBe("http://localhost:11434/v1/chat/completions");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("throws on non-OK HTTP response", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () =>
+      new Response("Internal Server Error", { status: 500 });
+
+    try {
+      const adapter = createOpenAICompatibleAdapter("http://localhost:11434/v1");
+      await expect(
+        adapter.messages.create({
+          model: "test-model",
+          max_tokens: 100,
+          system: "test",
+          messages: [{ role: "user", content: "Hi" }],
+        }),
+      ).rejects.toThrow("OpenAI-compatible API returned 500");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("returns empty text when response has no choices", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () =>
+      new Response(
+        JSON.stringify({ choices: [] }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+
+    try {
+      const adapter = createOpenAICompatibleAdapter("http://localhost:11434/v1");
+      const result = await adapter.messages.create({
+        model: "test-model",
+        max_tokens: 100,
+        system: "test",
+        messages: [{ role: "user", content: "Hi" }],
+      });
+
+      expect(result.content[0].text).toBe("");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Error handling when provider SDK is not installed
+// ---------------------------------------------------------------------------
+
+describe("LlmClient — missing provider SDK", () => {
+  it("bedrock: initialization fails with helpful message when SDK not installed", async () => {
+    process.env.AWS_REGION = "us-east-1";
+    const debrief = new DecisionDebrief();
+    const client = new LlmClient(debrief, "command", { provider: "bedrock" });
+
+    // The client is available (env vars set) but initialization will fail
+    // because @anthropic-ai/bedrock-sdk is not installed
+    expect(client.isAvailable()).toBe(true);
+
+    const result = await client.reason(makeParams());
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.fallback).toBe(true);
+      expect(result.reason).toContain("@anthropic-ai/bedrock-sdk");
+    }
+
+    delete process.env.AWS_REGION;
+  });
+
+  it("vertex: initialization fails with helpful message when SDK not installed", async () => {
+    process.env.CLOUD_ML_REGION = "us-central1";
+    process.env.ANTHROPIC_VERTEX_PROJECT_ID = "my-project";
+    const debrief = new DecisionDebrief();
+    const client = new LlmClient(debrief, "command", { provider: "vertex" });
+
+    expect(client.isAvailable()).toBe(true);
+
+    const result = await client.reason(makeParams());
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.fallback).toBe(true);
+      expect(result.reason).toContain("@anthropic-ai/vertex-sdk");
+    }
+
+    delete process.env.CLOUD_ML_REGION;
+    delete process.env.ANTHROPIC_VERTEX_PROJECT_ID;
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Fallback messages for each provider
+// ---------------------------------------------------------------------------
+
+describe("LlmClient — fallback messages per provider", () => {
+  it("anthropic: fallback mentions DEPLOYSTACK_LLM_API_KEY", async () => {
+    const debrief = new DecisionDebrief();
+    const client = new LlmClient(debrief, "command", {
+      provider: "anthropic",
+      apiKey: undefined,
+    });
+    const result = await client.reason(makeParams());
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reason).toContain("DEPLOYSTACK_LLM_API_KEY");
+    }
+  });
+
+  it("bedrock: fallback mentions AWS_REGION", async () => {
+    delete process.env.AWS_REGION;
+    const debrief = new DecisionDebrief();
+    const client = new LlmClient(debrief, "command", { provider: "bedrock" });
+    const result = await client.reason(makeParams());
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reason).toContain("AWS_REGION");
+    }
+  });
+
+  it("vertex: fallback mentions CLOUD_ML_REGION and ANTHROPIC_VERTEX_PROJECT_ID", async () => {
+    delete process.env.CLOUD_ML_REGION;
+    delete process.env.ANTHROPIC_VERTEX_PROJECT_ID;
+    const debrief = new DecisionDebrief();
+    const client = new LlmClient(debrief, "command", { provider: "vertex" });
+    const result = await client.reason(makeParams());
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reason).toContain("CLOUD_ML_REGION");
+      expect(result.reason).toContain("ANTHROPIC_VERTEX_PROJECT_ID");
+    }
+  });
+
+  it("openai-compatible: fallback mentions DEPLOYSTACK_LLM_BASE_URL", async () => {
+    delete process.env.DEPLOYSTACK_LLM_BASE_URL;
+    const debrief = new DecisionDebrief();
+    const client = new LlmClient(debrief, "command", {
+      provider: "openai-compatible",
+    });
+    const result = await client.reason(makeParams());
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reason).toContain("DEPLOYSTACK_LLM_BASE_URL");
+    }
   });
 });

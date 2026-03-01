@@ -5,8 +5,13 @@ import type { AgentType } from "./types.js";
 // Public types
 // ---------------------------------------------------------------------------
 
+export type LlmProvider = "anthropic" | "bedrock" | "vertex" | "openai-compatible";
+
 export interface LlmConfig {
   apiKey?: string;
+  provider?: LlmProvider;
+  baseUrl?: string;
+  model?: string;
   reasoningModel?: string;
   classificationModel?: string;
   timeoutMs?: number;
@@ -50,6 +55,8 @@ export class LlmClient {
   private _anthropicClient: unknown = null;
   private _initialized = false;
   private readonly _apiKey: string | undefined;
+  private readonly _provider: LlmProvider;
+  private readonly _baseUrl: string | undefined;
   private readonly _reasoningModel: string;
   private readonly _classificationModel: string;
   private readonly _timeoutMs: number;
@@ -62,8 +69,15 @@ export class LlmClient {
     config: LlmConfig = {},
   ) {
     this._apiKey = config.apiKey ?? process.env.DEPLOYSTACK_LLM_API_KEY;
+    this._provider =
+      config.provider ??
+      (process.env.DEPLOYSTACK_LLM_PROVIDER as LlmProvider | undefined) ??
+      "anthropic";
+    this._baseUrl =
+      config.baseUrl ?? process.env.DEPLOYSTACK_LLM_BASE_URL;
     this._reasoningModel =
       config.reasoningModel ??
+      config.model ??
       process.env.DEPLOYSTACK_LLM_MODEL ??
       DEFAULT_REASONING_MODEL;
     this._classificationModel =
@@ -81,11 +95,32 @@ export class LlmClient {
   }
 
   /**
-   * Synchronous check: is an API key configured?
-   * Does NOT validate the key — just checks presence.
+   * Synchronous check: is the LLM provider configured?
+   * Does NOT validate credentials — just checks presence of required config.
    */
   isAvailable(): boolean {
-    return typeof this._apiKey === "string" && this._apiKey.length > 0;
+    switch (this._provider) {
+      case "anthropic":
+        return typeof this._apiKey === "string" && this._apiKey.length > 0;
+      case "bedrock":
+        return (
+          typeof process.env.AWS_REGION === "string" &&
+          process.env.AWS_REGION.length > 0
+        );
+      case "vertex":
+        return (
+          typeof process.env.CLOUD_ML_REGION === "string" &&
+          process.env.CLOUD_ML_REGION.length > 0 &&
+          typeof process.env.ANTHROPIC_VERTEX_PROJECT_ID === "string" &&
+          process.env.ANTHROPIC_VERTEX_PROJECT_ID.length > 0
+        );
+      case "openai-compatible":
+        return (
+          typeof this._baseUrl === "string" && this._baseUrl.length > 0
+        );
+      default:
+        return false;
+    }
   }
 
   /**
@@ -120,12 +155,18 @@ export class LlmClient {
     model: string,
   ): Promise<LlmResult> {
     if (!this.isAvailable()) {
-      const reason = "LLM not configured — DEPLOYSTACK_LLM_API_KEY not set";
+      const reason = this._notConfiguredReason();
       this._recordDebrief(params, model, null, reason, true);
       return { ok: false, fallback: true, reason };
     }
 
-    await this._ensureInitialized();
+    try {
+      await this._ensureInitialized();
+    } catch (error) {
+      const reason = `LLM call failed: ${error instanceof Error ? error.message : String(error)}`;
+      this._recordDebrief(params, model, null, reason, true);
+      return { ok: false, fallback: true, reason };
+    }
 
     if (!this._checkRateLimit()) {
       const reason = `LLM rate limit exceeded (${this._rateLimitPerMinute} calls/min)`;
@@ -178,14 +219,82 @@ export class LlmClient {
   }
 
   /**
-   * Lazy initialization of the Anthropic SDK client.
-   * The SDK is dynamically imported on first use so that the module
-   * can be loaded without the SDK installed (graceful degradation).
+   * Returns a human-readable reason why the provider is not configured.
+   */
+  private _notConfiguredReason(): string {
+    switch (this._provider) {
+      case "anthropic":
+        return "LLM not configured — DEPLOYSTACK_LLM_API_KEY not set";
+      case "bedrock":
+        return "LLM not configured — AWS_REGION not set for Bedrock provider";
+      case "vertex":
+        return "LLM not configured — CLOUD_ML_REGION and/or ANTHROPIC_VERTEX_PROJECT_ID not set for Vertex provider";
+      case "openai-compatible":
+        return "LLM not configured — DEPLOYSTACK_LLM_BASE_URL not set for openai-compatible provider";
+      default:
+        return `LLM not configured — unknown provider "${this._provider}"`;
+    }
+  }
+
+  /**
+   * Lazy initialization of the LLM client based on the configured provider.
+   * SDKs are dynamically imported on first use so that the module
+   * can be loaded without optional SDKs installed (graceful degradation).
    */
   private async _ensureInitialized(): Promise<void> {
     if (this._initialized) return;
-    const { default: Anthropic } = await import("@anthropic-ai/sdk");
-    this._anthropicClient = new Anthropic({ apiKey: this._apiKey });
+
+    switch (this._provider) {
+      case "anthropic": {
+        const { default: Anthropic } = await import("@anthropic-ai/sdk");
+        this._anthropicClient = new Anthropic({ apiKey: this._apiKey });
+        break;
+      }
+
+      case "bedrock": {
+        try {
+          const { default: AnthropicBedrock } = await import(
+            // @ts-expect-error — optional peer dependency, not in devDependencies
+            "@anthropic-ai/bedrock-sdk"
+          );
+          this._anthropicClient = new AnthropicBedrock();
+        } catch {
+          throw new Error(
+            "Bedrock provider requires @anthropic-ai/bedrock-sdk — install it with: npm install @anthropic-ai/bedrock-sdk",
+          );
+        }
+        break;
+      }
+
+      case "vertex": {
+        try {
+          const { default: AnthropicVertex } = await import(
+            // @ts-expect-error — optional peer dependency, not in devDependencies
+            "@anthropic-ai/vertex-sdk"
+          );
+          this._anthropicClient = new AnthropicVertex();
+        } catch {
+          throw new Error(
+            "Vertex provider requires @anthropic-ai/vertex-sdk — install it with: npm install @anthropic-ai/vertex-sdk",
+          );
+        }
+        break;
+      }
+
+      case "openai-compatible": {
+        const baseUrl =
+          this._baseUrl ?? "http://localhost:11434/v1";
+        this._anthropicClient = createOpenAICompatibleAdapter(
+          baseUrl,
+          this._apiKey,
+        );
+        break;
+      }
+
+      default:
+        throw new Error(`Unknown LLM provider: ${this._provider}`);
+    }
+
     this._initialized = true;
   }
 
@@ -211,6 +320,7 @@ export class LlmClient {
           `Response received in ${responseTimeMs}ms.`,
       context: {
         model,
+        provider: this._provider,
         responseTimeMs,
         promptSummary: params.promptSummary,
         fallbackUsed,
@@ -218,4 +328,86 @@ export class LlmClient {
       },
     });
   }
+}
+
+// ---------------------------------------------------------------------------
+// OpenAI-compatible adapter
+// ---------------------------------------------------------------------------
+
+/**
+ * Lightweight adapter that wraps any OpenAI-compatible API endpoint
+ * (e.g. Ollama, LM Studio, vLLM) to expose a `messages.create()` method
+ * matching the shape the `_call()` method expects.
+ *
+ * Converts from Anthropic message format on the way in and from
+ * OpenAI chat-completion format on the way out.
+ */
+export function createOpenAICompatibleAdapter(
+  baseUrl: string,
+  apiKey?: string,
+) {
+  return {
+    messages: {
+      async create(opts: {
+        model: string;
+        max_tokens: number;
+        system: string;
+        messages: Array<{ role: string; content: string }>;
+        signal?: AbortSignal;
+      }) {
+        // Build OpenAI chat-completion request body
+        const openaiMessages: Array<{ role: string; content: string }> = [];
+
+        // System prompt becomes the first message with role "system"
+        if (opts.system) {
+          openaiMessages.push({ role: "system", content: opts.system });
+        }
+
+        // Map Anthropic-style messages to OpenAI format (they are compatible)
+        for (const msg of opts.messages) {
+          openaiMessages.push({ role: msg.role, content: msg.content });
+        }
+
+        const url = baseUrl.replace(/\/+$/, "") + "/chat/completions";
+        const headers: Record<string, string> = {
+          "Content-Type": "application/json",
+        };
+        if (apiKey) {
+          headers["Authorization"] = `Bearer ${apiKey}`;
+        }
+
+        const response = await fetch(url, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            model: opts.model,
+            max_tokens: opts.max_tokens,
+            messages: openaiMessages,
+          }),
+          signal: opts.signal,
+        });
+
+        if (!response.ok) {
+          const body = await response.text().catch(() => "");
+          throw new Error(
+            `OpenAI-compatible API returned ${response.status}: ${body}`,
+          );
+        }
+
+        const json = await response.json() as {
+          choices?: Array<{
+            message?: { content?: string };
+          }>;
+        };
+
+        // Convert OpenAI chat-completion response to Anthropic message format
+        const text =
+          json.choices?.[0]?.message?.content ?? "";
+
+        return {
+          content: [{ type: "text" as const, text }],
+        };
+      },
+    },
+  };
 }

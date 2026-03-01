@@ -71,8 +71,8 @@ export type {
 export { PartitionManager } from "./partition-manager.js";
 export type { DeploymentStoreReader } from "./partition-manager.js";
 export { generatePostmortem, generateOperationHistory } from "./debrief-reader.js";
-export { LlmClient } from "./llm-client.js";
-export type { LlmConfig, LlmCallParams, LlmResult } from "./llm-client.js";
+export { LlmClient, createOpenAICompatibleAdapter } from "./llm-client.js";
+export type { LlmProvider, LlmConfig, LlmCallParams, LlmResult } from "./llm-client.js";
 export type {
   PostmortemReport,
   TimelineEntry,
