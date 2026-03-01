@@ -1,0 +1,56 @@
+# DeployStack Envoy — multi-stage Docker build
+# Deployment agent (port 3001)
+
+# --- Stage 1: Build ---
+FROM node:22-slim AS build
+
+WORKDIR /app
+
+# Copy package manifests first for layer caching
+COPY package.json package-lock.json ./
+COPY packages/core/package.json packages/core/
+COPY packages/command/package.json packages/command/
+COPY packages/envoy/package.json packages/envoy/
+COPY packages/ui/package.json packages/ui/
+
+# Install all dependencies (including devDependencies for build)
+RUN npm ci
+
+# Copy source and config
+COPY tsconfig.base.json ./
+COPY packages/core/ packages/core/
+COPY packages/envoy/ packages/envoy/
+
+# Build core and envoy
+RUN npm run build -w packages/core && npm run build -w packages/envoy
+
+# --- Stage 2: Runtime ---
+FROM node:22-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy package manifests for workspace resolution
+COPY package.json package-lock.json ./
+COPY packages/core/package.json packages/core/
+COPY packages/envoy/package.json packages/envoy/
+
+# Install production dependencies only
+RUN npm ci --omit=dev
+
+# Copy built artifacts
+COPY --from=build /app/packages/core/dist packages/core/dist/
+COPY --from=build /app/packages/envoy/dist packages/envoy/dist/
+
+# Deployment workspace directory
+VOLUME /workspace
+ENV DEPLOYSTACK_COMMAND_URL=http://command:3000
+ENV NODE_ENV=production
+
+EXPOSE 3001
+
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
+  CMD curl -f http://localhost:3001/health || exit 1
+
+CMD ["node", "packages/envoy/dist/index.js"]

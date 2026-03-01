@@ -4,6 +4,9 @@
   "private": true,
   "type": "module",
   "main": "dist/index.js",
+  "bin": {
+    "deploystack-envoy": "./dist/index.js"
+  },
   "exports": {
     ".": "./dist/index.js",
     "./agent/*": "./dist/agent/*",
