@@ -13,6 +13,8 @@ import OrderListPanel from "./canvas/OrderListPanel.js";
 import OrderDetailPanel from "./canvas/OrderDetailPanel.js";
 import DebriefPanel from "./canvas/DebriefPanel.js";
 import SignalDetailPanel from "./canvas/SignalDetailPanel.js";
+import EnvoyRegistryPanel from "./canvas/EnvoyRegistryPanel.js";
+import EnvoyDetailPanel from "./canvas/EnvoyDetailPanel.js";
 import SettingsPanel from "./canvas/SettingsPanel.js";
 import ErrorBoundary from "./ErrorBoundary.js";
 
@@ -147,6 +149,18 @@ export default function AgentCanvas() {
           />
         );
       }
+
+      case "envoy-registry":
+        return <EnvoyRegistryPanel key={panel.id} title={panel.title} />;
+
+      case "envoy-detail":
+        return (
+          <EnvoyDetailPanel
+            key={panel.id}
+            envoyId={params.id}
+            title={panel.title}
+          />
+        );
 
       case "settings":
         return <SettingsPanel key={panel.id} title={panel.title} />;

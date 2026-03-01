@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router";
-import { listDeployments, listPartitions, listEnvironments, listOperations, getDeploymentContext } from "../api.js";
+import { listDeployments, listPartitions, listEnvironments, listOperations, getDeploymentContext, listEnvoys } from "../api.js";
+import type { EnvoyRegistryEntry } from "../api.js";
 import type { Deployment, Partition, Environment, Operation } from "../types.js";
 import type { DeploymentContext } from "../api.js";
 import { useMode } from "../context/ModeContext.js";
@@ -18,6 +19,7 @@ export default function Dashboard() {
   const [environments, setEnvironments] = useState<Environment[]>([]);
   const [operations, setOperations] = useState<Operation[]>([]);
   const [agentContext, setAgentContext] = useState<DeploymentContext | null>(null);
+  const [envoyHealthStatus, setEnvoyHealthStatus] = useState<"OK" | "Degraded" | "Unreachable">("OK");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -29,13 +31,22 @@ export default function Dashboard() {
     ];
     if (isAgent) {
       fetches.push(getDeploymentContext());
+    } else {
+      fetches.push(Promise.resolve(null));
     }
-    Promise.all(fetches).then(([d, t, e, p, ctx]) => {
+    fetches.push(listEnvoys().catch(() => []));
+    Promise.all(fetches).then(([d, t, e, p, ctx, envoyResult]) => {
       setDeployments(d);
       setPartitions(t);
       setEnvironments(e);
       setOperations(p);
       if (ctx) setAgentContext(ctx);
+      const envoyList = envoyResult as EnvoyRegistryEntry[];
+      if (envoyList.length > 0) {
+        const hasUnreachable = envoyList.some((ev) => ev.health === "Unreachable");
+        const hasDegraded = envoyList.some((ev) => ev.health === "Degraded");
+        setEnvoyHealthStatus(hasUnreachable ? "Unreachable" : hasDegraded ? "Degraded" : "OK");
+      }
       setLoading(false);
     }).catch(() => setLoading(false));
   }, [isAgent]);
@@ -80,7 +91,7 @@ export default function Dashboard() {
 
     return {
       successRate: rate,
-      envoyHealth: "OK" as const,
+      envoyHealth: envoyHealthStatus,
       drift: hasDrift,
       history,
     };
