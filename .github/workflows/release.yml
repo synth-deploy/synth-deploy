@@ -102,6 +102,13 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Log in to Docker Hub
+        if: steps.check.outputs.exists == 'true'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
       - name: Extract version from tag
         if: steps.check.outputs.exists == 'true'
         id: version
@@ -117,6 +124,13 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository_owner }}/deploystack-command:${{ steps.version.outputs.VERSION }}
             ghcr.io/${{ github.repository_owner }}/deploystack-command:latest
+            deploystack/command:${{ steps.version.outputs.VERSION }}
+            deploystack/command:latest
+          labels: |
+            org.opencontainers.image.title=DeployStack Command
+            org.opencontainers.image.description=DeployStack orchestration server with embedded UI
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.licenses=MIT
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -151,6 +165,13 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Log in to Docker Hub
+        if: steps.check.outputs.exists == 'true'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
       - name: Extract version from tag
         if: steps.check.outputs.exists == 'true'
         id: version
@@ -166,6 +187,13 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository_owner }}/deploystack-envoy:${{ steps.version.outputs.VERSION }}
             ghcr.io/${{ github.repository_owner }}/deploystack-envoy:latest
+            deploystack/envoy:${{ steps.version.outputs.VERSION }}
+            deploystack/envoy:latest
+          labels: |
+            org.opencontainers.image.title=DeployStack Envoy
+            org.opencontainers.image.description=DeployStack local deployment agent
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.licenses=MIT
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
