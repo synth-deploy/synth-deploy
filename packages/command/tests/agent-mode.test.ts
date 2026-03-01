@@ -9,6 +9,7 @@ import { registerOperationRoutes } from "../src/api/operations.js";
 import { registerPartitionRoutes } from "../src/api/partitions.js";
 import { registerEnvironmentRoutes } from "../src/api/environments.js";
 import { registerAgentRoutes, conversations, sanitizeUserInput, validateExtractedVersion, validateExtractedVariables, cleanupStaleConversations } from "../src/api/agent.js";
+import { registerOrderRoutes } from "../src/api/orders.js";
 
 // ---------------------------------------------------------------------------
 // Test server setup
@@ -44,6 +45,7 @@ beforeAll(async () => {
   registerOperationRoutes(app, operations, environments);
   registerPartitionRoutes(app, partitions, deployments, diary);
   registerEnvironmentRoutes(app, environments, operations);
+  registerOrderRoutes(app, orders, agent, partitions, environments, operations, deployments, diary, settings);
   registerAgentRoutes(app, agent, partitions, environments, operations, deployments, diary, settings);
 
   await app.ready();
@@ -83,6 +85,52 @@ beforeAll(async () => {
     payload: { variables: { DB_HOST: "acme-db-1", APP_ENV: "production" } },
   });
 });
+
+/**
+ * Helper: creates an Order via HTTP and returns its ID.
+ * This is needed because POST /api/deployments now requires an orderId.
+ */
+async function createOrderViaHttp(
+  server: FastifyInstance,
+  params: { operationId: string; partitionId: string; environmentId: string; version: string },
+): Promise<string> {
+  const res = await server.inject({
+    method: "POST",
+    url: "/api/orders",
+    payload: params,
+  });
+  if (res.statusCode !== 201) {
+    throw new Error(`Failed to create order: ${res.payload}`);
+  }
+  return JSON.parse(res.payload).order.id;
+}
+
+/**
+ * Helper: creates an Order, then triggers deployment via HTTP.
+ * Replaces the old pattern of posting directly to /api/deployments with operationId/version.
+ */
+async function deployViaHttp(
+  server: FastifyInstance,
+  params: { operationId: string; partitionId: string; environmentId: string; version: string; variables?: Record<string, string> },
+) {
+  const orderId = await createOrderViaHttp(server, {
+    operationId: params.operationId,
+    partitionId: params.partitionId,
+    environmentId: params.environmentId,
+    version: params.version,
+  });
+  return server.inject({
+    method: "POST",
+    url: "/api/deployments",
+    payload: {
+      orderId,
+      partitionId: params.partitionId,
+      environmentId: params.environmentId,
+      triggeredBy: "user",
+      ...(params.variables ? { variables: params.variables } : {}),
+    },
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Intent interpretation tests
@@ -216,11 +264,7 @@ describe("Agent mode — intent interpretation", () => {
 describe("Agent mode — deployment context", () => {
   it("returns context with signals and environment summary", async () => {
     // Trigger a deployment first to have some data
-    await app.inject({
-      method: "POST",
-      url: "/api/deployments",
-      payload: { operationId, partitionId, environmentId: productionEnvId, version: "1.0.0" },
-    });
+    await deployViaHttp(app, { operationId, partitionId, environmentId: productionEnvId, version: "1.0.0" });
 
     const res = await app.inject({ method: "GET", url: "/api/agent/context" });
 
@@ -252,24 +296,20 @@ describe("Agent mode — deployment context", () => {
 
 describe("Identical artifacts — traditional vs agent mode", () => {
   it("produces the same deployment output regardless of mode", async () => {
-    // --- Traditional mode: explicit trigger with all fields ---
-    const traditionalRes = await app.inject({
-      method: "POST",
-      url: "/api/deployments",
-      payload: {
-        operationId,
-        partitionId,
-        environmentId: productionEnvId,
-        version: "5.0.0",
-        variables: { CACHE_TTL: "3600" },
-      },
+    // --- Traditional mode: create Order then trigger deployment ---
+    const traditionalRes = await deployViaHttp(app, {
+      operationId,
+      partitionId,
+      environmentId: productionEnvId,
+      version: "5.0.0",
+      variables: { CACHE_TTL: "3600" },
     });
 
     expect(traditionalRes.statusCode).toBe(201);
     const traditional = JSON.parse(traditionalRes.payload);
     const traditionalDeploy: Deployment = traditional.deployment;
 
-    // --- Agent mode: interpret intent, then trigger with resolved config ---
+    // --- Agent mode: interpret intent, create Order from resolved config, then trigger ---
     const intentRes = await app.inject({
       method: "POST",
       url: "/api/agent/interpret-intent",
@@ -281,17 +321,13 @@ describe("Identical artifacts — traditional vs agent mode", () => {
     const intent = JSON.parse(intentRes.payload);
     expect(intent.ready).toBe(true);
 
-    // Use the resolved config to trigger — same endpoint as traditional mode
-    const agentRes = await app.inject({
-      method: "POST",
-      url: "/api/deployments",
-      payload: {
-        operationId: intent.resolved.operationId.value,
-        partitionId: intent.resolved.partitionId.value,
-        environmentId: intent.resolved.environmentId.value,
-        version: intent.resolved.version.value,
-        variables: intent.resolved.variables,
-      },
+    // Use the resolved config to create an Order, then trigger deployment
+    const agentRes = await deployViaHttp(app, {
+      operationId: intent.resolved.operationId.value,
+      partitionId: intent.resolved.partitionId.value,
+      environmentId: intent.resolved.environmentId.value,
+      version: intent.resolved.version.value,
+      variables: intent.resolved.variables,
     });
 
     expect(agentRes.statusCode).toBe(201);
@@ -335,15 +371,11 @@ describe("Identical artifacts — traditional vs agent mode", () => {
 
     // User switches to traditional mode — fields should already be populated.
     // They complete the deployment using the traditional endpoint with the same values.
-    const traditionalRes = await app.inject({
-      method: "POST",
-      url: "/api/deployments",
-      payload: {
-        operationId: intent.resolved.operationId.value,
-        partitionId: intent.resolved.partitionId.value,
-        environmentId: intent.resolved.environmentId.value,
-        version: intent.resolved.version.value,
-      },
+    const traditionalRes = await deployViaHttp(app, {
+      operationId: intent.resolved.operationId.value,
+      partitionId: intent.resolved.partitionId.value,
+      environmentId: intent.resolved.environmentId.value,
+      version: intent.resolved.version.value,
     });
 
     expect(traditionalRes.statusCode).toBe(201);
@@ -903,6 +935,7 @@ describe("Agent mode — LLM query classification", () => {
     registerOperationRoutes(qApp, qOperations, qEnvironments);
     registerPartitionRoutes(qApp, qPartitions, qDeployments, qDiary);
     registerEnvironmentRoutes(qApp, qEnvironments, qOperations);
+    registerOrderRoutes(qApp, qOrders, qAgent, qPartitions, qEnvironments, qOperations, qDeployments, qDiary, qSettings);
     registerAgentRoutes(qApp, qAgent, qPartitions, qEnvironments, qOperations, qDeployments, qDiary, qSettings, qMockLlm);
 
     await qApp.ready();
@@ -937,11 +970,7 @@ describe("Agent mode — LLM query classification", () => {
     qPartitionId = JSON.parse(partRes.payload).partition.id;
 
     // Create a deployment so data queries have something to find
-    await qApp.inject({
-      method: "POST",
-      url: "/api/deployments",
-      payload: { operationId: qOperationId, partitionId: qPartitionId, environmentId: qProdEnvId, version: "1.0.0" },
-    });
+    await deployViaHttp(qApp, { operationId: qOperationId, partitionId: qPartitionId, environmentId: qProdEnvId, version: "1.0.0" });
   });
 
   it("navigate action: resolves 'show partition Acme Corp' to partition-detail", async () => {

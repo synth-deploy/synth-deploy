@@ -199,36 +199,25 @@ export class CommandAgent {
     partition: Partition,
     environment: Environment,
     operation: Operation,
-    existingOrder?: Order,
+    order: Order,
   ): Promise<Deployment> {
     const deploymentId = crypto.randomUUID();
 
-    // --- Step 0: Create or reuse Order -------------------------------------
+    // --- Step 0: Log Order usage -------------------------------------------
 
-    let order: Order;
-    if (existingOrder) {
-      order = existingOrder;
-      this.debrief.record({
-        partitionId: trigger.partitionId,
-        deploymentId,
-        agent: "command",
-        decisionType: "order-created",
-        decision: `Re-executing existing Order ${order.id.slice(0, 8)}`,
-        reasoning:
-          `An existing Order was provided for re-execution. Using frozen snapshot from ` +
-          `${order.createdAt.toISOString()} instead of reading current Operation configuration. ` +
-          `This guarantees the deployment reproduces exactly what was captured in the Order.`,
-        context: { orderId: order.id, reused: true },
-      });
-    } else {
-      order = this.createOrderFromCurrentState(
-        deploymentId,
-        trigger,
-        partition,
-        environment,
-        operation,
-      );
-    }
+    this.debrief.record({
+      partitionId: trigger.partitionId,
+      deploymentId,
+      agent: "command",
+      decisionType: "order-created",
+      decision: `Executing Order ${order.id.slice(0, 8)} — "${order.operationName}" v${order.version}`,
+      reasoning:
+        `Deploying from Order ${order.id.slice(0, 8)}, created ${order.createdAt instanceof Date ? order.createdAt.toISOString() : order.createdAt}. ` +
+        `Using frozen snapshot configuration to guarantee reproducibility. ` +
+        `The Order captures the exact operation steps, deploy config, and variables ` +
+        `as they existed when the Order was created.`,
+      context: { orderId: order.id, triggeredBy: trigger.triggeredBy },
+    });
 
     // --- Step 1: Plan the pipeline -----------------------------------------
 
@@ -246,14 +235,14 @@ export class CommandAgent {
       decisionType: "pipeline-plan",
       decision: `Planned deployment pipeline: ${pipelineSteps.join(" → ")}`,
       reasoning:
-        `Deployment of ${trigger.operationId} v${trigger.version} to ${environment.name} ` +
+        `Deployment of "${order.operationName}" v${order.version} to ${environment.name} ` +
         `for partition "${partition.name}". Pipeline includes pre-flight health check to verify ` +
         `target environment is reachable before deploying, and post-deployment verification ` +
         `to confirm the deployment took effect.`,
       context: {
         steps: pipelineSteps,
-        operationId: trigger.operationId,
-        version: trigger.version,
+        operationId: order.operationId,
+        version: order.version,
         environmentName: environment.name,
         partitionName: partition.name,
         orderId: order.id,
@@ -262,10 +251,10 @@ export class CommandAgent {
 
     const deployment: Deployment = {
       id: deploymentId,
-      operationId: trigger.operationId,
+      operationId: order.operationId,
       partitionId: trigger.partitionId,
       environmentId: trigger.environmentId,
-      version: trigger.version,
+      version: order.version,
       status: "pending",
       variables: {},
       debriefEntryIds: [planEntry.id],
@@ -282,7 +271,7 @@ export class CommandAgent {
 
       const { variables, hasConflicts } = this.resolveConfiguration(
         deployment,
-        trigger,
+        trigger.variables,
         partition,
         environment,
       );
@@ -347,7 +336,7 @@ export class CommandAgent {
         reasoning:
           error instanceof OrchestrationError
             ? error.reasoning
-            : `Unexpected error during ${deployment.operationId} v${deployment.version} ` +
+            : `Unexpected error during "${order.operationName}" v${order.version} ` +
               `deployment to "${environment.name}" for partition "${partition.name}": ` +
               `${error instanceof Error ? error.message : String(error)}. ` +
               `This error did not come from the orchestration pipeline (not a health check, ` +
@@ -375,9 +364,13 @@ export class CommandAgent {
   // Order creation — snapshot current operation/env/partition state
   // -----------------------------------------------------------------------
 
-  private createOrderFromCurrentState(
-    deploymentId: string,
-    trigger: DeploymentTrigger,
+  /**
+   * Create an Order snapshot from the current state of an Operation.
+   * Used by MCP tools and the agent intent flow to create an Order
+   * before triggering a deployment.
+   */
+  createOrderSnapshot(
+    version: string,
     partition: Partition,
     environment: Environment,
     operation: Operation,
@@ -395,22 +388,22 @@ export class CommandAgent {
       partitionId: partition.id,
       environmentId: environment.id,
       environmentName: environment.name,
-      version: trigger.version,
+      version,
       steps: operation.steps,
       deployConfig: effectiveDeployConfig,
       variables: {}, // populated after resolve — we snapshot inputs here
     });
 
     this.debrief.record({
-      partitionId: trigger.partitionId,
-      deploymentId,
+      partitionId: partition.id,
+      deploymentId: null,
       agent: "command",
       decisionType: "order-created",
       decision: `Created Order ${order.id.slice(0, 8)} — immutable snapshot of "${operation.name}" configuration`,
       reasoning:
         `Snapshotted operation "${operation.name}" (${operation.steps.length} step(s), ` +
-        `verification: ${effectiveDeployConfig.verificationStrategy}) for deployment ` +
-        `v${trigger.version} to "${environment.name}". ` +
+        `verification: ${effectiveDeployConfig.verificationStrategy}) for version ` +
+        `v${version} to "${environment.name}". ` +
         (globalDefaults
           ? `Global deployment defaults were merged as a base under operation-level deploy config. `
           : ``) +
@@ -418,7 +411,6 @@ export class CommandAgent {
         `exactly, even if the operation is modified later.`,
       context: {
         orderId: order.id,
-        reused: false,
         stepCount: operation.steps.length,
         deployConfig: effectiveDeployConfig,
         appliedGlobalDefaults: !!globalDefaults,
@@ -434,7 +426,7 @@ export class CommandAgent {
 
   private resolveConfiguration(
     deployment: Deployment,
-    trigger: DeploymentTrigger,
+    triggerVariables: Record<string, string> | undefined,
     partition: Partition,
     environment: Environment,
   ): { variables: Record<string, string>; hasConflicts: boolean } {
@@ -456,8 +448,8 @@ export class CommandAgent {
     }
 
     // Trigger overrides everything
-    if (trigger.variables) {
-      for (const [key, value] of Object.entries(trigger.variables)) {
+    if (triggerVariables) {
+      for (const [key, value] of Object.entries(triggerVariables)) {
         if (key in resolved && resolved[key] !== value) {
           conflicts.push({
             variable: key,
@@ -497,7 +489,7 @@ export class CommandAgent {
       reasoning:
         conflicts.length === 0
           ? `Environment "${environment.name}" provided ${Object.keys(environment.variables).length} base variable(s), ` +
-            `partition added ${Object.keys(partition.variables).length}, trigger added ${Object.keys(trigger.variables ?? {}).length}. ` +
+            `partition added ${Object.keys(partition.variables).length}, trigger added ${Object.keys(triggerVariables ?? {}).length}. ` +
             `No values collided across levels, so the merged configuration is unambiguous. ` +
             `Accepting ${Object.keys(resolved).length} final variable(s) as the deployment configuration.`
           : `${conflicts.length} variable(s) had different values at multiple precedence levels. ` +
@@ -510,7 +502,7 @@ export class CommandAgent {
         sources: {
           environment: Object.keys(environment.variables).length,
           partition: Object.keys(partition.variables).length,
-          trigger: Object.keys(trigger.variables ?? {}).length,
+          trigger: Object.keys(triggerVariables ?? {}).length,
         },
       },
     });

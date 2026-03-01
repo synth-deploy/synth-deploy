@@ -20,7 +20,7 @@ export function registerTools(
     {
       title: "Trigger Deployment",
       description:
-        "Trigger a deployment for an operation to a specific partition and environment. " +
+        "Trigger a deployment from an Order (or create one on the fly from an operation + version). " +
         "The server agent will resolve variables, make decisions, and record everything to the Debrief.",
       inputSchema: {
         operationId: z.string().describe("The operation to deploy"),
@@ -55,11 +55,15 @@ export function registerTools(
         };
       }
 
+      // Create an Order snapshot, then trigger deployment from it
+      const order = agent.createOrderSnapshot(version, partition, environment, operation);
+
       const deployment = await agent.triggerDeployment(
-        { operationId, partitionId: partitionId, environmentId, version, variables },
+        { orderId: order.id, partitionId, environmentId, triggeredBy: "agent", variables },
         partition,
         environment,
         operation,
+        order,
       );
 
       return {
@@ -69,6 +73,7 @@ export function registerTools(
             text: JSON.stringify(
               {
                 deploymentId: deployment.id,
+                orderId: order.id,
                 status: deployment.status,
                 version: deployment.version,
                 debriefEntries: deployment.debriefEntryIds.length,

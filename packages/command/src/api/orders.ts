@@ -145,10 +145,10 @@ export function registerOrderRoutes(
     }
 
     const trigger = {
-      operationId: order.operationId,
+      orderId: order.id,
       partitionId: order.partitionId,
       environmentId: order.environmentId,
-      version: order.version,
+      triggeredBy: "user" as const,
     };
 
     const deployment = await agent.triggerDeployment(

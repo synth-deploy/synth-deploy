@@ -60,6 +60,42 @@ async function createTestServer(): Promise<TestContext> {
   return { app, diary, partitions, operations, environments, deployments, orders, settings, agent };
 }
 
+/**
+ * Helper: creates an Order via HTTP, then triggers deployment.
+ * Replaces the old pattern of posting directly to /api/deployments with operationId/version.
+ */
+async function deployViaHttp(
+  server: FastifyInstance,
+  params: { operationId: string; partitionId: string; environmentId: string; version: string; variables?: Record<string, string> },
+) {
+  const orderRes = await server.inject({
+    method: "POST",
+    url: "/api/orders",
+    payload: {
+      operationId: params.operationId,
+      partitionId: params.partitionId,
+      environmentId: params.environmentId,
+      version: params.version,
+    },
+  });
+  if (orderRes.statusCode !== 201) {
+    throw new Error(`Failed to create order: ${orderRes.payload}`);
+  }
+  const orderId = JSON.parse(orderRes.payload).order.id;
+
+  return server.inject({
+    method: "POST",
+    url: "/api/deployments",
+    payload: {
+      orderId,
+      partitionId: params.partitionId,
+      environmentId: params.environmentId,
+      triggeredBy: "user",
+      ...(params.variables ? { variables: params.variables } : {}),
+    },
+  });
+}
+
 // ===========================================================================
 // Partition Routes
 // ===========================================================================
@@ -1612,15 +1648,11 @@ describe("Deployment Routes", () => {
       const partition = ctx.partitions.create("Acme", { DB_HOST: "acme-db" });
       const op = ctx.operations.create("web-app", [env.id]);
 
-      const res = await ctx.app.inject({
-        method: "POST",
-        url: "/api/deployments",
-        payload: {
-          operationId: op.id,
-          partitionId: partition.id,
-          environmentId: env.id,
-          version: "1.0.0",
-        },
+      const res = await deployViaHttp(ctx.app, {
+        operationId: op.id,
+        partitionId: partition.id,
+        environmentId: env.id,
+        version: "1.0.0",
       });
 
       expect(res.statusCode).toBe(201);
@@ -1645,17 +1677,16 @@ describe("Deployment Routes", () => {
       expect(body.error).toContain("Invalid");
     });
 
-    it("returns 404 when operation does not exist", async () => {
+    it("returns 404 when order does not exist", async () => {
       const partition = ctx.partitions.create("Acme");
 
       const res = await ctx.app.inject({
         method: "POST",
         url: "/api/deployments",
         payload: {
-          operationId: "nonexistent",
+          orderId: "nonexistent-order",
           partitionId: partition.id,
           environmentId: "env-id",
-          version: "1.0.0",
         },
       });
 
@@ -1663,41 +1694,29 @@ describe("Deployment Routes", () => {
     });
 
     it("returns 404 when partition does not exist", async () => {
-      const op = ctx.operations.create("web-app");
+      const env = ctx.environments.create("production");
+      const partition = ctx.partitions.create("Acme");
+      const op = ctx.operations.create("web-app", [env.id]);
+
+      // Create a valid order, but reference a non-existent partition in the trigger
+      const orderRes = await ctx.app.inject({
+        method: "POST",
+        url: "/api/orders",
+        payload: { operationId: op.id, partitionId: partition.id, environmentId: env.id, version: "1.0.0" },
+      });
+      const orderId = JSON.parse(orderRes.payload).order.id;
 
       const res = await ctx.app.inject({
         method: "POST",
         url: "/api/deployments",
         payload: {
-          operationId: op.id,
+          orderId,
           partitionId: "nonexistent",
-          environmentId: "env-id",
-          version: "1.0.0",
+          environmentId: env.id,
         },
       });
 
       expect(res.statusCode).toBe(404);
-    });
-
-    it("returns 400 when environment is not linked to operation", async () => {
-      const env = ctx.environments.create("production");
-      const partition = ctx.partitions.create("Acme");
-      const op = ctx.operations.create("web-app"); // No environments linked
-
-      const res = await ctx.app.inject({
-        method: "POST",
-        url: "/api/deployments",
-        payload: {
-          operationId: op.id,
-          partitionId: partition.id,
-          environmentId: env.id,
-          version: "1.0.0",
-        },
-      });
-
-      expect(res.statusCode).toBe(400);
-      const body = JSON.parse(res.payload);
-      expect(body.error).toContain("not linked");
     });
 
     it("succeeds when environments are disabled", async () => {
@@ -1705,15 +1724,11 @@ describe("Deployment Routes", () => {
       const partition = ctx.partitions.create("Acme");
       const op = ctx.operations.create("web-app");
 
-      const res = await ctx.app.inject({
-        method: "POST",
-        url: "/api/deployments",
-        payload: {
-          operationId: op.id,
-          partitionId: partition.id,
-          environmentId: "",
-          version: "1.0.0",
-        },
+      const res = await deployViaHttp(ctx.app, {
+        operationId: op.id,
+        partitionId: partition.id,
+        environmentId: "",
+        version: "1.0.0",
       });
 
       expect(res.statusCode).toBe(201);
@@ -1739,15 +1754,11 @@ describe("Deployment Routes", () => {
       const partition = ctx.partitions.create("Acme");
       const op = ctx.operations.create("web-app", [env.id]);
 
-      await ctx.app.inject({
-        method: "POST",
-        url: "/api/deployments",
-        payload: {
-          operationId: op.id,
-          partitionId: partition.id,
-          environmentId: env.id,
-          version: "1.0.0",
-        },
+      await deployViaHttp(ctx.app, {
+        operationId: op.id,
+        partitionId: partition.id,
+        environmentId: env.id,
+        version: "1.0.0",
       });
 
       const res = await ctx.app.inject({
@@ -1766,25 +1777,17 @@ describe("Deployment Routes", () => {
       const p2 = ctx.partitions.create("Beta");
       const op = ctx.operations.create("web-app", [env.id]);
 
-      await ctx.app.inject({
-        method: "POST",
-        url: "/api/deployments",
-        payload: {
-          operationId: op.id,
-          partitionId: p1.id,
-          environmentId: env.id,
-          version: "1.0.0",
-        },
+      await deployViaHttp(ctx.app, {
+        operationId: op.id,
+        partitionId: p1.id,
+        environmentId: env.id,
+        version: "1.0.0",
       });
-      await ctx.app.inject({
-        method: "POST",
-        url: "/api/deployments",
-        payload: {
-          operationId: op.id,
-          partitionId: p2.id,
-          environmentId: env.id,
-          version: "1.0.0",
-        },
+      await deployViaHttp(ctx.app, {
+        operationId: op.id,
+        partitionId: p2.id,
+        environmentId: env.id,
+        version: "1.0.0",
       });
 
       const res = await ctx.app.inject({
@@ -1807,15 +1810,11 @@ describe("Deployment Routes", () => {
       const partition = ctx.partitions.create("Acme");
       const op = ctx.operations.create("web-app", [env.id]);
 
-      const triggerRes = await ctx.app.inject({
-        method: "POST",
-        url: "/api/deployments",
-        payload: {
-          operationId: op.id,
-          partitionId: partition.id,
-          environmentId: env.id,
-          version: "1.0.0",
-        },
+      const triggerRes = await deployViaHttp(ctx.app, {
+        operationId: op.id,
+        partitionId: partition.id,
+        environmentId: env.id,
+        version: "1.0.0",
       });
       const deploymentId = JSON.parse(triggerRes.payload).deployment.id;
 
@@ -1851,15 +1850,11 @@ describe("Deployment Routes", () => {
       const partition = ctx.partitions.create("Acme");
       const op = ctx.operations.create("web-app", [env.id]);
 
-      const triggerRes = await ctx.app.inject({
-        method: "POST",
-        url: "/api/deployments",
-        payload: {
-          operationId: op.id,
-          partitionId: partition.id,
-          environmentId: env.id,
-          version: "1.0.0",
-        },
+      const triggerRes = await deployViaHttp(ctx.app, {
+        operationId: op.id,
+        partitionId: partition.id,
+        environmentId: env.id,
+        version: "1.0.0",
       });
       const deploymentId = JSON.parse(triggerRes.payload).deployment.id;
 
@@ -1892,25 +1887,17 @@ describe("Deployment Routes", () => {
       const op1 = ctx.operations.create("web-app", [env.id]);
       const op2 = ctx.operations.create("api-service", [env.id]);
 
-      await ctx.app.inject({
-        method: "POST",
-        url: "/api/deployments",
-        payload: {
-          operationId: op1.id,
-          partitionId: partition.id,
-          environmentId: env.id,
-          version: "1.0.0",
-        },
+      await deployViaHttp(ctx.app, {
+        operationId: op1.id,
+        partitionId: partition.id,
+        environmentId: env.id,
+        version: "1.0.0",
       });
-      await ctx.app.inject({
-        method: "POST",
-        url: "/api/deployments",
-        payload: {
-          operationId: op2.id,
-          partitionId: partition.id,
-          environmentId: env.id,
-          version: "1.0.0",
-        },
+      await deployViaHttp(ctx.app, {
+        operationId: op2.id,
+        partitionId: partition.id,
+        environmentId: env.id,
+        version: "1.0.0",
       });
 
       const res = await ctx.app.inject({
@@ -1934,15 +1921,11 @@ describe("Deployment Routes", () => {
       const partition = ctx.partitions.create("Acme");
       const op = ctx.operations.create("web-app", [env.id]);
 
-      await ctx.app.inject({
-        method: "POST",
-        url: "/api/deployments",
-        payload: {
-          operationId: op.id,
-          partitionId: partition.id,
-          environmentId: env.id,
-          version: "1.0.0",
-        },
+      await deployViaHttp(ctx.app, {
+        operationId: op.id,
+        partitionId: partition.id,
+        environmentId: env.id,
+        version: "1.0.0",
       });
 
       const res = await ctx.app.inject({
@@ -1962,15 +1945,11 @@ describe("Deployment Routes", () => {
       const partition = ctx.partitions.create("Acme");
       const op = ctx.operations.create("web-app", [env.id]);
 
-      await ctx.app.inject({
-        method: "POST",
-        url: "/api/deployments",
-        payload: {
-          operationId: op.id,
-          partitionId: partition.id,
-          environmentId: env.id,
-          version: "1.0.0",
-        },
+      await deployViaHttp(ctx.app, {
+        operationId: op.id,
+        partitionId: partition.id,
+        environmentId: env.id,
+        version: "1.0.0",
       });
 
       const res = await ctx.app.inject({
@@ -1989,25 +1968,17 @@ describe("Deployment Routes", () => {
       const p2 = ctx.partitions.create("Beta");
       const op = ctx.operations.create("web-app", [env.id]);
 
-      await ctx.app.inject({
-        method: "POST",
-        url: "/api/deployments",
-        payload: {
-          operationId: op.id,
-          partitionId: p1.id,
-          environmentId: env.id,
-          version: "1.0.0",
-        },
+      await deployViaHttp(ctx.app, {
+        operationId: op.id,
+        partitionId: p1.id,
+        environmentId: env.id,
+        version: "1.0.0",
       });
-      await ctx.app.inject({
-        method: "POST",
-        url: "/api/deployments",
-        payload: {
-          operationId: op.id,
-          partitionId: p2.id,
-          environmentId: env.id,
-          version: "1.0.0",
-        },
+      await deployViaHttp(ctx.app, {
+        operationId: op.id,
+        partitionId: p2.id,
+        environmentId: env.id,
+        version: "1.0.0",
       });
 
       const res = await ctx.app.inject({

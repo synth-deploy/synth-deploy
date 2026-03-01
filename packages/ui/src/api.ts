@@ -225,10 +225,10 @@ export async function getDeployment(id: string): Promise<{ deployment: Deploymen
 }
 
 export async function triggerDeployment(trigger: {
-  operationId: string;
+  orderId: string;
   partitionId: string;
   environmentId: string;
-  version: string;
+  triggeredBy?: "user" | "agent";
   variables?: Record<string, string>;
 }): Promise<{ deployment: Deployment; debrief: DebriefEntry[] }> {
   return fetchJson("/api/deployments", {

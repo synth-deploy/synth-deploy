@@ -79,16 +79,6 @@ function makeEnvironment(overrides: Partial<Environment> = {}): Environment {
   };
 }
 
-function makeTrigger(overrides: Record<string, unknown> = {}) {
-  return {
-    operationId: "web-app",
-    partitionId: "partition-1",
-    environmentId: "env-prod",
-    version: "2.0.0",
-    ...overrides,
-  };
-}
-
 function makeOperation(overrides: Partial<Operation> = {}): Operation {
   return {
     id: "web-app",
@@ -103,6 +93,36 @@ function makeOperation(overrides: Partial<Operation> = {}): Operation {
     },
     ...overrides,
   };
+}
+
+/**
+ * Create an Order + trigger pair for testing. The Order is created from
+ * the operation/partition/environment, and the trigger references it.
+ */
+function makeOrderAndTrigger(
+  agent: CommandAgent,
+  opts: {
+    partition?: Partition;
+    environment?: Environment;
+    operation?: Operation;
+    version?: string;
+    variables?: Record<string, string>;
+  } = {},
+) {
+  const partition = opts.partition ?? makePartition();
+  const environment = opts.environment ?? makeEnvironment();
+  const operation = opts.operation ?? makeOperation();
+  const version = opts.version ?? "2.0.0";
+
+  const order = agent.createOrderSnapshot(version, partition, environment, operation);
+  const trigger = {
+    orderId: order.id,
+    partitionId: partition.id,
+    environmentId: environment.id,
+    triggeredBy: "user" as const,
+    ...(opts.variables ? { variables: opts.variables } : {}),
+  };
+  return { order, trigger, partition, environment, operation };
 }
 
 function findDecisions(entries: DebriefEntry[], substr: string): DebriefEntry[] {
@@ -143,13 +163,16 @@ describe("Deployment Orchestration Engine", () => {
       const env = makeEnvironment({
         variables: { APP_ENV: "production", LOG_LEVEL: "warn" },
       });
-      const trigger = makeTrigger({
-        variables: { LOG_LEVEL: "error" },
-      });
 
       healthChecker.willReturn(HEALTHY);
 
-      const result = await agent.triggerDeployment(trigger, partition, env, makeOperation());
+      const { order, trigger, operation } = makeOrderAndTrigger(agent, {
+        partition,
+        environment: env,
+        variables: { LOG_LEVEL: "error" },
+      });
+
+      const result = await agent.triggerDeployment(trigger, partition, env, operation, order);
 
       expect(result.status).toBe("succeeded");
       expect(result.failureReason).toBeNull();
@@ -186,7 +209,8 @@ describe("Deployment Orchestration Engine", () => {
 
       healthChecker.willReturn(HEALTHY);
 
-      const result = await agent.triggerDeployment(makeTrigger(), partition, env, makeOperation());
+      const { order, trigger, operation } = makeOrderAndTrigger(agent, { partition, environment: env });
+      const result = await agent.triggerDeployment(trigger, partition, env, operation, order);
 
       expect(result.status).toBe("succeeded");
       expect(result.variables).toEqual({
@@ -208,12 +232,9 @@ describe("Deployment Orchestration Engine", () => {
     it("connection refused → retries, then fails with actionable reasoning", async () => {
       healthChecker.willReturn(CONN_REFUSED, CONN_REFUSED);
 
-      const result = await agent.triggerDeployment(
-        makeTrigger(),
-        makePartition(),
-        makeEnvironment({ name: "staging" }),
-        makeOperation(),
-      );
+      const env = makeEnvironment({ name: "staging" });
+      const { order, trigger, partition, operation } = makeOrderAndTrigger(agent, { environment: env });
+      const result = await agent.triggerDeployment(trigger, partition, env, operation, order);
 
       expect(result.status).toBe("failed");
       expect(result.failureReason).toContain("unreachable");
@@ -236,12 +257,9 @@ describe("Deployment Orchestration Engine", () => {
     it("DNS failure → aborts immediately without retrying", async () => {
       healthChecker.willReturn(DNS_FAILURE);
 
-      const result = await agent.triggerDeployment(
-        makeTrigger(),
-        makePartition(),
-        makeEnvironment({ name: "staging" }),
-        makeOperation(),
-      );
+      const env = makeEnvironment({ name: "staging" });
+      const { order, trigger, partition, operation } = makeOrderAndTrigger(agent, { environment: env });
+      const result = await agent.triggerDeployment(trigger, partition, env, operation, order);
 
       expect(result.status).toBe("failed");
 
@@ -267,12 +285,9 @@ describe("Deployment Orchestration Engine", () => {
       // Track the delay used by capturing the reasoning
       healthChecker.willReturn(TIMEOUT, TIMEOUT);
 
-      const result = await agent.triggerDeployment(
-        makeTrigger(),
-        makePartition(),
-        makeEnvironment({ name: "production" }),
-        makeOperation(),
-      );
+      const env = makeEnvironment({ name: "production" });
+      const { order, trigger, partition, operation } = makeOrderAndTrigger(agent, { environment: env });
+      const result = await agent.triggerDeployment(trigger, partition, env, operation, order);
 
       expect(result.status).toBe("failed");
 
@@ -292,12 +307,9 @@ describe("Deployment Orchestration Engine", () => {
     it("timeout in staging → retries with standard backoff (not extended)", async () => {
       healthChecker.willReturn(TIMEOUT, TIMEOUT);
 
-      const result = await agent.triggerDeployment(
-        makeTrigger(),
-        makePartition(),
-        makeEnvironment({ name: "staging" }),
-        makeOperation(),
-      );
+      const env = makeEnvironment({ name: "staging" });
+      const { order, trigger, partition, operation } = makeOrderAndTrigger(agent, { environment: env });
+      const result = await agent.triggerDeployment(trigger, partition, env, operation, order);
 
       expect(result.status).toBe("failed");
 
@@ -313,12 +325,8 @@ describe("Deployment Orchestration Engine", () => {
     it("recovery on retry → completes deployment", async () => {
       healthChecker.willReturn(CONN_REFUSED, HEALTHY);
 
-      const result = await agent.triggerDeployment(
-        makeTrigger(),
-        makePartition(),
-        makeEnvironment(),
-        makeOperation(),
-      );
+      const { order, trigger, partition, environment, operation } = makeOrderAndTrigger(agent);
+      const result = await agent.triggerDeployment(trigger, partition, environment, operation, order);
 
       expect(result.status).toBe("succeeded");
 
@@ -332,12 +340,8 @@ describe("Deployment Orchestration Engine", () => {
     it("server error (503) → retries with appropriate reasoning", async () => {
       healthChecker.willReturn(SERVER_ERROR, HEALTHY);
 
-      const result = await agent.triggerDeployment(
-        makeTrigger(),
-        makePartition(),
-        makeEnvironment(),
-        makeOperation(),
-      );
+      const { order, trigger, partition, environment, operation } = makeOrderAndTrigger(agent);
+      const result = await agent.triggerDeployment(trigger, partition, environment, operation, order);
 
       expect(result.status).toBe("succeeded");
 
@@ -364,15 +368,12 @@ describe("Deployment Orchestration Engine", () => {
         name: "staging",
         variables: { DB_HOST: "staging-db.internal" },
       });
+      const operation = makeOperation({ environmentIds: ["env-staging"] });
 
       healthChecker.willReturn(HEALTHY);
 
-      const result = await agent.triggerDeployment(
-        makeTrigger({ environmentId: "env-staging" }),
-        partition,
-        env,
-        makeOperation({ environmentIds: ["env-staging"] }),
-      );
+      const { order, trigger } = makeOrderAndTrigger(agent, { partition, environment: env, operation });
+      const result = await agent.triggerDeployment(trigger, partition, env, operation, order);
 
       // Single override → agent proceeds (might be intentional)
       expect(result.status).toBe("succeeded");
@@ -405,15 +406,12 @@ describe("Deployment Orchestration Engine", () => {
           CACHE_HOST: "staging-cache:6379",
         },
       });
+      const operation = makeOperation({ environmentIds: ["env-staging"] });
 
       healthChecker.willReturn(HEALTHY);
 
-      const result = await agent.triggerDeployment(
-        makeTrigger({ environmentId: "env-staging" }),
-        partition,
-        env,
-        makeOperation({ environmentIds: ["env-staging"] }),
-      );
+      const { order, trigger } = makeOrderAndTrigger(agent, { partition, environment: env, operation });
+      const result = await agent.triggerDeployment(trigger, partition, env, operation, order);
 
       // THIS IS THE KEY BEHAVIORAL DIFFERENCE:
       // Multiple cross-env connectivity overrides → deployment blocked
@@ -450,12 +448,8 @@ describe("Deployment Orchestration Engine", () => {
 
       healthChecker.willReturn(HEALTHY);
 
-      const result = await agent.triggerDeployment(
-        makeTrigger(),
-        partition,
-        env,
-        makeOperation(),
-      );
+      const { order, trigger, operation } = makeOrderAndTrigger(agent, { partition, environment: env });
+      const result = await agent.triggerDeployment(trigger, partition, env, operation, order);
 
       // Non-connectivity cross-env → proceeds (can't route traffic)
       expect(result.status).toBe("succeeded");
@@ -471,12 +465,8 @@ describe("Deployment Orchestration Engine", () => {
 
       healthChecker.willReturn(HEALTHY);
 
-      const result = await agent.triggerDeployment(
-        makeTrigger(),
-        partition,
-        env,
-        makeOperation(),
-      );
+      const { order, trigger, operation } = makeOrderAndTrigger(agent, { partition, environment: env });
+      const result = await agent.triggerDeployment(trigger, partition, env, operation, order);
 
       expect(result.status).toBe("succeeded");
       expect(result.variables.API_SECRET).toBe("partition-secret-xyz");
@@ -500,16 +490,11 @@ describe("Deployment Orchestration Engine", () => {
   describe("decision trail", () => {
     it("every diary entry has partition isolation via partitionId", async () => {
       const partition = makePartition({ id: "isolated-partition" });
-      const trigger = makeTrigger({ partitionId: "isolated-partition" });
 
       healthChecker.willReturn(HEALTHY);
 
-      const result = await agent.triggerDeployment(
-        trigger,
-        partition,
-        makeEnvironment(),
-        makeOperation(),
-      );
+      const { order, trigger, environment, operation } = makeOrderAndTrigger(agent, { partition });
+      const result = await agent.triggerDeployment(trigger, partition, environment, operation, order);
       const entries = diary.getByDeployment(result.id);
 
       for (const entry of entries) {
@@ -517,18 +502,16 @@ describe("Deployment Orchestration Engine", () => {
       }
 
       const partitionEntries = diary.getByPartition("isolated-partition");
-      expect(partitionEntries.length).toBe(entries.length);
+      // Partition entries include the order-created snapshot entry (deploymentId: null)
+      // plus all deployment-scoped entries, so partition count >= deployment count.
+      expect(partitionEntries.length).toBeGreaterThanOrEqual(entries.length);
     });
 
     it("failed deployment trail includes the failing step", async () => {
       healthChecker.willReturn(CONN_REFUSED, CONN_REFUSED);
 
-      const result = await agent.triggerDeployment(
-        makeTrigger(),
-        makePartition(),
-        makeEnvironment(),
-        makeOperation(),
-      );
+      const { order, trigger, partition, environment, operation } = makeOrderAndTrigger(agent);
+      const result = await agent.triggerDeployment(trigger, partition, environment, operation, order);
 
       expect(result.status).toBe("failed");
 
@@ -549,12 +532,8 @@ describe("Deployment Orchestration Engine", () => {
     it("deployment store persists the final state", async () => {
       healthChecker.willReturn(HEALTHY);
 
-      const result = await agent.triggerDeployment(
-        makeTrigger(),
-        makePartition(),
-        makeEnvironment(),
-        makeOperation(),
-      );
+      const { order, trigger, partition, environment, operation } = makeOrderAndTrigger(agent);
+      const result = await agent.triggerDeployment(trigger, partition, environment, operation, order);
 
       const stored = deployments.get(result.id);
       expect(stored).toBeDefined();

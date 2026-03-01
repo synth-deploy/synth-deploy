@@ -82,16 +82,6 @@ function makeEnvironment(overrides: Partial<Environment> = {}): Environment {
   };
 }
 
-function makeTrigger(overrides: Record<string, unknown> = {}) {
-  return {
-    operationId: "web-app",
-    partitionId: "partition-1",
-    environmentId: "env-prod",
-    version: "2.0.0",
-    ...overrides,
-  };
-}
-
 function makeOperation(overrides: Partial<Operation> = {}): Operation {
   return {
     id: "web-app",
@@ -106,6 +96,37 @@ function makeOperation(overrides: Partial<Operation> = {}): Operation {
     },
     ...overrides,
   };
+}
+
+/**
+ * Test convenience: creates an Order snapshot and triggers deployment in one call.
+ * Mirrors the old API where tests passed (trigger, partition, env, operation) directly.
+ */
+async function testDeploy(
+  agent: CommandAgent,
+  oldTrigger: { operationId?: string; partitionId?: string; environmentId?: string; version?: string; variables?: Record<string, string> },
+  partition?: Partition,
+  environment?: Environment,
+  operation?: Operation,
+) {
+  const p = partition ?? makePartition();
+  const e = environment ?? makeEnvironment();
+  const op = operation ?? makeOperation();
+  const version = oldTrigger.version ?? "2.0.0";
+
+  const effectivePartition = oldTrigger.partitionId && oldTrigger.partitionId !== p.id
+    ? makePartition({ id: oldTrigger.partitionId })
+    : p;
+
+  const order = agent.createOrderSnapshot(version, effectivePartition, e, op);
+  const trigger = {
+    orderId: order.id,
+    partitionId: effectivePartition.id,
+    environmentId: e.id,
+    triggeredBy: "user" as const,
+    ...(oldTrigger.variables ? { variables: oldTrigger.variables } : {}),
+  };
+  return agent.triggerDeployment(trigger, effectivePartition, e, op, order);
 }
 
 // ---------------------------------------------------------------------------
@@ -138,12 +159,7 @@ describe("Simulated Postmortem — failed deployment read experience", () => {
     // Scenario: deployment fails because target environment is unreachable
     healthChecker.willReturn(CONN_REFUSED, CONN_REFUSED);
 
-    const deployment = await agent.triggerDeployment(
-      makeTrigger(),
-      makePartition(),
-      makeEnvironment(),
-      makeOperation(),
-    );
+    const deployment = await testDeploy(agent, {});
 
     expect(deployment.status).toBe("failed");
 
@@ -196,12 +212,7 @@ describe("Simulated Postmortem — failed deployment read experience", () => {
   it("DNS failure postmortem — immediate abort explained clearly", async () => {
     healthChecker.willReturn(DNS_FAILURE);
 
-    const deployment = await agent.triggerDeployment(
-      makeTrigger(),
-      makePartition(),
-      makeEnvironment(),
-      makeOperation(),
-    );
+    const deployment = await testDeploy(agent, {});
 
     const entries = diary.getByDeployment(deployment.id);
     const postmortem = generatePostmortem(entries, deployment);
@@ -242,12 +253,7 @@ describe("Simulated Postmortem — failed deployment read experience", () => {
 
     healthChecker.willReturn(HEALTHY);
 
-    const deployment = await agent.triggerDeployment(
-      makeTrigger(),
-      partition,
-      env,
-      makeOperation(),
-    );
+    const deployment = await testDeploy(agent, {}, partition, env);
 
     expect(deployment.status).toBe("failed");
 
@@ -276,12 +282,7 @@ describe("Simulated Postmortem — failed deployment read experience", () => {
   it("successful deployment postmortem — no failure analysis, clean outcome", async () => {
     healthChecker.willReturn(HEALTHY);
 
-    const deployment = await agent.triggerDeployment(
-      makeTrigger(),
-      makePartition(),
-      makeEnvironment(),
-      makeOperation(),
-    );
+    const deployment = await testDeploy(agent, {});
 
     expect(deployment.status).toBe("succeeded");
 
@@ -301,12 +302,7 @@ describe("Simulated Postmortem — failed deployment read experience", () => {
     // First health check fails (connection refused), retry succeeds
     healthChecker.willReturn(CONN_REFUSED, HEALTHY);
 
-    const deployment = await agent.triggerDeployment(
-      makeTrigger(),
-      makePartition(),
-      makeEnvironment(),
-      makeOperation(),
-    );
+    const deployment = await testDeploy(agent, {});
 
     expect(deployment.status).toBe("succeeded");
 
@@ -337,11 +333,11 @@ describe("Simulated Postmortem — failed deployment read experience", () => {
   it("postmortem formatted output is self-contained — readable without any other document", async () => {
     healthChecker.willReturn(CONN_REFUSED, CONN_REFUSED);
 
-    const deployment = await agent.triggerDeployment(
-      makeTrigger({ version: "3.1.0" }),
+    const deployment = await testDeploy(
+      agent,
+      { version: "3.1.0" },
       makePartition({ name: "Widget Inc" }),
       makeEnvironment({ name: "staging" }),
-      makeOperation(),
     );
 
     const entries = diary.getByDeployment(deployment.id);
@@ -427,153 +423,61 @@ describe("Simulated Onboarding — operation history read experience", () => {
     // Deployment 1: v1.0.0 to staging — clean success
     healthChecker.willReturn(HEALTHY);
     results.push(
-      await agent.triggerDeployment(
-        makeTrigger({
-          partitionId: "acme",
-          environmentId: "env-staging",
-          version: "1.0.0",
-        }),
-        partition,
-        stagingEnv,
-        stagingOperation,
-      ),
+      await testDeploy(agent, { partitionId: "acme", version: "1.0.0" }, partition, stagingEnv, stagingOperation),
     );
 
     // Deployment 2: v1.0.0 to production — clean success
     healthChecker.willReturn(HEALTHY);
     results.push(
-      await agent.triggerDeployment(
-        makeTrigger({
-          partitionId: "acme",
-          environmentId: "env-prod",
-          version: "1.0.0",
-        }),
-        partition,
-        prodEnv,
-        prodOperation,
-      ),
+      await testDeploy(agent, { partitionId: "acme", version: "1.0.0" }, partition, prodEnv, prodOperation),
     );
 
     // Deployment 3: v1.1.0 to staging — with LOG_LEVEL conflict
     healthChecker.willReturn(HEALTHY);
     results.push(
-      await agent.triggerDeployment(
-        makeTrigger({
-          partitionId: "acme",
-          environmentId: "env-staging",
-          version: "1.1.0",
-          variables: { LOG_LEVEL: "error" },
-        }),
-        partition,
-        stagingEnv,
-        stagingOperation,
-      ),
+      await testDeploy(agent, { partitionId: "acme", version: "1.1.0", variables: { LOG_LEVEL: "error" } }, partition, stagingEnv, stagingOperation),
     );
 
     // Deployment 4: v1.1.0 to production — health check fails then recovers
     healthChecker.willReturn(CONN_REFUSED, HEALTHY);
     results.push(
-      await agent.triggerDeployment(
-        makeTrigger({
-          partitionId: "acme",
-          environmentId: "env-prod",
-          version: "1.1.0",
-        }),
-        partition,
-        prodEnv,
-        prodOperation,
-      ),
+      await testDeploy(agent, { partitionId: "acme", version: "1.1.0" }, partition, prodEnv, prodOperation),
     );
 
     // Deployment 5: v1.2.0 to staging — clean
     healthChecker.willReturn(HEALTHY);
     results.push(
-      await agent.triggerDeployment(
-        makeTrigger({
-          partitionId: "acme",
-          environmentId: "env-staging",
-          version: "1.2.0",
-        }),
-        partition,
-        stagingEnv,
-        stagingOperation,
-      ),
+      await testDeploy(agent, { partitionId: "acme", version: "1.2.0" }, partition, stagingEnv, stagingOperation),
     );
 
     // Deployment 6: v1.2.0 to production — DNS failure
     healthChecker.willReturn(DNS_FAILURE);
     results.push(
-      await agent.triggerDeployment(
-        makeTrigger({
-          partitionId: "acme",
-          environmentId: "env-prod",
-          version: "1.2.0",
-        }),
-        partition,
-        prodEnv,
-        prodOperation,
-      ),
+      await testDeploy(agent, { partitionId: "acme", version: "1.2.0" }, partition, prodEnv, prodOperation),
     );
 
     // Deployment 7: v1.2.0 to production retry — succeeds after fix
     healthChecker.willReturn(HEALTHY);
     results.push(
-      await agent.triggerDeployment(
-        makeTrigger({
-          partitionId: "acme",
-          environmentId: "env-prod",
-          version: "1.2.0",
-        }),
-        partition,
-        prodEnv,
-        prodOperation,
-      ),
+      await testDeploy(agent, { partitionId: "acme", version: "1.2.0" }, partition, prodEnv, prodOperation),
     );
 
     // Deployment 8: v2.0.0 to staging — clean
     healthChecker.willReturn(HEALTHY);
     results.push(
-      await agent.triggerDeployment(
-        makeTrigger({
-          partitionId: "acme",
-          environmentId: "env-staging",
-          version: "2.0.0",
-        }),
-        partition,
-        stagingEnv,
-        stagingOperation,
-      ),
+      await testDeploy(agent, { partitionId: "acme", version: "2.0.0" }, partition, stagingEnv, stagingOperation),
     );
 
     // Deployment 9: v2.0.0 to production — with variable conflict
     healthChecker.willReturn(HEALTHY);
     results.push(
-      await agent.triggerDeployment(
-        makeTrigger({
-          partitionId: "acme",
-          environmentId: "env-prod",
-          version: "2.0.0",
-          variables: { LOG_LEVEL: "debug" },
-        }),
-        partition,
-        prodEnv,
-        prodOperation,
-      ),
+      await testDeploy(agent, { partitionId: "acme", version: "2.0.0", variables: { LOG_LEVEL: "debug" } }, partition, prodEnv, prodOperation),
     );
 
     // Deployment 10: v2.1.0 to staging — clean
     healthChecker.willReturn(HEALTHY);
     results.push(
-      await agent.triggerDeployment(
-        makeTrigger({
-          partitionId: "acme",
-          environmentId: "env-staging",
-          version: "2.1.0",
-        }),
-        partition,
-        stagingEnv,
-        stagingOperation,
-      ),
+      await testDeploy(agent, { partitionId: "acme", version: "2.1.0" }, partition, stagingEnv, stagingOperation),
     );
 
     return results;
@@ -783,12 +687,7 @@ describe("Postmortem report — structural guarantees", () => {
   it("timeline entries are sorted chronologically", async () => {
     healthChecker.willReturn(CONN_REFUSED, HEALTHY);
 
-    const deployment = await agent.triggerDeployment(
-      makeTrigger(),
-      makePartition(),
-      makeEnvironment(),
-      makeOperation(),
-    );
+    const deployment = await testDeploy(agent, {});
 
     const entries = diary.getByDeployment(deployment.id);
     const postmortem = generatePostmortem(entries, deployment);
@@ -809,11 +708,9 @@ describe("Postmortem report — structural guarantees", () => {
     const env = makeEnvironment({
       variables: { LOG_LEVEL: "warn", APP_ENV: "production", DB_POOL: "10" },
     });
-    const trigger = makeTrigger({ variables: { LOG_LEVEL: "debug" } });
-
     healthChecker.willReturn(HEALTHY);
 
-    const deployment = await agent.triggerDeployment(trigger, partition, env, makeOperation());
+    const deployment = await testDeploy(agent, { variables: { LOG_LEVEL: "debug" } }, partition, env);
 
     const entries = diary.getByDeployment(deployment.id);
     const postmortem = generatePostmortem(entries, deployment);
@@ -826,12 +723,7 @@ describe("Postmortem report — structural guarantees", () => {
   it("failure analysis is null for successful deployments", async () => {
     healthChecker.willReturn(HEALTHY);
 
-    const deployment = await agent.triggerDeployment(
-      makeTrigger(),
-      makePartition(),
-      makeEnvironment(),
-      makeOperation(),
-    );
+    const deployment = await testDeploy(agent, {});
 
     const entries = diary.getByDeployment(deployment.id);
     const postmortem = generatePostmortem(entries, deployment);
@@ -842,12 +734,7 @@ describe("Postmortem report — structural guarantees", () => {
   it("failure analysis includes the failed step name", async () => {
     healthChecker.willReturn(DNS_FAILURE);
 
-    const deployment = await agent.triggerDeployment(
-      makeTrigger(),
-      makePartition(),
-      makeEnvironment(),
-      makeOperation(),
-    );
+    const deployment = await testDeploy(agent, {});
 
     const entries = diary.getByDeployment(deployment.id);
     const postmortem = generatePostmortem(entries, deployment);

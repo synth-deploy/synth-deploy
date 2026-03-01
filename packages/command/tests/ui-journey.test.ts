@@ -8,6 +8,7 @@ import { registerDeploymentRoutes } from "../src/api/deployments.js";
 import { registerOperationRoutes } from "../src/api/operations.js";
 import { registerPartitionRoutes } from "../src/api/partitions.js";
 import { registerEnvironmentRoutes } from "../src/api/environments.js";
+import { registerOrderRoutes } from "../src/api/orders.js";
 
 // ---------------------------------------------------------------------------
 // Test server setup — mirrors index.ts but without MCP or static serving
@@ -38,9 +39,45 @@ beforeAll(async () => {
   registerOperationRoutes(app, operations, environments);
   registerPartitionRoutes(app, partitions, deployments, diary);
   registerEnvironmentRoutes(app, environments, operations);
+  registerOrderRoutes(app, orders, agent, partitions, environments, operations, deployments, diary, settings);
 
   await app.ready();
 });
+
+/**
+ * Helper: creates an Order via HTTP, then triggers deployment.
+ */
+async function deployViaHttp(
+  server: FastifyInstance,
+  params: { operationId: string; partitionId: string; environmentId: string; version: string; variables?: Record<string, string> },
+) {
+  const orderRes = await server.inject({
+    method: "POST",
+    url: "/api/orders",
+    payload: {
+      operationId: params.operationId,
+      partitionId: params.partitionId,
+      environmentId: params.environmentId,
+      version: params.version,
+    },
+  });
+  if (orderRes.statusCode !== 201) {
+    throw new Error(`Failed to create order: ${orderRes.payload}`);
+  }
+  const orderId = JSON.parse(orderRes.payload).order.id;
+
+  return server.inject({
+    method: "POST",
+    url: "/api/deployments",
+    payload: {
+      orderId,
+      partitionId: params.partitionId,
+      environmentId: params.environmentId,
+      triggeredBy: "user",
+      ...(params.variables ? { variables: params.variables } : {}),
+    },
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Complete user journey — exercising every API the UI depends on
@@ -152,15 +189,11 @@ describe("Complete UI user journey", () => {
   // ---- Step 5: Trigger first deployment ----
 
   it("triggers a deployment", async () => {
-    const res = await app.inject({
-      method: "POST",
-      url: "/api/deployments",
-      payload: {
-        operationId,
-        partitionId,
-        environmentId: productionEnvId,
-        version: "1.0.0",
-      },
+    const res = await deployViaHttp(app, {
+      operationId,
+      partitionId,
+      environmentId: productionEnvId,
+      version: "1.0.0",
     });
 
     expect(res.statusCode).toBe(201);
@@ -237,16 +270,12 @@ describe("Complete UI user journey", () => {
   // ---- Step 9: Trigger a second deployment ----
 
   it("triggers a second deployment (version upgrade)", async () => {
-    const res = await app.inject({
-      method: "POST",
-      url: "/api/deployments",
-      payload: {
-        operationId,
-        partitionId,
-        environmentId: productionEnvId,
-        version: "1.1.0",
-        variables: { FEATURE_FLAG: "new-ui" },
-      },
+    const res = await deployViaHttp(app, {
+      operationId,
+      partitionId,
+      environmentId: productionEnvId,
+      version: "1.1.0",
+      variables: { FEATURE_FLAG: "new-ui" },
     });
 
     expect(res.statusCode).toBe(201);

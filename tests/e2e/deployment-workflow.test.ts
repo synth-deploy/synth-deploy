@@ -78,6 +78,30 @@ async function httpRequest(
   return { status: res.status, body: json as Record<string, unknown> };
 }
 
+/** Creates an Order then triggers a deployment via the Order-based flow. */
+async function deployViaHttp(
+  baseUrl: string,
+  params: { operationId: string; partitionId: string; environmentId: string; version: string },
+): Promise<{ status: number; body: Record<string, unknown> }> {
+  const orderRes = await httpRequest(baseUrl, "POST", "/api/orders", {
+    operationId: params.operationId,
+    partitionId: params.partitionId,
+    environmentId: params.environmentId,
+    version: params.version,
+  });
+  if (orderRes.status !== 201) {
+    throw new Error(`Failed to create order: ${JSON.stringify(orderRes.body)}`);
+  }
+  const orderId = (orderRes.body.order as Record<string, unknown>).id as string;
+
+  return httpRequest(baseUrl, "POST", "/api/deployments", {
+    orderId,
+    partitionId: params.partitionId,
+    environmentId: params.environmentId,
+    triggeredBy: "user",
+  });
+}
+
 // ==========================================================================
 // Helper: build a Command server with all routes registered
 // ==========================================================================
@@ -235,18 +259,13 @@ describe("E2E: Full deployment lifecycle via HTTP", () => {
     expect(order.environmentId).toBe(environmentId);
     expect(order.version).toBe("1.0.0");
 
-    // Step 5: Trigger a deployment via HTTP
-    const deployRes = await httpRequest(
-      ctx.baseUrl,
-      "POST",
-      "/api/deployments",
-      {
-        operationId,
-        partitionId,
-        environmentId,
-        version: "1.0.0",
-      },
-    );
+    // Step 5: Trigger a deployment via HTTP (Order-based flow)
+    const deployRes = await deployViaHttp(ctx.baseUrl, {
+      operationId,
+      partitionId,
+      environmentId,
+      version: "1.0.0",
+    });
     expect(deployRes.status).toBe(201);
 
     const deployment = deployRes.body.deployment as Record<string, unknown>;
@@ -574,34 +593,24 @@ describe("E2E: Partition isolation via HTTP", () => {
 
   it("deploys to both partitions independently via HTTP", async () => {
     // Deploy to partition A
-    const depARes = await httpRequest(
-      ctx.baseUrl,
-      "POST",
-      "/api/deployments",
-      {
-        operationId,
-        partitionId: partitionAId,
-        environmentId,
-        version: "1.0.0",
-      },
-    );
+    const depARes = await deployViaHttp(ctx.baseUrl, {
+      operationId,
+      partitionId: partitionAId,
+      environmentId,
+      version: "1.0.0",
+    });
     expect(depARes.status).toBe(201);
     expect(
       (depARes.body.deployment as Record<string, unknown>).status,
     ).toBe("succeeded");
 
     // Deploy to partition B
-    const depBRes = await httpRequest(
-      ctx.baseUrl,
-      "POST",
-      "/api/deployments",
-      {
-        operationId,
-        partitionId: partitionBId,
-        environmentId,
-        version: "2.0.0",
-      },
-    );
+    const depBRes = await deployViaHttp(ctx.baseUrl, {
+      operationId,
+      partitionId: partitionBId,
+      environmentId,
+      version: "2.0.0",
+    });
     expect(depBRes.status).toBe(201);
     expect(
       (depBRes.body.deployment as Record<string, unknown>).status,

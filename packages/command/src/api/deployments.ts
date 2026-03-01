@@ -19,7 +19,7 @@ export function registerDeploymentRoutes(
   orders: IOrderStore,
   settings: ISettingsStore,
 ): void {
-  // Trigger a deployment
+  // Trigger a deployment from an Order
   app.post("/api/deployments", async (request, reply) => {
     const parsed = DeploymentTriggerSchema.safeParse(request.body);
     if (!parsed.success) {
@@ -30,14 +30,11 @@ export function registerDeploymentRoutes(
     }
 
     const trigger = parsed.data;
-    const body = request.body as Record<string, unknown> | null;
-    const orderId = body && typeof body === "object" && "orderId" in body ? body.orderId : undefined;
-    const envEnabled = settings.get().environmentsEnabled;
 
-    // Validate operation exists
-    const operation = operations.get(trigger.operationId);
-    if (!operation) {
-      return reply.status(404).send({ error: `Operation not found: ${trigger.operationId}` });
+    // Look up the Order — this is now the authoritative source
+    const order = orders.get(trigger.orderId);
+    if (!order) {
+      return reply.status(404).send({ error: `Order not found: ${trigger.orderId}` });
     }
 
     const partition = partitions.get(trigger.partitionId);
@@ -45,15 +42,10 @@ export function registerDeploymentRoutes(
       return reply.status(404).send({ error: `Partition not found: ${trigger.partitionId}` });
     }
 
-    // Resolve environment — skip validation when environments are disabled
+    // Resolve environment from the Order
+    const envEnabled = settings.get().environmentsEnabled;
     let environment: { id: string; name: string; variables: Record<string, string> };
     if (envEnabled && trigger.environmentId) {
-      if (!operation.environmentIds.includes(trigger.environmentId)) {
-        return reply.status(400).send({
-          error: `Environment ${trigger.environmentId} is not linked to operation "${operation.name}". ` +
-            `Available environments: ${operation.environmentIds.join(", ") || "none"}`,
-        });
-      }
       const env = environments.get(trigger.environmentId);
       if (!env) {
         return reply.status(404).send({ error: `Environment not found: ${trigger.environmentId}` });
@@ -63,16 +55,13 @@ export function registerDeploymentRoutes(
       environment = { id: "", name: "(none)", variables: {} };
     }
 
-    // If an orderId was provided, load the existing Order for re-execution
-    let existingOrder;
-    if (typeof orderId === "string") {
-      existingOrder = orders.get(orderId);
-      if (!existingOrder) {
-        return reply.status(404).send({ error: `Order not found: ${orderId}` });
-      }
+    // Look up the Operation (needed by the agent for pipeline context)
+    const operation = operations.get(order.operationId);
+    if (!operation) {
+      return reply.status(404).send({ error: `Operation not found: ${order.operationId}` });
     }
 
-    const deployment = await agent.triggerDeployment(trigger, partition, environment, operation, existingOrder);
+    const deployment = await agent.triggerDeployment(trigger, partition, environment, operation, order);
 
     return reply.status(201).send({
       deployment,

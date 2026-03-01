@@ -4,7 +4,7 @@ import {
   PartitionManager,
   OrderStore,
 } from "@deploystack/core";
-import type { Environment, DebriefEntry, Operation } from "@deploystack/core";
+import type { Environment, DebriefEntry, Operation, Partition } from "@deploystack/core";
 import {
   CommandAgent,
   InMemoryDeploymentStore,
@@ -71,6 +71,30 @@ function findDecisions(entries: DebriefEntry[], substr: string): DebriefEntry[] 
   return entries.filter((e) =>
     e.decision.toLowerCase().includes(substr.toLowerCase()),
   );
+}
+
+/**
+ * Test convenience: creates an Order snapshot and triggers deployment in one call.
+ * Works with PartitionManager containers (uses .toPartition()) or raw Partition objects.
+ */
+async function testDeployWithPartition(
+  agent: CommandAgent,
+  partitionLike: { id: string; toPartition: () => Partition },
+  env: Environment,
+  operation: Operation,
+  version = "1.0.0",
+  variables?: Record<string, string>,
+) {
+  const partition = partitionLike.toPartition();
+  const order = agent.createOrderSnapshot(version, partition, env, operation);
+  const trigger = {
+    orderId: order.id,
+    partitionId: partition.id,
+    environmentId: env.id,
+    triggeredBy: "user" as const,
+    ...(variables ? { variables } : {}),
+  };
+  return agent.triggerDeployment(trigger, partition, env, operation, order);
 }
 
 // ---------------------------------------------------------------------------
@@ -150,18 +174,7 @@ describe("Partition Isolation", () => {
       const env = makeEnvironment();
 
       // Deploy to Partition A
-      const triggerA = {
-        operationId: "web-app",
-        partitionId: partitionA.id,
-        environmentId: env.id,
-        version: "1.0.0",
-      };
-      const resultA = await agent.triggerDeployment(
-        triggerA,
-        partitionA.toPartition(),
-        env,
-        makeOperation(),
-      );
+      const resultA = await testDeployWithPartition(agent, partitionA, env, makeOperation());
       expect(resultA.status).toBe("succeeded");
 
       // Partition A sees its deployment
@@ -177,17 +190,7 @@ describe("Partition Isolation", () => {
       const partitionB = manager.createPartition("Beta Inc");
       const env = makeEnvironment();
 
-      const resultA = await agent.triggerDeployment(
-        {
-          operationId: "web-app",
-          partitionId: partitionA.id,
-          environmentId: env.id,
-          version: "1.0.0",
-        },
-        partitionA.toPartition(),
-        env,
-        makeOperation(),
-      );
+      const resultA = await testDeployWithPartition(agent, partitionA, env, makeOperation());
 
       // Partition A can access by ID
       expect(partitionA.getDeployment(resultA.id)).toBeDefined();
@@ -204,30 +207,10 @@ describe("Partition Isolation", () => {
 
       // Deploy 3 times to A, 2 times to B
       for (let i = 0; i < 3; i++) {
-        await agent.triggerDeployment(
-          {
-            operationId: "web-app",
-            partitionId: partitionA.id,
-            environmentId: env.id,
-            version: `a-${i}`,
-          },
-          partitionA.toPartition(),
-          env,
-          makeOperation(),
-        );
+        await testDeployWithPartition(agent, partitionA, env, makeOperation(), `a-${i}`);
       }
       for (let i = 0; i < 2; i++) {
-        await agent.triggerDeployment(
-          {
-            operationId: "web-app",
-            partitionId: partitionB.id,
-            environmentId: env.id,
-            version: `b-${i}`,
-          },
-          partitionB.toPartition(),
-          env,
-          makeOperation(),
-        );
+        await testDeployWithPartition(agent, partitionB, env, makeOperation(), `b-${i}`);
       }
 
       expect(partitionA.getDeployments()).toHaveLength(3);
@@ -254,17 +237,7 @@ describe("Partition Isolation", () => {
       const partitionB = manager.createPartition("Beta Inc");
       const env = makeEnvironment();
 
-      await agent.triggerDeployment(
-        {
-          operationId: "web-app",
-          partitionId: partitionA.id,
-          environmentId: env.id,
-          version: "1.0.0",
-        },
-        partitionA.toPartition(),
-        env,
-        makeOperation(),
-      );
+      await testDeployWithPartition(agent, partitionA, env, makeOperation());
 
       // A has diary entries
       const entriesA = partitionA.getDebriefEntries();
@@ -292,31 +265,11 @@ describe("Partition Isolation", () => {
 
       // Partition A: deployment fails (health check fails)
       healthChecker.willReturn(CONN_REFUSED, CONN_REFUSED);
-      const resultA = await agent.triggerDeployment(
-        {
-          operationId: "web-app",
-          partitionId: partitionA.id,
-          environmentId: env.id,
-          version: "1.0.0",
-        },
-        partitionA.toPartition(),
-        env,
-        makeOperation(),
-      );
+      const resultA = await testDeployWithPartition(agent, partitionA, env, makeOperation());
       expect(resultA.status).toBe("failed");
 
       // Partition B: deployment succeeds — A's failure had no effect
-      const resultB = await agent.triggerDeployment(
-        {
-          operationId: "web-app",
-          partitionId: partitionB.id,
-          environmentId: env.id,
-          version: "1.0.0",
-        },
-        partitionB.toPartition(),
-        env,
-        makeOperation(),
-      );
+      const resultB = await testDeployWithPartition(agent, partitionB, env, makeOperation());
       expect(resultB.status).toBe("succeeded");
 
       // Each partition sees only their own result
@@ -334,30 +287,10 @@ describe("Partition Isolation", () => {
 
       // A fails
       healthChecker.willReturn(CONN_REFUSED, CONN_REFUSED);
-      await agent.triggerDeployment(
-        {
-          operationId: "web-app",
-          partitionId: partitionA.id,
-          environmentId: env.id,
-          version: "1.0.0",
-        },
-        partitionA.toPartition(),
-        env,
-        makeOperation(),
-      );
+      await testDeployWithPartition(agent, partitionA, env, makeOperation());
 
       // B succeeds
-      await agent.triggerDeployment(
-        {
-          operationId: "web-app",
-          partitionId: partitionB.id,
-          environmentId: env.id,
-          version: "1.0.0",
-        },
-        partitionB.toPartition(),
-        env,
-        makeOperation(),
-      );
+      await testDeployWithPartition(agent, partitionB, env, makeOperation());
 
       // A has failure entries
       const failEntries = findDecisions(
@@ -627,17 +560,13 @@ describe("Precedence Recording in Decision Diary", () => {
       variables: { LOG_LEVEL: "warn", APP_ENV: "production" },
     });
 
-    const result = await agent.triggerDeployment(
-      {
-        operationId: "web-app",
-        partitionId: partition.id,
-        environmentId: env.id,
-        version: "1.0.0",
-        variables: { LOG_LEVEL: "debug" },
-      },
-      partition.toPartition(),
+    const result = await testDeployWithPartition(
+      agent,
+      partition,
       env,
       makeOperation(),
+      "1.0.0",
+      { LOG_LEVEL: "debug" },
     );
 
     expect(result.status).toBe("succeeded");
@@ -718,17 +647,7 @@ describe("Scale: 50 Partitions", () => {
     const start = performance.now();
     const results = await Promise.all(
       partitions.map((partition) =>
-        agent.triggerDeployment(
-          {
-            operationId: "web-app",
-            partitionId: partition.id,
-            environmentId: env.id,
-            version: "1.0.0",
-          },
-          partition.toPartition(),
-          env,
-          makeOperation(),
-        ),
+        testDeployWithPartition(agent, partition, env, makeOperation()),
       ),
     );
     const elapsed = performance.now() - start;
@@ -797,17 +716,7 @@ describe("Scale: 50 Partitions", () => {
     // Deploy to all 50
     await Promise.all(
       partitions.map((partition) =>
-        agent.triggerDeployment(
-          {
-            operationId: "web-app",
-            partitionId: partition.id,
-            environmentId: env.id,
-            version: "1.0.0",
-          },
-          partition.toPartition(),
-          env,
-          makeOperation(),
-        ),
+        testDeployWithPartition(agent, partition, env, makeOperation()),
       ),
     );
 

@@ -21,10 +21,10 @@ export const DeploymentStatus = z.enum([
 export type DeploymentStatus = z.infer<typeof DeploymentStatus>;
 
 export const DeploymentTriggerSchema = z.object({
-  operationId: z.string(),
+  orderId: z.string(),
   partitionId: z.string(),
   environmentId: z.string(),
-  version: z.string(),
+  triggeredBy: z.enum(["user", "agent"]).default("user"),
   variables: z.record(z.string()).optional(),
 });
 export type DeploymentTrigger = z.infer<typeof DeploymentTriggerSchema>;

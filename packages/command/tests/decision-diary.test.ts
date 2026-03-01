@@ -76,16 +76,6 @@ function makeEnvironment(overrides: Partial<Environment> = {}): Environment {
   };
 }
 
-function makeTrigger(overrides: Record<string, unknown> = {}) {
-  return {
-    operationId: "web-app",
-    partitionId: "partition-1",
-    environmentId: "env-prod",
-    version: "2.0.0",
-    ...overrides,
-  };
-}
-
 function makeOperation(overrides: Partial<Operation> = {}): Operation {
   return {
     id: "web-app",
@@ -100,6 +90,64 @@ function makeOperation(overrides: Partial<Operation> = {}): Operation {
     },
     ...overrides,
   };
+}
+
+function makeOrderAndTrigger(
+  agent: CommandAgent,
+  opts: {
+    partition?: Partition;
+    environment?: Environment;
+    operation?: Operation;
+    version?: string;
+    variables?: Record<string, string>;
+  } = {},
+) {
+  const partition = opts.partition ?? makePartition();
+  const environment = opts.environment ?? makeEnvironment();
+  const operation = opts.operation ?? makeOperation();
+  const version = opts.version ?? "2.0.0";
+
+  const order = agent.createOrderSnapshot(version, partition, environment, operation);
+  const trigger = {
+    orderId: order.id,
+    partitionId: partition.id,
+    environmentId: environment.id,
+    triggeredBy: "user" as const,
+    ...(opts.variables ? { variables: opts.variables } : {}),
+  };
+  return { order, trigger, partition, environment, operation };
+}
+
+/**
+ * Test convenience: creates an Order snapshot and triggers deployment in one call.
+ * Mirrors the old API where tests passed (trigger, partition, env, operation) directly.
+ */
+async function testDeploy(
+  agent: CommandAgent,
+  oldTrigger: { operationId?: string; partitionId?: string; environmentId?: string; version?: string; variables?: Record<string, string> },
+  partition?: Partition,
+  environment?: Environment,
+  operation?: Operation,
+) {
+  const p = partition ?? makePartition();
+  const e = environment ?? makeEnvironment();
+  const op = operation ?? makeOperation();
+  const version = oldTrigger.version ?? "2.0.0";
+
+  // Ensure partition/environment IDs match
+  const effectivePartition = oldTrigger.partitionId && oldTrigger.partitionId !== p.id
+    ? makePartition({ id: oldTrigger.partitionId })
+    : p;
+
+  const order = agent.createOrderSnapshot(version, effectivePartition, e, op);
+  const trigger = {
+    orderId: order.id,
+    partitionId: effectivePartition.id,
+    environmentId: e.id,
+    triggeredBy: "user" as const,
+    ...(oldTrigger.variables ? { variables: oldTrigger.variables } : {}),
+  };
+  return agent.triggerDeployment(trigger, effectivePartition, e, op, order);
 }
 
 function findDecisions(entries: DebriefEntry[], substr: string): DebriefEntry[] {
@@ -143,10 +191,9 @@ describe("Decision Diary — entry specificity", () => {
     const env = makeEnvironment({
       variables: { APP_ENV: "production", LOG_LEVEL: "warn" },
     });
-    const trigger = makeTrigger({ variables: { LOG_LEVEL: "error" } });
 
     healthChecker.willReturn(HEALTHY);
-    const result = await agent.triggerDeployment(trigger, partition, env, makeOperation());
+    const result = await testDeploy(agent, { variables: { LOG_LEVEL: "error" } }, partition, env);
 
     const entries = diary.getByDeployment(result.id);
     expect(entries.length).toBeGreaterThanOrEqual(5);
@@ -169,10 +216,9 @@ describe("Decision Diary — entry specificity", () => {
       name: "staging",
       variables: { APP_ENV: "staging", LOG_LEVEL: "debug" },
     });
-    const trigger = makeTrigger({ variables: { LOG_LEVEL: "error" } });
 
     healthChecker.willReturn(HEALTHY);
-    const result = await agent.triggerDeployment(trigger, partition, env, makeOperation());
+    const result = await testDeploy(agent, { variables: { LOG_LEVEL: "error" } }, partition, env);
 
     const entries = diary.getByDeployment(result.id);
 
@@ -201,12 +247,7 @@ describe("Decision Diary — entry specificity", () => {
   it("failure entries include actionable recommendations", async () => {
     healthChecker.willReturn(CONN_REFUSED, CONN_REFUSED);
 
-    const result = await agent.triggerDeployment(
-      makeTrigger(),
-      makePartition(),
-      makeEnvironment(),
-      makeOperation(),
-    );
+    const result = await testDeploy(agent, {});
 
     expect(result.status).toBe("failed");
 
@@ -226,10 +267,9 @@ describe("Decision Diary — entry specificity", () => {
     const env = makeEnvironment({
       variables: { LOG_LEVEL: "warn", APP_ENV: "production" },
     });
-    const trigger = makeTrigger({ variables: { LOG_LEVEL: "debug" } });
 
     healthChecker.willReturn(HEALTHY);
-    const result = await agent.triggerDeployment(trigger, partition, env, makeOperation());
+    const result = await testDeploy(agent, { variables: { LOG_LEVEL: "debug" } }, partition, env);
 
     const entries = diary.getByDeployment(result.id);
     const conflictEntries = findDecisions(entries, "conflict");
@@ -268,12 +308,7 @@ describe("Decision Diary — orchestration completeness", () => {
   it("successful deployment produces entries for every pipeline step", async () => {
     healthChecker.willReturn(HEALTHY);
 
-    const result = await agent.triggerDeployment(
-      makeTrigger(),
-      makePartition(),
-      makeEnvironment(),
-      makeOperation(),
-    );
+    const result = await testDeploy(agent, {});
 
     const entries = diary.getByDeployment(result.id);
     const types = entries.map((e) => e.decisionType);
@@ -289,12 +324,7 @@ describe("Decision Diary — orchestration completeness", () => {
   it("failed deployment produces entries up to the failure plus the failure entry", async () => {
     healthChecker.willReturn(CONN_REFUSED, CONN_REFUSED);
 
-    const result = await agent.triggerDeployment(
-      makeTrigger(),
-      makePartition(),
-      makeEnvironment(),
-      makeOperation(),
-    );
+    const result = await testDeploy(agent, {});
 
     const entries = diary.getByDeployment(result.id);
     const types = entries.map((e) => e.decisionType);
@@ -316,18 +346,16 @@ describe("Decision Diary — orchestration completeness", () => {
       variables: { DB_HOST: "prod-db.internal" },
     });
     const env = makeEnvironment({
+      id: "env-staging",
       name: "staging",
       variables: { DB_HOST: "staging-db.internal" },
     });
+    const op = makeOperation({ environmentIds: ["env-staging"] });
 
     healthChecker.willReturn(HEALTHY);
 
-    const result = await agent.triggerDeployment(
-      makeTrigger({ environmentId: "env-staging" }),
-      partition,
-      env,
-      makeOperation({ environmentIds: ["env-staging"] }),
-    );
+    const { trigger, order } = makeOrderAndTrigger(agent, { partition, environment: env, operation: op });
+    const result = await agent.triggerDeployment(trigger, partition, env, op, order);
 
     const entries = diary.getByDeployment(result.id);
     const types = entries.map((e) => e.decisionType);
@@ -352,7 +380,7 @@ describe("Decision Diary — orchestration completeness", () => {
 
     healthChecker.willReturn(HEALTHY);
 
-    await agent.triggerDeployment(makeTrigger(), makePartition(), makeEnvironment(), makeOperation());
+    await testDeploy(agent, {});
 
     const entries = diary.getRecent(100);
     for (const entry of entries) {
@@ -384,18 +412,8 @@ describe("Decision Diary — retrieval dimensions", () => {
   it("retrieval by deployment — returns only entries for the specified deployment", async () => {
     healthChecker.willReturn(HEALTHY, HEALTHY);
 
-    const result1 = await agent.triggerDeployment(
-      makeTrigger({ version: "1.0.0" }),
-      makePartition(),
-      makeEnvironment(),
-      makeOperation(),
-    );
-    const result2 = await agent.triggerDeployment(
-      makeTrigger({ version: "2.0.0" }),
-      makePartition(),
-      makeEnvironment(),
-      makeOperation(),
-    );
+    const result1 = await testDeploy(agent, { version: "1.0.0" });
+    const result2 = await testDeploy(agent, { version: "2.0.0" });
 
     const entries1 = diary.getByDeployment(result1.id);
     const entries2 = diary.getByDeployment(result2.id);
@@ -416,18 +434,8 @@ describe("Decision Diary — retrieval dimensions", () => {
   it("retrieval by partition — returns only entries for the specified partition", async () => {
     healthChecker.willReturn(HEALTHY, HEALTHY);
 
-    await agent.triggerDeployment(
-      makeTrigger({ partitionId: "partition-a" }),
-      makePartition({ id: "partition-a", name: "Partition A" }),
-      makeEnvironment(),
-      makeOperation(),
-    );
-    await agent.triggerDeployment(
-      makeTrigger({ partitionId: "partition-b" }),
-      makePartition({ id: "partition-b", name: "Partition B" }),
-      makeEnvironment(),
-      makeOperation(),
-    );
+    await testDeploy(agent, { partitionId: "partition-a" }, makePartition({ id: "partition-a", name: "Partition A" }));
+    await testDeploy(agent, { partitionId: "partition-b" }, makePartition({ id: "partition-b", name: "Partition B" }));
 
     const entriesA = diary.getByPartition("partition-a");
     const entriesB = diary.getByPartition("partition-b");
@@ -454,18 +462,8 @@ describe("Decision Diary — retrieval dimensions", () => {
     healthChecker.willReturn(HEALTHY, CONN_REFUSED, CONN_REFUSED);
 
     // One success, one failure
-    await agent.triggerDeployment(
-      makeTrigger({ version: "1.0.0" }),
-      makePartition(),
-      makeEnvironment(),
-      makeOperation(),
-    );
-    await agent.triggerDeployment(
-      makeTrigger({ version: "2.0.0" }),
-      makePartition(),
-      makeEnvironment(),
-      makeOperation(),
-    );
+    await testDeploy(agent, { version: "1.0.0" });
+    await testDeploy(agent, { version: "2.0.0" });
 
     const planEntries = diary.getByType("pipeline-plan");
     const healthEntries = diary.getByType("health-check");
@@ -493,12 +491,7 @@ describe("Decision Diary — retrieval dimensions", () => {
     const before = new Date();
 
     healthChecker.willReturn(HEALTHY);
-    await agent.triggerDeployment(
-      makeTrigger(),
-      makePartition(),
-      makeEnvironment(),
-      makeOperation(),
-    );
+    await testDeploy(agent, {});
 
     const after = new Date();
 
@@ -521,12 +514,7 @@ describe("Decision Diary — retrieval dimensions", () => {
     const before = new Date();
 
     healthChecker.willReturn(HEALTHY);
-    await agent.triggerDeployment(
-      makeTrigger(),
-      makePartition(),
-      makeEnvironment(),
-      makeOperation(),
-    );
+    await testDeploy(agent, {});
 
     const after = new Date();
     const entries = diary.getByTimeRange(before, after);
@@ -814,12 +802,7 @@ describe("PersistentDecisionDebrief — integration with CommandAgent", () => {
   it("agent decisions persist to SQLite and survive reconnection", async () => {
     healthChecker.willReturn(HEALTHY);
 
-    const result = await agent.triggerDeployment(
-      makeTrigger(),
-      makePartition({ name: "Acme Corp" }),
-      makeEnvironment(),
-      makeOperation(),
-    );
+    const result = await testDeploy(agent, {}, makePartition({ name: "Acme Corp" }));
 
     expect(result.status).toBe("succeeded");
 
@@ -850,18 +833,8 @@ describe("PersistentDecisionDebrief — integration with CommandAgent", () => {
     healthChecker.willReturn(HEALTHY, HEALTHY);
 
     // Two deployments for different partitions
-    const result1 = await agent.triggerDeployment(
-      makeTrigger({ partitionId: "acme" }),
-      makePartition({ id: "acme", name: "Acme Corp" }),
-      makeEnvironment(),
-      makeOperation(),
-    );
-    const result2 = await agent.triggerDeployment(
-      makeTrigger({ partitionId: "beta" }),
-      makePartition({ id: "beta", name: "Beta Inc" }),
-      makeEnvironment(),
-      makeOperation(),
-    );
+    const result1 = await testDeploy(agent, { partitionId: "acme" }, makePartition({ id: "acme", name: "Acme Corp" }));
+    const result2 = await testDeploy(agent, { partitionId: "beta" }, makePartition({ id: "beta", name: "Beta Inc" }));
 
     // By deployment
     const acmeEntries = diary.getByDeployment(result1.id);
@@ -869,11 +842,11 @@ describe("PersistentDecisionDebrief — integration with CommandAgent", () => {
     expect(acmeEntries.length).toBeGreaterThanOrEqual(5);
     expect(betaEntries.length).toBeGreaterThanOrEqual(5);
 
-    // By partition — same entries, different access path
+    // By partition — includes deployment entries plus order-created snapshot entry
     const acmePartitionEntries = diary.getByPartition("acme");
     const betaPartitionEntries = diary.getByPartition("beta");
-    expect(acmePartitionEntries).toHaveLength(acmeEntries.length);
-    expect(betaPartitionEntries).toHaveLength(betaEntries.length);
+    expect(acmePartitionEntries.length).toBeGreaterThanOrEqual(acmeEntries.length);
+    expect(betaPartitionEntries.length).toBeGreaterThanOrEqual(betaEntries.length);
 
     // By type — across both deployments
     const plans = diary.getByType("pipeline-plan");

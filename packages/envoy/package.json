@@ -4,6 +4,12 @@
   "private": true,
   "type": "module",
   "main": "dist/index.js",
+  "exports": {
+    ".": "./dist/index.js",
+    "./agent/*": "./dist/agent/*",
+    "./state/*": "./dist/state/*",
+    "./server.js": "./dist/server.js"
+  },
   "scripts": {
     "build": "tsc",
     "dev": "tsx --watch src/index.ts",
