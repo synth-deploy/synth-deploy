@@ -10,7 +10,7 @@ import EnvironmentDetailPanel from "./canvas/EnvironmentDetailPanel.js";
 import DeploymentDetailPanel from "./canvas/DeploymentDetailPanel.js";
 import DeploymentListPanel from "./canvas/DeploymentListPanel.js";
 import DeploymentAuthoringPanel from "./canvas/DeploymentAuthoringPanel.js";
-import ProjectListPanel from "./canvas/ProjectListPanel.js";
+import OperationListPanel from "./canvas/OperationListPanel.js";
 import PartitionListPanel from "./canvas/PartitionListPanel.js";
 import OrderListPanel from "./canvas/OrderListPanel.js";
 import OrderDetailPanel from "./canvas/OrderDetailPanel.js";
@@ -108,8 +108,8 @@ export default function AgentCanvas() {
           />
         );
 
-      case "project-list":
-        return <ProjectListPanel key={panel.id} title={panel.title} />;
+      case "operation-list":
+        return <OperationListPanel key={panel.id} title={panel.title} />;
 
       case "partition-list":
         return <PartitionListPanel key={panel.id} title={panel.title} />;
@@ -119,7 +119,7 @@ export default function AgentCanvas() {
           <OrderListPanel
             key={panel.id}
             title={panel.title}
-            filterProjectId={panel.params.projectId}
+            filterOperationId={panel.params.operationId}
             filterPartitionId={panel.params.partitionId}
           />
         );

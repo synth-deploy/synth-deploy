@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { getEnvironment, listDeployments, listProjects } from "../../api.js";
-import type { Environment, Deployment, Project } from "../../types.js";
+import { getEnvironment, listDeployments, listOperations } from "../../api.js";
+import type { Environment, Deployment, Operation } from "../../types.js";
 import { useCanvas } from "../../context/CanvasContext.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
 
@@ -14,18 +14,18 @@ export default function EnvironmentDetailPanel({ environmentId, title }: Props) 
 
   const [environment, setEnvironment] = useState<Environment | null>(null);
   const [deployments, setDeployments] = useState<Deployment[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
+  const [operations, setOperations] = useState<Operation[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     Promise.all([
       getEnvironment(environmentId),
       listDeployments(),
-      listProjects(),
+      listOperations(),
     ]).then(([e, d, p]) => {
       setEnvironment(e);
       setDeployments(d.filter((dep) => dep.environmentId === environmentId));
-      setProjects(p);
+      setOperations(p);
       setLoading(false);
     }).catch(() => setLoading(false));
   }, [environmentId]);
@@ -91,8 +91,8 @@ export default function EnvironmentDetailPanel({ environmentId, title }: Props) 
                 >
                   <span className={`badge badge-${d.status}`}>{d.status}</span>
                   <span className="canvas-activity-version">{d.version}</span>
-                  <span className="canvas-activity-project">
-                    {projects.find((p) => p.id === d.projectId)?.name ?? d.projectId}
+                  <span className="canvas-activity-operation">
+                    {operations.find((p) => p.id === d.operationId)?.name ?? d.operationId}
                   </span>
                   <span className="canvas-activity-time">
                     {new Date(d.createdAt).toLocaleString()}

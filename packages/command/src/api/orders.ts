@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import type {
   OrderStore,
-  ProjectStore,
+  OperationStore,
   PartitionStore,
   DebriefWriter,
   DebriefReader,
@@ -23,21 +23,21 @@ export function registerOrderRoutes(
   agent: CommandAgent,
   partitions: PartitionStore,
   environments: EnvironmentStore,
-  projects: ProjectStore,
+  operations: OperationStore,
   deployments: DeploymentStore,
   debrief: DebriefWriter & DebriefReader,
   settings: SettingsStore,
 ): void {
-  // List orders (supports ?projectId and ?partitionId filters)
+  // List orders (supports ?operationId and ?partitionId filters)
   app.get("/api/orders", async (request) => {
-    const { projectId, partitionId } = request.query as {
-      projectId?: string;
+    const { operationId, partitionId } = request.query as {
+      operationId?: string;
       partitionId?: string;
     };
 
     let list;
-    if (projectId) {
-      list = orders.getByProject(projectId);
+    if (operationId) {
+      list = orders.getByOperation(operationId);
     } else if (partitionId) {
       list = orders.getByPartition(partitionId);
     } else {
@@ -64,8 +64,8 @@ export function registerOrderRoutes(
 
   // Create an order manually (pre-stage without deploying)
   app.post("/api/orders", async (request, reply) => {
-    const { projectId, partitionId, environmentId, version } = request.body as {
-      projectId?: string;
+    const { operationId, partitionId, environmentId, version } = request.body as {
+      operationId?: string;
       partitionId?: string;
       environmentId?: string;
       version?: string;
@@ -73,17 +73,17 @@ export function registerOrderRoutes(
 
     const envEnabled = settings.get().environmentsEnabled;
 
-    if (!projectId || !partitionId || !version || (envEnabled && !environmentId)) {
+    if (!operationId || !partitionId || !version || (envEnabled && !environmentId)) {
       return reply.status(400).send({
         error: envEnabled
-          ? "Missing required fields: projectId, partitionId, environmentId, version"
-          : "Missing required fields: projectId, partitionId, version",
+          ? "Missing required fields: operationId, partitionId, environmentId, version"
+          : "Missing required fields: operationId, partitionId, version",
       });
     }
 
-    const project = projects.get(projectId);
-    if (!project) {
-      return reply.status(404).send({ error: `Project not found: ${projectId}` });
+    const operation = operations.get(operationId);
+    if (!operation) {
+      return reply.status(404).send({ error: `Operation not found: ${operationId}` });
     }
 
     const partition = partitions.get(partitionId);
@@ -109,14 +109,14 @@ export function registerOrderRoutes(
     }
 
     const order = orders.create({
-      projectId: project.id,
-      projectName: project.name,
+      operationId: operation.id,
+      operationName: operation.name,
       partitionId: partition.id,
       environmentId: environment.id,
       environmentName: environment.name,
       version,
-      steps: project.steps,
-      deployConfig: project.deployConfig,
+      steps: operation.steps,
+      deployConfig: operation.deployConfig,
       variables: resolved,
     });
 
@@ -146,13 +146,13 @@ export function registerOrderRoutes(
       environment = { id: "", name: "(none)", variables: {} };
     }
 
-    const project = projects.get(order.projectId);
-    if (!project) {
-      return reply.status(404).send({ error: `Project not found: ${order.projectId}` });
+    const operation = operations.get(order.operationId);
+    if (!operation) {
+      return reply.status(404).send({ error: `Operation not found: ${order.operationId}` });
     }
 
     const trigger = {
-      projectId: order.projectId,
+      operationId: order.operationId,
       partitionId: order.partitionId,
       environmentId: order.environmentId,
       version: order.version,
@@ -162,7 +162,7 @@ export function registerOrderRoutes(
       trigger,
       partition,
       environment,
-      project,
+      operation,
       order,
     );
 

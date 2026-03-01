@@ -14,7 +14,7 @@ const DeployRequestSchema = z.object({
   deploymentId: z.string(),
   partitionId: z.string(),
   environmentId: z.string(),
-  projectId: z.string(),
+  operationId: z.string(),
   version: z.string(),
   variables: z.record(z.string()),
   environmentName: z.string(),
@@ -109,7 +109,7 @@ export function createEnvoyServer(
       })),
       recentDeployments: recentDeployments.map((d) => ({
         deploymentId: d.deploymentId,
-        projectId: d.projectId,
+        operationId: d.operationId,
         version: d.version,
         status: d.status,
         receivedAt: d.receivedAt.toISOString(),

@@ -36,7 +36,7 @@ function makeInstruction(
     deploymentId: `deploy-${Date.now()}`,
     partitionId: "partition-1",
     environmentId: "env-prod",
-    projectId: "web-app",
+    operationId: "web-app",
     version: "2.0.0",
     variables: {
       APP_ENV: "production",
@@ -89,7 +89,7 @@ function setupServiceCrashWorkspace(
     path.join(workspacePath, "manifest.json"),
     JSON.stringify({
       deploymentId: instruction.deploymentId,
-      projectId: instruction.projectId,
+      operationId: instruction.operationId,
       version: instruction.version,
       variables: instruction.variables,
     }),
@@ -102,7 +102,7 @@ function setupServiceCrashWorkspace(
   );
   fs.writeFileSync(
     path.join(workspacePath, "VERSION"),
-    `${instruction.projectId}@${instruction.version}`,
+    `${instruction.operationId}@${instruction.version}`,
   );
   fs.writeFileSync(path.join(workspacePath, "STATUS"), "FAILED");
 
@@ -111,8 +111,8 @@ function setupServiceCrashWorkspace(
   fs.writeFileSync(
     path.join(workspacePath, "logs", "service.log"),
     [
-      `2026-02-23T10:15:01.123Z [INFO] Starting ${instruction.projectId} v${instruction.version}...`,
-      `2026-02-23T10:15:01.234Z [INFO] Loading configuration from /etc/${instruction.projectId}/config.yaml`,
+      `2026-02-23T10:15:01.123Z [INFO] Starting ${instruction.operationId} v${instruction.version}...`,
+      `2026-02-23T10:15:01.234Z [INFO] Loading configuration from /etc/${instruction.operationId}/config.yaml`,
       `2026-02-23T10:15:01.345Z [INFO] Initializing HTTP server on port 8080`,
       `2026-02-23T10:15:01.456Z [ERROR] Failed to bind to port 8080: EADDRINUSE`,
       `2026-02-23T10:15:01.567Z [ERROR] Another process is listening on port 8080 (PID: 4521)`,
@@ -136,7 +136,7 @@ function setupHealthTimeoutWorkspace(
     path.join(workspacePath, "manifest.json"),
     JSON.stringify({
       deploymentId: instruction.deploymentId,
-      projectId: instruction.projectId,
+      operationId: instruction.operationId,
       version: instruction.version,
     }),
   );
@@ -148,7 +148,7 @@ function setupHealthTimeoutWorkspace(
   );
   fs.writeFileSync(
     path.join(workspacePath, "VERSION"),
-    `${instruction.projectId}@${instruction.version}`,
+    `${instruction.operationId}@${instruction.version}`,
   );
   fs.writeFileSync(path.join(workspacePath, "STATUS"), "STARTING");
   fs.writeFileSync(path.join(workspacePath, "HEALTH"), "timeout");
@@ -158,7 +158,7 @@ function setupHealthTimeoutWorkspace(
   fs.writeFileSync(
     path.join(workspacePath, "logs", "service.log"),
     [
-      `2026-02-23T10:15:01.000Z [INFO] Starting ${instruction.projectId} v${instruction.version}...`,
+      `2026-02-23T10:15:01.000Z [INFO] Starting ${instruction.operationId} v${instruction.version}...`,
       `2026-02-23T10:15:01.100Z [INFO] Loading configuration...`,
       `2026-02-23T10:15:02.000Z [INFO] Connecting to database at ${instruction.variables.DB_HOST || "db:5432"}...`,
       `2026-02-23T10:15:15.000Z [WARN] Database connection slow — still waiting...`,
@@ -184,7 +184,7 @@ function setupDependencyUnavailableWorkspace(
     path.join(workspacePath, "manifest.json"),
     JSON.stringify({
       deploymentId: instruction.deploymentId,
-      projectId: instruction.projectId,
+      operationId: instruction.operationId,
       version: instruction.version,
     }),
   );
@@ -196,7 +196,7 @@ function setupDependencyUnavailableWorkspace(
   );
   fs.writeFileSync(
     path.join(workspacePath, "VERSION"),
-    `${instruction.projectId}@${instruction.version}`,
+    `${instruction.operationId}@${instruction.version}`,
   );
   fs.writeFileSync(path.join(workspacePath, "STATUS"), "FAILED");
 
@@ -205,7 +205,7 @@ function setupDependencyUnavailableWorkspace(
   fs.writeFileSync(
     path.join(workspacePath, "logs", "service.log"),
     [
-      `2026-02-23T10:15:01.000Z [INFO] Starting ${instruction.projectId} v${instruction.version}...`,
+      `2026-02-23T10:15:01.000Z [INFO] Starting ${instruction.operationId} v${instruction.version}...`,
       `2026-02-23T10:15:01.100Z [INFO] Loading configuration...`,
       `2026-02-23T10:15:01.200Z [INFO] Attempting to connect to database at ${instruction.variables.DB_HOST || "db:5432"}...`,
       `2026-02-23T10:15:01.300Z [ERROR] connect ECONNREFUSED ${instruction.variables.DB_HOST || "127.0.0.1:5432"}`,
@@ -231,7 +231,7 @@ function setupPartialDeploymentWorkspace(
     path.join(workspacePath, "manifest.json"),
     JSON.stringify({
       deploymentId: instruction.deploymentId,
-      projectId: instruction.projectId,
+      operationId: instruction.operationId,
       version: instruction.version,
     }),
   );
@@ -692,7 +692,7 @@ describe("DiagnosticInvestigator — Failure Scenario Investigation", () => {
         deploymentId: "prev-deploy",
         partitionId: "partition-1",
         environmentId: "env-prod",
-        projectId: "web-app",
+        operationId: "web-app",
         version: "1.0.0",
         variables: {},
         workspacePath: "/previous/workspace",
@@ -833,9 +833,9 @@ describe("Diagnostic Quality Standards", () => {
     expect(uniqueRecs.size).toBe(4);
   });
 
-  it("every diagnostic references the specific project and version", () => {
+  it("every diagnostic references the specific operation and version", () => {
     const instruction = makeInstruction({
-      projectId: "billing-service",
+      operationId: "billing-service",
       version: "4.2.1",
     });
     const scenarios = [
@@ -1359,7 +1359,7 @@ describe("DiagnosticInvestigator — Edge Cases", () => {
       deploymentId: "prev-fail",
       partitionId: "partition-1",
       environmentId: "env-prod",
-      projectId: "web-app",
+      operationId: "web-app",
       version: "1.9.0",
       variables: {},
       workspacePath: "/old/workspace",

@@ -1,21 +1,21 @@
 import { useState, useEffect } from "react";
 import { useParams, Link, useNavigate } from "react-router";
 import {
-  getProject,
-  listProjectDeployments,
+  getOperation,
+  listOperationDeployments,
   listEnvironments,
   listOrders,
-  updateProject,
-  deleteProject,
-  addProjectEnvironment,
-  removeProjectEnvironment,
-  createProjectStep,
-  updateProjectStep,
-  deleteProjectStep,
-  updateProjectDeployConfig,
-  reorderProjectSteps,
+  updateOperation,
+  deleteOperation,
+  addOperationEnvironment,
+  removeOperationEnvironment,
+  createOperationStep,
+  updateOperationStep,
+  deleteOperationStep,
+  updateOperationDeployConfig,
+  reorderOperationSteps,
 } from "../api.js";
-import type { Project, Environment, Deployment, DeploymentStep, DeploymentStepType, DeployConfig, Order } from "../types.js";
+import type { Operation, Environment, Deployment, DeploymentStep, DeploymentStepType, DeployConfig, Order } from "../types.js";
 import EnvBadge from "../components/EnvBadge.js";
 import DeploymentTable from "../components/DeploymentTable.js";
 import InlineEdit from "../components/InlineEdit.js";
@@ -24,13 +24,13 @@ import StepEditor from "../components/StepEditor.js";
 import DeployConfigEditor from "../components/DeployConfigEditor.js";
 import { useSettings } from "../context/SettingsContext.js";
 
-export default function ProjectDetail() {
+export default function OperationDetail() {
   const { settings: appSettings } = useSettings();
   const environmentsEnabled = appSettings?.environmentsEnabled ?? true;
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [project, setProject] = useState<Project | null>(null);
-  const [projectEnvs, setProjectEnvs] = useState<Environment[]>([]);
+  const [operation, setOperation] = useState<Operation | null>(null);
+  const [operationEnvs, setOperationEnvs] = useState<Environment[]>([]);
   const [allEnvs, setAllEnvs] = useState<Environment[]>([]);
   const [deployments, setDeployments] = useState<Deployment[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
@@ -42,13 +42,13 @@ export default function ProjectDetail() {
   useEffect(() => {
     if (!id) return;
     Promise.all([
-      getProject(id),
-      listProjectDeployments(id),
+      getOperation(id),
+      listOperationDeployments(id),
       listEnvironments(),
-      listOrders({ projectId: id }),
+      listOrders({ operationId: id }),
     ]).then(([data, deps, envs, ords]) => {
-      setProject(data.project);
-      setProjectEnvs(data.environments);
+      setOperation(data.operation);
+      setOperationEnvs(data.environments);
       setDeployments(deps);
       setAllEnvs(envs);
       setOrders(ords);
@@ -61,87 +61,87 @@ export default function ProjectDetail() {
 
   async function handleUpdateName(newName: string) {
     if (!id) return;
-    const updated = await updateProject(id, { name: newName });
-    setProject(updated);
+    const updated = await updateOperation(id, { name: newName });
+    setOperation(updated);
   }
 
   async function handleDelete() {
     if (!id) return;
-    await deleteProject(id);
-    navigate("/projects");
+    await deleteOperation(id);
+    navigate("/operations");
   }
 
   async function handleAddEnv() {
     if (!id || !addEnvId) return;
-    const updated = await addProjectEnvironment(id, addEnvId);
-    setProject(updated);
+    const updated = await addOperationEnvironment(id, addEnvId);
+    setOperation(updated);
     const env = allEnvs.find((e) => e.id === addEnvId);
-    if (env) setProjectEnvs([...projectEnvs, env]);
+    if (env) setOperationEnvs([...operationEnvs, env]);
     setAddEnvId("");
   }
 
   async function handleRemoveEnv(envId: string) {
     if (!id) return;
-    const updated = await removeProjectEnvironment(id, envId);
-    setProject(updated);
-    setProjectEnvs(projectEnvs.filter((e) => e.id !== envId));
+    const updated = await removeOperationEnvironment(id, envId);
+    setOperation(updated);
+    setOperationEnvs(operationEnvs.filter((e) => e.id !== envId));
   }
 
   async function handleAddStep(step: { name: string; type: DeploymentStepType; command: string; order?: number }) {
-    if (!id || !project) return;
-    const newStep = await createProjectStep(id, step);
-    setProject({ ...project, steps: [...project.steps, newStep].sort((a, b) => a.order - b.order) });
+    if (!id || !operation) return;
+    const newStep = await createOperationStep(id, step);
+    setOperation({ ...operation, steps: [...operation.steps, newStep].sort((a, b) => a.order - b.order) });
   }
 
   async function handleUpdateStep(stepId: string, updates: Partial<DeploymentStep>) {
-    if (!id || !project) return;
-    const updated = await updateProjectStep(id, stepId, updates);
-    setProject({
-      ...project,
-      steps: project.steps.map((s) => (s.id === stepId ? updated : s)).sort((a, b) => a.order - b.order),
+    if (!id || !operation) return;
+    const updated = await updateOperationStep(id, stepId, updates);
+    setOperation({
+      ...operation,
+      steps: operation.steps.map((s) => (s.id === stepId ? updated : s)).sort((a, b) => a.order - b.order),
     });
   }
 
   async function handleDeleteStep(stepId: string) {
-    if (!id || !project) return;
-    await deleteProjectStep(id, stepId);
-    setProject({ ...project, steps: project.steps.filter((s) => s.id !== stepId) });
+    if (!id || !operation) return;
+    await deleteOperationStep(id, stepId);
+    setOperation({ ...operation, steps: operation.steps.filter((s) => s.id !== stepId) });
   }
 
   async function handleReorderSteps(stepIds: string[]) {
-    if (!id || !project) return;
-    const reordered = await reorderProjectSteps(id, stepIds);
-    setProject({ ...project, steps: reordered });
+    if (!id || !operation) return;
+    const reordered = await reorderOperationSteps(id, stepIds);
+    setOperation({ ...operation, steps: reordered });
   }
 
   async function handleSaveDeployConfig(config: DeployConfig) {
-    if (!id || !project) return;
-    const updated = await updateProjectDeployConfig(id, config);
-    setProject({ ...project, deployConfig: updated });
+    if (!id || !operation) return;
+    const updated = await updateOperationDeployConfig(id, config);
+    setOperation({ ...operation, deployConfig: updated });
   }
 
   if (loading) return <div className="loading">Loading...</div>;
   if (error) return <div className="error-msg">{error}</div>;
-  if (!project) return <div className="error-msg">Project not found</div>;
+  if (!operation) return <div className="error-msg">Operation not found</div>;
 
   const sorted = [...deployments].sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
   );
 
-  // Environments not yet linked to this project
+  // Environments not yet linked to this operation
   const unlinkedEnvs = allEnvs.filter(
-    (e) => !project.environmentIds.includes(e.id),
+    (e) => !operation.environmentIds.includes(e.id),
   );
 
   return (
     <div>
       <div className="breadcrumb">
-        <Link to="/projects">Projects</Link> / {project.name}
+        <Link to="/operations">Operations</Link> / {operation.name}
       </div>
       <div className="page-header">
-        <InlineEdit value={project.name} onSave={handleUpdateName} />
+        <InlineEdit value={operation.name} onSave={handleUpdateName} />
         <div style={{ display: "flex", gap: 8 }}>
-          <Link to={`/deploy?projectId=${project.id}`} className="btn btn-primary">
+          <Link to={`/deploy?operationId=${operation.id}`} className="btn btn-primary">
             Deploy
           </Link>
           <button className="btn btn-danger" onClick={() => setShowDeleteConfirm(true)}>
@@ -158,7 +158,7 @@ export default function ProjectDetail() {
               <h3>Environments</h3>
             </div>
             <div className="env-link-row">
-              {projectEnvs.map((env) => (
+              {operationEnvs.map((env) => (
                 <div key={env.id} style={{ display: "flex", alignItems: "center", gap: 4 }}>
                   <EnvBadge name={env.name} />
                   <button
@@ -170,7 +170,7 @@ export default function ProjectDetail() {
                   </button>
                 </div>
               ))}
-              {projectEnvs.length === 0 && <span className="text-muted">No environments linked</span>}
+              {operationEnvs.length === 0 && <span className="text-muted">No environments linked</span>}
             </div>
             {unlinkedEnvs.length > 0 && (
               <div className="env-link-add">
@@ -196,7 +196,7 @@ export default function ProjectDetail() {
             <h3>Deployment Steps</h3>
           </div>
           <StepEditor
-            steps={project.steps}
+            steps={operation.steps}
             onAdd={handleAddStep}
             onUpdate={handleUpdateStep}
             onDelete={handleDeleteStep}
@@ -212,7 +212,7 @@ export default function ProjectDetail() {
             <h3>Deployment Configuration</h3>
           </div>
           <DeployConfigEditor
-            config={project.deployConfig}
+            config={operation.deployConfig}
             onSave={handleSaveDeployConfig}
           />
         </div>
@@ -266,13 +266,13 @@ export default function ProjectDetail() {
         <div className="card-header">
           <h3>Deployment History</h3>
         </div>
-        <DeploymentTable deployments={sorted} environments={allEnvs} showProject={false} />
+        <DeploymentTable deployments={sorted} environments={allEnvs} showOperation={false} />
       </div>
 
       {showDeleteConfirm && (
         <ConfirmDialog
-          title="Delete Project"
-          message={`Are you sure you want to delete "${project.name}"? This cannot be undone.`}
+          title="Delete Operation"
+          message={`Are you sure you want to delete "${operation.name}"? This cannot be undone.`}
           onConfirm={handleDelete}
           onCancel={() => setShowDeleteConfirm(false)}
         />

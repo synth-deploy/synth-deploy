@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import type {
   Order,
   OrderId,
-  ProjectId,
+  OperationId,
   PartitionId,
   EnvironmentId,
   DeploymentStep,
@@ -10,8 +10,8 @@ import type {
 } from "./types.js";
 
 export interface CreateOrderParams {
-  projectId: ProjectId;
-  projectName: string;
+  operationId: OperationId;
+  operationName: string;
   partitionId: PartitionId;
   environmentId: EnvironmentId;
   environmentName: string;
@@ -34,8 +34,8 @@ export class OrderStore {
   create(params: CreateOrderParams): Order {
     const order: Order = {
       id: crypto.randomUUID(),
-      projectId: params.projectId,
-      projectName: params.projectName,
+      operationId: params.operationId,
+      operationName: params.operationName,
       partitionId: params.partitionId,
       environmentId: params.environmentId,
       environmentName: params.environmentName,
@@ -58,9 +58,9 @@ export class OrderStore {
     return [...this.orders.values()].map((o) => structuredClone(o));
   }
 
-  getByProject(projectId: ProjectId): Order[] {
+  getByOperation(operationId: OperationId): Order[] {
     return [...this.orders.values()]
-      .filter((o) => o.projectId === projectId)
+      .filter((o) => o.operationId === operationId)
       .map((o) => structuredClone(o));
   }
 

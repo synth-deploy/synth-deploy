@@ -1,5 +1,5 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { DebriefWriter, DebriefReader, PartitionStore, ProjectStore } from "@deploystack/core";
+import type { DebriefWriter, DebriefReader, PartitionStore, OperationStore } from "@deploystack/core";
 import type { CommandAgent, DeploymentStore } from "../agent/command-agent.js";
 import { registerTools } from "./tools.js";
 import { registerResources } from "./resources.js";
@@ -17,7 +17,7 @@ export function createMcpServer(deps: {
   partitions: PartitionStore;
   environments: EnvironmentStore;
   deployments: DeploymentStore;
-  projects: ProjectStore;
+  operations: OperationStore;
 }): McpServer {
   const mcp = new McpServer(
     {
@@ -31,7 +31,7 @@ export function createMcpServer(deps: {
     },
   );
 
-  registerTools(mcp, deps.agent, deps.partitions, deps.environments, deps.deployments, deps.projects);
+  registerTools(mcp, deps.agent, deps.partitions, deps.environments, deps.deployments, deps.operations);
   registerResources(mcp, deps.debrief, deps.deployments);
 
   return mcp;

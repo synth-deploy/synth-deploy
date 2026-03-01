@@ -32,7 +32,7 @@ function makeInstruction(overrides: Partial<DeploymentInstruction> = {}): Deploy
     deploymentId: `deploy-${Date.now()}`,
     partitionId: "partition-1",
     environmentId: "env-prod",
-    projectId: "web-app",
+    operationId: "web-app",
     version: "2.0.0",
     variables: { APP_ENV: "production", LOG_LEVEL: "warn", DB_HOST: "db-1" },
     environmentName: "production",
@@ -57,7 +57,7 @@ describe("LocalStateStore", () => {
       deploymentId: "d-1",
       partitionId: "t-1",
       environmentId: "e-1",
-      projectId: "web-app",
+      operationId: "web-app",
       version: "1.0.0",
       variables: { APP_ENV: "prod" },
       workspacePath: "/tmp/test",
@@ -68,7 +68,7 @@ describe("LocalStateStore", () => {
 
     const retrieved = state.getDeployment("d-1");
     expect(retrieved).toBeDefined();
-    expect(retrieved!.projectId).toBe("web-app");
+    expect(retrieved!.operationId).toBe("web-app");
   });
 
   it("completes deployments and tracks status", () => {
@@ -76,7 +76,7 @@ describe("LocalStateStore", () => {
       deploymentId: "d-1",
       partitionId: "t-1",
       environmentId: "e-1",
-      projectId: "web-app",
+      operationId: "web-app",
       version: "1.0.0",
       variables: {},
       workspacePath: "/tmp/test",
@@ -105,11 +105,11 @@ describe("LocalStateStore", () => {
   it("produces accurate summary", () => {
     state.recordDeployment({
       deploymentId: "d-1", partitionId: "t-1", environmentId: "e-1",
-      projectId: "app", version: "1.0", variables: {}, workspacePath: "/tmp",
+      operationId: "app", version: "1.0", variables: {}, workspacePath: "/tmp",
     });
     state.recordDeployment({
       deploymentId: "d-2", partitionId: "t-1", environmentId: "e-1",
-      projectId: "app", version: "2.0", variables: {}, workspacePath: "/tmp",
+      operationId: "app", version: "2.0", variables: {}, workspacePath: "/tmp",
     });
     state.completeDeployment("d-1", "succeeded");
     state.completeDeployment("d-2", "failed", "disk full");
@@ -124,11 +124,11 @@ describe("LocalStateStore", () => {
   it("isolates deployments by partition", () => {
     state.recordDeployment({
       deploymentId: "d-1", partitionId: "t-1", environmentId: "e-1",
-      projectId: "app", version: "1.0", variables: {}, workspacePath: "/tmp",
+      operationId: "app", version: "1.0", variables: {}, workspacePath: "/tmp",
     });
     state.recordDeployment({
       deploymentId: "d-2", partitionId: "t-2", environmentId: "e-1",
-      projectId: "app", version: "1.0", variables: {}, workspacePath: "/tmp",
+      operationId: "app", version: "1.0", variables: {}, workspacePath: "/tmp",
     });
 
     expect(state.getDeploymentsByPartition("t-1")).toHaveLength(1);
@@ -158,7 +158,7 @@ describe("DeploymentExecutor", () => {
   it("creates deployment workspace with all artifacts", async () => {
     const result = await executor.execute({
       deploymentId: "test-deploy",
-      projectId: "web-app",
+      operationId: "web-app",
       partitionId: "partition-1",
       environmentId: "env-prod",
       version: "2.0.0",
@@ -197,7 +197,7 @@ describe("DeploymentExecutor", () => {
   it("verification passes for correct deployment", async () => {
     const execResult = await executor.execute({
       deploymentId: "test-deploy",
-      projectId: "web-app",
+      operationId: "web-app",
       partitionId: "partition-1",
       environmentId: "env-prod",
       version: "2.0.0",
@@ -226,7 +226,7 @@ describe("DeploymentExecutor", () => {
   it("verification detects wrong version", async () => {
     const execResult = await executor.execute({
       deploymentId: "test-deploy",
-      projectId: "web-app",
+      operationId: "web-app",
       partitionId: "partition-1",
       environmentId: "env-prod",
       version: "2.0.0",
@@ -626,7 +626,7 @@ describe("Full Deployment Cycle — Command triggers, Envoy executes", () => {
       decisionType: "pipeline-plan",
       decision: "Planned deployment pipeline: resolve-configuration → preflight-health-check → execute-deployment → post-deploy-verify",
       reasoning: "Command orchestrating deployment of web-app v3.0.0 to production",
-      context: { projectId: "web-app", version: "3.0.0" },
+      context: { operationId: "web-app", version: "3.0.0" },
     });
 
     // Step 2: Command checks Envoy health via HTTP
@@ -643,7 +643,7 @@ describe("Full Deployment Cycle — Command triggers, Envoy executes", () => {
         deploymentId,
         partitionId: "partition-1",
         environmentId: "env-prod",
-        projectId: "web-app",
+        operationId: "web-app",
         version: "3.0.0",
         variables: { APP_ENV: "production", LOG_LEVEL: "warn" },
         environmentName: "production",

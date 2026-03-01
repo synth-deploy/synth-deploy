@@ -2289,7 +2289,7 @@ table a:hover {
   min-width: 80px;
 }
 
-.canvas-activity-project,
+.canvas-activity-operation,
 .canvas-activity-partition {
   color: var(--agent-text-secondary);
   min-width: 100px;

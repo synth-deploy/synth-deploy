@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import type { PartitionStore, DebriefWriter, DebriefReader, Project, Partition, Environment, SettingsStore, LlmResult } from "@deploystack/core";
+import type { PartitionStore, DebriefWriter, DebriefReader, Operation, Partition, Environment, SettingsStore, LlmResult } from "@deploystack/core";
 import type { LlmClient } from "@deploystack/core";
 import type { CommandAgent, DeploymentStore } from "../agent/command-agent.js";
 
@@ -11,7 +11,7 @@ interface IntentRequest {
   intent: string;
   conversationId?: string;
   partialConfig?: {
-    projectId?: string;
+    operationId?: string;
     partitionId?: string;
     environmentId?: string;
     version?: string;
@@ -27,7 +27,7 @@ interface ResolvedField {
 
 interface IntentResult {
   resolved: {
-    projectId: ResolvedField;
+    operationId: ResolvedField;
     partitionId: ResolvedField;
     environmentId: ResolvedField;
     version: ResolvedField;
@@ -71,10 +71,10 @@ interface DeploymentContext {
 // Entity stores interface (matches what index.ts exposes)
 // ---------------------------------------------------------------------------
 
-interface ProjectStore {
-  get(id: string): Project | undefined;
-  list(): Project[];
-  create(name: string, environmentIds?: string[]): Project;
+interface OperationStore {
+  get(id: string): Operation | undefined;
+  list(): Operation[];
+  create(name: string, environmentIds?: string[]): Operation;
 }
 
 interface EnvironmentStore {
@@ -93,7 +93,7 @@ interface LlmEntityMatch {
 }
 
 interface LlmIntentResponse {
-  projectId: LlmEntityMatch | null;
+  operationId: LlmEntityMatch | null;
   partitionId: LlmEntityMatch | null;
   environmentId: LlmEntityMatch | null;
   version: { value: string; confidence: "exact" | "inferred"; matchedFrom: string } | null;
@@ -159,13 +159,13 @@ function buildSystemPrompt(): string {
 
 You will receive:
 - An intent string from a deployment engineer
-- Lists of known projects, partitions, and environments (with IDs and names)
+- Lists of known operations, partitions, and environments (with IDs and names)
 - Optionally, partial configuration already provided by the user
 - Optionally, previous conversation context for follow-up intents
 
 Return a JSON object with this exact schema:
 {
-  "projectId": { "id": "<project-id>", "confidence": "exact"|"inferred", "matchedFrom": "<explanation>" } | null,
+  "operationId": { "id": "<operation-id>", "confidence": "exact"|"inferred", "matchedFrom": "<explanation>" } | null,
   "partitionId": { "id": "<partition-id>", "confidence": "exact"|"inferred", "matchedFrom": "<explanation>" } | null,
   "environmentId": { "id": "<environment-id>", "confidence": "exact"|"inferred", "matchedFrom": "<explanation>" } | null,
   "version": { "value": "<semver>", "confidence": "exact"|"inferred", "matchedFrom": "<explanation>" } | null,
@@ -188,7 +188,7 @@ Rules:
 function buildUserPrompt(
   intent: string,
   partialConfig: IntentRequest["partialConfig"],
-  allProjects: Project[],
+  allOperations: Operation[],
   allPartitions: Partition[],
   allEnvironments: Environment[],
   history: ConversationEntry[],
@@ -197,11 +197,11 @@ function buildUserPrompt(
 
   parts.push(`Intent: "${intent}"`);
 
-  parts.push(`\nKnown projects:`);
-  for (const p of allProjects) {
+  parts.push(`\nKnown operations:`);
+  for (const p of allOperations) {
     parts.push(`  - id: "${p.id}", name: "${p.name}"`);
   }
-  if (allProjects.length === 0) parts.push("  (none configured)");
+  if (allOperations.length === 0) parts.push("  (none configured)");
 
   parts.push(`\nKnown partitions:`);
   for (const t of allPartitions) {
@@ -217,7 +217,7 @@ function buildUserPrompt(
 
   if (partialConfig) {
     parts.push(`\nPre-filled fields (already selected by user):`);
-    if (partialConfig.projectId) parts.push(`  projectId: "${partialConfig.projectId}"`);
+    if (partialConfig.operationId) parts.push(`  operationId: "${partialConfig.operationId}"`);
     if (partialConfig.partitionId) parts.push(`  partitionId: "${partialConfig.partitionId}"`);
     if (partialConfig.environmentId) parts.push(`  environmentId: "${partialConfig.environmentId}"`);
     if (partialConfig.version) parts.push(`  version: "${partialConfig.version}"`);
@@ -227,7 +227,7 @@ function buildUserPrompt(
     parts.push(`\nPrevious intents in this conversation (for follow-up context):`);
     for (const entry of history) {
       const resolved: string[] = [];
-      if (entry.resolved.projectId.confidence !== "missing") resolved.push(`project=${entry.resolved.projectId.value}`);
+      if (entry.resolved.operationId.confidence !== "missing") resolved.push(`operation=${entry.resolved.operationId.value}`);
       if (entry.resolved.partitionId.confidence !== "missing") resolved.push(`partition=${entry.resolved.partitionId.value}`);
       if (entry.resolved.environmentId.confidence !== "missing") resolved.push(`environment=${entry.resolved.environmentId.value}`);
       if (entry.resolved.version.confidence !== "missing") resolved.push(`version=${entry.resolved.version.value}`);
@@ -240,7 +240,7 @@ function buildUserPrompt(
 
 function parseLlmResponse(
   llmResult: LlmResult,
-  allProjects: Project[],
+  allOperations: Operation[],
   allPartitions: Partition[],
   allEnvironments: Environment[],
   partialConfig: IntentRequest["partialConfig"],
@@ -259,12 +259,12 @@ function parseLlmResponse(
     return null; // JSON parse failure → fall back to regex
   }
 
-  const projectIds = new Set(allProjects.map((p) => p.id));
+  const operationIds = new Set(allOperations.map((p) => p.id));
   const partitionIds = new Set(allPartitions.map((t) => t.id));
   const environmentIds = new Set(allEnvironments.map((e) => e.id));
 
   // Validate and convert each field
-  const projectField = convertLlmEntity(parsed.projectId, projectIds, partialConfig?.projectId);
+  const operationField = convertLlmEntity(parsed.operationId, operationIds, partialConfig?.operationId);
   const partitionField = convertLlmEntity(parsed.partitionId, partitionIds, partialConfig?.partitionId);
   const envField = convertLlmEntity(parsed.environmentId, environmentIds, partialConfig?.environmentId);
   const versionField = convertLlmVersion(parsed.version, partialConfig?.version);
@@ -272,7 +272,7 @@ function parseLlmResponse(
 
   // If any field that the LLM claimed to resolve has an invalid ID, reject the whole response
   if (
-    (parsed.projectId && !projectIds.has(parsed.projectId.id)) ||
+    (parsed.operationId && !operationIds.has(parsed.operationId.id)) ||
     (parsed.partitionId && !partitionIds.has(parsed.partitionId.id)) ||
     (parsed.environmentId && !environmentIds.has(parsed.environmentId.id))
   ) {
@@ -283,7 +283,7 @@ function parseLlmResponse(
   const uiUpdates: IntentResult["uiUpdates"] = [];
 
   for (const [name, field] of Object.entries({
-    projectId: projectField,
+    operationId: operationField,
     partitionId: partitionField,
     environmentId: envField,
     version: versionField,
@@ -311,7 +311,7 @@ function parseLlmResponse(
 
   return {
     resolved: {
-      projectId: projectField,
+      operationId: operationField,
       partitionId: partitionField,
       environmentId: envField,
       version: versionField,
@@ -367,17 +367,17 @@ function convertLlmVersion(
 function interpretIntent(
   intent: string,
   partialConfig: IntentRequest["partialConfig"],
-  projects: ProjectStore,
+  operations: OperationStore,
   partitionStore: PartitionStore,
   environmentStore: EnvironmentStore,
 ): IntentResult {
   const lower = intent.toLowerCase();
-  const allProjects = projects.list();
+  const allOperations = operations.list();
   const allPartitions = partitionStore.list();
   const allEnvironments = environmentStore.list();
 
-  // --- Resolve project ---
-  const projectField = resolveProject(lower, partialConfig?.projectId, allProjects);
+  // --- Resolve operation ---
+  const operationField = resolveOperation(lower, partialConfig?.operationId, allOperations);
 
   // --- Resolve partition ---
   const partitionField = resolvePartition(lower, partialConfig?.partitionId, allPartitions);
@@ -400,7 +400,7 @@ function interpretIntent(
   const uiUpdates: IntentResult["uiUpdates"] = [];
 
   for (const [name, field] of Object.entries({
-    projectId: projectField,
+    operationId: operationField,
     partitionId: partitionField,
     environmentId: envField,
     version: versionField,
@@ -416,7 +416,7 @@ function interpretIntent(
 
   return {
     resolved: {
-      projectId: projectField,
+      operationId: operationField,
       partitionId: partitionField,
       environmentId: envField,
       version: versionField,
@@ -428,25 +428,25 @@ function interpretIntent(
   };
 }
 
-function resolveProject(
+function resolveOperation(
   lower: string,
   partialId: string | undefined,
-  projects: Project[],
+  operations: Operation[],
 ): ResolvedField {
   if (partialId) {
-    const p = projects.find((p) => p.id === partialId);
+    const p = operations.find((p) => p.id === partialId);
     if (p) return { value: p.id, confidence: "exact", matchedFrom: p.name };
   }
 
-  for (const p of projects) {
+  for (const p of operations) {
     if (lower.includes(p.name.toLowerCase())) {
       return { value: p.id, confidence: "exact", matchedFrom: p.name };
     }
   }
 
-  // If only one project exists, infer it
-  if (projects.length === 1) {
-    return { value: projects[0].id, confidence: "inferred", matchedFrom: `only project: ${projects[0].name}` };
+  // If only one operation exists, infer it
+  if (operations.length === 1) {
+    return { value: operations[0].id, confidence: "inferred", matchedFrom: `only operation: ${operations[0].name}` };
   }
 
   return { value: "", confidence: "missing" };
@@ -695,7 +695,7 @@ export function registerAgentRoutes(
   agent: CommandAgent,
   partitions: PartitionStore,
   environments: EnvironmentStore,
-  projects: ProjectStore,
+  operations: OperationStore,
   deployments: DeploymentStore,
   debrief: DebriefWriter & DebriefReader,
   settings: SettingsStore,
@@ -714,7 +714,7 @@ export function registerAgentRoutes(
       return reply.status(400).send({ error: "Intent string is required" });
     }
 
-    const allProjects = projects.list();
+    const allOperations = operations.list();
     const allPartitions = partitions.list();
     const allEnvironments = environments.list();
 
@@ -728,7 +728,7 @@ export function registerAgentRoutes(
         prompt: buildUserPrompt(
           body.intent,
           body.partialConfig,
-          allProjects,
+          allOperations,
           allPartitions,
           allEnvironments,
           history,
@@ -741,7 +741,7 @@ export function registerAgentRoutes(
 
       const llmParsed = parseLlmResponse(
         llmResult,
-        allProjects,
+        allOperations,
         allPartitions,
         allEnvironments,
         body.partialConfig,
@@ -755,7 +755,7 @@ export function registerAgentRoutes(
         result = interpretIntent(
           body.intent,
           body.partialConfig,
-          projects,
+          operations,
           partitions,
           environments,
         );
@@ -765,28 +765,28 @@ export function registerAgentRoutes(
       result = interpretIntent(
         body.intent,
         body.partialConfig,
-        projects,
+        operations,
         partitions,
         environments,
       );
     }
 
-    // Validate environment belongs to project (runs for both LLM and regex paths)
+    // Validate environment belongs to operation (runs for both LLM and regex paths)
     if (
-      result.resolved.projectId.confidence !== "missing" &&
+      result.resolved.operationId.confidence !== "missing" &&
       result.resolved.environmentId.confidence !== "missing"
     ) {
-      const project = allProjects.find((p) => p.id === result.resolved.projectId.value);
-      if (project && !project.environmentIds.includes(result.resolved.environmentId.value)) {
+      const operation = allOperations.find((p) => p.id === result.resolved.operationId.value);
+      if (operation && !operation.environmentIds.includes(result.resolved.environmentId.value)) {
         result.uiUpdates.push({
           field: "environmentId",
           action: "warn",
-          message: `Environment is not linked to project "${project.name}". Choose a linked environment.`,
+          message: `Environment is not linked to operation "${operation.name}". Choose a linked environment.`,
         });
         if (!result.missingFields.includes("environmentId")) {
           result.missingFields.push("environmentId");
         }
-        result.resolved.environmentId = { value: "", confidence: "missing", matchedFrom: `not linked to project "${project.name}"` };
+        result.resolved.environmentId = { value: "", confidence: "missing", matchedFrom: `not linked to operation "${operation.name}"` };
         result.ready = false;
       }
     }
@@ -807,7 +807,7 @@ export function registerAgentRoutes(
     const reasoningParts = [`Interpreted intent "${body.intent}" via ${method}.`];
 
     const fieldEntries: Array<[string, ResolvedField, string[]]> = [
-      ["Project", result.resolved.projectId, allProjects.map((p: Project) => p.name)],
+      ["Operation", result.resolved.operationId, allOperations.map((p: Operation) => p.name)],
       ["Partition", result.resolved.partitionId, allPartitions.map((t: Partition) => t.name)],
       ["Environment", result.resolved.environmentId, allEnvironments.map((e: Environment) => e.name)],
       ["Version", result.resolved.version, []],
@@ -829,7 +829,7 @@ export function registerAgentRoutes(
       agent: "command",
       decisionType: "system",
       decision: result.ready
-        ? `Intent fully resolved: ready to deploy ${result.resolved.projectId.matchedFrom ?? result.resolved.projectId.value} v${result.resolved.version.value}`
+        ? `Intent fully resolved: ready to deploy ${result.resolved.operationId.matchedFrom ?? result.resolved.operationId.value} v${result.resolved.version.value}`
         : `Intent partially resolved: missing ${result.missingFields.join(", ")}`,
       reasoning: reasoningParts.join(" "),
       context: {
@@ -867,14 +867,14 @@ export function registerAgentRoutes(
 
     const query = body.query.trim();
     const lower = query.toLowerCase();
-    const allProjects = projects.list();
+    const allOperations = operations.list();
     const allPartitions = partitions.list();
     const allEnvironments = environments.list();
 
     // --- LLM classification (when available) ---
     if (llm && llm.isAvailable()) {
       const llmAction = await classifyQueryWithLlm(
-        llm, query, allProjects, allPartitions, allEnvironments,
+        llm, query, allOperations, allPartitions, allEnvironments,
         deployments, debrief,
       );
       if (llmAction) {
@@ -894,18 +894,18 @@ export function registerAgentRoutes(
             });
             return { action: "navigate" as const, view: "partition-detail", params: { id: created.id }, title: created.name };
           }
-          if (llmAction.view === "project-list") {
-            const created = projects.create(entityName, []);
+          if (llmAction.view === "operation-list") {
+            const created = operations.create(entityName, []);
             debrief.record({
               partitionId: null,
               deploymentId: null,
               agent: "command",
               decisionType: "system",
-              decision: `Created project "${created.name}" via intent bar`,
-              reasoning: `LLM classified "${query}" as create-project`,
-              context: { query, projectId: created.id },
+              decision: `Created operation "${created.name}" via intent bar`,
+              reasoning: `LLM classified "${query}" as create-operation`,
+              context: { query, operationId: created.id },
             });
-            return { action: "navigate" as const, view: "project-list", params: {}, title: "Projects" };
+            return { action: "navigate" as const, view: "operation-list", params: {}, title: "Operations" };
           }
         }
 
@@ -941,21 +941,21 @@ export function registerAgentRoutes(
       return { action: "navigate" as const, view: "partition-detail", params: { id: created.id }, title: created.name };
     }
 
-    // Create project: "create project api-service" → create and navigate to project list
-    const createProjectMatch = query.match(/\bcreate\s+project\s+(.+)/i);
-    if (createProjectMatch) {
-      const projectName = createProjectMatch[1].trim();
-      const created = projects.create(projectName, []);
+    // Create operation: "create operation api-service" → create and navigate to operation list
+    const createOperationMatch = query.match(/\bcreate\s+operation\s+(.+)/i);
+    if (createOperationMatch) {
+      const operationName = createOperationMatch[1].trim();
+      const created = operations.create(operationName, []);
       debrief.record({
         partitionId: null,
         deploymentId: null,
         agent: "command",
         decisionType: "system",
-        decision: `Created project "${created.name}" via intent bar`,
-        reasoning: `User requested project creation: "${query}"`,
-        context: { query, projectId: created.id },
+        decision: `Created operation "${created.name}" via intent bar`,
+        reasoning: `User requested operation creation: "${query}"`,
+        context: { query, operationId: created.id },
       });
-      return { action: "navigate" as const, view: "project-list", params: {}, title: "Projects" };
+      return { action: "navigate" as const, view: "operation-list", params: {}, title: "Operations" };
     }
 
     // Deploy intents: contains "deploy" or version-like patterns with entity names
@@ -996,9 +996,9 @@ export function registerAgentRoutes(
       return { action: "navigate" as const, view: "settings", params: {}, title: "Settings" };
     }
 
-    // Projects list
-    if (/\b(projects|project list|manage projects)\b/.test(lower)) {
-      return { action: "navigate" as const, view: "project-list", params: {}, title: "Projects" };
+    // Operations list
+    if (/\b(operations|operation list|manage operations)\b/.test(lower)) {
+      return { action: "navigate" as const, view: "operation-list", params: {}, title: "Operations" };
     }
 
     // Debrief / decision diary
@@ -1022,9 +1022,9 @@ export function registerAgentRoutes(
     // Orders list
     if (/\b(orders|order list|all orders|manage orders)\b/.test(lower)) {
       const orderParams: Record<string, string> = {};
-      for (const p of allProjects) {
+      for (const p of allOperations) {
         if (lower.includes(p.name.toLowerCase())) {
-          orderParams.projectId = p.id;
+          orderParams.operationId = p.id;
           break;
         }
       }
@@ -1068,7 +1068,7 @@ function buildQueryClassificationPrompt(): string {
 1. "deploy" — The user wants to trigger a deployment (e.g., "deploy Acme to staging", "release v1.2.3")
 2. "navigate" — The user wants to see details about a specific entity (e.g., "show partition Alpha", "environment staging")
 3. "data" — The user wants to see a list or filtered view of data (e.g., "what failed", "recent deployments", "deployment history for Alpha")
-4. "create" — The user wants to create a new entity (e.g., "create partition Acme Corp", "create project api-service")
+4. "create" — The user wants to create a new entity (e.g., "create partition Acme Corp", "create operation api-service")
 
 Return a JSON object with this exact schema:
 {
@@ -1085,9 +1085,9 @@ View names:
 - "deployment-detail" — show specific deployment (params: { "id": "<deployment-id>" })
 - "deployment-list" — show list of deployments (params: { "partitionId"?: "...", "status"?: "failed"|"succeeded" })
 - "overview" — show the operational overview (params: { "focus"?: "signals"|"partitions" })
-- "project-list" — show all projects (params: {})
+- "operation-list" — show all operations (params: {})
 - "partition-list" — show all partitions with create option (params: {})
-- "order-list" — show deployment orders (params: { "projectId"?: "...", "partitionId"?: "..." })
+- "order-list" — show deployment orders (params: { "operationId"?: "...", "partitionId"?: "..." })
 - "order-detail" — show a specific order (params: { "id": "<order-id>" })
 - "debrief" — show the decision diary / debrief timeline (params: { "partitionId"?: "...", "decisionType"?: "..." })
 - "settings" — show application settings and configuration (params: {})
@@ -1096,14 +1096,14 @@ Rules:
 - ONLY use entity IDs from the provided lists. Never invent IDs.
 - If the query mentions an entity by name, resolve it to its ID.
 - If the query is ambiguous, default to "overview".
-- For "create" actions, include the entity name in params: { "name": "..." } and use view "partition-list" for partitions or "project-list" for projects.
+- For "create" actions, include the entity name in params: { "name": "..." } and use view "partition-list" for partitions or "operation-list" for operations.
 - Return ONLY valid JSON, no markdown, no explanation.`;
 }
 
 async function classifyQueryWithLlm(
   llm: LlmClient,
   query: string,
-  allProjects: Project[],
+  allOperations: Operation[],
   allPartitions: Partition[],
   allEnvironments: Environment[],
   deploymentStore: DeploymentStore,
@@ -1119,9 +1119,9 @@ async function classifyQueryWithLlm(
   for (const e of allEnvironments) parts.push(`  - id: "${e.id}", name: "${e.name}"`);
   if (allEnvironments.length === 0) parts.push("  (none)");
 
-  parts.push(`\nKnown projects:`);
-  for (const p of allProjects) parts.push(`  - id: "${p.id}", name: "${p.name}"`);
-  if (allProjects.length === 0) parts.push("  (none)");
+  parts.push(`\nKnown operations:`);
+  for (const p of allOperations) parts.push(`  - id: "${p.id}", name: "${p.name}"`);
+  if (allOperations.length === 0) parts.push("  (none)");
 
   const llmResult = await llm.classify({
     prompt: parts.join("\n"),

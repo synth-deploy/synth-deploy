@@ -1,13 +1,13 @@
 import { Link } from "react-router";
-import type { Deployment, Environment, Project } from "../types.js";
+import type { Deployment, Environment, Operation } from "../types.js";
 import StatusBadge from "./StatusBadge.js";
 import EnvBadge from "./EnvBadge.js";
 
 interface Props {
   deployments: Deployment[];
   environments?: Environment[];
-  projects?: Project[];
-  showProject?: boolean;
+  operations?: Operation[];
+  showOperation?: boolean;
 }
 
 function formatTime(iso: string): string {
@@ -27,9 +27,9 @@ function formatDuration(created: string, completed: string | null): string {
   return `${(ms / 1000).toFixed(1)}s`;
 }
 
-export default function DeploymentTable({ deployments, environments = [], projects = [], showProject = true }: Props) {
+export default function DeploymentTable({ deployments, environments = [], operations = [], showOperation = true }: Props) {
   const envMap = new Map(environments.map((e) => [e.id, e]));
-  const projectMap = new Map(projects.map((p) => [p.id, p]));
+  const operationMap = new Map(operations.map((p) => [p.id, p]));
 
   if (deployments.length === 0) {
     return (
@@ -46,7 +46,7 @@ export default function DeploymentTable({ deployments, environments = [], projec
           <tr>
             <th>Status</th>
             <th>Version</th>
-            {showProject && <th>Project</th>}
+            {showOperation && <th>Operation</th>}
             <th>Environment</th>
             <th>Time</th>
             <th>Duration</th>
@@ -67,10 +67,10 @@ export default function DeploymentTable({ deployments, environments = [], projec
                     {d.version}
                   </Link>
                 </td>
-                {showProject && (
+                {showOperation && (
                   <td>
-                    <Link to={`/projects/${d.projectId}`}>
-                      {projectMap.get(d.projectId)?.name ?? d.projectId.slice(0, 8)}
+                    <Link to={`/operations/${d.operationId}`}>
+                      {operationMap.get(d.operationId)?.name ?? d.operationId.slice(0, 8)}
                     </Link>
                   </td>
                 )}

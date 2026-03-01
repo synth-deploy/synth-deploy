@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
-import { listProjects, listPartitions, listEnvironments, triggerDeployment, interpretIntent } from "../../api.js";
-import type { Project, Partition, Environment } from "../../types.js";
+import { listOperations, listPartitions, listEnvironments, triggerDeployment, interpretIntent } from "../../api.js";
+import type { Operation, Partition, Environment } from "../../types.js";
 import type { IntentResult } from "../../api.js";
 import { useSettings } from "../../context/SettingsContext.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
@@ -18,12 +18,11 @@ interface Props {
 }
 
 export default function DeploymentAuthoringPanel({ title, initialIntent }: Props) {
-  const navigate = useNavigate();
   const { pushPanel } = useCanvas();
   const { settings: appSettings } = useSettings();
   const environmentsEnabled = appSettings?.environmentsEnabled ?? true;
 
-  const [projects, setProjects] = useState<Project[]>([]);
+  const [operations, setOperations] = useState<Operation[]>([]);
   const [partitions, setPartitions] = useState<Partition[]>([]);
   const [environments, setEnvironments] = useState<Environment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -35,8 +34,8 @@ export default function DeploymentAuthoringPanel({ title, initialIntent }: Props
   const initialSubmittedRef = useRef(false);
 
   useEffect(() => {
-    Promise.all([listProjects(), listPartitions(), listEnvironments()]).then(([p, t, e]) => {
-      setProjects(p);
+    Promise.all([listOperations(), listPartitions(), listEnvironments()]).then(([p, t, e]) => {
+      setOperations(p);
       setPartitions(t);
       setEnvironments(e);
       setLoading(false);
@@ -75,7 +74,7 @@ export default function DeploymentAuthoringPanel({ title, initialIntent }: Props
 
     try {
       const deployResult = await triggerDeployment({
-        projectId: result.resolved.projectId.value,
+        operationId: result.resolved.operationId.value,
         partitionId: result.resolved.partitionId.value,
         environmentId: result.resolved.environmentId.value,
         version: result.resolved.version.value,
@@ -96,8 +95,8 @@ export default function DeploymentAuthoringPanel({ title, initialIntent }: Props
     }
   }
 
-  function projectName(id: string): string {
-    return projects.find((p) => p.id === id)?.name ?? id;
+  function operationName(id: string): string {
+    return operations.find((p) => p.id === id)?.name ?? id;
   }
   function partitionName(id: string): string {
     return partitions.find((t) => t.id === id)?.name ?? id;
@@ -125,9 +124,9 @@ export default function DeploymentAuthoringPanel({ title, initialIntent }: Props
             </div>
             <div className="resolved-fields">
               <ResolvedFieldDisplay
-                label="Project"
-                field={intentResult.resolved.projectId}
-                displayValue={intentResult.resolved.projectId.value ? projectName(intentResult.resolved.projectId.value) : ""}
+                label="Operation"
+                field={intentResult.resolved.operationId}
+                displayValue={intentResult.resolved.operationId.value ? operationName(intentResult.resolved.operationId.value) : ""}
               />
               <ResolvedFieldDisplay
                 label="Partition"
@@ -171,7 +170,7 @@ export default function DeploymentAuthoringPanel({ title, initialIntent }: Props
                   <strong>Missing: {missing.join(", ")}</strong>
                   <div style={{ marginTop: 4, fontSize: 12 }}>
                     Try including {missing.map((f) => {
-                      if (f === "projectId") return "the project name";
+                      if (f === "operationId") return "the operation name";
                       if (f === "partitionId") return "the partition name";
                       if (f === "environmentId") return '"production" or "staging"';
                       if (f === "version") return 'a version like "v1.2.3"';

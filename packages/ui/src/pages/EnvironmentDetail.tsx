@@ -4,9 +4,9 @@ import {
   getEnvironment,
   updateEnvironment,
   deleteEnvironment,
-  listProjects,
+  listOperations,
 } from "../api.js";
-import type { Environment, Project } from "../types.js";
+import type { Environment, Operation } from "../types.js";
 import VariableEditor from "../components/VariableEditor.js";
 import InlineEdit from "../components/InlineEdit.js";
 import ConfirmDialog from "../components/ConfirmDialog.js";
@@ -15,17 +15,17 @@ export default function EnvironmentDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [env, setEnv] = useState<Environment | null>(null);
-  const [linkedProjects, setLinkedProjects] = useState<Project[]>([]);
+  const [linkedOperations, setLinkedOperations] = useState<Operation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   useEffect(() => {
     if (!id) return;
-    Promise.all([getEnvironment(id), listProjects()])
-      .then(([environment, projects]) => {
+    Promise.all([getEnvironment(id), listOperations()])
+      .then(([environment, operations]) => {
         setEnv(environment);
-        setLinkedProjects(projects.filter((p) => p.environmentIds.includes(id)));
+        setLinkedOperations(operations.filter((p) => p.environmentIds.includes(id)));
         setLoading(false);
       })
       .catch((e) => {
@@ -86,22 +86,22 @@ export default function EnvironmentDetail() {
 
       <div className="card">
         <div className="card-header">
-          <h3>Linked Projects</h3>
+          <h3>Linked Operations</h3>
         </div>
-        {linkedProjects.length > 0 ? (
+        {linkedOperations.length > 0 ? (
           <div className="table-wrapper">
             <table>
               <thead>
                 <tr>
-                  <th>Project</th>
+                  <th>Operation</th>
                   <th>ID</th>
                 </tr>
               </thead>
               <tbody>
-                {linkedProjects.map((p) => (
+                {linkedOperations.map((p) => (
                   <tr key={p.id}>
                     <td>
-                      <Link to={`/projects/${p.id}`} style={{ fontWeight: 500 }}>
+                      <Link to={`/operations/${p.id}`} style={{ fontWeight: 500 }}>
                         {p.name}
                       </Link>
                     </td>
@@ -113,7 +113,7 @@ export default function EnvironmentDetail() {
           </div>
         ) : (
           <p className="text-muted" style={{ padding: "12px 0", fontSize: 13 }}>
-            Not linked to any projects.
+            Not linked to any operations.
           </p>
         )}
       </div>
@@ -122,13 +122,13 @@ export default function EnvironmentDetail() {
         <ConfirmDialog
           title="Delete Environment"
           message={
-            linkedProjects.length > 0
-              ? `This environment is linked to ${linkedProjects.length} project(s). Unlink it from all projects before deleting.`
+            linkedOperations.length > 0
+              ? `This environment is linked to ${linkedOperations.length} operation(s). Unlink it from all operations before deleting.`
               : `Are you sure you want to delete "${env.name}"? This cannot be undone.`
           }
-          onConfirm={linkedProjects.length > 0 ? () => setShowDeleteConfirm(false) : handleDelete}
+          onConfirm={linkedOperations.length > 0 ? () => setShowDeleteConfirm(false) : handleDelete}
           onCancel={() => setShowDeleteConfirm(false)}
-          confirmLabel={linkedProjects.length > 0 ? "OK" : "Delete"}
+          confirmLabel={linkedOperations.length > 0 ? "OK" : "Delete"}
         />
       )}
     </div>

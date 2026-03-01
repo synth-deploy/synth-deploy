@@ -1,7 +1,7 @@
 export type {
   PartitionId,
   DeploymentId,
-  ProjectId,
+  OperationId,
   EnvironmentId,
   DebriefEntryId,
   OrderId,
@@ -13,7 +13,7 @@ export type {
   DebriefEntry,
   Partition,
   Environment,
-  Project,
+  Operation,
   Order,
   DeploymentStepType,
   DeploymentStep,
@@ -38,7 +38,7 @@ export type { DebriefWriter, DebriefReader, DebriefRecordParams } from "./debrie
 export { PersistentDecisionDebrief } from "./debrief-persistence.js";
 export { formatDebriefEntry, formatDebriefEntries } from "./debrief-formatter.js";
 export { PartitionStore } from "./partition.js";
-export { ProjectStore } from "./project-store.js";
+export { OperationStore } from "./operation-store.js";
 export { EnvironmentStore } from "./environment-store.js";
 export { SettingsStore } from "./settings-store.js";
 export { OrderStore } from "./order-store.js";
@@ -52,7 +52,7 @@ export type {
 } from "./partition-container.js";
 export { PartitionManager } from "./partition-manager.js";
 export type { DeploymentStoreReader } from "./partition-manager.js";
-export { generatePostmortem, generateProjectHistory } from "./debrief-reader.js";
+export { generatePostmortem, generateOperationHistory } from "./debrief-reader.js";
 export { LlmClient } from "./llm-client.js";
 export type { LlmConfig, LlmCallParams, LlmResult } from "./llm-client.js";
 export type {
@@ -61,7 +61,7 @@ export type {
   ConfigurationSection,
   ConflictSummary,
   FailureAnalysis,
-  ProjectHistory,
+  OperationHistory,
   HistoryOverview,
   DeploymentSummary,
   ConfigurationPattern,

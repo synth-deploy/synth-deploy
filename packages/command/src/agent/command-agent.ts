@@ -6,7 +6,7 @@ import type {
   DebriefWriter,
   Environment,
   Partition,
-  Project,
+  Operation,
   Order,
   AppSettings,
 } from "@deploystack/core";
@@ -196,7 +196,7 @@ export class CommandAgent {
     trigger: DeploymentTrigger,
     partition: Partition,
     environment: Environment,
-    project: Project,
+    operation: Operation,
     existingOrder?: Order,
   ): Promise<Deployment> {
     const deploymentId = crypto.randomUUID();
@@ -214,7 +214,7 @@ export class CommandAgent {
         decision: `Re-executing existing Order ${order.id.slice(0, 8)}`,
         reasoning:
           `An existing Order was provided for re-execution. Using frozen snapshot from ` +
-          `${order.createdAt.toISOString()} instead of reading current Project configuration. ` +
+          `${order.createdAt.toISOString()} instead of reading current Operation configuration. ` +
           `This guarantees the deployment reproduces exactly what was captured in the Order.`,
         context: { orderId: order.id, reused: true },
       });
@@ -224,7 +224,7 @@ export class CommandAgent {
         trigger,
         partition,
         environment,
-        project,
+        operation,
       );
     }
 
@@ -244,13 +244,13 @@ export class CommandAgent {
       decisionType: "pipeline-plan",
       decision: `Planned deployment pipeline: ${pipelineSteps.join(" → ")}`,
       reasoning:
-        `Deployment of ${trigger.projectId} v${trigger.version} to ${environment.name} ` +
+        `Deployment of ${trigger.operationId} v${trigger.version} to ${environment.name} ` +
         `for partition "${partition.name}". Pipeline includes pre-flight health check to verify ` +
         `target environment is reachable before deploying, and post-deployment verification ` +
         `to confirm the deployment took effect.`,
       context: {
         steps: pipelineSteps,
-        projectId: trigger.projectId,
+        operationId: trigger.operationId,
         version: trigger.version,
         environmentName: environment.name,
         partitionName: partition.name,
@@ -260,7 +260,7 @@ export class CommandAgent {
 
     const deployment: Deployment = {
       id: deploymentId,
-      projectId: trigger.projectId,
+      operationId: trigger.operationId,
       partitionId: trigger.partitionId,
       environmentId: trigger.environmentId,
       version: trigger.version,
@@ -311,7 +311,7 @@ export class CommandAgent {
         deploymentId: deployment.id,
         agent: "command",
         decisionType: "deployment-completion",
-        decision: `Marking deployment of ${deployment.projectId} v${deployment.version} as succeeded on "${environment.name}"`,
+        decision: `Marking deployment of ${deployment.operationId} v${deployment.version} as succeeded on "${environment.name}"`,
         reasoning:
           `All four pipeline steps completed: configuration accepted, health check passed, ` +
           `execution finished, post-deploy verification confirmed. ` +
@@ -345,7 +345,7 @@ export class CommandAgent {
         reasoning:
           error instanceof OrchestrationError
             ? error.reasoning
-            : `Unexpected error during ${deployment.projectId} v${deployment.version} ` +
+            : `Unexpected error during ${deployment.operationId} v${deployment.version} ` +
               `deployment to "${environment.name}" for partition "${partition.name}": ` +
               `${error instanceof Error ? error.message : String(error)}. ` +
               `This error did not come from the orchestration pipeline (not a health check, ` +
@@ -370,7 +370,7 @@ export class CommandAgent {
   }
 
   // -----------------------------------------------------------------------
-  // Order creation — snapshot current project/env/partition state
+  // Order creation — snapshot current operation/env/partition state
   // -----------------------------------------------------------------------
 
   private createOrderFromCurrentState(
@@ -378,23 +378,23 @@ export class CommandAgent {
     trigger: DeploymentTrigger,
     partition: Partition,
     environment: Environment,
-    project: Project,
+    operation: Operation,
   ): Order {
-    // Merge global deployment defaults under project-level config.
-    // Project-specific values win; global defaults fill gaps.
+    // Merge global deployment defaults under operation-level config.
+    // Operation-specific values win; global defaults fill gaps.
     const globalDefaults = this.settingsReader?.get()?.deploymentDefaults?.defaultDeployConfig;
     const effectiveDeployConfig = globalDefaults
-      ? { ...globalDefaults, ...project.deployConfig }
-      : project.deployConfig;
+      ? { ...globalDefaults, ...operation.deployConfig }
+      : operation.deployConfig;
 
     const order = this.orders.create({
-      projectId: project.id,
-      projectName: project.name,
+      operationId: operation.id,
+      operationName: operation.name,
       partitionId: partition.id,
       environmentId: environment.id,
       environmentName: environment.name,
       version: trigger.version,
-      steps: project.steps,
+      steps: operation.steps,
       deployConfig: effectiveDeployConfig,
       variables: {}, // populated after resolve — we snapshot inputs here
     });
@@ -404,20 +404,20 @@ export class CommandAgent {
       deploymentId,
       agent: "command",
       decisionType: "order-created",
-      decision: `Created Order ${order.id.slice(0, 8)} — immutable snapshot of "${project.name}" configuration`,
+      decision: `Created Order ${order.id.slice(0, 8)} — immutable snapshot of "${operation.name}" configuration`,
       reasoning:
-        `Snapshotted project "${project.name}" (${project.steps.length} step(s), ` +
+        `Snapshotted operation "${operation.name}" (${operation.steps.length} step(s), ` +
         `verification: ${effectiveDeployConfig.verificationStrategy}) for deployment ` +
         `v${trigger.version} to "${environment.name}". ` +
         (globalDefaults
-          ? `Global deployment defaults were merged as a base under project-level deploy config. `
+          ? `Global deployment defaults were merged as a base under operation-level deploy config. `
           : ``) +
-        `This Order freezes the project configuration so the deployment can be reproduced ` +
-        `exactly, even if the project is modified later.`,
+        `This Order freezes the operation configuration so the deployment can be reproduced ` +
+        `exactly, even if the operation is modified later.`,
       context: {
         orderId: order.id,
         reused: false,
-        stepCount: project.steps.length,
+        stepCount: operation.steps.length,
         deployConfig: effectiveDeployConfig,
         appliedGlobalDefaults: !!globalDefaults,
       },
@@ -815,7 +815,7 @@ export class CommandAgent {
     partition: Partition,
     environment: Environment,
   ): Promise<void> {
-    const serviceId = `${deployment.projectId}/${environment.name}`;
+    const serviceId = `${deployment.operationId}/${environment.name}`;
     const opts = this.getEffectiveOptions();
     const maxAttempts = opts.healthCheckRetries + 1;
     let attempt = 1;
@@ -1111,7 +1111,7 @@ export class CommandAgent {
       deploymentId: deployment.id,
       agent: "command",
       decisionType: "deployment-execution",
-      decision: `Executing ${deployment.projectId} v${deployment.version} on "${environment.name}" for partition "${partition.name}" — delegating to Envoy`,
+      decision: `Executing ${deployment.operationId} v${deployment.version} on "${environment.name}" for partition "${partition.name}" — delegating to Envoy`,
       reasoning:
         `All preconditions passed: configuration accepted (${Object.keys(deployment.variables).length} variable(s), ` +
         `conflicts resolved), health check confirmed "${environment.name}" is reachable. ` +
@@ -1121,7 +1121,7 @@ export class CommandAgent {
         `error — check that the Envoy process is running on the target host.`,
       context: {
         step: "execute-deployment",
-        projectId: deployment.projectId,
+        operationId: deployment.operationId,
         version: deployment.version,
         variableCount: Object.keys(deployment.variables).length,
         partitionName: partition.name,
@@ -1143,7 +1143,7 @@ export class CommandAgent {
       deploymentId: deployment.id,
       agent: "command",
       decisionType: "deployment-verification",
-      decision: `Verified: ${deployment.projectId} v${deployment.version} deployed successfully to "${environment.name}" for partition "${partition.name}"`,
+      decision: `Verified: ${deployment.operationId} v${deployment.version} deployed successfully to "${environment.name}" for partition "${partition.name}"`,
       reasoning:
         `Deployment execution completed without errors. Verification confirms: (1) no ` +
         `execution errors were raised, (2) no rollback was triggered, (3) the Envoy ` +
@@ -1154,7 +1154,7 @@ export class CommandAgent {
       context: {
         step: "post-deploy-verify",
         variableCount: Object.keys(deployment.variables).length,
-        projectId: deployment.projectId,
+        operationId: deployment.operationId,
         version: deployment.version,
       },
     });

@@ -1,14 +1,14 @@
 import crypto from "node:crypto";
 import type { FastifyInstance } from "fastify";
-import type { ProjectStore, EnvironmentStore, DeploymentStep, DeploymentStepType, DeployConfig } from "@deploystack/core";
+import type { OperationStore, EnvironmentStore, DeploymentStep, DeploymentStepType, DeployConfig } from "@deploystack/core";
 
-export function registerProjectRoutes(
+export function registerOperationRoutes(
   app: FastifyInstance,
-  projects: ProjectStore,
+  operations: OperationStore,
   environments: EnvironmentStore,
 ): void {
-  // Create a project
-  app.post("/api/projects", async (request, reply) => {
+  // Create an operation
+  app.post("/api/operations", async (request, reply) => {
     const { name, environmentIds } = request.body as {
       name?: string;
       environmentIds?: string[];
@@ -26,59 +26,59 @@ export function registerProjectRoutes(
       }
     }
 
-    const project = projects.create(name.trim(), envIds);
-    return reply.status(201).send({ project });
+    const operation = operations.create(name.trim(), envIds);
+    return reply.status(201).send({ operation });
   });
 
-  // List all projects
-  app.get("/api/projects", async () => {
-    return { projects: projects.list() };
+  // List all operations
+  app.get("/api/operations", async () => {
+    return { operations: operations.list() };
   });
 
-  // Get project by ID
-  app.get<{ Params: { id: string } }>("/api/projects/:id", async (request, reply) => {
-    const project = projects.get(request.params.id);
-    if (!project) {
-      return reply.status(404).send({ error: "Project not found" });
+  // Get operation by ID
+  app.get<{ Params: { id: string } }>("/api/operations/:id", async (request, reply) => {
+    const operation = operations.get(request.params.id);
+    if (!operation) {
+      return reply.status(404).send({ error: "Operation not found" });
     }
 
     // Resolve environment names for display
-    const envDetails = project.environmentIds
+    const envDetails = operation.environmentIds
       .map((eid) => environments.get(eid))
       .filter(Boolean);
 
-    return { project, environments: envDetails };
+    return { operation, environments: envDetails };
   });
 
-  // Update project
-  app.put<{ Params: { id: string } }>("/api/projects/:id", async (request, reply) => {
+  // Update operation
+  app.put<{ Params: { id: string } }>("/api/operations/:id", async (request, reply) => {
     const { name } = request.body as { name?: string };
 
     try {
-      const project = projects.update(request.params.id, {
+      const operation = operations.update(request.params.id, {
         name: name?.trim(),
       });
-      return { project };
+      return { operation };
     } catch {
-      return reply.status(404).send({ error: "Project not found" });
+      return reply.status(404).send({ error: "Operation not found" });
     }
   });
 
-  // Delete project
-  app.delete<{ Params: { id: string } }>("/api/projects/:id", async (request, reply) => {
-    const project = projects.get(request.params.id);
-    if (!project) {
-      return reply.status(404).send({ error: "Project not found" });
+  // Delete operation
+  app.delete<{ Params: { id: string } }>("/api/operations/:id", async (request, reply) => {
+    const operation = operations.get(request.params.id);
+    if (!operation) {
+      return reply.status(404).send({ error: "Operation not found" });
     }
-    projects.delete(request.params.id);
+    operations.delete(request.params.id);
     return { deleted: true };
   });
 
   // --- Environment links ---
 
-  // Add environment to project
+  // Add environment to operation
   app.post<{ Params: { id: string } }>(
-    "/api/projects/:id/environments",
+    "/api/operations/:id/environments",
     async (request, reply) => {
       const { environmentId } = request.body as { environmentId?: string };
 
@@ -91,26 +91,26 @@ export function registerProjectRoutes(
       }
 
       try {
-        const project = projects.addEnvironment(request.params.id, environmentId);
-        return { project };
+        const operation = operations.addEnvironment(request.params.id, environmentId);
+        return { operation };
       } catch {
-        return reply.status(404).send({ error: "Project not found" });
+        return reply.status(404).send({ error: "Operation not found" });
       }
     },
   );
 
-  // Remove environment from project
+  // Remove environment from operation
   app.delete<{ Params: { id: string; envId: string } }>(
-    "/api/projects/:id/environments/:envId",
+    "/api/operations/:id/environments/:envId",
     async (request, reply) => {
       try {
-        const project = projects.removeEnvironment(
+        const operation = operations.removeEnvironment(
           request.params.id,
           request.params.envId,
         );
-        return { project };
+        return { operation };
       } catch {
-        return reply.status(404).send({ error: "Project not found" });
+        return reply.status(404).send({ error: "Operation not found" });
       }
     },
   );
@@ -119,23 +119,23 @@ export function registerProjectRoutes(
 
   // List steps
   app.get<{ Params: { id: string } }>(
-    "/api/projects/:id/steps",
+    "/api/operations/:id/steps",
     async (request, reply) => {
-      const project = projects.get(request.params.id);
-      if (!project) {
-        return reply.status(404).send({ error: "Project not found" });
+      const operation = operations.get(request.params.id);
+      if (!operation) {
+        return reply.status(404).send({ error: "Operation not found" });
       }
-      return { steps: project.steps };
+      return { steps: operation.steps };
     },
   );
 
   // Create step
   app.post<{ Params: { id: string } }>(
-    "/api/projects/:id/steps",
+    "/api/operations/:id/steps",
     async (request, reply) => {
-      const project = projects.get(request.params.id);
-      if (!project) {
-        return reply.status(404).send({ error: "Project not found" });
+      const operation = operations.get(request.params.id);
+      if (!operation) {
+        return reply.status(404).send({ error: "Operation not found" });
       }
 
       const { name, type, command, order } = request.body as {
@@ -163,11 +163,11 @@ export function registerProjectRoutes(
         name: name.trim(),
         type,
         command: command.trim(),
-        order: order ?? project.steps.length,
+        order: order ?? operation.steps.length,
       };
 
-      project.steps.push(step);
-      project.steps.sort((a, b) => a.order - b.order);
+      operation.steps.push(step);
+      operation.steps.sort((a, b) => a.order - b.order);
 
       return reply.status(201).send({ step });
     },
@@ -175,14 +175,14 @@ export function registerProjectRoutes(
 
   // Update step
   app.put<{ Params: { id: string; stepId: string } }>(
-    "/api/projects/:id/steps/:stepId",
+    "/api/operations/:id/steps/:stepId",
     async (request, reply) => {
-      const project = projects.get(request.params.id);
-      if (!project) {
-        return reply.status(404).send({ error: "Project not found" });
+      const operation = operations.get(request.params.id);
+      if (!operation) {
+        return reply.status(404).send({ error: "Operation not found" });
       }
 
-      const step = project.steps.find((s) => s.id === request.params.stepId);
+      const step = operation.steps.find((s) => s.id === request.params.stepId);
       if (!step) {
         return reply.status(404).send({ error: "Step not found" });
       }
@@ -199,7 +199,7 @@ export function registerProjectRoutes(
       if (command !== undefined) step.command = command.trim();
       if (order !== undefined) step.order = order;
 
-      project.steps.sort((a, b) => a.order - b.order);
+      operation.steps.sort((a, b) => a.order - b.order);
 
       return { step };
     },
@@ -207,11 +207,11 @@ export function registerProjectRoutes(
 
   // Reorder steps
   app.post<{ Params: { id: string } }>(
-    "/api/projects/:id/steps/reorder",
+    "/api/operations/:id/steps/reorder",
     async (request, reply) => {
-      const project = projects.get(request.params.id);
-      if (!project) {
-        return reply.status(404).send({ error: "Project not found" });
+      const operation = operations.get(request.params.id);
+      if (!operation) {
+        return reply.status(404).send({ error: "Operation not found" });
       }
 
       const { stepIds } = request.body as { stepIds?: string[] };
@@ -220,7 +220,7 @@ export function registerProjectRoutes(
       }
 
       // Validate all step IDs exist
-      const stepMap = new Map(project.steps.map((s) => [s.id, s]));
+      const stepMap = new Map(operation.steps.map((s) => [s.id, s]));
       for (const sid of stepIds) {
         if (!stepMap.has(sid)) {
           return reply.status(400).send({ error: `Step not found: ${sid}` });
@@ -231,27 +231,27 @@ export function registerProjectRoutes(
       for (let i = 0; i < stepIds.length; i++) {
         stepMap.get(stepIds[i])!.order = i;
       }
-      project.steps.sort((a, b) => a.order - b.order);
+      operation.steps.sort((a, b) => a.order - b.order);
 
-      return { steps: project.steps };
+      return { steps: operation.steps };
     },
   );
 
   // Delete step
   app.delete<{ Params: { id: string; stepId: string } }>(
-    "/api/projects/:id/steps/:stepId",
+    "/api/operations/:id/steps/:stepId",
     async (request, reply) => {
-      const project = projects.get(request.params.id);
-      if (!project) {
-        return reply.status(404).send({ error: "Project not found" });
+      const operation = operations.get(request.params.id);
+      if (!operation) {
+        return reply.status(404).send({ error: "Operation not found" });
       }
 
-      const idx = project.steps.findIndex((s) => s.id === request.params.stepId);
+      const idx = operation.steps.findIndex((s) => s.id === request.params.stepId);
       if (idx === -1) {
         return reply.status(404).send({ error: "Step not found" });
       }
 
-      project.steps.splice(idx, 1);
+      operation.steps.splice(idx, 1);
       return { deleted: true };
     },
   );
@@ -260,29 +260,29 @@ export function registerProjectRoutes(
 
   // Get deploy config
   app.get<{ Params: { id: string } }>(
-    "/api/projects/:id/deploy-config",
+    "/api/operations/:id/deploy-config",
     async (request, reply) => {
-      const project = projects.get(request.params.id);
-      if (!project) {
-        return reply.status(404).send({ error: "Project not found" });
+      const operation = operations.get(request.params.id);
+      if (!operation) {
+        return reply.status(404).send({ error: "Operation not found" });
       }
-      return { deployConfig: project.deployConfig };
+      return { deployConfig: operation.deployConfig };
     },
   );
 
   // Update deploy config
   app.put<{ Params: { id: string } }>(
-    "/api/projects/:id/deploy-config",
+    "/api/operations/:id/deploy-config",
     async (request, reply) => {
-      const project = projects.get(request.params.id);
-      if (!project) {
-        return reply.status(404).send({ error: "Project not found" });
+      const operation = operations.get(request.params.id);
+      if (!operation) {
+        return reply.status(404).send({ error: "Operation not found" });
       }
 
       const updates = request.body as Partial<DeployConfig>;
-      project.deployConfig = { ...project.deployConfig, ...updates };
+      operation.deployConfig = { ...operation.deployConfig, ...updates };
 
-      return { deployConfig: project.deployConfig };
+      return { deployConfig: operation.deployConfig };
     },
   );
 }

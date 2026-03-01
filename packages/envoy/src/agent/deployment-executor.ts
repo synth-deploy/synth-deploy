@@ -7,7 +7,7 @@ import path from "node:path";
 
 export interface DeploymentManifest {
   deploymentId: string;
-  projectId: string;
+  operationId: string;
   partitionId: string;
   environmentId: string;
   version: string;
@@ -91,7 +91,7 @@ export class DeploymentExecutor {
       const versionPath = path.join(workspacePath, "VERSION");
       fs.writeFileSync(
         versionPath,
-        `${manifest.projectId}@${manifest.version}`,
+        `${manifest.operationId}@${manifest.version}`,
       );
       artifacts.push("VERSION");
 
@@ -125,7 +125,7 @@ export class DeploymentExecutor {
   verify(
     workspacePath: string,
     expectedVersion: string,
-    expectedProjectId: string,
+    expectedOperationId: string,
   ): VerificationResult {
     const checks: VerificationCheck[] = [];
 
@@ -161,13 +161,13 @@ export class DeploymentExecutor {
     if (versionExists) {
       const versionContent = fs.readFileSync(versionPath, "utf-8").trim();
       versionCorrect =
-        versionContent === `${expectedProjectId}@${expectedVersion}`;
+        versionContent === `${expectedOperationId}@${expectedVersion}`;
       checks.push({
         name: "version-correct",
         passed: versionCorrect,
         detail: versionCorrect
           ? `Version marker reads "${versionContent}" — matches expected`
-          : `Version marker reads "${versionContent}" — expected "${expectedProjectId}@${expectedVersion}"`,
+          : `Version marker reads "${versionContent}" — expected "${expectedOperationId}@${expectedVersion}"`,
       });
     } else {
       checks.push({

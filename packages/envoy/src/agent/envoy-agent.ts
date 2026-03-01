@@ -25,7 +25,7 @@ export interface DeploymentInstruction {
   deploymentId: DeploymentId;
   partitionId: PartitionId;
   environmentId: EnvironmentId;
-  projectId: string;
+  operationId: string;
   version: string;
   variables: Record<string, string>;
   /** Name of the environment (for reasoning — "production" vs "staging" matters) */
@@ -141,16 +141,16 @@ export class EnvoyAgent {
       agent: "envoy",
       decisionType: "pipeline-plan",
       decision:
-        `Received deployment instruction: ${instruction.projectId} ` +
+        `Received deployment instruction: ${instruction.operationId} ` +
         `v${instruction.version} → ${instruction.environmentName}`,
       reasoning:
-        `Server delegated execution of ${instruction.projectId} ` +
+        `Server delegated execution of ${instruction.operationId} ` +
         `v${instruction.version} to this Envoy for partition ` +
         `"${instruction.partitionName}" on environment ` +
         `"${instruction.environmentName}". Beginning local execution ` +
         `pipeline: environment-scan → execute → verify → update-state.`,
       context: {
-        projectId: instruction.projectId,
+        operationId: instruction.operationId,
         version: instruction.version,
         environmentName: instruction.environmentName,
         partitionName: instruction.partitionName,
@@ -211,14 +211,14 @@ export class EnvoyAgent {
         : `Environment scan complete — first deployment to "${instruction.environmentName}"`,
       reasoning: existingEnv
         ? `Local environment "${instruction.environmentName}" currently has ` +
-          `${instruction.projectId} v${existingEnv.currentVersion} deployed ` +
+          `${instruction.operationId} v${existingEnv.currentVersion} deployed ` +
           `(deployment ${existingEnv.currentDeploymentId}). This deployment ` +
           `will upgrade to v${instruction.version}. ` +
           `${scanResult.disk.deploymentCount} previous deployment(s) exist ` +
           `on disk. Workspace is writable and ready.`
         : `No previous deployment found for "${instruction.environmentName}" ` +
           `on this machine. This is the first deployment of ` +
-          `${instruction.projectId} to this environment for partition ` +
+          `${instruction.operationId} to this environment for partition ` +
           `"${instruction.partitionName}". ` +
           `${scanResult.disk.deploymentCount} other deployment(s) exist on disk. ` +
           `Workspace is writable and ready.`,
@@ -238,7 +238,7 @@ export class EnvoyAgent {
       deploymentId: instruction.deploymentId,
       partitionId: instruction.partitionId,
       environmentId: instruction.environmentId,
-      projectId: instruction.projectId,
+      operationId: instruction.operationId,
       version: instruction.version,
       variables: instruction.variables,
       workspacePath: `${this.baseDir}/deployments/${instruction.deploymentId}`,
@@ -252,14 +252,14 @@ export class EnvoyAgent {
       agent: "envoy",
       decisionType: "deployment-execution",
       decision:
-        `Executing deployment: writing ${instruction.projectId} ` +
+        `Executing deployment: writing ${instruction.operationId} ` +
         `v${instruction.version} artifacts to ${localRecord.workspacePath}`,
       reasoning:
         `Environment scan passed. Local workspace is ready at ${localRecord.workspacePath}. ` +
         `Writing 4 artifacts: manifest.json (deployment metadata), variables.env ` +
         `(${Object.keys(instruction.variables).length} resolved variable(s)), VERSION ` +
         `(marker: ${instruction.version}), STATUS (marker: DEPLOYING). These artifacts ` +
-        `represent the deployed state of ${instruction.projectId} v${instruction.version} ` +
+        `represent the deployed state of ${instruction.operationId} v${instruction.version} ` +
         `on "${instruction.environmentName}" for partition ${instruction.partitionId}. If this ` +
         `step fails, check filesystem permissions on the workspace directory and available disk space.`,
       context: {
@@ -271,7 +271,7 @@ export class EnvoyAgent {
 
     const execResult = await this.executor.execute({
       deploymentId: instruction.deploymentId,
-      projectId: instruction.projectId,
+      operationId: instruction.operationId,
       partitionId: instruction.partitionId,
       environmentId: instruction.environmentId,
       version: instruction.version,
@@ -354,7 +354,7 @@ export class EnvoyAgent {
     const verification = this.executor.verify(
       execResult.workspacePath,
       instruction.version,
-      instruction.projectId,
+      instruction.operationId,
     );
 
     recordEntry({
@@ -368,7 +368,7 @@ export class EnvoyAgent {
       reasoning: verification.passed
         ? `Post-deployment verification confirms all expected artifacts are ` +
           `present and contain correct content: ${verification.checks.map((c) => c.detail).join(". ")}. ` +
-          `The deployment of ${instruction.projectId} v${instruction.version} ` +
+          `The deployment of ${instruction.operationId} v${instruction.version} ` +
           `is confirmed on this machine.`
         : `Post-deployment verification found issues: ` +
           `${verification.checks.filter((c) => !c.passed).map((c) => c.detail).join(". ")}. ` +
@@ -453,7 +453,7 @@ export class EnvoyAgent {
       agent: "envoy",
       decisionType: "deployment-completion",
       decision:
-        `Deployment complete: ${instruction.projectId} ` +
+        `Deployment complete: ${instruction.operationId} ` +
         `v${instruction.version} is now live on "${instruction.environmentName}"`,
       reasoning:
         `Full local pipeline completed successfully: environment scan ` +

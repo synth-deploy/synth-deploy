@@ -6,14 +6,14 @@ import Fastify from "fastify";
 import fastifyCors from "@fastify/cors";
 import fastifyStatic from "@fastify/static";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { PersistentDecisionDebrief, PartitionStore, ProjectStore, EnvironmentStore, SettingsStore, OrderStore, LlmClient, DEFAULT_DEPLOY_CONFIG } from "@deploystack/core";
+import { PersistentDecisionDebrief, PartitionStore, OperationStore, EnvironmentStore, SettingsStore, OrderStore, LlmClient, DEFAULT_DEPLOY_CONFIG } from "@deploystack/core";
 import type { Deployment, DeploymentStep, DeployConfig } from "@deploystack/core";
 import { CommandAgent, InMemoryDeploymentStore } from "./agent/command-agent.js";
 import { createMcpServer } from "./mcp/server.js";
 import { registerDeploymentRoutes } from "./api/deployments.js";
 import { registerHealthRoutes } from "./api/health.js";
 import { registerEnvoyReportRoutes } from "./api/envoy-reports.js";
-import { registerProjectRoutes } from "./api/projects.js";
+import { registerOperationRoutes } from "./api/operations.js";
 import { registerPartitionRoutes } from "./api/partitions.js";
 import { registerEnvironmentRoutes } from "./api/environments.js";
 import { registerAgentRoutes } from "./api/agent.js";
@@ -27,7 +27,7 @@ mkdirSync(DATA_DIR, { recursive: true });
 
 const debrief = new PersistentDecisionDebrief(path.join(DATA_DIR, "debrief.db"));
 const partitions = new PartitionStore();
-const projects = new ProjectStore();
+const operations = new OperationStore();
 const environments = new EnvironmentStore();
 const settings = new SettingsStore();
 const deployments = new InMemoryDeploymentStore();
@@ -49,7 +49,7 @@ const acmePartition = partitions.create("Acme Corp", { APP_ENV: "production", DB
 const globexPartition = partitions.create("Globex Industries", { APP_ENV: "production", DB_HOST: "globex-db-1", REGION: "eu-west-1" });
 const initechPartition = partitions.create("Initech", { APP_ENV: "production", DB_HOST: "initech-db-1", REGION: "us-west-2" });
 
-// Projects with steps
+// Operations with steps
 const webAppSteps: DeploymentStep[] = [
   { id: crypto.randomUUID(), name: "Install dependencies", type: "pre-deploy", command: "npm ci --production", order: 1 },
   { id: crypto.randomUUID(), name: "Run migrations", type: "pre-deploy", command: "npm run db:migrate", order: 2 },
@@ -66,9 +66,9 @@ const workerSteps: DeploymentStep[] = [
   { id: crypto.randomUUID(), name: "Check queue depth", type: "verification", command: "worker-cli queue-depth --max 100", order: 4 },
 ];
 
-const webApp = projects.create("web-app", [prodEnv.id, stagingEnv.id, devEnv.id]);
-const apiService = projects.create("api-service", [prodEnv.id, stagingEnv.id]);
-const workerService = projects.create("worker-service", [prodEnv.id]);
+const webApp = operations.create("web-app", [prodEnv.id, stagingEnv.id, devEnv.id]);
+const apiService = operations.create("api-service", [prodEnv.id, stagingEnv.id]);
+const workerService = operations.create("worker-service", [prodEnv.id]);
 for (const s of webAppSteps) webApp.steps.push(s);
 for (const s of apiSteps) apiService.steps.push(s);
 for (const s of workerSteps) workerService.steps.push(s);
@@ -80,31 +80,31 @@ const fullConfig: DeployConfig = { ...DEFAULT_DEPLOY_CONFIG, verificationStrateg
 // --- Orders ---
 
 const order1 = orders.create({
-  projectId: webApp.id, projectName: "web-app",
+  operationId: webApp.id, operationName: "web-app",
   partitionId: acmePartition.id, environmentId: prodEnv.id, environmentName: "production",
   version: "2.4.1", steps: webAppSteps, deployConfig: standardConfig,
   variables: { ...acmePartition.variables, ...prodEnv.variables },
 });
 const order2 = orders.create({
-  projectId: webApp.id, projectName: "web-app",
+  operationId: webApp.id, operationName: "web-app",
   partitionId: globexPartition.id, environmentId: stagingEnv.id, environmentName: "staging",
   version: "2.5.0-rc.1", steps: webAppSteps, deployConfig: standardConfig,
   variables: { ...globexPartition.variables, ...stagingEnv.variables },
 });
 const order3 = orders.create({
-  projectId: apiService.id, projectName: "api-service",
+  operationId: apiService.id, operationName: "api-service",
   partitionId: acmePartition.id, environmentId: prodEnv.id, environmentName: "production",
   version: "1.12.0", steps: apiSteps, deployConfig: standardConfig,
   variables: { ...acmePartition.variables, ...prodEnv.variables },
 });
 const order4 = orders.create({
-  projectId: workerService.id, projectName: "worker-service",
+  operationId: workerService.id, operationName: "worker-service",
   partitionId: initechPartition.id, environmentId: prodEnv.id, environmentName: "production",
   version: "3.0.0", steps: workerSteps, deployConfig: fullConfig,
   variables: { ...initechPartition.variables, ...prodEnv.variables },
 });
 const order5 = orders.create({
-  projectId: apiService.id, projectName: "api-service",
+  operationId: apiService.id, operationName: "api-service",
   partitionId: globexPartition.id, environmentId: stagingEnv.id, environmentName: "staging",
   version: "1.13.0-beta.2", steps: apiSteps, deployConfig: standardConfig,
   variables: { ...globexPartition.variables, ...stagingEnv.variables },
@@ -113,28 +113,28 @@ const order5 = orders.create({
 // --- Deployments (mix of statuses and ages) ---
 
 const dep1: Deployment = {
-  id: crypto.randomUUID(), projectId: webApp.id, partitionId: acmePartition.id,
+  id: crypto.randomUUID(), operationId: webApp.id, partitionId: acmePartition.id,
   environmentId: prodEnv.id, version: "2.3.0", status: "succeeded",
   variables: { ...acmePartition.variables, ...prodEnv.variables },
   debriefEntryIds: [], orderId: null,
   createdAt: hoursAgo(72), completedAt: hoursAgo(71.5), failureReason: null,
 };
 const dep2: Deployment = {
-  id: crypto.randomUUID(), projectId: webApp.id, partitionId: acmePartition.id,
+  id: crypto.randomUUID(), operationId: webApp.id, partitionId: acmePartition.id,
   environmentId: prodEnv.id, version: "2.4.0", status: "succeeded",
   variables: { ...acmePartition.variables, ...prodEnv.variables },
   debriefEntryIds: [], orderId: null,
   createdAt: hoursAgo(48), completedAt: hoursAgo(47.8), failureReason: null,
 };
 const dep3: Deployment = {
-  id: crypto.randomUUID(), projectId: webApp.id, partitionId: acmePartition.id,
+  id: crypto.randomUUID(), operationId: webApp.id, partitionId: acmePartition.id,
   environmentId: prodEnv.id, version: "2.4.1", status: "succeeded",
   variables: { ...acmePartition.variables, ...prodEnv.variables },
   debriefEntryIds: [], orderId: order1.id,
   createdAt: hoursAgo(24), completedAt: hoursAgo(23.7), failureReason: null,
 };
 const dep4: Deployment = {
-  id: crypto.randomUUID(), projectId: apiService.id, partitionId: acmePartition.id,
+  id: crypto.randomUUID(), operationId: apiService.id, partitionId: acmePartition.id,
   environmentId: prodEnv.id, version: "1.11.0", status: "failed",
   variables: { ...acmePartition.variables, ...prodEnv.variables },
   debriefEntryIds: [], orderId: null,
@@ -142,21 +142,21 @@ const dep4: Deployment = {
   failureReason: "Health check failed after 3 retries: connection refused on port 8080",
 };
 const dep5: Deployment = {
-  id: crypto.randomUUID(), projectId: apiService.id, partitionId: acmePartition.id,
+  id: crypto.randomUUID(), operationId: apiService.id, partitionId: acmePartition.id,
   environmentId: prodEnv.id, version: "1.12.0", status: "succeeded",
   variables: { ...acmePartition.variables, ...prodEnv.variables },
   debriefEntryIds: [], orderId: order3.id,
   createdAt: hoursAgo(12), completedAt: hoursAgo(11.8), failureReason: null,
 };
 const dep6: Deployment = {
-  id: crypto.randomUUID(), projectId: webApp.id, partitionId: globexPartition.id,
+  id: crypto.randomUUID(), operationId: webApp.id, partitionId: globexPartition.id,
   environmentId: stagingEnv.id, version: "2.5.0-rc.1", status: "succeeded",
   variables: { ...globexPartition.variables, ...stagingEnv.variables },
   debriefEntryIds: [], orderId: order2.id,
   createdAt: hoursAgo(6), completedAt: hoursAgo(5.8), failureReason: null,
 };
 const dep7: Deployment = {
-  id: crypto.randomUUID(), projectId: workerService.id, partitionId: initechPartition.id,
+  id: crypto.randomUUID(), operationId: workerService.id, partitionId: initechPartition.id,
   environmentId: prodEnv.id, version: "2.9.0", status: "failed",
   variables: { ...initechPartition.variables, ...prodEnv.variables },
   debriefEntryIds: [], orderId: null,
@@ -164,21 +164,21 @@ const dep7: Deployment = {
   failureReason: "Queue depth exceeded threshold (342 > 100) during verification",
 };
 const dep8: Deployment = {
-  id: crypto.randomUUID(), projectId: workerService.id, partitionId: initechPartition.id,
+  id: crypto.randomUUID(), operationId: workerService.id, partitionId: initechPartition.id,
   environmentId: prodEnv.id, version: "3.0.0", status: "succeeded",
   variables: { ...initechPartition.variables, ...prodEnv.variables },
   debriefEntryIds: [], orderId: order4.id,
   createdAt: hoursAgo(3), completedAt: hoursAgo(2.7), failureReason: null,
 };
 const dep9: Deployment = {
-  id: crypto.randomUUID(), projectId: apiService.id, partitionId: globexPartition.id,
+  id: crypto.randomUUID(), operationId: apiService.id, partitionId: globexPartition.id,
   environmentId: stagingEnv.id, version: "1.13.0-beta.2", status: "running",
   variables: { ...globexPartition.variables, ...stagingEnv.variables },
   debriefEntryIds: [], orderId: order5.id,
   createdAt: hoursAgo(0.5), completedAt: null, failureReason: null,
 };
 const dep10: Deployment = {
-  id: crypto.randomUUID(), projectId: webApp.id, partitionId: initechPartition.id,
+  id: crypto.randomUUID(), operationId: webApp.id, partitionId: initechPartition.id,
   environmentId: prodEnv.id, version: "2.4.1", status: "rolled_back",
   variables: { ...initechPartition.variables, ...prodEnv.variables },
   debriefEntryIds: [], orderId: null,
@@ -195,8 +195,8 @@ for (const d of [dep1, dep2, dep3, dep4, dep5, dep6, dep7, dep8, dep9, dep10]) {
 debrief.record({
   partitionId: null, deploymentId: null, agent: "command", decisionType: "system",
   decision: "Command initialized with demo data",
-  reasoning: "Seeded 3 partitions, 3 environments, 3 projects, 5 orders, and 10 deployments.",
-  context: { partitions: 3, environments: 3, projects: 3, orders: 5, deployments: 10 },
+  reasoning: "Seeded 3 partitions, 3 environments, 3 operations, 5 orders, and 10 deployments.",
+  context: { partitions: 3, environments: 3, operations: 3, orders: 5, deployments: 10 },
 });
 
 // dep1 — web-app 2.3.0 succeeded
@@ -365,7 +365,7 @@ debrief.record({
 
 // --- Create MCP server ---
 
-const mcp = createMcpServer({ agent, debrief, partitions, environments, deployments, projects });
+const mcp = createMcpServer({ agent, debrief, partitions, environments, deployments, operations });
 
 // --- Create Fastify HTTP server ---
 
@@ -378,14 +378,14 @@ await app.register(fastifyCors, {
 
 // Register REST routes
 registerHealthRoutes(app);
-registerDeploymentRoutes(app, agent, partitions, environments, deployments, debrief, projects, orders, settings);
+registerDeploymentRoutes(app, agent, partitions, environments, deployments, debrief, operations, orders, settings);
 registerEnvoyReportRoutes(app, debrief);
-registerProjectRoutes(app, projects, environments);
+registerOperationRoutes(app, operations, environments);
 registerPartitionRoutes(app, partitions, deployments, debrief);
-registerEnvironmentRoutes(app, environments, projects);
-registerAgentRoutes(app, agent, partitions, environments, projects, deployments, debrief, settings, llm);
+registerEnvironmentRoutes(app, environments, operations);
+registerAgentRoutes(app, agent, partitions, environments, operations, deployments, debrief, settings, llm);
 registerSettingsRoutes(app, settings);
-registerOrderRoutes(app, orders, agent, partitions, environments, projects, deployments, debrief, settings);
+registerOrderRoutes(app, orders, agent, partitions, environments, operations, deployments, debrief, settings);
 
 // --- Serve UI static files if built ---
 
@@ -479,7 +479,7 @@ app.listen({ port: PORT, host: HOST }, (err) => {
 ║  Health:    http://${HOST}:${PORT}/health             ║
 ║  ${uiStatus.padEnd(50)}║
 ║                                                     ║
-║  Seed: 3 partitions, 3 environments, 3 projects    ║
+║  Seed: 3 partitions, 3 environments, 3 operations   ║
 ║        5 orders, 10 deployments                     ║
 ╚══════════════════════════════════════════════════════╝
   `);

@@ -90,7 +90,7 @@ packages/
 ## Seed Data
 
 The server boots with demo data:
-- 1 project (web-app)
+- 1 operation (web-app)
 - 1 partition (Acme Corp)
 - 2 environments (production, staging)
 
@@ -101,7 +101,7 @@ IDs are printed to the console on startup.
 | URL | What |
 |-----|------|
 | `http://localhost:5173` | UI (Vite dev server) |
-| `http://localhost:3000/api/projects` | Projects API |
+| `http://localhost:3000/api/operations` | Operations API |
 | `http://localhost:3000/api/partitions` | Partitions API |
 | `http://localhost:3000/api/environments` | Environments API |
 | `http://localhost:3000/api/deployments` | Deployments API |

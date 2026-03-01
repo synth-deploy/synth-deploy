@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router";
-import { listDeployments, listPartitions, listEnvironments, listProjects, getDeploymentContext } from "../api.js";
-import type { Deployment, Partition, Environment, Project } from "../types.js";
+import { listDeployments, listPartitions, listEnvironments, listOperations, getDeploymentContext } from "../api.js";
+import type { Deployment, Partition, Environment, Operation } from "../types.js";
 import type { DeploymentContext } from "../api.js";
 import { useMode } from "../context/ModeContext.js";
 import DeploymentTable from "../components/DeploymentTable.js";
@@ -16,7 +16,7 @@ export default function Dashboard() {
   const [deployments, setDeployments] = useState<Deployment[]>([]);
   const [partitions, setPartitions] = useState<Partition[]>([]);
   const [environments, setEnvironments] = useState<Environment[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
+  const [operations, setOperations] = useState<Operation[]>([]);
   const [agentContext, setAgentContext] = useState<DeploymentContext | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -25,7 +25,7 @@ export default function Dashboard() {
       listDeployments(),
       listPartitions(),
       listEnvironments(),
-      listProjects(),
+      listOperations(),
     ];
     if (isAgent) {
       fetches.push(getDeploymentContext());
@@ -34,7 +34,7 @@ export default function Dashboard() {
       setDeployments(d);
       setPartitions(t);
       setEnvironments(e);
-      setProjects(p);
+      setOperations(p);
       if (ctx) setAgentContext(ctx);
       setLoading(false);
     }).catch(() => setLoading(false));
@@ -105,8 +105,8 @@ export default function Dashboard() {
           <div className="value">{successRate}</div>
         </div>
         <div className="summary-card">
-          <div className="label">Projects</div>
-          <div className="value">{projects.length}</div>
+          <div className="label">Operations</div>
+          <div className="value">{operations.length}</div>
         </div>
         <div className="summary-card">
           <div className="label">Partitions</div>
@@ -148,7 +148,7 @@ export default function Dashboard() {
           <div className="card-header">
             <h3>Recent Deployments</h3>
           </div>
-          <DeploymentTable deployments={recent} environments={environments} projects={projects} />
+          <DeploymentTable deployments={recent} environments={environments} operations={operations} />
         </div>
         <CommandHealth />
       </div>

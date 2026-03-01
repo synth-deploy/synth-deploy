@@ -4,7 +4,7 @@ import {
   PartitionManager,
   OrderStore,
 } from "@deploystack/core";
-import type { Environment, DebriefEntry, Project } from "@deploystack/core";
+import type { Environment, DebriefEntry, Operation } from "@deploystack/core";
 import {
   CommandAgent,
   InMemoryDeploymentStore,
@@ -51,7 +51,7 @@ function makeEnvironment(overrides: Partial<Environment> = {}): Environment {
   };
 }
 
-function makeProject(overrides: Partial<Project> = {}): Project {
+function makeOperation(overrides: Partial<Operation> = {}): Operation {
   return {
     id: "web-app",
     name: "web-app",
@@ -151,7 +151,7 @@ describe("Partition Isolation", () => {
 
       // Deploy to Partition A
       const triggerA = {
-        projectId: "web-app",
+        operationId: "web-app",
         partitionId: partitionA.id,
         environmentId: env.id,
         version: "1.0.0",
@@ -160,7 +160,7 @@ describe("Partition Isolation", () => {
         triggerA,
         partitionA.toPartition(),
         env,
-        makeProject(),
+        makeOperation(),
       );
       expect(resultA.status).toBe("succeeded");
 
@@ -179,14 +179,14 @@ describe("Partition Isolation", () => {
 
       const resultA = await agent.triggerDeployment(
         {
-          projectId: "web-app",
+          operationId: "web-app",
           partitionId: partitionA.id,
           environmentId: env.id,
           version: "1.0.0",
         },
         partitionA.toPartition(),
         env,
-        makeProject(),
+        makeOperation(),
       );
 
       // Partition A can access by ID
@@ -206,27 +206,27 @@ describe("Partition Isolation", () => {
       for (let i = 0; i < 3; i++) {
         await agent.triggerDeployment(
           {
-            projectId: "web-app",
+            operationId: "web-app",
             partitionId: partitionA.id,
             environmentId: env.id,
             version: `a-${i}`,
           },
           partitionA.toPartition(),
           env,
-          makeProject(),
+          makeOperation(),
         );
       }
       for (let i = 0; i < 2; i++) {
         await agent.triggerDeployment(
           {
-            projectId: "web-app",
+            operationId: "web-app",
             partitionId: partitionB.id,
             environmentId: env.id,
             version: `b-${i}`,
           },
           partitionB.toPartition(),
           env,
-          makeProject(),
+          makeOperation(),
         );
       }
 
@@ -256,14 +256,14 @@ describe("Partition Isolation", () => {
 
       await agent.triggerDeployment(
         {
-          projectId: "web-app",
+          operationId: "web-app",
           partitionId: partitionA.id,
           environmentId: env.id,
           version: "1.0.0",
         },
         partitionA.toPartition(),
         env,
-        makeProject(),
+        makeOperation(),
       );
 
       // A has diary entries
@@ -294,28 +294,28 @@ describe("Partition Isolation", () => {
       healthChecker.willReturn(CONN_REFUSED, CONN_REFUSED);
       const resultA = await agent.triggerDeployment(
         {
-          projectId: "web-app",
+          operationId: "web-app",
           partitionId: partitionA.id,
           environmentId: env.id,
           version: "1.0.0",
         },
         partitionA.toPartition(),
         env,
-        makeProject(),
+        makeOperation(),
       );
       expect(resultA.status).toBe("failed");
 
       // Partition B: deployment succeeds — A's failure had no effect
       const resultB = await agent.triggerDeployment(
         {
-          projectId: "web-app",
+          operationId: "web-app",
           partitionId: partitionB.id,
           environmentId: env.id,
           version: "1.0.0",
         },
         partitionB.toPartition(),
         env,
-        makeProject(),
+        makeOperation(),
       );
       expect(resultB.status).toBe("succeeded");
 
@@ -336,27 +336,27 @@ describe("Partition Isolation", () => {
       healthChecker.willReturn(CONN_REFUSED, CONN_REFUSED);
       await agent.triggerDeployment(
         {
-          projectId: "web-app",
+          operationId: "web-app",
           partitionId: partitionA.id,
           environmentId: env.id,
           version: "1.0.0",
         },
         partitionA.toPartition(),
         env,
-        makeProject(),
+        makeOperation(),
       );
 
       // B succeeds
       await agent.triggerDeployment(
         {
-          projectId: "web-app",
+          operationId: "web-app",
           partitionId: partitionB.id,
           environmentId: env.id,
           version: "1.0.0",
         },
         partitionB.toPartition(),
         env,
-        makeProject(),
+        makeOperation(),
       );
 
       // A has failure entries
@@ -629,7 +629,7 @@ describe("Precedence Recording in Decision Diary", () => {
 
     const result = await agent.triggerDeployment(
       {
-        projectId: "web-app",
+        operationId: "web-app",
         partitionId: partition.id,
         environmentId: env.id,
         version: "1.0.0",
@@ -637,7 +637,7 @@ describe("Precedence Recording in Decision Diary", () => {
       },
       partition.toPartition(),
       env,
-      makeProject(),
+      makeOperation(),
     );
 
     expect(result.status).toBe("succeeded");
@@ -720,14 +720,14 @@ describe("Scale: 50 Partitions", () => {
       partitions.map((partition) =>
         agent.triggerDeployment(
           {
-            projectId: "web-app",
+            operationId: "web-app",
             partitionId: partition.id,
             environmentId: env.id,
             version: "1.0.0",
           },
           partition.toPartition(),
           env,
-          makeProject(),
+          makeOperation(),
         ),
       ),
     );
@@ -799,14 +799,14 @@ describe("Scale: 50 Partitions", () => {
       partitions.map((partition) =>
         agent.triggerDeployment(
           {
-            projectId: "web-app",
+            operationId: "web-app",
             partitionId: partition.id,
             environmentId: env.id,
             version: "1.0.0",
           },
           partition.toPartition(),
           env,
-          makeProject(),
+          makeOperation(),
         ),
       ),
     );

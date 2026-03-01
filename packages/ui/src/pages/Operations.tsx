@@ -1,10 +1,10 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router";
-import { listProjects, createProject, listEnvironments } from "../api.js";
-import type { Project, Environment } from "../types.js";
+import { listOperations, createOperation, listEnvironments } from "../api.js";
+import type { Operation, Environment } from "../types.js";
 
-export default function Projects() {
-  const [projects, setProjects] = useState<Project[]>([]);
+export default function Operations() {
+  const [operations, setOperations] = useState<Operation[]>([]);
   const [environments, setEnvironments] = useState<Environment[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -13,8 +13,8 @@ export default function Projects() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([listProjects(), listEnvironments()]).then(([p, e]) => {
-      setProjects(p);
+    Promise.all([listOperations(), listEnvironments()]).then(([p, e]) => {
+      setOperations(p);
       setEnvironments(e);
       setLoading(false);
     });
@@ -24,8 +24,8 @@ export default function Projects() {
     if (!name.trim()) return;
     setError(null);
     try {
-      const project = await createProject(name.trim(), selectedEnvs);
-      setProjects([...projects, project]);
+      const operation = await createOperation(name.trim(), selectedEnvs);
+      setOperations([...operations, operation]);
       setName("");
       setSelectedEnvs([]);
       setShowForm(false);
@@ -45,9 +45,9 @@ export default function Projects() {
   return (
     <div>
       <div className="page-header">
-        <h2>Projects</h2>
+        <h2>Operations</h2>
         <button className="btn btn-primary" onClick={() => setShowForm(!showForm)}>
-          {showForm ? "Cancel" : "Create Project"}
+          {showForm ? "Cancel" : "Create Operation"}
         </button>
       </div>
 
@@ -56,7 +56,7 @@ export default function Projects() {
       {showForm && (
         <div className="card mb-16">
           <div className="form-group">
-            <label>Project Name</label>
+            <label>Operation Name</label>
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -94,10 +94,10 @@ export default function Projects() {
               </tr>
             </thead>
             <tbody>
-              {projects.map((p) => (
+              {operations.map((p) => (
                 <tr key={p.id}>
                   <td>
-                    <Link to={`/projects/${p.id}`} style={{ fontWeight: 500 }}>
+                    <Link to={`/operations/${p.id}`} style={{ fontWeight: 500 }}>
                       {p.name}
                     </Link>
                   </td>
@@ -117,10 +117,10 @@ export default function Projects() {
                   <td className="mono text-muted">{p.id.slice(0, 8)}</td>
                 </tr>
               ))}
-              {projects.length === 0 && (
+              {operations.length === 0 && (
                 <tr>
                   <td colSpan={3} className="empty-state">
-                    <p>No projects yet. Create one to get started.</p>
+                    <p>No operations yet. Create one to get started.</p>
                   </td>
                 </tr>
               )}

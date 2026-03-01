@@ -35,7 +35,7 @@ function makeInstruction(
     deploymentId: `deploy-${Date.now()}`,
     partitionId: "partition-1",
     environmentId: "env-prod",
-    projectId: "web-app",
+    operationId: "web-app",
     version: "2.0.0",
     variables: { APP_ENV: "production", LOG_LEVEL: "warn" },
     environmentName: "production",

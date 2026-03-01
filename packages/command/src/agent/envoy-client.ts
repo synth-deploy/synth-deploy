@@ -96,7 +96,7 @@ export class EnvoyClient {
     deploymentId: string;
     partitionId: string;
     environmentId: string;
-    projectId: string;
+    operationId: string;
     version: string;
     variables: Record<string, string>;
     environmentName: string;
@@ -142,7 +142,7 @@ export class EnvoyHealthChecker implements ServiceHealthChecker {
 
   /**
    * Register a Envoy for a specific environment.
-   * The serviceId format is "{projectId}/{environmentName}".
+   * The serviceId format is "{operationId}/{environmentName}".
    */
   registerEnvoy(serviceId: string, client: EnvoyClient): void {
     this.envoys.set(serviceId, client);

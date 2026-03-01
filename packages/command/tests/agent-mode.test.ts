@@ -1,11 +1,11 @@
 import { describe, it, expect, beforeAll, beforeEach } from "vitest";
 import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
-import { DecisionDebrief, PartitionStore, ProjectStore, EnvironmentStore, OrderStore, SettingsStore, LlmClient } from "@deploystack/core";
+import { DecisionDebrief, PartitionStore, OperationStore, EnvironmentStore, OrderStore, SettingsStore, LlmClient } from "@deploystack/core";
 import type { Deployment, DebriefEntry, LlmResult } from "@deploystack/core";
 import { CommandAgent, InMemoryDeploymentStore } from "../src/agent/command-agent.js";
 import { registerDeploymentRoutes } from "../src/api/deployments.js";
-import { registerProjectRoutes } from "../src/api/projects.js";
+import { registerOperationRoutes } from "../src/api/operations.js";
 import { registerPartitionRoutes } from "../src/api/partitions.js";
 import { registerEnvironmentRoutes } from "../src/api/environments.js";
 import { registerAgentRoutes, conversations } from "../src/api/agent.js";
@@ -17,14 +17,14 @@ import { registerAgentRoutes, conversations } from "../src/api/agent.js";
 let app: FastifyInstance;
 let diary: DecisionDebrief;
 let partitions: PartitionStore;
-let projects: ProjectStore;
+let operations: OperationStore;
 let environments: EnvironmentStore;
 let deployments: InMemoryDeploymentStore;
 let orders: OrderStore;
 let settings: SettingsStore;
 let agent: CommandAgent;
 
-let projectId: string;
+let operationId: string;
 let partitionId: string;
 let productionEnvId: string;
 let stagingEnvId: string;
@@ -32,7 +32,7 @@ let stagingEnvId: string;
 beforeAll(async () => {
   diary = new DecisionDebrief();
   partitions = new PartitionStore();
-  projects = new ProjectStore();
+  operations = new OperationStore();
   environments = new EnvironmentStore();
   deployments = new InMemoryDeploymentStore();
   orders = new OrderStore();
@@ -40,11 +40,11 @@ beforeAll(async () => {
   agent = new CommandAgent(diary, deployments, orders);
 
   app = Fastify();
-  registerDeploymentRoutes(app, agent, partitions, environments, deployments, diary, projects, orders, settings);
-  registerProjectRoutes(app, projects, environments);
+  registerDeploymentRoutes(app, agent, partitions, environments, deployments, diary, operations, orders, settings);
+  registerOperationRoutes(app, operations, environments);
   registerPartitionRoutes(app, partitions, deployments, diary);
-  registerEnvironmentRoutes(app, environments, projects);
-  registerAgentRoutes(app, agent, partitions, environments, projects, deployments, diary, settings);
+  registerEnvironmentRoutes(app, environments, operations);
+  registerAgentRoutes(app, agent, partitions, environments, operations, deployments, diary, settings);
 
   await app.ready();
 
@@ -65,10 +65,10 @@ beforeAll(async () => {
 
   const projRes = await app.inject({
     method: "POST",
-    url: "/api/projects",
+    url: "/api/operations",
     payload: { name: "web-app", environmentIds: [productionEnvId, stagingEnvId] },
   });
-  projectId = JSON.parse(projRes.payload).project.id;
+  operationId = JSON.parse(projRes.payload).operation.id;
 
   const partitionRes = await app.inject({
     method: "POST",
@@ -103,8 +103,8 @@ describe("Agent mode — intent interpretation", () => {
 
     expect(result.ready).toBe(true);
     expect(result.missingFields).toHaveLength(0);
-    expect(result.resolved.projectId.value).toBe(projectId);
-    expect(result.resolved.projectId.confidence).toBe("exact");
+    expect(result.resolved.operationId.value).toBe(operationId);
+    expect(result.resolved.operationId.confidence).toBe("exact");
     expect(result.resolved.partitionId.value).toBe(partitionId);
     expect(result.resolved.partitionId.confidence).toBe("exact");
     expect(result.resolved.environmentId.value).toBe(productionEnvId);
@@ -125,7 +125,7 @@ describe("Agent mode — intent interpretation", () => {
     const result = JSON.parse(res.payload);
     expect(result.ready).toBe(false);
     expect(result.missingFields).toContain("version");
-    // Project may be inferred if only one exists
+    // Operation may be inferred if only one exists
     expect(result.resolved.environmentId.confidence).toBe("exact");
   });
 
@@ -136,7 +136,7 @@ describe("Agent mode — intent interpretation", () => {
       payload: {
         intent: "Deploy version 3.0.0",
         partialConfig: {
-          projectId,
+          operationId,
           partitionId,
           environmentId: productionEnvId,
         },
@@ -145,7 +145,7 @@ describe("Agent mode — intent interpretation", () => {
 
     const result = JSON.parse(res.payload);
     expect(result.ready).toBe(true);
-    expect(result.resolved.projectId.value).toBe(projectId);
+    expect(result.resolved.operationId.value).toBe(operationId);
     expect(result.resolved.version.value).toBe("3.0.0");
   });
 
@@ -219,7 +219,7 @@ describe("Agent mode — deployment context", () => {
     await app.inject({
       method: "POST",
       url: "/api/deployments",
-      payload: { projectId, partitionId, environmentId: productionEnvId, version: "1.0.0" },
+      payload: { operationId, partitionId, environmentId: productionEnvId, version: "1.0.0" },
     });
 
     const res = await app.inject({ method: "GET", url: "/api/agent/context" });
@@ -257,7 +257,7 @@ describe("Identical artifacts — traditional vs agent mode", () => {
       method: "POST",
       url: "/api/deployments",
       payload: {
-        projectId,
+        operationId,
         partitionId,
         environmentId: productionEnvId,
         version: "5.0.0",
@@ -286,7 +286,7 @@ describe("Identical artifacts — traditional vs agent mode", () => {
       method: "POST",
       url: "/api/deployments",
       payload: {
-        projectId: intent.resolved.projectId.value,
+        operationId: intent.resolved.operationId.value,
         partitionId: intent.resolved.partitionId.value,
         environmentId: intent.resolved.environmentId.value,
         version: intent.resolved.version.value,
@@ -300,7 +300,7 @@ describe("Identical artifacts — traditional vs agent mode", () => {
     // --- Compare: identical artifacts ---
 
     // Same trigger inputs
-    expect(agentDeploy.projectId).toBe(traditionalDeploy.projectId);
+    expect(agentDeploy.operationId).toBe(traditionalDeploy.operationId);
     expect(agentDeploy.partitionId).toBe(traditionalDeploy.partitionId);
     expect(agentDeploy.environmentId).toBe(traditionalDeploy.environmentId);
     expect(agentDeploy.version).toBe(traditionalDeploy.version);
@@ -339,7 +339,7 @@ describe("Identical artifacts — traditional vs agent mode", () => {
       method: "POST",
       url: "/api/deployments",
       payload: {
-        projectId: intent.resolved.projectId.value,
+        operationId: intent.resolved.operationId.value,
         partitionId: intent.resolved.partitionId.value,
         environmentId: intent.resolved.environmentId.value,
         version: intent.resolved.version.value,
@@ -362,7 +362,7 @@ describe("Identical artifacts — traditional vs agent mode", () => {
       payload: {
         intent: "deploy version 7.0.0 to production",
         partialConfig: {
-          projectId,
+          operationId,
           partitionId,
         },
       },
@@ -370,7 +370,7 @@ describe("Identical artifacts — traditional vs agent mode", () => {
 
     const intent = JSON.parse(intentRes.payload);
     expect(intent.ready).toBe(true);
-    expect(intent.resolved.projectId.value).toBe(projectId);
+    expect(intent.resolved.operationId.value).toBe(operationId);
     expect(intent.resolved.partitionId.value).toBe(partitionId);
     expect(intent.resolved.version.value).toBe("7.0.0");
     expect(intent.resolved.environmentId.value).toBe(productionEnvId);
@@ -385,7 +385,7 @@ describe("Agent mode — LLM intent interpretation", () => {
   let llmApp: FastifyInstance;
   let llmDiary: DecisionDebrief;
   let llmPartitions: PartitionStore;
-  let llmProjects: ProjectStore;
+  let llmOperations: OperationStore;
   let llmEnvironments: EnvironmentStore;
   let llmDeployments: InMemoryDeploymentStore;
   let llmOrders: OrderStore;
@@ -393,7 +393,7 @@ describe("Agent mode — LLM intent interpretation", () => {
   let llmAgent: CommandAgent;
   let mockLlm: LlmClient;
 
-  let llmProjectId: string;
+  let llmOperationId: string;
   let llmPartitionId: string;
   let llmProdEnvId: string;
   let llmStagingEnvId: string;
@@ -404,7 +404,7 @@ describe("Agent mode — LLM intent interpretation", () => {
   beforeAll(async () => {
     llmDiary = new DecisionDebrief();
     llmPartitions = new PartitionStore();
-    llmProjects = new ProjectStore();
+    llmOperations = new OperationStore();
     llmEnvironments = new EnvironmentStore();
     llmDeployments = new InMemoryDeploymentStore();
     llmOrders = new OrderStore();
@@ -420,11 +420,11 @@ describe("Agent mode — LLM intent interpretation", () => {
     mockLlm.isAvailable = () => true;
 
     llmApp = Fastify();
-    registerDeploymentRoutes(llmApp, llmAgent, llmPartitions, llmEnvironments, llmDeployments, llmDiary, llmProjects, llmOrders, llmSettings);
-    registerProjectRoutes(llmApp, llmProjects, llmEnvironments);
+    registerDeploymentRoutes(llmApp, llmAgent, llmPartitions, llmEnvironments, llmDeployments, llmDiary, llmOperations, llmOrders, llmSettings);
+    registerOperationRoutes(llmApp, llmOperations, llmEnvironments);
     registerPartitionRoutes(llmApp, llmPartitions, llmDeployments, llmDiary);
-    registerEnvironmentRoutes(llmApp, llmEnvironments, llmProjects);
-    registerAgentRoutes(llmApp, llmAgent, llmPartitions, llmEnvironments, llmProjects, llmDeployments, llmDiary, llmSettings, mockLlm);
+    registerEnvironmentRoutes(llmApp, llmEnvironments, llmOperations);
+    registerAgentRoutes(llmApp, llmAgent, llmPartitions, llmEnvironments, llmOperations, llmDeployments, llmDiary, llmSettings, mockLlm);
 
     await llmApp.ready();
 
@@ -445,10 +445,10 @@ describe("Agent mode — LLM intent interpretation", () => {
 
     const projRes = await llmApp.inject({
       method: "POST",
-      url: "/api/projects",
+      url: "/api/operations",
       payload: { name: "web-app", environmentIds: [llmProdEnvId, llmStagingEnvId] },
     });
-    llmProjectId = JSON.parse(projRes.payload).project.id;
+    llmOperationId = JSON.parse(projRes.payload).operation.id;
 
     const partRes = await llmApp.inject({
       method: "POST",
@@ -466,7 +466,7 @@ describe("Agent mode — LLM intent interpretation", () => {
     classifyResponse = {
       ok: true,
       text: JSON.stringify({
-        projectId: { id: llmProjectId, confidence: "exact", matchedFrom: "web-app mentioned in intent" },
+        operationId: { id: llmOperationId, confidence: "exact", matchedFrom: "web-app mentioned in intent" },
         partitionId: { id: llmPartitionId, confidence: "exact", matchedFrom: "Acme Corp mentioned in intent" },
         environmentId: { id: llmProdEnvId, confidence: "exact", matchedFrom: "production mentioned in intent" },
         version: { value: "2.0.0", confidence: "exact", matchedFrom: "v2.0.0 in intent" },
@@ -484,8 +484,8 @@ describe("Agent mode — LLM intent interpretation", () => {
 
     const result = JSON.parse(res.payload);
     expect(result.ready).toBe(true);
-    expect(result.resolved.projectId.value).toBe(llmProjectId);
-    expect(result.resolved.projectId.confidence).toBe("exact");
+    expect(result.resolved.operationId.value).toBe(llmOperationId);
+    expect(result.resolved.operationId.confidence).toBe("exact");
     expect(result.resolved.version.value).toBe("2.0.0");
     expect(result.resolved.variables.FEATURE).toBe("enabled");
   });
@@ -507,7 +507,7 @@ describe("Agent mode — LLM intent interpretation", () => {
     const result = JSON.parse(res.payload);
     // Should still work via regex fallback
     expect(result.ready).toBe(true);
-    expect(result.resolved.projectId.value).toBe(llmProjectId);
+    expect(result.resolved.operationId.value).toBe(llmOperationId);
     expect(result.resolved.version.value).toBe("3.0.0");
   });
 
@@ -515,7 +515,7 @@ describe("Agent mode — LLM intent interpretation", () => {
     classifyResponse = {
       ok: true,
       text: JSON.stringify({
-        projectId: { id: "fake-project-id", confidence: "exact", matchedFrom: "hallucinated" },
+        operationId: { id: "fake-operation-id", confidence: "exact", matchedFrom: "hallucinated" },
         partitionId: { id: llmPartitionId, confidence: "exact", matchedFrom: "Acme Corp" },
         environmentId: { id: llmProdEnvId, confidence: "exact", matchedFrom: "production" },
         version: { value: "1.0.0", confidence: "exact", matchedFrom: "v1.0.0" },
@@ -534,7 +534,7 @@ describe("Agent mode — LLM intent interpretation", () => {
     const result = JSON.parse(res.payload);
     // Should fall back to regex — regex can still resolve this intent
     expect(result.ready).toBe(true);
-    expect(result.resolved.projectId.value).toBe(llmProjectId);
+    expect(result.resolved.operationId.value).toBe(llmOperationId);
   });
 
   it("falls back to regex when LLM call fails", async () => {
@@ -559,7 +559,7 @@ describe("Agent mode — LLM intent interpretation", () => {
     classifyResponse = {
       ok: true,
       text: JSON.stringify({
-        projectId: { id: llmProjectId, confidence: "exact", matchedFrom: "web-app" },
+        operationId: { id: llmOperationId, confidence: "exact", matchedFrom: "web-app" },
         partitionId: { id: llmPartitionId, confidence: "exact", matchedFrom: "Acme Corp" },
         environmentId: { id: llmProdEnvId, confidence: "inferred", matchedFrom: "inferred from context" },
         version: { value: "1.0.0", confidence: "exact", matchedFrom: "v1.0.0" },
@@ -601,7 +601,7 @@ describe("Agent mode — LLM intent interpretation", () => {
     classifyResponse = {
       ok: true,
       text: JSON.stringify({
-        projectId: { id: llmProjectId, confidence: "exact", matchedFrom: "web-app" },
+        operationId: { id: llmOperationId, confidence: "exact", matchedFrom: "web-app" },
         partitionId: { id: llmPartitionId, confidence: "exact", matchedFrom: "Acme Corp" },
         environmentId: { id: llmProdEnvId, confidence: "exact", matchedFrom: "production" },
         version: { value: "1.0.0", confidence: "exact", matchedFrom: "v1.0.0" },
@@ -624,7 +624,7 @@ describe("Agent mode — LLM intent interpretation", () => {
     classifyResponse = {
       ok: true,
       text: JSON.stringify({
-        projectId: { id: llmProjectId, confidence: "inferred", matchedFrom: "carried from previous intent" },
+        operationId: { id: llmOperationId, confidence: "inferred", matchedFrom: "carried from previous intent" },
         partitionId: { id: llmPartitionId, confidence: "inferred", matchedFrom: "carried from previous intent" },
         environmentId: { id: llmStagingEnvId, confidence: "exact", matchedFrom: "staging mentioned in follow-up" },
         version: { value: "1.0.0", confidence: "inferred", matchedFrom: "carried from previous intent" },
@@ -645,7 +645,7 @@ describe("Agent mode — LLM intent interpretation", () => {
 
     const result = JSON.parse(res.payload);
     expect(result.ready).toBe(true);
-    expect(result.resolved.projectId.value).toBe(llmProjectId);
+    expect(result.resolved.operationId.value).toBe(llmOperationId);
     expect(result.resolved.environmentId.value).toBe(llmStagingEnvId);
     expect(result.resolved.version.value).toBe("1.0.0");
   });
@@ -654,7 +654,7 @@ describe("Agent mode — LLM intent interpretation", () => {
     classifyResponse = {
       ok: true,
       text: JSON.stringify({
-        projectId: { id: llmProjectId, confidence: "exact", matchedFrom: "web-app" },
+        operationId: { id: llmOperationId, confidence: "exact", matchedFrom: "web-app" },
         partitionId: { id: llmPartitionId, confidence: "exact", matchedFrom: "Acme" },
         environmentId: { id: llmProdEnvId, confidence: "exact", matchedFrom: "prod" },
         version: { value: "9.0.0", confidence: "exact", matchedFrom: "v9.0.0" },
@@ -686,7 +686,7 @@ describe("Agent mode — LLM intent interpretation", () => {
     classifyResponse = {
       ok: true,
       text: '```json\n' + JSON.stringify({
-        projectId: { id: llmProjectId, confidence: "exact", matchedFrom: "web-app" },
+        operationId: { id: llmOperationId, confidence: "exact", matchedFrom: "web-app" },
         partitionId: { id: llmPartitionId, confidence: "exact", matchedFrom: "Acme" },
         environmentId: { id: llmProdEnvId, confidence: "exact", matchedFrom: "prod" },
         version: { value: "5.0.0", confidence: "exact", matchedFrom: "v5.0.0" },
@@ -707,20 +707,20 @@ describe("Agent mode — LLM intent interpretation", () => {
     expect(result.resolved.version.value).toBe("5.0.0");
   });
 
-  it("validates environment-project linking after LLM extraction", async () => {
-    // Create a second project with only staging linked
+  it("validates environment-operation linking after LLM extraction", async () => {
+    // Create a second operation with only staging linked
     const proj2Res = await llmApp.inject({
       method: "POST",
-      url: "/api/projects",
+      url: "/api/operations",
       payload: { name: "api-service", environmentIds: [llmStagingEnvId] },
     });
-    const proj2Id = JSON.parse(proj2Res.payload).project.id;
+    const proj2Id = JSON.parse(proj2Res.payload).operation.id;
 
     // LLM resolves to api-service + production (which is NOT linked)
     classifyResponse = {
       ok: true,
       text: JSON.stringify({
-        projectId: { id: proj2Id, confidence: "exact", matchedFrom: "api-service" },
+        operationId: { id: proj2Id, confidence: "exact", matchedFrom: "api-service" },
         partitionId: { id: llmPartitionId, confidence: "exact", matchedFrom: "Acme" },
         environmentId: { id: llmProdEnvId, confidence: "exact", matchedFrom: "production" },
         version: { value: "1.0.0", confidence: "exact", matchedFrom: "v1.0.0" },
@@ -743,6 +743,6 @@ describe("Agent mode — LLM intent interpretation", () => {
       (u: any) => u.field === "environmentId" && u.action === "warn",
     );
     expect(warnUpdate).toBeDefined();
-    expect(warnUpdate.message).toContain("not linked to project");
+    expect(warnUpdate.message).toContain("not linked to operation");
   });
 });

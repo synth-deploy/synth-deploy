@@ -64,7 +64,7 @@ export default function OrderDetailPanel({ orderId, title }: Props) {
         <div className="deploy-header">
           <div className="deploy-header-main">
             <div className="flex items-center gap-12">
-              <h2 style={{ fontSize: 22, fontWeight: 700 }}>{order.projectName}</h2>
+              <h2 style={{ fontSize: 22, fontWeight: 700 }}>{order.operationName}</h2>
               <span className="badge badge-pending">v{order.version}</span>
               <EnvBadge name={order.environmentName} />
             </div>
@@ -79,8 +79,8 @@ export default function OrderDetailPanel({ orderId, title }: Props) {
             </div>
             <div className="deploy-header-meta">
               <div className="meta-item">
-                <span className="meta-label">Project</span>
-                <span className="meta-value">{order.projectName}</span>
+                <span className="meta-label">Operation</span>
+                <span className="meta-value">{order.operationName}</span>
               </div>
               <div className="meta-item">
                 <span className="meta-label">Partition</span>

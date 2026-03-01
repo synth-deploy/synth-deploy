@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { listOrders, listProjects, listPartitions, listEnvironments } from "../../api.js";
-import type { Order, Project, Partition, Environment } from "../../types.js";
+import { listOrders, listOperations, listPartitions, listEnvironments } from "../../api.js";
+import type { Order, Operation, Partition, Environment } from "../../types.js";
 import { useCanvas } from "../../context/CanvasContext.js";
 import { useSettings } from "../../context/SettingsContext.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
@@ -8,39 +8,39 @@ import EnvBadge from "../EnvBadge.js";
 
 interface Props {
   title: string;
-  filterProjectId?: string;
+  filterOperationId?: string;
   filterPartitionId?: string;
 }
 
-export default function OrderListPanel({ title, filterProjectId, filterPartitionId }: Props) {
+export default function OrderListPanel({ title, filterOperationId, filterPartitionId }: Props) {
   const { pushPanel } = useCanvas();
   const { settings: appSettings } = useSettings();
   const environmentsEnabled = appSettings?.environmentsEnabled ?? true;
 
   const [orders, setOrders] = useState<Order[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
+  const [operations, setOperations] = useState<Operation[]>([]);
   const [partitions, setPartitions] = useState<Partition[]>([]);
   const [environments, setEnvironments] = useState<Environment[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Filters
-  const [filterProject, setFilterProject] = useState(filterProjectId ?? "");
+  const [filterOperation, setFilterOperation] = useState(filterOperationId ?? "");
   const [filterPartition, setFilterPartition] = useState(filterPartitionId ?? "");
 
   useEffect(() => {
-    const filters: { projectId?: string; partitionId?: string } = {};
-    if (filterProjectId) filters.projectId = filterProjectId;
+    const filters: { operationId?: string; partitionId?: string } = {};
+    if (filterOperationId) filters.operationId = filterOperationId;
     if (filterPartitionId) filters.partitionId = filterPartitionId;
 
     Promise.all([
       listOrders(Object.keys(filters).length > 0 ? filters : undefined),
-      listProjects(),
+      listOperations(),
       listPartitions(),
       listEnvironments(),
     ])
       .then(([o, p, t, e]) => {
         setOrders(o);
-        setProjects(p);
+        setOperations(p);
         setPartitions(t);
         setEnvironments(e);
         setLoading(false);
@@ -49,11 +49,11 @@ export default function OrderListPanel({ title, filterProjectId, filterPartition
   }, []);
 
   useEffect(() => {
-    const filters: { projectId?: string; partitionId?: string } = {};
-    if (filterProject) filters.projectId = filterProject;
+    const filters: { operationId?: string; partitionId?: string } = {};
+    if (filterOperation) filters.operationId = filterOperation;
     if (filterPartition) filters.partitionId = filterPartition;
     listOrders(Object.keys(filters).length > 0 ? filters : undefined).then(setOrders);
-  }, [filterProject, filterPartition]);
+  }, [filterOperation, filterPartition]);
 
   if (loading) return <CanvasPanelHost title={title}><div className="loading">Loading...</div></CanvasPanelHost>;
 
@@ -72,12 +72,12 @@ export default function OrderListPanel({ title, filterProjectId, filterPartition
           <div className="flex gap-8 items-center">
             <span className="text-muted" style={{ fontSize: 12 }}>Filter:</span>
             <select
-              value={filterProject}
-              onChange={(e) => setFilterProject(e.target.value)}
+              value={filterOperation}
+              onChange={(e) => setFilterOperation(e.target.value)}
               style={{ fontSize: 13, padding: "4px 8px" }}
             >
-              <option value="">All Projects</option>
-              {projects.map((p) => (
+              <option value="">All Operations</option>
+              {operations.map((p) => (
                 <option key={p.id} value={p.id}>{p.name}</option>
               ))}
             </select>
@@ -111,7 +111,7 @@ export default function OrderListPanel({ title, filterProjectId, filterPartition
                   <span className="mono" style={{ fontWeight: 500, fontSize: 12 }}>
                     {o.id.slice(0, 8)}
                   </span>
-                  <span>{o.projectName}</span>
+                  <span>{o.operationName}</span>
                   <span className="mono" style={{ fontSize: 12 }}>v{o.version}</span>
                   {environmentsEnabled && <EnvBadge name={o.environmentName} />}
                   <span className="text-muted" style={{ fontSize: 12 }}>

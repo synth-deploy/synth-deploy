@@ -1,11 +1,11 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
-import { DecisionDebrief, PartitionStore, ProjectStore, EnvironmentStore, OrderStore, SettingsStore } from "@deploystack/core";
-import type { Deployment, DebriefEntry, PostmortemReport, ProjectHistory } from "@deploystack/core";
+import { DecisionDebrief, PartitionStore, OperationStore, EnvironmentStore, OrderStore, SettingsStore } from "@deploystack/core";
+import type { Deployment, DebriefEntry, PostmortemReport, OperationHistory } from "@deploystack/core";
 import { CommandAgent, InMemoryDeploymentStore } from "../src/agent/command-agent.js";
 import { registerDeploymentRoutes } from "../src/api/deployments.js";
-import { registerProjectRoutes } from "../src/api/projects.js";
+import { registerOperationRoutes } from "../src/api/operations.js";
 import { registerPartitionRoutes } from "../src/api/partitions.js";
 import { registerEnvironmentRoutes } from "../src/api/environments.js";
 
@@ -16,7 +16,7 @@ import { registerEnvironmentRoutes } from "../src/api/environments.js";
 let app: FastifyInstance;
 let diary: DecisionDebrief;
 let partitions: PartitionStore;
-let projects: ProjectStore;
+let operations: OperationStore;
 let environments: EnvironmentStore;
 let deployments: InMemoryDeploymentStore;
 let orders: OrderStore;
@@ -26,7 +26,7 @@ let agent: CommandAgent;
 beforeAll(async () => {
   diary = new DecisionDebrief();
   partitions = new PartitionStore();
-  projects = new ProjectStore();
+  operations = new OperationStore();
   environments = new EnvironmentStore();
   deployments = new InMemoryDeploymentStore();
   orders = new OrderStore();
@@ -34,10 +34,10 @@ beforeAll(async () => {
   agent = new CommandAgent(diary, deployments, orders);
 
   app = Fastify();
-  registerDeploymentRoutes(app, agent, partitions, environments, deployments, diary, projects, orders, settings);
-  registerProjectRoutes(app, projects, environments);
+  registerDeploymentRoutes(app, agent, partitions, environments, deployments, diary, operations, orders, settings);
+  registerOperationRoutes(app, operations, environments);
   registerPartitionRoutes(app, partitions, deployments, diary);
-  registerEnvironmentRoutes(app, environments, projects);
+  registerEnvironmentRoutes(app, environments, operations);
 
   await app.ready();
 });
@@ -47,7 +47,7 @@ beforeAll(async () => {
 // ---------------------------------------------------------------------------
 
 describe("Complete UI user journey", () => {
-  let projectId: string;
+  let operationId: string;
   let partitionId: string;
   let productionEnvId: string;
   let stagingEnvId: string;
@@ -81,33 +81,33 @@ describe("Complete UI user journey", () => {
     stagingEnvId = JSON.parse(res.payload).environment.id;
   });
 
-  // ---- Step 2: Create a project ----
+  // ---- Step 2: Create an operation ----
 
-  it("creates a project linked to both environments", async () => {
+  it("creates an operation linked to both environments", async () => {
     const res = await app.inject({
       method: "POST",
-      url: "/api/projects",
+      url: "/api/operations",
       payload: { name: "web-app", environmentIds: [productionEnvId, stagingEnvId] },
     });
 
     expect(res.statusCode).toBe(201);
     const body = JSON.parse(res.payload);
-    expect(body.project.name).toBe("web-app");
-    expect(body.project.environmentIds).toHaveLength(2);
-    projectId = body.project.id;
+    expect(body.operation.name).toBe("web-app");
+    expect(body.operation.environmentIds).toHaveLength(2);
+    operationId = body.operation.id;
   });
 
-  it("lists the project", async () => {
-    const res = await app.inject({ method: "GET", url: "/api/projects" });
+  it("lists the operation", async () => {
+    const res = await app.inject({ method: "GET", url: "/api/operations" });
     const body = JSON.parse(res.payload);
-    expect(body.projects).toHaveLength(1);
-    expect(body.projects[0].name).toBe("web-app");
+    expect(body.operations).toHaveLength(1);
+    expect(body.operations[0].name).toBe("web-app");
   });
 
-  it("gets project detail with environment info", async () => {
-    const res = await app.inject({ method: "GET", url: `/api/projects/${projectId}` });
+  it("gets operation detail with environment info", async () => {
+    const res = await app.inject({ method: "GET", url: `/api/operations/${operationId}` });
     const body = JSON.parse(res.payload);
-    expect(body.project.name).toBe("web-app");
+    expect(body.operation.name).toBe("web-app");
     expect(body.environments).toHaveLength(2);
     expect(body.environments.map((e: any) => e.name).sort()).toEqual(["production", "staging"]);
   });
@@ -156,7 +156,7 @@ describe("Complete UI user journey", () => {
       method: "POST",
       url: "/api/deployments",
       payload: {
-        projectId,
+        operationId,
         partitionId,
         environmentId: productionEnvId,
         version: "1.0.0",
@@ -241,7 +241,7 @@ describe("Complete UI user journey", () => {
       method: "POST",
       url: "/api/deployments",
       payload: {
-        projectId,
+        operationId,
         partitionId,
         environmentId: productionEnvId,
         version: "1.1.0",
@@ -265,7 +265,7 @@ describe("Complete UI user journey", () => {
     });
 
     const body = JSON.parse(res.payload);
-    const history: ProjectHistory = body.history;
+    const history: OperationHistory = body.history;
 
     expect(history.overview.totalDeployments).toBe(2);
     expect(history.overview.succeeded).toBe(2);
@@ -293,12 +293,12 @@ describe("Complete UI user journey", () => {
     expect(versions).toEqual(["1.0.0", "1.1.0"]);
   });
 
-  // ---- Step 12: List project deployments ----
+  // ---- Step 12: List operation deployments ----
 
-  it("lists deployments filtered by project", async () => {
+  it("lists deployments filtered by operation", async () => {
     const res = await app.inject({
       method: "GET",
-      url: `/api/projects/${projectId}/deployments`,
+      url: `/api/operations/${operationId}/deployments`,
     });
 
     const body = JSON.parse(res.payload);
@@ -341,8 +341,8 @@ describe("Complete UI user journey", () => {
 
   // ---- Step 14: Error handling ----
 
-  it("returns 404 for nonexistent project", async () => {
-    const res = await app.inject({ method: "GET", url: "/api/projects/nonexistent" });
+  it("returns 404 for nonexistent operation", async () => {
+    const res = await app.inject({ method: "GET", url: "/api/operations/nonexistent" });
     expect(res.statusCode).toBe(404);
   });
 
@@ -351,10 +351,10 @@ describe("Complete UI user journey", () => {
     expect(res.statusCode).toBe(404);
   });
 
-  it("returns 400 for project without name", async () => {
+  it("returns 400 for operation without name", async () => {
     const res = await app.inject({
       method: "POST",
-      url: "/api/projects",
+      url: "/api/operations",
       payload: { environmentIds: [] },
     });
     expect(res.statusCode).toBe(400);

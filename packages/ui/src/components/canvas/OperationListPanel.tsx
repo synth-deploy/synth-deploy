@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { listProjects, listEnvironments } from "../../api.js";
-import type { Project, Environment } from "../../types.js";
+import { listOperations, listEnvironments } from "../../api.js";
+import type { Operation, Environment } from "../../types.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
 import EnvBadge from "../EnvBadge.js";
 
@@ -8,15 +8,15 @@ interface Props {
   title: string;
 }
 
-export default function ProjectListPanel({ title }: Props) {
-  const [projects, setProjects] = useState<Project[]>([]);
+export default function OperationListPanel({ title }: Props) {
+  const [operations, setOperations] = useState<Operation[]>([]);
   const [environments, setEnvironments] = useState<Environment[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([listProjects(), listEnvironments()])
+    Promise.all([listOperations(), listEnvironments()])
       .then(([p, e]) => {
-        setProjects(p);
+        setOperations(p);
         setEnvironments(e);
         setLoading(false);
       })
@@ -30,8 +30,8 @@ export default function ProjectListPanel({ title }: Props) {
       <div className="canvas-detail">
         <div className="canvas-summary-strip">
           <div className="canvas-summary-item">
-            <span className="canvas-summary-value">{projects.length}</span>
-            <span className="canvas-summary-label">Projects</span>
+            <span className="canvas-summary-value">{operations.length}</span>
+            <span className="canvas-summary-label">Operations</span>
           </div>
           <div className="canvas-summary-item">
             <span className="canvas-summary-value">{environments.length}</span>
@@ -39,9 +39,9 @@ export default function ProjectListPanel({ title }: Props) {
           </div>
         </div>
 
-        {projects.length > 0 ? (
+        {operations.length > 0 ? (
           <div className="canvas-activity-list">
-            {projects.map((p) => (
+            {operations.map((p) => (
               <div key={p.id} className="canvas-activity-row">
                 <span style={{ fontWeight: 500 }}>{p.name}</span>
                 <span className="flex flex-wrap gap-8">
@@ -59,7 +59,7 @@ export default function ProjectListPanel({ title }: Props) {
           </div>
         ) : (
           <div className="canvas-empty">
-            <p>No projects yet. Use the intent bar to create one.</p>
+            <p>No operations yet. Use the intent bar to create one.</p>
           </div>
         )}
       </div>

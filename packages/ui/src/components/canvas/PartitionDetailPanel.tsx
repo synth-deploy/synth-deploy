@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { getPartition, getPartitionHistory, listDeployments, listEnvironments, getDeploymentContext } from "../../api.js";
 import type { Partition, Deployment, Environment } from "../../types.js";
-import type { ProjectHistory, DeploymentContext } from "../../api.js";
+import type { OperationHistory, DeploymentContext } from "../../api.js";
 import { useCanvas } from "../../context/CanvasContext.js";
 import EnvBadge from "../EnvBadge.js";
 import type { EnvAgentData } from "../EnvBadge.js";
@@ -16,7 +16,7 @@ export default function PartitionDetailPanel({ partitionId, title }: Props) {
   const { pushPanel } = useCanvas();
 
   const [partition, setPartition] = useState<Partition | null>(null);
-  const [history, setHistory] = useState<ProjectHistory | null>(null);
+  const [history, setHistory] = useState<OperationHistory | null>(null);
   const [deployments, setDeployments] = useState<Deployment[]>([]);
   const [environments, setEnvironments] = useState<Environment[]>([]);
   const [agentContext, setAgentContext] = useState<DeploymentContext | null>(null);

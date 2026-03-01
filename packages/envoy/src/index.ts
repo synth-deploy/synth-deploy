@@ -68,14 +68,14 @@ const envIds = {
 
 // Deployment records — Envoy's local history of what it executed
 const envoyDeps = [
-  { deploymentId: crypto.randomUUID(), partitionId: partitionIds.acme, environmentId: envIds.production, projectId: "web-app", version: "2.3.0", variables: { APP_ENV: "production" }, workspacePath: path.join(BASE_DIR, "deployments", "web-app-2.3.0") },
-  { deploymentId: crypto.randomUUID(), partitionId: partitionIds.acme, environmentId: envIds.production, projectId: "web-app", version: "2.4.0", variables: { APP_ENV: "production" }, workspacePath: path.join(BASE_DIR, "deployments", "web-app-2.4.0") },
-  { deploymentId: crypto.randomUUID(), partitionId: partitionIds.acme, environmentId: envIds.production, projectId: "web-app", version: "2.4.1", variables: { APP_ENV: "production" }, workspacePath: path.join(BASE_DIR, "deployments", "web-app-2.4.1") },
-  { deploymentId: crypto.randomUUID(), partitionId: partitionIds.acme, environmentId: envIds.production, projectId: "api-service", version: "1.11.0", variables: { APP_ENV: "production" }, workspacePath: path.join(BASE_DIR, "deployments", "api-service-1.11.0") },
-  { deploymentId: crypto.randomUUID(), partitionId: partitionIds.acme, environmentId: envIds.production, projectId: "api-service", version: "1.12.0", variables: { APP_ENV: "production" }, workspacePath: path.join(BASE_DIR, "deployments", "api-service-1.12.0") },
-  { deploymentId: crypto.randomUUID(), partitionId: partitionIds.globex, environmentId: envIds.staging, projectId: "web-app", version: "2.5.0-rc.1", variables: { APP_ENV: "staging" }, workspacePath: path.join(BASE_DIR, "deployments", "web-app-2.5.0-rc.1") },
-  { deploymentId: crypto.randomUUID(), partitionId: partitionIds.initech, environmentId: envIds.production, projectId: "worker-service", version: "2.9.0", variables: { APP_ENV: "production" }, workspacePath: path.join(BASE_DIR, "deployments", "worker-service-2.9.0") },
-  { deploymentId: crypto.randomUUID(), partitionId: partitionIds.initech, environmentId: envIds.production, projectId: "worker-service", version: "3.0.0", variables: { APP_ENV: "production" }, workspacePath: path.join(BASE_DIR, "deployments", "worker-service-3.0.0") },
+  { deploymentId: crypto.randomUUID(), partitionId: partitionIds.acme, environmentId: envIds.production, operationId: "web-app", version: "2.3.0", variables: { APP_ENV: "production" }, workspacePath: path.join(BASE_DIR, "deployments", "web-app-2.3.0") },
+  { deploymentId: crypto.randomUUID(), partitionId: partitionIds.acme, environmentId: envIds.production, operationId: "web-app", version: "2.4.0", variables: { APP_ENV: "production" }, workspacePath: path.join(BASE_DIR, "deployments", "web-app-2.4.0") },
+  { deploymentId: crypto.randomUUID(), partitionId: partitionIds.acme, environmentId: envIds.production, operationId: "web-app", version: "2.4.1", variables: { APP_ENV: "production" }, workspacePath: path.join(BASE_DIR, "deployments", "web-app-2.4.1") },
+  { deploymentId: crypto.randomUUID(), partitionId: partitionIds.acme, environmentId: envIds.production, operationId: "api-service", version: "1.11.0", variables: { APP_ENV: "production" }, workspacePath: path.join(BASE_DIR, "deployments", "api-service-1.11.0") },
+  { deploymentId: crypto.randomUUID(), partitionId: partitionIds.acme, environmentId: envIds.production, operationId: "api-service", version: "1.12.0", variables: { APP_ENV: "production" }, workspacePath: path.join(BASE_DIR, "deployments", "api-service-1.12.0") },
+  { deploymentId: crypto.randomUUID(), partitionId: partitionIds.globex, environmentId: envIds.staging, operationId: "web-app", version: "2.5.0-rc.1", variables: { APP_ENV: "staging" }, workspacePath: path.join(BASE_DIR, "deployments", "web-app-2.5.0-rc.1") },
+  { deploymentId: crypto.randomUUID(), partitionId: partitionIds.initech, environmentId: envIds.production, operationId: "worker-service", version: "2.9.0", variables: { APP_ENV: "production" }, workspacePath: path.join(BASE_DIR, "deployments", "worker-service-2.9.0") },
+  { deploymentId: crypto.randomUUID(), partitionId: partitionIds.initech, environmentId: envIds.production, operationId: "worker-service", version: "3.0.0", variables: { APP_ENV: "production" }, workspacePath: path.join(BASE_DIR, "deployments", "worker-service-3.0.0") },
 ];
 
 // Record deployments and complete them with appropriate statuses

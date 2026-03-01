@@ -64,9 +64,9 @@ export default function DeploymentDetail() {
           </div>
           <div className="deploy-header-meta">
             <div className="meta-item">
-              <span className="meta-label">Project</span>
-              <Link to={`/projects/${deployment.projectId}`} className="meta-value">
-                {deployment.projectId.slice(0, 8)}
+              <span className="meta-label">Operation</span>
+              <Link to={`/operations/${deployment.operationId}`} className="meta-value">
+                {deployment.operationId.slice(0, 8)}
               </Link>
             </div>
             <div className="meta-item">
@@ -144,7 +144,7 @@ export default function DeploymentDetail() {
           <div className="card-header">
             <h3>Debrief</h3>
             <span className="text-muted" style={{ fontSize: 12 }}>
-              {debrief.length} decision{diary.length !== 1 ? "s" : ""} recorded
+              {debrief.length} decision{debrief.length !== 1 ? "s" : ""} recorded
             </span>
           </div>
           <DebriefTimeline entries={debrief} />

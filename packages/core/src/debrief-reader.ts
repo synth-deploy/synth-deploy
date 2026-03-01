@@ -45,7 +45,7 @@ export interface FailureAnalysis {
   suggestedFix: string;
 }
 
-export interface ProjectHistory {
+export interface OperationHistory {
   /** High-level stats: total deployments, success rate, environments. */
   overview: HistoryOverview;
   /** Per-deployment summaries in chronological order. */
@@ -135,7 +135,7 @@ export function generatePostmortem(
 
 function buildSummary(entries: DebriefEntry[], deployment: Deployment): string {
   const planEntry = entries.find((e) => e.decisionType === "pipeline-plan");
-  const project = (planEntry?.context?.projectId as string) ?? deployment.projectId;
+  const operation = (planEntry?.context?.operationId as string) ?? deployment.operationId;
   const version = (planEntry?.context?.version as string) ?? deployment.version;
   const environment =
     (planEntry?.context?.environmentName as string) ?? deployment.environmentId;
@@ -145,7 +145,7 @@ function buildSummary(entries: DebriefEntry[], deployment: Deployment): string {
   const statusLabel = deployment.status === "succeeded" ? "SUCCEEDED" : "FAILED";
 
   return (
-    `Deployment of ${project} v${version} to "${environment}" ` +
+    `Deployment of ${operation} v${version} to "${environment}" ` +
     `for partition "${partition}" -- ${statusLabel}`
   );
 }
@@ -343,20 +343,20 @@ function formatPostmortem(
 }
 
 // ---------------------------------------------------------------------------
-// Knowledge base / project history generator
+// Knowledge base / operation history generator
 // ---------------------------------------------------------------------------
 
 /**
- * Generate a project history from debrief entries and deployments.
+ * Generate an operation history from debrief entries and deployments.
  *
- * Designed so a new engineer joining a project with 10 deployments in its
- * history can read this and understand the project's configuration decisions
+ * Designed so a new engineer joining an operation with 10 deployments in its
+ * history can read this and understand the operation's configuration decisions
  * and deployment patterns without digging through individual logs.
  */
-export function generateProjectHistory(
+export function generateOperationHistory(
   entries: DebriefEntry[],
   deployments: Deployment[],
-): ProjectHistory {
+): OperationHistory {
   const sorted = [...entries].sort(
     (a, b) => a.timestamp.getTime() - b.timestamp.getTime(),
   );
@@ -374,7 +374,7 @@ export function generateProjectHistory(
     sortedDeployments,
     sorted,
   );
-  const formatted = formatProjectHistory(
+  const formatted = formatOperationHistory(
     overview,
     deploymentSummaries,
     configurationPatterns,
@@ -687,7 +687,7 @@ function buildEnvironmentNotes(
   return notes;
 }
 
-function formatProjectHistory(
+function formatOperationHistory(
   overview: HistoryOverview,
   deploymentSummaries: DeploymentSummary[],
   configurationPatterns: ConfigurationPattern[],
@@ -695,7 +695,7 @@ function formatProjectHistory(
 ): string {
   const lines: string[] = [];
 
-  lines.push("# Project Deployment History");
+  lines.push("# Operation Deployment History");
   lines.push("");
   lines.push("## Overview");
   lines.push(`Total deployments: ${overview.totalDeployments}`);

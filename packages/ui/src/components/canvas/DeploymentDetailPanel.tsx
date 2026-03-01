@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { getDeployment, getPostmortem, listEnvironments, listProjects, listPartitions } from "../../api.js";
-import type { Deployment, DebriefEntry, Environment, Project, Partition, PostmortemReport } from "../../types.js";
+import { getDeployment, getPostmortem, listEnvironments, listOperations, listPartitions } from "../../api.js";
+import type { Deployment, DebriefEntry, Environment, Operation, Partition, PostmortemReport } from "../../types.js";
 import { useCanvas } from "../../context/CanvasContext.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
 
@@ -31,7 +31,7 @@ export default function DeploymentDetailPanel({ deploymentId, title }: Props) {
   const [debrief, setDebrief] = useState<DebriefEntry[]>([]);
   const [postmortem, setPostmortem] = useState<PostmortemReport | null>(null);
   const [environments, setEnvironments] = useState<Environment[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
+  const [operations, setOperations] = useState<Operation[]>([]);
   const [partitions, setPartitions] = useState<Partition[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedEntries, setExpandedEntries] = useState<Set<string>>(new Set());
@@ -40,13 +40,13 @@ export default function DeploymentDetailPanel({ deploymentId, title }: Props) {
     Promise.all([
       getDeployment(deploymentId),
       listEnvironments(),
-      listProjects(),
+      listOperations(),
       listPartitions(),
     ]).then(async ([result, e, p, t]) => {
       setDeployment(result.deployment);
       setDebrief(result.debrief);
       setEnvironments(e);
-      setProjects(p);
+      setOperations(p);
       setPartitions(t);
 
       if (result.deployment.status === "failed") {
@@ -63,7 +63,7 @@ export default function DeploymentDetailPanel({ deploymentId, title }: Props) {
   if (!deployment) return <CanvasPanelHost title={title}><div className="error-msg">Deployment not found</div></CanvasPanelHost>;
 
   const envName = environments.find((e) => e.id === deployment.environmentId)?.name ?? deployment.environmentId;
-  const projName = projects.find((p) => p.id === deployment.projectId)?.name ?? deployment.projectId;
+  const projName = operations.find((p) => p.id === deployment.operationId)?.name ?? deployment.operationId;
   const partName = partitions.find((t) => t.id === deployment.partitionId)?.name ?? deployment.partitionId;
 
   function toggleEntry(id: string) {
@@ -95,7 +95,7 @@ export default function DeploymentDetailPanel({ deploymentId, title }: Props) {
           })}>
             Environment: {envName}
           </button>
-          <span>Project: {projName}</span>
+          <span>Operation: {projName}</span>
           <span>Started: {new Date(deployment.createdAt).toLocaleString()}</span>
           {deployment.completedAt && (
             <span>Completed: {new Date(deployment.completedAt).toLocaleString()}</span>

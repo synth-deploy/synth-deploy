@@ -1,10 +1,10 @@
 import type { FastifyInstance } from "fastify";
-import type { EnvironmentStore, ProjectStore } from "@deploystack/core";
+import type { EnvironmentStore, OperationStore } from "@deploystack/core";
 
 export function registerEnvironmentRoutes(
   app: FastifyInstance,
   environments: EnvironmentStore,
-  projects: ProjectStore,
+  operations: OperationStore,
 ): void {
   // List all environments
   app.get("/api/environments", async () => {
@@ -59,7 +59,7 @@ export function registerEnvironmentRoutes(
     },
   );
 
-  // Delete environment (with linked-projects safety check)
+  // Delete environment (with linked-operations safety check)
   app.delete<{ Params: { id: string } }>(
     "/api/environments/:id",
     async (request, reply) => {
@@ -69,16 +69,16 @@ export function registerEnvironmentRoutes(
         return reply.status(404).send({ error: "Environment not found" });
       }
 
-      // Check if any projects reference this environment
-      const linkedProjects = projects
+      // Check if any operations reference this environment
+      const linkedOperations = operations
         .list()
         .filter((p) => p.environmentIds.includes(envId))
         .map((p) => ({ id: p.id, name: p.name }));
 
-      if (linkedProjects.length > 0) {
+      if (linkedOperations.length > 0) {
         return reply.status(409).send({
-          error: `Environment is linked to ${linkedProjects.length} project(s). Unlink before deleting.`,
-          linkedProjects,
+          error: `Environment is linked to ${linkedOperations.length} operation(s). Unlink before deleting.`,
+          linkedOperations,
         });
       }
 

@@ -4,7 +4,7 @@ import { z } from "zod";
 
 export type PartitionId = string;
 export type DeploymentId = string;
-export type ProjectId = string;
+export type OperationId = string;
 export type EnvironmentId = string;
 export type DebriefEntryId = string;
 export type OrderId = string;
@@ -21,7 +21,7 @@ export const DeploymentStatus = z.enum([
 export type DeploymentStatus = z.infer<typeof DeploymentStatus>;
 
 export const DeploymentTriggerSchema = z.object({
-  projectId: z.string(),
+  operationId: z.string(),
   partitionId: z.string(),
   environmentId: z.string(),
   version: z.string(),
@@ -31,7 +31,7 @@ export type DeploymentTrigger = z.infer<typeof DeploymentTriggerSchema>;
 
 export interface Deployment {
   id: DeploymentId;
-  projectId: ProjectId;
+  operationId: OperationId;
   partitionId: PartitionId;
   environmentId: EnvironmentId;
   version: string;
@@ -121,10 +121,10 @@ export const DEFAULT_DEPLOY_CONFIG: DeployConfig = {
   verificationStrategy: "basic",
 };
 
-// --- Project ---
+// --- Operation ---
 
-export interface Project {
-  id: ProjectId;
+export interface Operation {
+  id: OperationId;
   name: string;
   environmentIds: EnvironmentId[];
   steps: DeploymentStep[];
@@ -135,8 +135,8 @@ export interface Project {
 
 export interface Order {
   id: OrderId;
-  projectId: ProjectId;
-  projectName: string;
+  operationId: OperationId;
+  operationName: string;
   partitionId: PartitionId;
   environmentId: EnvironmentId;
   environmentName: string;

@@ -1,14 +1,14 @@
 import type { FastifyInstance } from "fastify";
 import { DeploymentTriggerSchema, generatePostmortem } from "@deploystack/core";
-import type { PartitionStore, DebriefWriter, DebriefReader, OrderStore, Project, SettingsStore } from "@deploystack/core";
+import type { PartitionStore, DebriefWriter, DebriefReader, OrderStore, Operation, SettingsStore } from "@deploystack/core";
 import type { CommandAgent, DeploymentStore } from "../agent/command-agent.js";
 
 interface EnvironmentStore {
   get(id: string): { id: string; name: string; variables: Record<string, string> } | undefined;
 }
 
-interface ProjectStore {
-  get(id: string): Project | undefined;
+interface OperationStore {
+  get(id: string): Operation | undefined;
 }
 
 /**
@@ -22,7 +22,7 @@ export function registerDeploymentRoutes(
   environments: EnvironmentStore,
   deployments: DeploymentStore,
   debrief: DebriefWriter & DebriefReader,
-  projects: ProjectStore,
+  operations: OperationStore,
   orders: OrderStore,
   settings: SettingsStore,
 ): void {
@@ -40,10 +40,10 @@ export function registerDeploymentRoutes(
     const { orderId } = (request.body as Record<string, unknown>) ?? {};
     const envEnabled = settings.get().environmentsEnabled;
 
-    // Validate project exists
-    const project = projects.get(trigger.projectId);
-    if (!project) {
-      return reply.status(404).send({ error: `Project not found: ${trigger.projectId}` });
+    // Validate operation exists
+    const operation = operations.get(trigger.operationId);
+    if (!operation) {
+      return reply.status(404).send({ error: `Operation not found: ${trigger.operationId}` });
     }
 
     const partition = partitions.get(trigger.partitionId);
@@ -54,10 +54,10 @@ export function registerDeploymentRoutes(
     // Resolve environment — skip validation when environments are disabled
     let environment: { id: string; name: string; variables: Record<string, string> };
     if (envEnabled && trigger.environmentId) {
-      if (!project.environmentIds.includes(trigger.environmentId)) {
+      if (!operation.environmentIds.includes(trigger.environmentId)) {
         return reply.status(400).send({
-          error: `Environment ${trigger.environmentId} is not linked to project "${project.name}". ` +
-            `Available environments: ${project.environmentIds.join(", ") || "none"}`,
+          error: `Environment ${trigger.environmentId} is not linked to operation "${operation.name}". ` +
+            `Available environments: ${operation.environmentIds.join(", ") || "none"}`,
         });
       }
       const env = environments.get(trigger.environmentId);
@@ -78,7 +78,7 @@ export function registerDeploymentRoutes(
       }
     }
 
-    const deployment = await agent.triggerDeployment(trigger, partition, environment, project, existingOrder);
+    const deployment = await agent.triggerDeployment(trigger, partition, environment, operation, existingOrder);
 
     return reply.status(201).send({
       deployment,
@@ -107,11 +107,11 @@ export function registerDeploymentRoutes(
     return { deployments: list };
   });
 
-  // List deployments filtered by project
-  app.get("/api/projects/:projectId/deployments", async (request) => {
-    const { projectId } = request.params as { projectId: string };
+  // List deployments filtered by operation
+  app.get("/api/operations/:operationId/deployments", async (request) => {
+    const { operationId } = request.params as { operationId: string };
     const all = deployments.list();
-    const filtered = all.filter((d) => d.projectId === projectId);
+    const filtered = all.filter((d) => d.operationId === operationId);
     return { deployments: filtered };
   });
 

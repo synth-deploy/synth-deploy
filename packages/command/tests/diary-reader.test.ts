@@ -3,14 +3,14 @@ import {
   DecisionDebrief,
   OrderStore,
   generatePostmortem,
-  generateProjectHistory,
+  generateOperationHistory,
 } from "@deploystack/core";
 import type {
   Partition,
   Environment,
   Deployment,
   DebriefEntry,
-  Project,
+  Operation,
 } from "@deploystack/core";
 import {
   CommandAgent,
@@ -84,7 +84,7 @@ function makeEnvironment(overrides: Partial<Environment> = {}): Environment {
 
 function makeTrigger(overrides: Record<string, unknown> = {}) {
   return {
-    projectId: "web-app",
+    operationId: "web-app",
     partitionId: "partition-1",
     environmentId: "env-prod",
     version: "2.0.0",
@@ -92,7 +92,7 @@ function makeTrigger(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function makeProject(overrides: Partial<Project> = {}): Project {
+function makeOperation(overrides: Partial<Operation> = {}): Operation {
   return {
     id: "web-app",
     name: "web-app",
@@ -142,7 +142,7 @@ describe("Simulated Postmortem — failed deployment read experience", () => {
       makeTrigger(),
       makePartition(),
       makeEnvironment(),
-      makeProject(),
+      makeOperation(),
     );
 
     expect(deployment.status).toBe("failed");
@@ -200,7 +200,7 @@ describe("Simulated Postmortem — failed deployment read experience", () => {
       makeTrigger(),
       makePartition(),
       makeEnvironment(),
-      makeProject(),
+      makeOperation(),
     );
 
     const entries = diary.getByDeployment(deployment.id);
@@ -246,7 +246,7 @@ describe("Simulated Postmortem — failed deployment read experience", () => {
       makeTrigger(),
       partition,
       env,
-      makeProject(),
+      makeOperation(),
     );
 
     expect(deployment.status).toBe("failed");
@@ -280,7 +280,7 @@ describe("Simulated Postmortem — failed deployment read experience", () => {
       makeTrigger(),
       makePartition(),
       makeEnvironment(),
-      makeProject(),
+      makeOperation(),
     );
 
     expect(deployment.status).toBe("succeeded");
@@ -305,7 +305,7 @@ describe("Simulated Postmortem — failed deployment read experience", () => {
       makeTrigger(),
       makePartition(),
       makeEnvironment(),
-      makeProject(),
+      makeOperation(),
     );
 
     expect(deployment.status).toBe("succeeded");
@@ -341,7 +341,7 @@ describe("Simulated Postmortem — failed deployment read experience", () => {
       makeTrigger({ version: "3.1.0" }),
       makePartition({ name: "Widget Inc" }),
       makeEnvironment({ name: "staging" }),
-      makeProject(),
+      makeOperation(),
     );
 
     const entries = diary.getByDeployment(deployment.id);
@@ -370,7 +370,7 @@ describe("Simulated Postmortem — failed deployment read experience", () => {
     expect(text).toContain("Suggested Fix");
 
     // A reviewer reading this text can answer:
-    // - What was deployed? (project, version, environment, partition)
+    // - What was deployed? (operation, version, environment, partition)
     // - What did the agent decide? (timeline)
     // - Why did it fail? (failure analysis)
     // - What should I do? (suggested fix)
@@ -381,12 +381,12 @@ describe("Simulated Postmortem — failed deployment read experience", () => {
 // SCENARIO 2: Simulated Onboarding Read
 // ---------------------------------------------------------------------------
 //
-// Success condition: Given a project with 10 deployments in its history,
+// Success condition: Given an operation with 10 deployments in its history,
 // a new engineer should be able to read the Diary and understand the
-// project's configuration decisions and deployment patterns.
+// operation's configuration decisions and deployment patterns.
 // ---------------------------------------------------------------------------
 
-describe("Simulated Onboarding — project history read experience", () => {
+describe("Simulated Onboarding — operation history read experience", () => {
   let diary: DecisionDebrief;
   let deploymentStore: InMemoryDeploymentStore;
   let healthChecker: MockHealthChecker;
@@ -419,8 +419,8 @@ describe("Simulated Onboarding — project history read experience", () => {
       variables: { APP_ENV: "staging", LOG_LEVEL: "debug" },
     });
 
-    const prodProject = makeProject({ environmentIds: ["env-prod"] });
-    const stagingProject = makeProject({ environmentIds: ["env-staging"] });
+    const prodOperation = makeOperation({ environmentIds: ["env-prod"] });
+    const stagingOperation = makeOperation({ environmentIds: ["env-staging"] });
 
     const results: Deployment[] = [];
 
@@ -435,7 +435,7 @@ describe("Simulated Onboarding — project history read experience", () => {
         }),
         partition,
         stagingEnv,
-        stagingProject,
+        stagingOperation,
       ),
     );
 
@@ -450,7 +450,7 @@ describe("Simulated Onboarding — project history read experience", () => {
         }),
         partition,
         prodEnv,
-        prodProject,
+        prodOperation,
       ),
     );
 
@@ -466,7 +466,7 @@ describe("Simulated Onboarding — project history read experience", () => {
         }),
         partition,
         stagingEnv,
-        stagingProject,
+        stagingOperation,
       ),
     );
 
@@ -481,7 +481,7 @@ describe("Simulated Onboarding — project history read experience", () => {
         }),
         partition,
         prodEnv,
-        prodProject,
+        prodOperation,
       ),
     );
 
@@ -496,7 +496,7 @@ describe("Simulated Onboarding — project history read experience", () => {
         }),
         partition,
         stagingEnv,
-        stagingProject,
+        stagingOperation,
       ),
     );
 
@@ -511,7 +511,7 @@ describe("Simulated Onboarding — project history read experience", () => {
         }),
         partition,
         prodEnv,
-        prodProject,
+        prodOperation,
       ),
     );
 
@@ -526,7 +526,7 @@ describe("Simulated Onboarding — project history read experience", () => {
         }),
         partition,
         prodEnv,
-        prodProject,
+        prodOperation,
       ),
     );
 
@@ -541,7 +541,7 @@ describe("Simulated Onboarding — project history read experience", () => {
         }),
         partition,
         stagingEnv,
-        stagingProject,
+        stagingOperation,
       ),
     );
 
@@ -557,7 +557,7 @@ describe("Simulated Onboarding — project history read experience", () => {
         }),
         partition,
         prodEnv,
-        prodProject,
+        prodOperation,
       ),
     );
 
@@ -572,17 +572,17 @@ describe("Simulated Onboarding — project history read experience", () => {
         }),
         partition,
         stagingEnv,
-        stagingProject,
+        stagingOperation,
       ),
     );
 
     return results;
   }
 
-  it("new engineer can see overall project health at a glance", async () => {
+  it("new engineer can see overall operation health at a glance", async () => {
     const deploymentResults = await runDeploymentHistory();
     const allEntries = diary.getByPartition("acme");
-    const history = generateProjectHistory(allEntries, deploymentResults);
+    const history = generateOperationHistory(allEntries, deploymentResults);
 
     // Overview tells the engineer the big picture
     expect(history.overview.totalDeployments).toBe(10);
@@ -605,7 +605,7 @@ describe("Simulated Onboarding — project history read experience", () => {
   it("new engineer can trace every deployment outcome", async () => {
     const deploymentResults = await runDeploymentHistory();
     const allEntries = diary.getByPartition("acme");
-    const history = generateProjectHistory(allEntries, deploymentResults);
+    const history = generateOperationHistory(allEntries, deploymentResults);
 
     // All 10 deployments are listed
     expect(history.deployments).toHaveLength(10);
@@ -630,7 +630,7 @@ describe("Simulated Onboarding — project history read experience", () => {
   it("new engineer can see configuration patterns and recurring issues", async () => {
     const deploymentResults = await runDeploymentHistory();
     const allEntries = diary.getByPartition("acme");
-    const history = generateProjectHistory(allEntries, deploymentResults);
+    const history = generateOperationHistory(allEntries, deploymentResults);
 
     // Configuration patterns are surfaced
     expect(history.configurationPatterns.length).toBeGreaterThan(0);
@@ -648,7 +648,7 @@ describe("Simulated Onboarding — project history read experience", () => {
   it("new engineer can understand per-environment behavior", async () => {
     const deploymentResults = await runDeploymentHistory();
     const allEntries = diary.getByPartition("acme");
-    const history = generateProjectHistory(allEntries, deploymentResults);
+    const history = generateOperationHistory(allEntries, deploymentResults);
 
     // Environment notes present for both environments
     expect(history.environmentNotes.length).toBe(2);
@@ -681,12 +681,12 @@ describe("Simulated Onboarding — project history read experience", () => {
   it("new engineer can read the formatted output and understand everything", async () => {
     const deploymentResults = await runDeploymentHistory();
     const allEntries = diary.getByPartition("acme");
-    const history = generateProjectHistory(allEntries, deploymentResults);
+    const history = generateOperationHistory(allEntries, deploymentResults);
 
     const text = history.formatted;
 
     // Structure is present
-    expect(text).toContain("# Project Deployment History");
+    expect(text).toContain("# Operation Deployment History");
     expect(text).toContain("## Overview");
     expect(text).toContain("## Deployment Timeline");
     expect(text).toContain("## Configuration Patterns");
@@ -707,7 +707,7 @@ describe("Simulated Onboarding — project history read experience", () => {
     expect(text).toContain("### staging");
 
     // A new engineer reading this text can answer:
-    // - How many deployments has this project had? (10)
+    // - How many deployments has this operation had? (10)
     // - What's the success rate? (90%)
     // - Which environments are used? (production, staging)
     // - What versions have been deployed? (1.0.0 through 2.1.0)
@@ -719,7 +719,7 @@ describe("Simulated Onboarding — project history read experience", () => {
   it("deployment timeline shows outcome markers (OK vs FAILED) for quick scanning", async () => {
     const deploymentResults = await runDeploymentHistory();
     const allEntries = diary.getByPartition("acme");
-    const history = generateProjectHistory(allEntries, deploymentResults);
+    const history = generateOperationHistory(allEntries, deploymentResults);
 
     const text = history.formatted;
 
@@ -734,7 +734,7 @@ describe("Simulated Onboarding — project history read experience", () => {
   it("deployment timeline shows conflict counts where they occurred", async () => {
     const deploymentResults = await runDeploymentHistory();
     const allEntries = diary.getByPartition("acme");
-    const history = generateProjectHistory(allEntries, deploymentResults);
+    const history = generateOperationHistory(allEntries, deploymentResults);
 
     // Deployments with conflicts should have conflict counts
     const deploymentsWithConflicts = history.deployments.filter(
@@ -747,8 +747,8 @@ describe("Simulated Onboarding — project history read experience", () => {
     expect(text).toContain("conflict");
   });
 
-  it("handles a project with zero deployments gracefully", () => {
-    const history = generateProjectHistory([], []);
+  it("handles an operation with zero deployments gracefully", () => {
+    const history = generateOperationHistory([], []);
 
     expect(history.overview.totalDeployments).toBe(0);
     expect(history.overview.successRate).toBe("N/A");
@@ -787,7 +787,7 @@ describe("Postmortem report — structural guarantees", () => {
       makeTrigger(),
       makePartition(),
       makeEnvironment(),
-      makeProject(),
+      makeOperation(),
     );
 
     const entries = diary.getByDeployment(deployment.id);
@@ -813,7 +813,7 @@ describe("Postmortem report — structural guarantees", () => {
 
     healthChecker.willReturn(HEALTHY);
 
-    const deployment = await agent.triggerDeployment(trigger, partition, env, makeProject());
+    const deployment = await agent.triggerDeployment(trigger, partition, env, makeOperation());
 
     const entries = diary.getByDeployment(deployment.id);
     const postmortem = generatePostmortem(entries, deployment);
@@ -830,7 +830,7 @@ describe("Postmortem report — structural guarantees", () => {
       makeTrigger(),
       makePartition(),
       makeEnvironment(),
-      makeProject(),
+      makeOperation(),
     );
 
     const entries = diary.getByDeployment(deployment.id);
@@ -846,7 +846,7 @@ describe("Postmortem report — structural guarantees", () => {
       makeTrigger(),
       makePartition(),
       makeEnvironment(),
-      makeProject(),
+      makeOperation(),
     );
 
     const entries = diary.getByDeployment(deployment.id);

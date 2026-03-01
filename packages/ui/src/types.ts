@@ -18,7 +18,7 @@ export interface DeployConfig {
   verificationStrategy: "basic" | "full" | "none";
 }
 
-export interface Project {
+export interface Operation {
   id: string;
   name: string;
   environmentIds: string[];
@@ -75,7 +75,7 @@ export type DeploymentStatus = "pending" | "running" | "succeeded" | "failed" | 
 
 export interface Deployment {
   id: string;
-  projectId: string;
+  operationId: string;
   partitionId: string;
   environmentId: string;
   version: string;
@@ -118,8 +118,8 @@ export interface DebriefEntry {
 
 export interface Order {
   id: string;
-  projectId: string;
-  projectName: string;
+  operationId: string;
+  operationName: string;
   partitionId: string;
   environmentId: string;
   environmentName: string;
@@ -157,7 +157,7 @@ export interface PostmortemReport {
   formatted: string;
 }
 
-export interface ProjectHistory {
+export interface OperationHistory {
   overview: {
     totalDeployments: number;
     succeeded: number;

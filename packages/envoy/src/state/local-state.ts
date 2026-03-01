@@ -14,7 +14,7 @@ export interface LocalDeploymentRecord {
   deploymentId: DeploymentId;
   partitionId: PartitionId;
   environmentId: EnvironmentId;
-  projectId: string;
+  operationId: string;
   version: string;
   variables: Record<string, string>;
   status: "executing" | "succeeded" | "failed";
@@ -68,7 +68,7 @@ export class LocalStateStore {
     deploymentId: DeploymentId;
     partitionId: PartitionId;
     environmentId: EnvironmentId;
-    projectId: string;
+    operationId: string;
     version: string;
     variables: Record<string, string>;
     workspacePath: string;

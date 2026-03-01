@@ -545,7 +545,7 @@ export class DiagnosticInvestigator {
     historyContext: HistoryContext,
     execResult?: ExecutionResult | null,
   ): DiagnosticReport {
-    const svc = `${instruction.projectId} v${instruction.version}`;
+    const svc = `${instruction.operationId} v${instruction.version}`;
     const env = instruction.environmentName;
 
     switch (failureType) {
@@ -628,7 +628,7 @@ export class DiagnosticInvestigator {
         (pidMatch
           ? `Process ${pidMatch[1]} is the blocker — verify if it should be running. `
           : "") +
-        `Either stop the conflicting process or change ${instruction.projectId}'s ` +
+        `Either stop the conflicting process or change ${instruction.operationId}'s ` +
         `listen port via the APP_PORT or PORT variable.`;
     } else if (fileMatch) {
       recommendation =
@@ -644,7 +644,7 @@ export class DiagnosticInvestigator {
     } else if (primaryDetail.includes("out of memory")) {
       recommendation =
         `The service exceeded its memory allocation during startup. ` +
-        `Review the memory limits for ${instruction.projectId} on ${env} ` +
+        `Review the memory limits for ${instruction.operationId} on ${env} ` +
         `and either increase the allocation or investigate why startup ` +
         `memory consumption has increased in this version.`;
     } else {
@@ -721,7 +721,7 @@ export class DiagnosticInvestigator {
         `to initialize, (b) waiting on a dependency that isn't available, or ` +
         `(c) stuck in a startup loop.`,
       recommendation:
-        `Check if the service process is still running (\`ps aux | grep ${instruction.projectId}\`). ` +
+        `Check if the service process is still running (\`ps aux | grep ${instruction.operationId}\`). ` +
         `If running, inspect the service logs for initialization progress. ` +
         (timeoutMs
           ? `The health check timeout is ${timeoutMs}ms — consider whether this is sufficient for ${env}. `

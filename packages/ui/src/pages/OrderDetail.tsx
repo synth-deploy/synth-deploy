@@ -61,7 +61,7 @@ export default function OrderDetail() {
       <div className="deploy-header">
         <div className="deploy-header-main">
           <div className="flex items-center gap-12">
-            <h2 style={{ fontSize: 22, fontWeight: 700 }}>{order.projectName}</h2>
+            <h2 style={{ fontSize: 22, fontWeight: 700 }}>{order.operationName}</h2>
             <span className="badge badge-pending">v{order.version}</span>
             <EnvBadge name={order.environmentName} />
           </div>
@@ -76,8 +76,8 @@ export default function OrderDetail() {
           </div>
           <div className="deploy-header-meta">
             <div className="meta-item">
-              <span className="meta-label">Project</span>
-              <Link to={`/projects/${order.projectId}`} className="meta-value">{order.projectName}</Link>
+              <span className="meta-label">Operation</span>
+              <Link to={`/operations/${order.operationId}`} className="meta-value">{order.operationName}</Link>
             </div>
             <div className="meta-item">
               <span className="meta-label">Partition</span>

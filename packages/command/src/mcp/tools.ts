@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CommandAgent, DeploymentStore } from "../agent/command-agent.js";
-import type { PartitionStore, ProjectStore } from "@deploystack/core";
+import type { PartitionStore, OperationStore } from "@deploystack/core";
 
 interface EnvironmentStore {
   get(id: string): { id: string; name: string; variables: Record<string, string> } | undefined;
@@ -17,24 +17,24 @@ export function registerTools(
   partitions: PartitionStore,
   environments: EnvironmentStore,
   deployments: DeploymentStore,
-  projects: ProjectStore,
+  operations: OperationStore,
 ): void {
   mcp.registerTool(
     "trigger-deployment",
     {
       title: "Trigger Deployment",
       description:
-        "Trigger a deployment for a project to a specific partition and environment. " +
+        "Trigger a deployment for an operation to a specific partition and environment. " +
         "The server agent will resolve variables, make decisions, and record everything to the Debrief.",
       inputSchema: {
-        projectId: z.string().describe("The project to deploy"),
+        operationId: z.string().describe("The operation to deploy"),
         partitionId: z.string().describe("Target partition ID"),
         environmentId: z.string().describe("Target environment ID"),
         version: z.string().describe("Version to deploy"),
         variables: z.record(z.string()).optional().describe("Override variables for this deployment"),
       },
     },
-    async ({ projectId, partitionId, environmentId, version, variables }) => {
+    async ({ operationId, partitionId, environmentId, version, variables }) => {
       const partition = partitions.get(partitionId);
       if (!partition) {
         return {
@@ -51,19 +51,19 @@ export function registerTools(
         };
       }
 
-      const project = projects.get(projectId);
-      if (!project) {
+      const operation = operations.get(operationId);
+      if (!operation) {
         return {
-          content: [{ type: "text", text: `Error: Project not found: ${projectId}` }],
+          content: [{ type: "text", text: `Error: Operation not found: ${operationId}` }],
           isError: true,
         };
       }
 
       const deployment = await agent.triggerDeployment(
-        { projectId, partitionId: partitionId, environmentId, version, variables },
+        { operationId, partitionId: partitionId, environmentId, version, variables },
         partition,
         environment,
-        project,
+        operation,
       );
 
       return {

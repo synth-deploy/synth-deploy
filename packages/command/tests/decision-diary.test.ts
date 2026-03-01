@@ -16,7 +16,7 @@ import type {
   DecisionType,
   DebriefWriter,
   DebriefReader,
-  Project,
+  Operation,
 } from "@deploystack/core";
 import {
   CommandAgent,
@@ -78,7 +78,7 @@ function makeEnvironment(overrides: Partial<Environment> = {}): Environment {
 
 function makeTrigger(overrides: Record<string, unknown> = {}) {
   return {
-    projectId: "web-app",
+    operationId: "web-app",
     partitionId: "partition-1",
     environmentId: "env-prod",
     version: "2.0.0",
@@ -86,7 +86,7 @@ function makeTrigger(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function makeProject(overrides: Partial<Project> = {}): Project {
+function makeOperation(overrides: Partial<Operation> = {}): Operation {
   return {
     id: "web-app",
     name: "web-app",
@@ -136,7 +136,7 @@ describe("Decision Diary — entry specificity", () => {
     });
   });
 
-  it("every decision text is specific — contains project, version, or environment names", async () => {
+  it("every decision text is specific — contains operation, version, or environment names", async () => {
     const partition = makePartition({
       variables: { APP_ENV: "production", DB_HOST: "acme-db-1" },
     });
@@ -146,7 +146,7 @@ describe("Decision Diary — entry specificity", () => {
     const trigger = makeTrigger({ variables: { LOG_LEVEL: "error" } });
 
     healthChecker.willReturn(HEALTHY);
-    const result = await agent.triggerDeployment(trigger, partition, env, makeProject());
+    const result = await agent.triggerDeployment(trigger, partition, env, makeOperation());
 
     const entries = diary.getByDeployment(result.id);
     expect(entries.length).toBeGreaterThanOrEqual(5);
@@ -172,7 +172,7 @@ describe("Decision Diary — entry specificity", () => {
     const trigger = makeTrigger({ variables: { LOG_LEVEL: "error" } });
 
     healthChecker.willReturn(HEALTHY);
-    const result = await agent.triggerDeployment(trigger, partition, env, makeProject());
+    const result = await agent.triggerDeployment(trigger, partition, env, makeOperation());
 
     const entries = diary.getByDeployment(result.id);
 
@@ -191,7 +191,7 @@ describe("Decision Diary — entry specificity", () => {
       }
     }
 
-    // Pipeline plan must reference the actual project and version
+    // Pipeline plan must reference the actual operation and version
     const planEntries = findDecisions(entries, "pipeline");
     expect(planEntries[0].reasoning).toContain("web-app");
     expect(planEntries[0].reasoning).toContain("2.0.0");
@@ -205,7 +205,7 @@ describe("Decision Diary — entry specificity", () => {
       makeTrigger(),
       makePartition(),
       makeEnvironment(),
-      makeProject(),
+      makeOperation(),
     );
 
     expect(result.status).toBe("failed");
@@ -229,7 +229,7 @@ describe("Decision Diary — entry specificity", () => {
     const trigger = makeTrigger({ variables: { LOG_LEVEL: "debug" } });
 
     healthChecker.willReturn(HEALTHY);
-    const result = await agent.triggerDeployment(trigger, partition, env, makeProject());
+    const result = await agent.triggerDeployment(trigger, partition, env, makeOperation());
 
     const entries = diary.getByDeployment(result.id);
     const conflictEntries = findDecisions(entries, "conflict");
@@ -272,7 +272,7 @@ describe("Decision Diary — orchestration completeness", () => {
       makeTrigger(),
       makePartition(),
       makeEnvironment(),
-      makeProject(),
+      makeOperation(),
     );
 
     const entries = diary.getByDeployment(result.id);
@@ -293,7 +293,7 @@ describe("Decision Diary — orchestration completeness", () => {
       makeTrigger(),
       makePartition(),
       makeEnvironment(),
-      makeProject(),
+      makeOperation(),
     );
 
     const entries = diary.getByDeployment(result.id);
@@ -326,7 +326,7 @@ describe("Decision Diary — orchestration completeness", () => {
       makeTrigger({ environmentId: "env-staging" }),
       partition,
       env,
-      makeProject({ environmentIds: ["env-staging"] }),
+      makeOperation({ environmentIds: ["env-staging"] }),
     );
 
     const entries = diary.getByDeployment(result.id);
@@ -352,7 +352,7 @@ describe("Decision Diary — orchestration completeness", () => {
 
     healthChecker.willReturn(HEALTHY);
 
-    await agent.triggerDeployment(makeTrigger(), makePartition(), makeEnvironment(), makeProject());
+    await agent.triggerDeployment(makeTrigger(), makePartition(), makeEnvironment(), makeOperation());
 
     const entries = diary.getRecent(100);
     for (const entry of entries) {
@@ -388,13 +388,13 @@ describe("Decision Diary — retrieval dimensions", () => {
       makeTrigger({ version: "1.0.0" }),
       makePartition(),
       makeEnvironment(),
-      makeProject(),
+      makeOperation(),
     );
     const result2 = await agent.triggerDeployment(
       makeTrigger({ version: "2.0.0" }),
       makePartition(),
       makeEnvironment(),
-      makeProject(),
+      makeOperation(),
     );
 
     const entries1 = diary.getByDeployment(result1.id);
@@ -420,13 +420,13 @@ describe("Decision Diary — retrieval dimensions", () => {
       makeTrigger({ partitionId: "partition-a" }),
       makePartition({ id: "partition-a", name: "Partition A" }),
       makeEnvironment(),
-      makeProject(),
+      makeOperation(),
     );
     await agent.triggerDeployment(
       makeTrigger({ partitionId: "partition-b" }),
       makePartition({ id: "partition-b", name: "Partition B" }),
       makeEnvironment(),
-      makeProject(),
+      makeOperation(),
     );
 
     const entriesA = diary.getByPartition("partition-a");
@@ -458,13 +458,13 @@ describe("Decision Diary — retrieval dimensions", () => {
       makeTrigger({ version: "1.0.0" }),
       makePartition(),
       makeEnvironment(),
-      makeProject(),
+      makeOperation(),
     );
     await agent.triggerDeployment(
       makeTrigger({ version: "2.0.0" }),
       makePartition(),
       makeEnvironment(),
-      makeProject(),
+      makeOperation(),
     );
 
     const planEntries = diary.getByType("pipeline-plan");
@@ -497,7 +497,7 @@ describe("Decision Diary — retrieval dimensions", () => {
       makeTrigger(),
       makePartition(),
       makeEnvironment(),
-      makeProject(),
+      makeOperation(),
     );
 
     const after = new Date();
@@ -525,7 +525,7 @@ describe("Decision Diary — retrieval dimensions", () => {
       makeTrigger(),
       makePartition(),
       makeEnvironment(),
-      makeProject(),
+      makeOperation(),
     );
 
     const after = new Date();
@@ -574,7 +574,7 @@ describe("PersistentDecisionDebrief — SQLite backing store", () => {
       decisionType: "pipeline-plan",
       decision: "Planned deployment pipeline: resolve → execute → verify",
       reasoning: "Standard three-step pipeline for web-app v1.0.0 to production.",
-      context: { projectId: "web-app", version: "1.0.0" },
+      context: { operationId: "web-app", version: "1.0.0" },
     });
 
     diary.close();
@@ -588,7 +588,7 @@ describe("PersistentDecisionDebrief — SQLite backing store", () => {
     expect(retrieved!.partitionId).toBe("partition-1");
     expect(retrieved!.deploymentId).toBe("deploy-1");
     expect(retrieved!.decisionType).toBe("pipeline-plan");
-    expect(retrieved!.context).toEqual({ projectId: "web-app", version: "1.0.0" });
+    expect(retrieved!.context).toEqual({ operationId: "web-app", version: "1.0.0" });
     diary2.close();
   });
 
@@ -818,7 +818,7 @@ describe("PersistentDecisionDebrief — integration with CommandAgent", () => {
       makeTrigger(),
       makePartition({ name: "Acme Corp" }),
       makeEnvironment(),
-      makeProject(),
+      makeOperation(),
     );
 
     expect(result.status).toBe("succeeded");
@@ -854,13 +854,13 @@ describe("PersistentDecisionDebrief — integration with CommandAgent", () => {
       makeTrigger({ partitionId: "acme" }),
       makePartition({ id: "acme", name: "Acme Corp" }),
       makeEnvironment(),
-      makeProject(),
+      makeOperation(),
     );
     const result2 = await agent.triggerDeployment(
       makeTrigger({ partitionId: "beta" }),
       makePartition({ id: "beta", name: "Beta Inc" }),
       makeEnvironment(),
-      makeProject(),
+      makeOperation(),
     );
 
     // By deployment

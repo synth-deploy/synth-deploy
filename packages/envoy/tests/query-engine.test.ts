@@ -34,7 +34,7 @@ function makeInstruction(
     deploymentId: `deploy-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
     partitionId: "partition-1",
     environmentId: "env-prod",
-    projectId: "web-app",
+    operationId: "web-app",
     version: "2.0.0",
     variables: {
       APP_ENV: "production",
@@ -63,7 +63,7 @@ async function seedDeploymentHistory(
   const d1 = makeInstruction({
     deploymentId: "deploy-001",
     version: "1.0.0",
-    projectId: "web-app",
+    operationId: "web-app",
   });
   instructions.push(d1);
   await agent.executeDeployment(d1);
@@ -72,7 +72,7 @@ async function seedDeploymentHistory(
   const d2 = makeInstruction({
     deploymentId: "deploy-002",
     version: "1.1.0",
-    projectId: "web-app",
+    operationId: "web-app",
   });
   instructions.push(d2);
   await agent.executeDeployment(d2);
@@ -81,7 +81,7 @@ async function seedDeploymentHistory(
   const d3 = makeInstruction({
     deploymentId: "deploy-003",
     version: "2.0.0",
-    projectId: "web-app",
+    operationId: "web-app",
   });
   instructions.push(d3);
   await agent.executeDeployment(d3);
@@ -90,7 +90,7 @@ async function seedDeploymentHistory(
   const d4 = makeInstruction({
     deploymentId: "deploy-004",
     version: "2.1.0",
-    projectId: "web-app",
+    operationId: "web-app",
   });
   instructions.push(d4);
   await agent.executeDeployment(d4);
@@ -99,7 +99,7 @@ async function seedDeploymentHistory(
   const d5 = makeInstruction({
     deploymentId: "deploy-005",
     version: "1.0.0",
-    projectId: "api-service",
+    operationId: "api-service",
     environmentId: "env-staging",
     environmentName: "staging",
   });
@@ -431,15 +431,15 @@ describe("QueryEngine", () => {
       expect(q1.answer).not.toBe(q3.answer);
     });
 
-    it("answers reference actual project names from the environment", async () => {
+    it("answers reference actual operation names from the environment", async () => {
       await seedDeploymentHistory(agent, baseDir, state, diary);
 
       const result = queryEngine.query("What changed recently?");
 
-      // Must reference the actual project names, not generic text
-      const hasProject =
+      // Must reference the actual operation names, not generic text
+      const hasoperation =
         result.answer.includes("web-app") || result.answer.includes("api-service");
-      expect(hasProject).toBe(true);
+      expect(hasoperation).toBe(true);
     });
 
     it("answers reference actual version numbers", async () => {
@@ -542,7 +542,7 @@ describe("EscalationPackager", () => {
       );
 
       expect(pkg.recentDeployments.length).toBeGreaterThan(0);
-      expect(pkg.recentDeployments[0].projectId).toBeTruthy();
+      expect(pkg.recentDeployments[0].operationId).toBeTruthy();
     });
 
     it("includes diary entries from related deployments", async () => {

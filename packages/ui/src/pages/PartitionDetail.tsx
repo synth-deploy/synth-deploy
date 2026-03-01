@@ -8,9 +8,9 @@ import {
   listDeployments,
   getPartitionHistory,
   listEnvironments,
-  listProjects,
+  listOperations,
 } from "../api.js";
-import type { Partition, Deployment, ProjectHistory, Environment, Project } from "../types.js";
+import type { Partition, Deployment, OperationHistory, Environment, Operation } from "../types.js";
 import VariableEditor from "../components/VariableEditor.js";
 import DeploymentTable from "../components/DeploymentTable.js";
 import InlineEdit from "../components/InlineEdit.js";
@@ -22,8 +22,8 @@ export default function PartitionDetail() {
   const [partition, setPartition] = useState<Partition | null>(null);
   const [deployments, setDeployments] = useState<Deployment[]>([]);
   const [environments, setEnvironments] = useState<Environment[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [history, setHistory] = useState<ProjectHistory | null>(null);
+  const [operations, setOperations] = useState<Operation[]>([]);
+  const [history, setHistory] = useState<OperationHistory | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -35,13 +35,13 @@ export default function PartitionDetail() {
       listDeployments(id),
       getPartitionHistory(id),
       listEnvironments(),
-      listProjects(),
+      listOperations(),
     ]).then(([t, d, h, e, p]) => {
       setPartition(t);
       setDeployments(d);
       setHistory(h);
       setEnvironments(e);
-      setProjects(p);
+      setOperations(p);
       setLoading(false);
     }).catch((e) => {
       setError(e.message);
@@ -133,7 +133,7 @@ export default function PartitionDetail() {
         <div className="card-header">
           <h3>Deployment History</h3>
         </div>
-        <DeploymentTable deployments={sorted} environments={environments} projects={projects} />
+        <DeploymentTable deployments={sorted} environments={environments} operations={operations} />
       </div>
 
       {showDeleteConfirm && (

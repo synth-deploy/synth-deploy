@@ -246,7 +246,7 @@ export class QueryEngine {
       source: "local deployment history",
       summary: `${relevantDeployments.length} deployment(s) found during ${timeLabel}`,
       detail: relevantDeployments.map((d) =>
-        `${d.projectId} v${d.version} — ${d.status}` +
+        `${d.operationId} v${d.version} — ${d.status}` +
         (d.failureReason ? ` (${d.failureReason})` : ""),
       ).join("; "),
     });
@@ -288,7 +288,7 @@ export class QueryEngine {
         (e) => e.deploymentId === deployment.deploymentId,
       );
 
-      const line = `• ${deployment.projectId} v${deployment.version} — ${deployment.status.toUpperCase()}`;
+      const line = `• ${deployment.operationId} v${deployment.version} — ${deployment.status.toUpperCase()}`;
 
       if (deployment.status === "failed") {
         const diagnostic = diagnosticEntries.find(
@@ -373,7 +373,7 @@ export class QueryEngine {
       answerParts.push(
         "",
         "Version changes during this period: " +
-        envVersionChanges.map((c) => `${c.projectId} went from v${c.fromVersion} to v${c.toVersion}`).join("; ") +
+        envVersionChanges.map((c) => `${c.operationId} went from v${c.fromVersion} to v${c.toVersion}`).join("; ") +
         ".",
       );
     }
@@ -481,11 +481,11 @@ export class QueryEngine {
         const status = d.status === "succeeded" ? "OK" : "FAILED";
         const failNote = d.failureReason ? ` — ${d.failureReason}` : "";
         answerParts.push(
-          `  • [${dateStr}] ${d.projectId} v${d.version} — ${status}${failNote}`,
+          `  • [${dateStr}] ${d.operationId} v${d.version} — ${status}${failNote}`,
         );
         evidence.push({
           source: "deployment record",
-          summary: `${d.projectId} v${d.version} deployed ${dateStr} — ${d.status}`,
+          summary: `${d.operationId} v${d.version} deployed ${dateStr} — ${d.status}`,
           detail: d.failureReason ?? "completed successfully",
         });
       }
@@ -772,7 +772,7 @@ export class QueryEngine {
       for (const d of recentDeployments) {
         const dateStr = d.receivedAt.toISOString().split("T")[0];
         answerParts.push(
-          `  • [${dateStr}] ${d.projectId} v${d.version} — ${d.status}`,
+          `  • [${dateStr}] ${d.operationId} v${d.version} — ${d.status}`,
         );
       }
     }
@@ -814,24 +814,24 @@ export class QueryEngine {
 
   private findVersionChanges(
     deployments: LocalDeploymentRecord[],
-  ): Array<{ projectId: string; fromVersion: string; toVersion: string }> {
-    const changes: Array<{ projectId: string; fromVersion: string; toVersion: string }> = [];
-    const byProject = new Map<string, LocalDeploymentRecord[]>();
+  ): Array<{ operationId: string; fromVersion: string; toVersion: string }> {
+    const changes: Array<{ operationId: string; fromVersion: string; toVersion: string }> = [];
+    const byoperation = new Map<string, LocalDeploymentRecord[]>();
 
     for (const d of deployments) {
       if (d.status !== "succeeded") continue;
-      const existing = byProject.get(d.projectId) ?? [];
+      const existing = byoperation.get(d.operationId) ?? [];
       existing.push(d);
-      byProject.set(d.projectId, existing);
+      byoperation.set(d.operationId, existing);
     }
 
-    for (const [projectId, projectDeploys] of byProject) {
-      const sorted = [...projectDeploys].sort(
+    for (const [operationId, operationDeploys] of byoperation) {
+      const sorted = [...operationDeploys].sort(
         (a, b) => a.receivedAt.getTime() - b.receivedAt.getTime(),
       );
       if (sorted.length >= 2) {
         changes.push({
-          projectId,
+          operationId,
           fromVersion: sorted[0].version,
           toVersion: sorted[sorted.length - 1].version,
         });

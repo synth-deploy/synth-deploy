@@ -3,8 +3,8 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter, Routes, Route } from "react-router";
 import App from "./App.js";
 import Dashboard from "./pages/Dashboard.js";
-import Projects from "./pages/Projects.js";
-import ProjectDetail from "./pages/ProjectDetail.js";
+import Operations from "./pages/Operations.js";
+import OperationDetail from "./pages/OperationDetail.js";
 import Partitions from "./pages/Partitions.js";
 import PartitionDetail from "./pages/PartitionDetail.js";
 import Environments from "./pages/Environments.js";
@@ -23,8 +23,8 @@ createRoot(document.getElementById("root")!).render(
       <Routes>
         <Route element={<App />}>
           <Route index element={<Dashboard />} />
-          <Route path="projects" element={<Projects />} />
-          <Route path="projects/:id" element={<ProjectDetail />} />
+          <Route path="operations" element={<Operations />} />
+          <Route path="operations/:id" element={<OperationDetail />} />
           <Route path="partitions" element={<Partitions />} />
           <Route path="partitions/:id" element={<PartitionDetail />} />
           <Route path="environments" element={<Environments />} />

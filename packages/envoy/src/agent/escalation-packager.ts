@@ -321,7 +321,7 @@ export class EscalationPackager {
 
     const parts: string[] = [];
     parts.push(
-      `${deployment.projectId} v${deployment.version} deployment to ` +
+      `${deployment.operationId} v${deployment.version} deployment to ` +
       `environment ${deployment.environmentId} for partition ${deployment.partitionId} ` +
       `${deployment.status === "failed" ? "FAILED" : deployment.status.toUpperCase()}.`,
     );
@@ -380,7 +380,7 @@ export class EscalationPackager {
       if (previousSuccesses.length > 0) {
         const last = previousSuccesses[previousSuccesses.length - 1];
         parts.push(
-          `Previous successful deployment was ${last.projectId} v${last.version}. ` +
+          `Previous successful deployment was ${last.operationId} v${last.version}. ` +
           `That version may still be available for rollback.`,
         );
       }
@@ -464,7 +464,7 @@ export class EscalationPackager {
     if (deployment) {
       lines.push("## Failed Deployment");
       lines.push(`  ID: ${deployment.deploymentId}`);
-      lines.push(`  Project: ${deployment.projectId} v${deployment.version}`);
+      lines.push(`  operation: ${deployment.operationId} v${deployment.version}`);
       lines.push(`  Partition: ${deployment.partitionId}`);
       lines.push(`  Environment: ${deployment.environmentId}`);
       lines.push(`  Status: ${deployment.status}`);
@@ -514,7 +514,7 @@ export class EscalationPackager {
     for (const d of recentDeployments.slice(0, 5)) {
       const date = d.receivedAt.toISOString().split("T")[0];
       lines.push(
-        `  [${date}] ${d.projectId} v${d.version} — ${d.status}` +
+        `  [${date}] ${d.operationId} v${d.version} — ${d.status}` +
         (d.failureReason ? ` (${d.failureReason})` : ""),
       );
     }

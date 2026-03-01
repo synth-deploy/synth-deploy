@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { listDeployments, listPartitions, listEnvironments, listProjects, getDeploymentContext } from "../../api.js";
-import type { Deployment, Partition, Environment, Project } from "../../types.js";
+import { listDeployments, listPartitions, listEnvironments, listOperations, getDeploymentContext } from "../../api.js";
+import type { Deployment, Partition, Environment, Operation } from "../../types.js";
 import type { DeploymentContext } from "../../api.js";
 import { useCanvas } from "../../context/CanvasContext.js";
 import EnvBadge from "../EnvBadge.js";
@@ -12,7 +12,7 @@ export default function OperationalOverview() {
   const [deployments, setDeployments] = useState<Deployment[]>([]);
   const [partitions, setPartitions] = useState<Partition[]>([]);
   const [environments, setEnvironments] = useState<Environment[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
+  const [operations, setOperations] = useState<Operation[]>([]);
   const [agentContext, setAgentContext] = useState<DeploymentContext | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -21,13 +21,13 @@ export default function OperationalOverview() {
       listDeployments(),
       listPartitions(),
       listEnvironments(),
-      listProjects(),
+      listOperations(),
       getDeploymentContext(),
     ]).then(([d, t, e, p, ctx]) => {
       setDeployments(d);
       setPartitions(t);
       setEnvironments(e);
-      setProjects(p);
+      setOperations(p);
       setAgentContext(ctx);
       setLoading(false);
     }).catch(() => setLoading(false));
@@ -92,8 +92,8 @@ export default function OperationalOverview() {
           <span className="canvas-summary-label">Partitions</span>
         </div>
         <div className="canvas-summary-item">
-          <span className="canvas-summary-value">{projects.length}</span>
-          <span className="canvas-summary-label">Projects</span>
+          <span className="canvas-summary-value">{operations.length}</span>
+          <span className="canvas-summary-label">Operations</span>
         </div>
         <div className="canvas-summary-item">
           <span className="canvas-summary-value">{environments.length}</span>
@@ -180,8 +180,8 @@ export default function OperationalOverview() {
               >
                 <span className={`badge badge-${d.status}`}>{d.status}</span>
                 <span className="canvas-activity-version">{d.version}</span>
-                <span className="canvas-activity-project">
-                  {projects.find((p) => p.id === d.projectId)?.name ?? d.projectId}
+                <span className="canvas-activity-operation">
+                  {operations.find((p) => p.id === d.operationId)?.name ?? d.operationId}
                 </span>
                 <span className="canvas-activity-env">
                   {environments.find((e) => e.id === d.environmentId)?.name ?? d.environmentId}

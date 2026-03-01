@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import type { PartitionStore, DebriefReader } from "@deploystack/core";
-import { generateProjectHistory } from "@deploystack/core";
+import { generateOperationHistory } from "@deploystack/core";
 import type { DeploymentStore } from "../agent/command-agent.js";
 
 export function registerPartitionRoutes(
@@ -83,7 +83,7 @@ export function registerPartitionRoutes(
     },
   );
 
-  // Get partition deployment history / project history
+  // Get partition deployment history / operation history
   app.get<{ Params: { id: string } }>(
     "/api/partitions/:id/history",
     async (request, reply) => {
@@ -94,7 +94,7 @@ export function registerPartitionRoutes(
 
       const partitionDeployments = deployments.getByPartition(request.params.id);
       const partitionEntries = debrief.getByPartition(request.params.id);
-      const history = generateProjectHistory(partitionEntries, partitionDeployments);
+      const history = generateOperationHistory(partitionEntries, partitionDeployments);
 
       return { history };
     },

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { DecisionDebrief, OrderStore } from "@deploystack/core";
-import type { Partition, Environment, DebriefEntry, Project } from "@deploystack/core";
+import type { Partition, Environment, DebriefEntry, Operation } from "@deploystack/core";
 import {
   CommandAgent,
   InMemoryDeploymentStore,
@@ -81,7 +81,7 @@ function makeEnvironment(overrides: Partial<Environment> = {}): Environment {
 
 function makeTrigger(overrides: Record<string, unknown> = {}) {
   return {
-    projectId: "web-app",
+    operationId: "web-app",
     partitionId: "partition-1",
     environmentId: "env-prod",
     version: "2.0.0",
@@ -89,7 +89,7 @@ function makeTrigger(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function makeProject(overrides: Partial<Project> = {}): Project {
+function makeOperation(overrides: Partial<Operation> = {}): Operation {
   return {
     id: "web-app",
     name: "web-app",
@@ -149,7 +149,7 @@ describe("Deployment Orchestration Engine", () => {
 
       healthChecker.willReturn(HEALTHY);
 
-      const result = await agent.triggerDeployment(trigger, partition, env, makeProject());
+      const result = await agent.triggerDeployment(trigger, partition, env, makeOperation());
 
       expect(result.status).toBe("succeeded");
       expect(result.failureReason).toBeNull();
@@ -186,7 +186,7 @@ describe("Deployment Orchestration Engine", () => {
 
       healthChecker.willReturn(HEALTHY);
 
-      const result = await agent.triggerDeployment(makeTrigger(), partition, env, makeProject());
+      const result = await agent.triggerDeployment(makeTrigger(), partition, env, makeOperation());
 
       expect(result.status).toBe("succeeded");
       expect(result.variables).toEqual({
@@ -212,7 +212,7 @@ describe("Deployment Orchestration Engine", () => {
         makeTrigger(),
         makePartition(),
         makeEnvironment({ name: "staging" }),
-        makeProject(),
+        makeOperation(),
       );
 
       expect(result.status).toBe("failed");
@@ -240,7 +240,7 @@ describe("Deployment Orchestration Engine", () => {
         makeTrigger(),
         makePartition(),
         makeEnvironment({ name: "staging" }),
-        makeProject(),
+        makeOperation(),
       );
 
       expect(result.status).toBe("failed");
@@ -271,7 +271,7 @@ describe("Deployment Orchestration Engine", () => {
         makeTrigger(),
         makePartition(),
         makeEnvironment({ name: "production" }),
-        makeProject(),
+        makeOperation(),
       );
 
       expect(result.status).toBe("failed");
@@ -296,7 +296,7 @@ describe("Deployment Orchestration Engine", () => {
         makeTrigger(),
         makePartition(),
         makeEnvironment({ name: "staging" }),
-        makeProject(),
+        makeOperation(),
       );
 
       expect(result.status).toBe("failed");
@@ -317,7 +317,7 @@ describe("Deployment Orchestration Engine", () => {
         makeTrigger(),
         makePartition(),
         makeEnvironment(),
-        makeProject(),
+        makeOperation(),
       );
 
       expect(result.status).toBe("succeeded");
@@ -336,7 +336,7 @@ describe("Deployment Orchestration Engine", () => {
         makeTrigger(),
         makePartition(),
         makeEnvironment(),
-        makeProject(),
+        makeOperation(),
       );
 
       expect(result.status).toBe("succeeded");
@@ -371,7 +371,7 @@ describe("Deployment Orchestration Engine", () => {
         makeTrigger({ environmentId: "env-staging" }),
         partition,
         env,
-        makeProject({ environmentIds: ["env-staging"] }),
+        makeOperation({ environmentIds: ["env-staging"] }),
       );
 
       // Single override → agent proceeds (might be intentional)
@@ -412,7 +412,7 @@ describe("Deployment Orchestration Engine", () => {
         makeTrigger({ environmentId: "env-staging" }),
         partition,
         env,
-        makeProject({ environmentIds: ["env-staging"] }),
+        makeOperation({ environmentIds: ["env-staging"] }),
       );
 
       // THIS IS THE KEY BEHAVIORAL DIFFERENCE:
@@ -454,7 +454,7 @@ describe("Deployment Orchestration Engine", () => {
         makeTrigger(),
         partition,
         env,
-        makeProject(),
+        makeOperation(),
       );
 
       // Non-connectivity cross-env → proceeds (can't route traffic)
@@ -475,7 +475,7 @@ describe("Deployment Orchestration Engine", () => {
         makeTrigger(),
         partition,
         env,
-        makeProject(),
+        makeOperation(),
       );
 
       expect(result.status).toBe("succeeded");
@@ -508,7 +508,7 @@ describe("Deployment Orchestration Engine", () => {
         trigger,
         partition,
         makeEnvironment(),
-        makeProject(),
+        makeOperation(),
       );
       const entries = diary.getByDeployment(result.id);
 
@@ -527,7 +527,7 @@ describe("Deployment Orchestration Engine", () => {
         makeTrigger(),
         makePartition(),
         makeEnvironment(),
-        makeProject(),
+        makeOperation(),
       );
 
       expect(result.status).toBe("failed");
@@ -553,7 +553,7 @@ describe("Deployment Orchestration Engine", () => {
         makeTrigger(),
         makePartition(),
         makeEnvironment(),
-        makeProject(),
+        makeOperation(),
       );
 
       const stored = deployments.get(result.id);
