@@ -55,26 +55,23 @@ jobs:
       - name: Build all packages
         run: npm run build
 
-      # Prerequisite: @deploystack/command and @deploystack/envoy must have
-      # "private": false and the following in their package.json:
-      #
-      #   "publishConfig": {
-      #     "registry": "https://npm.pkg.github.com"
-      #   }
-      #
-      # Until then, publish will emit a warning but not fail the workflow.
+      # Core must be published first — command and envoy depend on it.
+      - name: Publish @deploystack/core
+        run: npm publish --workspace=packages/core || echo "::warning::@deploystack/core publish failed or already published"
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Publish @deploystack/command
-        run: npm publish --workspace=packages/command || echo "::warning::Publish skipped for @deploystack/command — package may still be private"
+        run: npm publish --workspace=packages/command || echo "::warning::@deploystack/command publish failed or already published"
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Publish @deploystack/envoy
-        run: npm publish --workspace=packages/envoy || echo "::warning::Publish skipped for @deploystack/envoy — package may still be private"
+        run: npm publish --workspace=packages/envoy || echo "::warning::@deploystack/envoy publish failed or already published"
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # ─── Docker: Command ───────────────────────────────────────
-  # Auto-activates when packages/command/Dockerfile lands (issue #27)
   docker-command:
     name: Docker — Command
     needs: ci
@@ -86,11 +83,11 @@ jobs:
       - name: Check for Dockerfile
         id: check
         run: |
-          if [ -f packages/command/Dockerfile ]; then
+          if [ -f Dockerfile.command ]; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::Skipping Docker build — packages/command/Dockerfile not found (see issue #27)"
+            echo "::notice::Skipping Docker build — Dockerfile.command not found"
           fi
 
       - name: Set up Docker Buildx
@@ -115,7 +112,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: packages/command/Dockerfile
+          file: Dockerfile.command
           push: true
           tags: |
             ghcr.io/${{ github.repository_owner }}/deploystack-command:${{ steps.version.outputs.VERSION }}
@@ -124,7 +121,6 @@ jobs:
           cache-to: type=gha,mode=max
 
   # ─── Docker: Envoy ─────────────────────────────────────────
-  # Auto-activates when packages/envoy/Dockerfile lands (issue #27)
   docker-envoy:
     name: Docker — Envoy
     needs: ci
@@ -136,11 +132,11 @@ jobs:
       - name: Check for Dockerfile
         id: check
         run: |
-          if [ -f packages/envoy/Dockerfile ]; then
+          if [ -f Dockerfile.envoy ]; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::Skipping Docker build — packages/envoy/Dockerfile not found (see issue #27)"
+            echo "::notice::Skipping Docker build — Dockerfile.envoy not found"
           fi
 
       - name: Set up Docker Buildx
@@ -165,7 +161,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: packages/envoy/Dockerfile
+          file: Dockerfile.envoy
           push: true
           tags: |
             ghcr.io/${{ github.repository_owner }}/deploystack-envoy:${{ steps.version.outputs.VERSION }}
