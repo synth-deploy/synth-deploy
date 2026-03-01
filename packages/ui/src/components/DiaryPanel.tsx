@@ -72,14 +72,20 @@ export default function DiaryPanel() {
   const isAgent = mode === "agent";
   const [entries, setEntries] = useState<DebriefEntry[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const fetchEntries = () => {
     if (!isAgent) return;
+    setError(null);
     setLoading(true);
     getRecentDebrief({ limit: 10 })
       .then(setEntries)
-      .catch(() => {})
+      .catch((e: any) => setError(e.message || "Failed to load decision diary"))
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    fetchEntries();
   }, [isAgent]);
 
   return (
@@ -94,11 +100,18 @@ export default function DiaryPanel() {
           <div className="diary-panel-loading">Loading...</div>
         )}
 
-        {!loading && entries.length === 0 && (
+        {!loading && error && (
+          <div className="diary-panel-error">
+            <span>{error}</span>
+            <button className="diary-panel-retry" onClick={fetchEntries}>Retry</button>
+          </div>
+        )}
+
+        {!loading && !error && entries.length === 0 && (
           <div className="diary-panel-empty">No recent decisions</div>
         )}
 
-        {!loading && entries.map((entry) => (
+        {!loading && !error && entries.map((entry) => (
           <DiaryEntry key={entry.id} entry={entry} />
         ))}
       </div>
