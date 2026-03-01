@@ -28,6 +28,7 @@ export default function OperationalOverview() {
   const [debriefEntries, setDebriefEntries] = useState<DebriefEntry[]>([]);
   const [agentContext, setAgentContext] = useState<DeploymentContext | null>(null);
   const [commandStatus, setCommandStatus] = useState<string>("observing");
+  const [signalsExpanded, setSignalsExpanded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [pulse, setPulse] = useState(0);
   const [tick, setTick] = useState(0);
@@ -130,63 +131,91 @@ export default function OperationalOverview() {
         </div>
       </div>
 
-      {/* Active signals section */}
+      {/* Active signals section — collapsible */}
       {agentContext && agentContext.signals.length > 0 && (
         <>
-          <SectionHeader
-            color="#f87171"
-            shape="diamond"
-            label="Active Signals"
-            subtitle="warnings and anomalies detected"
-          />
-          <div className="v2-signals-list">
-            {agentContext.signals.map((signal, i) => {
-              const severityColor =
-                signal.severity === "critical" ? "#dc2626"
-                : signal.severity === "warning" ? "#f59e0b"
-                : "#2563eb";
-              return (
-                <div
-                  key={i}
-                  className={`v2-signal-card v2-signal-${signal.severity}`}
-                  onClick={() =>
-                    pushPanel({
-                      type: "signal-detail",
-                      title: signal.title,
-                      params: { signal: JSON.stringify(signal) },
-                    })
-                  }
-                >
+          <div
+            className="v2-signals-collapse-header"
+            onClick={() => setSignalsExpanded(!signalsExpanded)}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              padding: "10px 16px",
+              cursor: "pointer",
+              borderRadius: 8,
+              border: "1px solid var(--agent-border)",
+              background: "var(--agent-card-bg)",
+              marginBottom: signalsExpanded ? 8 : 0,
+              userSelect: "none",
+            }}
+          >
+            <span style={{
+              width: 8, height: 8, borderRadius: "50%",
+              background: agentContext.signals.some(s => s.severity === "critical") ? "#dc2626"
+                : agentContext.signals.some(s => s.severity === "warning") ? "#f59e0b" : "#2563eb",
+              flexShrink: 0,
+            }} />
+            <span style={{ fontWeight: 600, fontSize: 13, color: "var(--agent-text)" }}>
+              Active Signals
+            </span>
+            <span style={{
+              fontSize: 11, fontWeight: 600, color: "var(--agent-text-muted)",
+              background: "rgba(255,255,255,0.06)", padding: "2px 8px", borderRadius: 10,
+            }}>
+              {agentContext.signals.length}
+            </span>
+            <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--agent-text-muted)" }}>
+              {signalsExpanded ? "\u25B2" : "\u25BC"}
+            </span>
+          </div>
+          {signalsExpanded && (
+            <div className="v2-signals-list" style={{ gap: 4 }}>
+              {agentContext.signals.map((signal, i) => {
+                const severityColor =
+                  signal.severity === "critical" ? "#dc2626"
+                  : signal.severity === "warning" ? "#f59e0b"
+                  : "#2563eb";
+                return (
                   <div
-                    className="v2-signal-accent-bar"
-                    style={{ background: severityColor }}
-                  />
-                  <div className="v2-signal-content">
-                    <div className="v2-signal-header">
-                      <span
-                        className="v2-signal-severity-badge"
-                        style={{
-                          color: severityColor,
-                          borderColor: `${severityColor}40`,
-                          background: `${severityColor}15`,
-                        }}
-                      >
-                        {signal.severity.toUpperCase()}
-                      </span>
-                      <span className="v2-signal-type-label">{signal.type}</span>
-                    </div>
-                    <div className="v2-signal-title">{signal.title}</div>
-                    <div className="v2-signal-detail">{signal.detail}</div>
+                    key={i}
+                    className={`v2-signal-compact v2-signal-${signal.severity}`}
+                    onClick={() =>
+                      pushPanel({
+                        type: "signal-detail",
+                        title: signal.title,
+                        params: { signal: JSON.stringify(signal) },
+                      })
+                    }
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 10,
+                      padding: "8px 12px",
+                      borderRadius: 6,
+                      border: "1px solid var(--agent-border)",
+                      background: "var(--agent-card-bg)",
+                      cursor: "pointer",
+                      fontSize: 13,
+                    }}
+                  >
+                    <span style={{
+                      width: 6, height: 6, borderRadius: "50%",
+                      background: severityColor, flexShrink: 0,
+                    }} />
+                    <span style={{ fontWeight: 500, color: "var(--agent-text)", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {signal.title}
+                    </span>
                     {signal.relatedEntity && (
-                      <div className="v2-signal-entity">
-                        {signal.relatedEntity.type}: {signal.relatedEntity.name}
-                      </div>
+                      <span style={{ fontSize: 11, color: "var(--agent-text-muted)", flexShrink: 0 }}>
+                        {signal.relatedEntity.name}
+                      </span>
                     )}
                   </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </>
       )}
 
