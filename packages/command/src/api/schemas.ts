@@ -115,6 +115,58 @@ export const UpdateEnvironmentSchema = z.object({
   variables: z.record(z.string()).optional(),
 });
 
+// --- SSRF Prevention ---
+
+/**
+ * SSRF-safe URL validator. Blocks private/internal IP ranges and
+ * restricts to http/https protocols.
+ */
+function isSsrfSafeUrl(url: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+
+  // Only allow http and https
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    return false;
+  }
+
+  const hostname = parsed.hostname;
+
+  // Block localhost variants
+  if (hostname === "localhost" || hostname === "[::1]") {
+    return false;
+  }
+
+  // Block IPv6 loopback
+  if (hostname === "::1") {
+    return false;
+  }
+
+  // Check IPv4 private ranges
+  const ipv4Match = hostname.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (ipv4Match) {
+    const [, a, b] = ipv4Match.map(Number);
+    // 127.0.0.0/8 — loopback
+    if (a === 127) return false;
+    // 10.0.0.0/8 — private
+    if (a === 10) return false;
+    // 172.16.0.0/12 — private
+    if (a === 172 && b >= 16 && b <= 31) return false;
+    // 192.168.0.0/16 — private
+    if (a === 192 && b === 168) return false;
+    // 169.254.0.0/16 — link-local (AWS metadata)
+    if (a === 169 && b === 254) return false;
+    // 0.0.0.0
+    if (a === 0) return false;
+  }
+
+  return true;
+}
+
 // --- Settings ---
 
 export const UpdateSettingsSchema = z.object({
@@ -129,7 +181,9 @@ export const UpdateSettingsSchema = z.object({
     defaultDeployConfig: UpdateDeployConfigSchema.optional(),
   }).optional(),
   envoy: z.object({
-    url: z.string().url().optional(),
+    url: z.string().url().refine(isSsrfSafeUrl, {
+      message: "URL must not point to private/internal IP ranges (SSRF prevention)",
+    }).optional(),
     timeoutMs: z.number().int().positive().optional(),
   }).optional(),
   coBranding: z.object({
@@ -139,7 +193,9 @@ export const UpdateSettingsSchema = z.object({
   }).optional().nullable(),
   mcpServers: z.array(z.object({
     name: z.string(),
-    url: z.string().url(),
+    url: z.string().url().refine(isSsrfSafeUrl, {
+      message: "URL must not point to private/internal IP ranges (SSRF prevention)",
+    }),
     description: z.string().optional(),
   })).optional(),
 });
