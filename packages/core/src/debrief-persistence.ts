@@ -123,52 +123,87 @@ export class PersistentDecisionDebrief implements DebriefWriter, DebriefReader {
       context: params.context ?? {},
     };
 
-    this.stmts.insert.run({
-      id: entry.id,
-      timestamp: entry.timestamp.toISOString(),
-      partition_id: entry.partitionId,
-      deployment_id: entry.deploymentId,
-      agent: entry.agent,
-      decision_type: entry.decisionType,
-      decision: entry.decision,
-      reasoning: entry.reasoning,
-      context: JSON.stringify(entry.context),
-    });
+    try {
+      this.stmts.insert.run({
+        id: entry.id,
+        timestamp: entry.timestamp.toISOString(),
+        partition_id: entry.partitionId,
+        deployment_id: entry.deploymentId,
+        agent: entry.agent,
+        decision_type: entry.decisionType,
+        decision: entry.decision,
+        reasoning: entry.reasoning,
+        context: JSON.stringify(entry.context),
+      });
+    } catch (error) {
+      console.error('Debrief persistence failed', { operation: 'record', entryId: entry.id, error });
+      throw new Error(`Failed to persist debrief entry ${entry.id}: ${(error as Error).message}`);
+    }
 
     return entry;
   }
 
   getById(id: DebriefEntryId): DebriefEntry | undefined {
-    const row = this.stmts.getById.get(id) as DebriefRow | undefined;
-    return row ? rowToEntry(row) : undefined;
+    try {
+      const row = this.stmts.getById.get(id) as DebriefRow | undefined;
+      return row ? rowToEntry(row) : undefined;
+    } catch (error) {
+      console.warn('Debrief read failed', { operation: 'getById', id, error });
+      return undefined;
+    }
   }
 
   getByDeployment(deploymentId: DeploymentId): DebriefEntry[] {
-    const rows = this.stmts.getByDeployment.all(deploymentId) as DebriefRow[];
-    return rows.map(rowToEntry);
+    try {
+      const rows = this.stmts.getByDeployment.all(deploymentId) as DebriefRow[];
+      return rows.map(rowToEntry);
+    } catch (error) {
+      console.warn('Debrief read failed', { operation: 'getByDeployment', deploymentId, error });
+      return [];
+    }
   }
 
   getByPartition(partitionId: PartitionId): DebriefEntry[] {
-    const rows = this.stmts.getByPartition.all(partitionId) as DebriefRow[];
-    return rows.map(rowToEntry);
+    try {
+      const rows = this.stmts.getByPartition.all(partitionId) as DebriefRow[];
+      return rows.map(rowToEntry);
+    } catch (error) {
+      console.warn('Debrief read failed', { operation: 'getByPartition', partitionId, error });
+      return [];
+    }
   }
 
   getByType(decisionType: DecisionType): DebriefEntry[] {
-    const rows = this.stmts.getByType.all(decisionType) as DebriefRow[];
-    return rows.map(rowToEntry);
+    try {
+      const rows = this.stmts.getByType.all(decisionType) as DebriefRow[];
+      return rows.map(rowToEntry);
+    } catch (error) {
+      console.warn('Debrief read failed', { operation: 'getByType', decisionType, error });
+      return [];
+    }
   }
 
   getByTimeRange(from: Date, to: Date): DebriefEntry[] {
-    const rows = this.stmts.getByTimeRange.all(
-      from.toISOString(),
-      to.toISOString(),
-    ) as DebriefRow[];
-    return rows.map(rowToEntry);
+    try {
+      const rows = this.stmts.getByTimeRange.all(
+        from.toISOString(),
+        to.toISOString(),
+      ) as DebriefRow[];
+      return rows.map(rowToEntry);
+    } catch (error) {
+      console.warn('Debrief read failed', { operation: 'getByTimeRange', from, to, error });
+      return [];
+    }
   }
 
   getRecent(limit = 50): DebriefEntry[] {
-    const rows = this.stmts.getRecent.all(limit) as DebriefRow[];
-    return rows.map(rowToEntry);
+    try {
+      const rows = this.stmts.getRecent.all(limit) as DebriefRow[];
+      return rows.map(rowToEntry);
+    } catch (error) {
+      console.warn('Debrief read failed', { operation: 'getRecent', limit, error });
+      return [];
+    }
   }
 
   close(): void {
