@@ -17,7 +17,7 @@ import type {
   HealthCheckResult,
 } from "./health-checker.js";
 import { DefaultHealthChecker } from "./health-checker.js";
-import { runStep } from "./step-runner.js";
+import { runStep, validateCommand } from "./step-runner.js";
 import type { McpClientManager, McpToolResult } from "./mcp-client-manager.js";
 
 // ---------------------------------------------------------------------------
@@ -1216,6 +1216,19 @@ export class CommandAgent {
       });
       deployment.debriefEntryIds.push(startEntry.id);
 
+      const cmdWarnings = validateCommand(step.command);
+      if (cmdWarnings.length > 0) {
+        this.debrief.record({
+          partitionId: deployment.partitionId,
+          deploymentId: deployment.id,
+          agent: "command",
+          decisionType: "system",
+          decision: `Step "${step.name}" contains potentially dangerous patterns`,
+          reasoning: `Flagged patterns: ${cmdWarnings.map(w => w.description).join(', ')}. Proceeding with execution in isolated environment (no host env leakage).`,
+          context: { stepId: step.id, command: step.command, warnings: cmdWarnings },
+        });
+      }
+
       const result = await runStep(step, deployment.variables, order.deployConfig.timeoutMs);
 
       if (!result.success) {
@@ -1320,6 +1333,19 @@ export class CommandAgent {
         },
       });
       deployment.debriefEntryIds.push(startEntry.id);
+
+      const verifyCmdWarnings = validateCommand(step.command);
+      if (verifyCmdWarnings.length > 0) {
+        this.debrief.record({
+          partitionId: deployment.partitionId,
+          deploymentId: deployment.id,
+          agent: "command",
+          decisionType: "system",
+          decision: `Step "${step.name}" contains potentially dangerous patterns`,
+          reasoning: `Flagged patterns: ${verifyCmdWarnings.map(w => w.description).join(', ')}. Proceeding with execution in isolated environment (no host env leakage).`,
+          context: { stepId: step.id, command: step.command, warnings: verifyCmdWarnings },
+        });
+      }
 
       const result = await runStep(step, deployment.variables, order.deployConfig.timeoutMs);
 

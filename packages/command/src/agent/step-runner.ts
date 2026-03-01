@@ -10,6 +10,49 @@ export interface StepResult {
   timedOut: boolean;
 }
 
+// ---------------------------------------------------------------------------
+// Command validation — detect dangerous patterns before execution
+// ---------------------------------------------------------------------------
+
+export interface StepValidationWarning {
+  pattern: string;
+  description: string;
+}
+
+const DANGEROUS_PATTERNS: Array<{ regex: RegExp; description: string }> = [
+  { regex: /\benv\b.*\|/, description: "Pipes environment to another command" },
+  { regex: /\bcurl\b.*-d\s/, description: "Sends data via curl" },
+  { regex: /\bwget\b/, description: "Downloads content via wget" },
+  { regex: /\beval\b/, description: "Uses eval for dynamic execution" },
+  { regex: /`[^`]+`/, description: "Contains backtick command substitution" },
+  { regex: /\/etc\/shadow/, description: "References sensitive system files" },
+  { regex: /\brm\s+-rf\s+\//, description: "Recursive deletion from root" },
+];
+
+export function validateCommand(command: string): StepValidationWarning[] {
+  const warnings: StepValidationWarning[] = [];
+  for (const { regex, description } of DANGEROUS_PATTERNS) {
+    if (regex.test(command)) {
+      warnings.push({ pattern: regex.source, description });
+    }
+  }
+  return warnings;
+}
+
+// ---------------------------------------------------------------------------
+// Environment isolation — only expose safe host vars + declared variables
+// ---------------------------------------------------------------------------
+
+const SAFE_HOST_VARS = ['PATH', 'HOME', 'SHELL', 'TERM', 'USER', 'LANG'];
+
+function buildStepEnv(variables: Record<string, string>): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const key of SAFE_HOST_VARS) {
+    if (process.env[key]) env[key] = process.env[key]!;
+  }
+  return { ...env, ...variables };
+}
+
 const MAX_OUTPUT_CHARS = 2000;
 
 function truncate(output: string): string {
@@ -36,7 +79,7 @@ export function runStep(
     const child = exec(
       step.command,
       {
-        env: { ...process.env, ...variables },
+        env: buildStepEnv(variables),
         signal: controller.signal,
         timeout: timeoutMs,
       },
