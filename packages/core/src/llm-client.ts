@@ -9,6 +9,8 @@ export interface LlmConfig {
   apiKey?: string;
   reasoningModel?: string;
   classificationModel?: string;
+  timeoutMs?: number;
+  rateLimitPerMinute?: number;
 }
 
 export interface LlmCallParams {
@@ -37,6 +39,8 @@ export type LlmResult =
 const DEFAULT_REASONING_MODEL = "claude-sonnet-4-6";
 const DEFAULT_CLASSIFICATION_MODEL = "claude-haiku-4-5-20251001";
 const DEFAULT_MAX_TOKENS = 1024;
+export const DEFAULT_TIMEOUT_MS = 30_000;
+export const DEFAULT_RATE_LIMIT_PER_MINUTE = 20;
 
 // ---------------------------------------------------------------------------
 // LlmClient
@@ -48,6 +52,9 @@ export class LlmClient {
   private readonly _apiKey: string | undefined;
   private readonly _reasoningModel: string;
   private readonly _classificationModel: string;
+  private readonly _timeoutMs: number;
+  private readonly _rateLimitPerMinute: number;
+  private _callTimestamps: number[] = [];
 
   constructor(
     private readonly _debrief: DebriefWriter,
@@ -61,6 +68,16 @@ export class LlmClient {
       DEFAULT_REASONING_MODEL;
     this._classificationModel =
       config.classificationModel ?? process.env.DEPLOYSTACK_LLM_CLASSIFICATION_MODEL ?? DEFAULT_CLASSIFICATION_MODEL;
+    this._timeoutMs =
+      config.timeoutMs ??
+      (process.env.DEPLOYSTACK_LLM_TIMEOUT_MS
+        ? parseInt(process.env.DEPLOYSTACK_LLM_TIMEOUT_MS, 10)
+        : DEFAULT_TIMEOUT_MS);
+    this._rateLimitPerMinute =
+      config.rateLimitPerMinute ??
+      (process.env.DEPLOYSTACK_LLM_RATE_LIMIT
+        ? parseInt(process.env.DEPLOYSTACK_LLM_RATE_LIMIT, 10)
+        : DEFAULT_RATE_LIMIT_PER_MINUTE);
   }
 
   /**
@@ -91,6 +108,13 @@ export class LlmClient {
   // Private
   // -------------------------------------------------------------------------
 
+  private _checkRateLimit(): boolean {
+    const now = Date.now();
+    const windowStart = now - 60_000;
+    this._callTimestamps = this._callTimestamps.filter((ts) => ts > windowStart);
+    return this._callTimestamps.length < this._rateLimitPerMinute;
+  }
+
   private async _call(
     params: LlmCallParams,
     model: string,
@@ -103,33 +127,51 @@ export class LlmClient {
 
     await this._ensureInitialized();
 
+    if (!this._checkRateLimit()) {
+      const reason = `LLM rate limit exceeded (${this._rateLimitPerMinute} calls/min)`;
+      this._recordDebrief(params, model, null, reason, true);
+      return { ok: false, fallback: true, reason };
+    }
+    this._callTimestamps.push(Date.now());
+
     const startTime = Date.now();
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const client = this._anthropicClient as any;
-      const response = await client.messages.create({
-        model,
-        max_tokens: params.maxTokens ?? DEFAULT_MAX_TOKENS,
-        system: params.systemPrompt,
-        messages: [{ role: "user", content: params.prompt }],
-      });
 
-      const responseTimeMs = Date.now() - startTime;
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), this._timeoutMs);
+      try {
+        const response = await client.messages.create({
+          model,
+          max_tokens: params.maxTokens ?? DEFAULT_MAX_TOKENS,
+          system: params.systemPrompt,
+          messages: [{ role: "user", content: params.prompt }],
+          signal: controller.signal,
+        });
 
-      const text = response.content
-        .filter(
-          (block: { type: string }): block is { type: "text"; text: string } =>
-            block.type === "text",
-        )
-        .map((block: { text: string }) => block.text)
-        .join("");
+        const responseTimeMs = Date.now() - startTime;
 
-      this._recordDebrief(params, model, responseTimeMs, null, false);
+        const text = response.content
+          .filter(
+            (block: { type: string }): block is { type: "text"; text: string } =>
+              block.type === "text",
+          )
+          .map((block: { text: string }) => block.text)
+          .join("");
 
-      return { ok: true, text, model, responseTimeMs };
+        this._recordDebrief(params, model, responseTimeMs, null, false);
+
+        return { ok: true, text, model, responseTimeMs };
+      } finally {
+        clearTimeout(timer);
+      }
     } catch (error) {
       const responseTimeMs = Date.now() - startTime;
-      const reason = `LLM call failed: ${error instanceof Error ? error.message : String(error)}`;
+      const isTimeout = error instanceof Error && error.name === "AbortError";
+      const reason = isTimeout
+        ? `LLM request timed out after ${this._timeoutMs}ms`
+        : `LLM call failed: ${error instanceof Error ? error.message : String(error)}`;
       this._recordDebrief(params, model, responseTimeMs, reason, true);
       return { ok: false, fallback: true, reason };
     }

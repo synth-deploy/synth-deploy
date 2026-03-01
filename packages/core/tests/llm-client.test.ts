@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { DecisionDebrief } from "../src/debrief.js";
-import { LlmClient } from "../src/llm-client.js";
+import { LlmClient, DEFAULT_TIMEOUT_MS, DEFAULT_RATE_LIMIT_PER_MINUTE } from "../src/llm-client.js";
 import type { LlmCallParams } from "../src/llm-client.js";
 
 // ---------------------------------------------------------------------------
@@ -210,5 +210,181 @@ describe("LlmClient — debrief recording", () => {
 
     const entries = debrief.getByType("llm-call");
     expect(entries[0].context.model).toBe("claude-haiku-4-5-20251001");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Timeout and rate limiting — configuration
+// ---------------------------------------------------------------------------
+
+describe("LlmClient — timeout and rate limiting", () => {
+  afterEach(() => {
+    delete process.env.DEPLOYSTACK_LLM_TIMEOUT_MS;
+    delete process.env.DEPLOYSTACK_LLM_RATE_LIMIT;
+  });
+
+  it("stores timeout from config", () => {
+    const debrief = new DecisionDebrief();
+    const client = new LlmClient(debrief, "command", { timeoutMs: 5000 });
+    // Access private field via type cast for testing
+    expect((client as unknown as { _timeoutMs: number })._timeoutMs).toBe(5000);
+  });
+
+  it("uses default timeout when not configured", () => {
+    const debrief = new DecisionDebrief();
+    const client = new LlmClient(debrief, "command");
+    expect((client as unknown as { _timeoutMs: number })._timeoutMs).toBe(DEFAULT_TIMEOUT_MS);
+  });
+
+  it("reads timeout from environment variable", () => {
+    process.env.DEPLOYSTACK_LLM_TIMEOUT_MS = "10000";
+    const debrief = new DecisionDebrief();
+    const client = new LlmClient(debrief, "command");
+    expect((client as unknown as { _timeoutMs: number })._timeoutMs).toBe(10000);
+  });
+
+  it("config timeoutMs takes precedence over environment variable", () => {
+    process.env.DEPLOYSTACK_LLM_TIMEOUT_MS = "10000";
+    const debrief = new DecisionDebrief();
+    const client = new LlmClient(debrief, "command", { timeoutMs: 5000 });
+    expect((client as unknown as { _timeoutMs: number })._timeoutMs).toBe(5000);
+  });
+
+  it("stores rate limit from config", () => {
+    const debrief = new DecisionDebrief();
+    const client = new LlmClient(debrief, "command", { rateLimitPerMinute: 10 });
+    expect((client as unknown as { _rateLimitPerMinute: number })._rateLimitPerMinute).toBe(10);
+  });
+
+  it("uses default rate limit when not configured", () => {
+    const debrief = new DecisionDebrief();
+    const client = new LlmClient(debrief, "command");
+    expect((client as unknown as { _rateLimitPerMinute: number })._rateLimitPerMinute).toBe(DEFAULT_RATE_LIMIT_PER_MINUTE);
+  });
+
+  it("reads rate limit from environment variable", () => {
+    process.env.DEPLOYSTACK_LLM_RATE_LIMIT = "5";
+    const debrief = new DecisionDebrief();
+    const client = new LlmClient(debrief, "command");
+    expect((client as unknown as { _rateLimitPerMinute: number })._rateLimitPerMinute).toBe(5);
+  });
+
+  it("config rateLimitPerMinute takes precedence over environment variable", () => {
+    process.env.DEPLOYSTACK_LLM_RATE_LIMIT = "5";
+    const debrief = new DecisionDebrief();
+    const client = new LlmClient(debrief, "command", { rateLimitPerMinute: 15 });
+    expect((client as unknown as { _rateLimitPerMinute: number })._rateLimitPerMinute).toBe(15);
+  });
+
+  it("DEFAULT_TIMEOUT_MS constant is 30000", () => {
+    expect(DEFAULT_TIMEOUT_MS).toBe(30_000);
+  });
+
+  it("DEFAULT_RATE_LIMIT_PER_MINUTE constant is 20", () => {
+    expect(DEFAULT_RATE_LIMIT_PER_MINUTE).toBe(20);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Rate limit behavior
+// ---------------------------------------------------------------------------
+
+describe("LlmClient — rate limit behavior", () => {
+  it("returns fallback when rate limit is exceeded", async () => {
+    const debrief = new DecisionDebrief();
+    // Set rate limit to 2 calls/min; no API key so calls fail before rate limit check
+    // We test the rate limiter by accessing _checkRateLimit directly
+    const client = new LlmClient(debrief, "command", {
+      apiKey: "sk-test-key",
+      rateLimitPerMinute: 2,
+    });
+
+    // Manually fill timestamps to simulate hitting the limit
+    const internalClient = client as unknown as {
+      _callTimestamps: number[];
+      _checkRateLimit: () => boolean;
+    };
+
+    // Pre-fill with 2 recent timestamps to simulate 2 calls already made
+    const now = Date.now();
+    internalClient._callTimestamps = [now - 5000, now - 3000];
+
+    // Should be at limit (2 calls already, limit is 2)
+    expect(internalClient._checkRateLimit()).toBe(false);
+  });
+
+  it("allows calls when under rate limit", () => {
+    const debrief = new DecisionDebrief();
+    const client = new LlmClient(debrief, "command", {
+      apiKey: "sk-test-key",
+      rateLimitPerMinute: 5,
+    });
+
+    const internalClient = client as unknown as {
+      _callTimestamps: number[];
+      _checkRateLimit: () => boolean;
+    };
+
+    // Only 3 calls so far, limit is 5
+    const now = Date.now();
+    internalClient._callTimestamps = [now - 10000, now - 8000, now - 5000];
+
+    expect(internalClient._checkRateLimit()).toBe(true);
+  });
+
+  it("prunes timestamps older than 60 seconds from the sliding window", () => {
+    const debrief = new DecisionDebrief();
+    const client = new LlmClient(debrief, "command", {
+      rateLimitPerMinute: 2,
+    });
+
+    const internalClient = client as unknown as {
+      _callTimestamps: number[];
+      _checkRateLimit: () => boolean;
+    };
+
+    // Fill with old timestamps (> 60s ago) — these should be pruned
+    const now = Date.now();
+    internalClient._callTimestamps = [now - 90000, now - 70000];
+
+    // After pruning expired timestamps, 0 calls remain — should be under limit
+    expect(internalClient._checkRateLimit()).toBe(true);
+    // Verify timestamps were pruned
+    expect(internalClient._callTimestamps).toHaveLength(0);
+  });
+
+  it("records rate-limit fallback in debrief with plain-language explanation", async () => {
+    const debrief = new DecisionDebrief();
+    const client = new LlmClient(debrief, "command", {
+      apiKey: "sk-test-key",
+      rateLimitPerMinute: 1,
+    });
+
+    // Pre-fill timestamps to trigger rate limit immediately on the next call
+    const internalClient = client as unknown as {
+      _callTimestamps: number[];
+      _initialized: boolean;
+      _anthropicClient: unknown;
+    };
+    // Force initialized state so _ensureInitialized() is a no-op,
+    // then rate limit check runs and returns false without any SDK calls
+    internalClient._initialized = true;
+    internalClient._anthropicClient = {};
+    internalClient._callTimestamps = [Date.now() - 1000];
+
+    const result = await client.reason(makeParams({ promptSummary: "Rate limit test" }));
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.fallback).toBe(true);
+      expect(result.reason).toContain("rate limit exceeded");
+      expect(result.reason).toContain("1 calls/min");
+    }
+
+    // Debrief should record the rate limit failure in plain language
+    const entries = debrief.getByType("llm-call");
+    expect(entries).toHaveLength(1);
+    expect(entries[0].context.fallbackUsed).toBe(true);
+    expect(entries[0].context.failureReason).toContain("rate limit exceeded");
   });
 });
