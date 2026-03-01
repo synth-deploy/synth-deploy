@@ -161,6 +161,14 @@ app.listen({ port: PORT, host: HOST }, (err) => {
 ║  Workspace: ${BASE_DIR.padEnd(40)}║
 ╚══════════════════════════════════════════════════════╝
   `);
+
+  const shutdown = async (signal: string) => {
+    console.log(`\nReceived ${signal}, shutting down gracefully...`);
+    await app.close();
+    process.exit(0);
+  };
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
 });
 
 // --- Exports for programmatic use ---

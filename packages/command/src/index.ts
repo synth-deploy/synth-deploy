@@ -472,6 +472,17 @@ app.delete("/mcp", async (request, reply) => {
   return reply.status(200).send({ status: "session closed" });
 });
 
+// --- Graceful shutdown hook ---
+
+app.addHook("onClose", async () => {
+  debrief.close();
+  for (const transport of mcpTransports.values()) {
+    await transport.close();
+  }
+  mcpTransports.clear();
+  console.log("DeployStack Command shutting down — resources cleaned up");
+});
+
 // --- Start ---
 
 const PORT = parseInt(process.env.PORT ?? "3000", 10);
@@ -501,4 +512,12 @@ app.listen({ port: PORT, host: HOST }, (err) => {
 ║  ${seedStatus}║
 ╚══════════════════════════════════════════════════════╝
   `);
+
+  const shutdown = async (signal: string) => {
+    console.log(`\nReceived ${signal}, shutting down gracefully...`);
+    await app.close();
+    process.exit(0);
+  };
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
 });
