@@ -350,12 +350,21 @@ describe("REST API -> CommandAgent -> store persistence roundtrip", () => {
     expect(order.environmentId).toBe(environmentId);
     expect(order.version).toBe("1.0.0");
 
-    // Step 5: Trigger a deployment via the deployments API
-    const deployRes = await inject(commandApp, "POST", "/api/deployments", {
+    // Step 5: Trigger a deployment via an Order
+    const deployOrderRes = await inject(commandApp, "POST", "/api/orders", {
       operationId,
       partitionId,
       environmentId,
       version: "1.0.0",
+    });
+    expect(deployOrderRes.status).toBe(201);
+    const deployOrderId = (deployOrderRes.body.order as Record<string, unknown>)
+      .id as string;
+
+    const deployRes = await inject(commandApp, "POST", "/api/deployments", {
+      orderId: deployOrderId,
+      partitionId,
+      environmentId,
     });
     expect(deployRes.status).toBe(201);
 
@@ -518,24 +527,44 @@ describe("Partition isolation end-to-end", () => {
   });
 
   it("deploys to both partitions independently", async () => {
-    // Deploy to partition A
-    const depARes = await inject(commandApp, "POST", "/api/deployments", {
+    // Create Order for partition A
+    const orderARes = await inject(commandApp, "POST", "/api/orders", {
       operationId,
       partitionId: partitionAId,
       environmentId,
       version: "1.0.0",
+    });
+    expect(orderARes.status).toBe(201);
+    const orderAId = (orderARes.body.order as Record<string, unknown>)
+      .id as string;
+
+    // Deploy to partition A
+    const depARes = await inject(commandApp, "POST", "/api/deployments", {
+      orderId: orderAId,
+      partitionId: partitionAId,
+      environmentId,
     });
     expect(depARes.status).toBe(201);
     expect(
       (depARes.body.deployment as Record<string, unknown>).status,
     ).toBe("succeeded");
 
-    // Deploy to partition B
-    const depBRes = await inject(commandApp, "POST", "/api/deployments", {
+    // Create Order for partition B
+    const orderBRes = await inject(commandApp, "POST", "/api/orders", {
       operationId,
       partitionId: partitionBId,
       environmentId,
       version: "2.0.0",
+    });
+    expect(orderBRes.status).toBe(201);
+    const orderBId = (orderBRes.body.order as Record<string, unknown>)
+      .id as string;
+
+    // Deploy to partition B
+    const depBRes = await inject(commandApp, "POST", "/api/deployments", {
+      orderId: orderBId,
+      partitionId: partitionBId,
+      environmentId,
     });
     expect(depBRes.status).toBe(201);
     expect(
@@ -733,12 +762,21 @@ describe("Decision Diary completeness for multi-step workflow", () => {
     const partitionId = (partRes.body.partition as Record<string, unknown>)
       .id as string;
 
-    // Trigger deployment
-    const deployRes = await inject(commandApp, "POST", "/api/deployments", {
+    // Create Order and trigger deployment
+    const orderRes2 = await inject(commandApp, "POST", "/api/orders", {
       operationId,
       partitionId,
       environmentId,
       version: "2.0.0",
+    });
+    expect(orderRes2.status).toBe(201);
+    const orderId2 = (orderRes2.body.order as Record<string, unknown>)
+      .id as string;
+
+    const deployRes = await inject(commandApp, "POST", "/api/deployments", {
+      orderId: orderId2,
+      partitionId,
+      environmentId,
     });
     expect(deployRes.status).toBe(201);
     const deploymentId = (
@@ -818,12 +856,21 @@ describe("Decision Diary completeness for multi-step workflow", () => {
     const partitionId = (partRes.body.partition as Record<string, unknown>)
       .id as string;
 
-    // Trigger deployment — expect it to succeed but with conflict decisions
-    const deployRes = await inject(commandApp, "POST", "/api/deployments", {
+    // Create Order and trigger deployment — expect it to succeed but with conflict decisions
+    const conflictOrderRes = await inject(commandApp, "POST", "/api/orders", {
       operationId,
       partitionId,
       environmentId,
       version: "3.0.0",
+    });
+    expect(conflictOrderRes.status).toBe(201);
+    const conflictOrderId = (conflictOrderRes.body.order as Record<string, unknown>)
+      .id as string;
+
+    const deployRes = await inject(commandApp, "POST", "/api/deployments", {
+      orderId: conflictOrderId,
+      partitionId,
+      environmentId,
     });
     expect(deployRes.status).toBe(201);
     const deploymentId = (
