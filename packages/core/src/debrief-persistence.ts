@@ -59,6 +59,8 @@ export class PersistentDecisionDebrief implements DebriefWriter, DebriefReader {
     getByType: Database.Statement;
     getByTimeRange: Database.Statement;
     getRecent: Database.Statement;
+    purgeOlderThan: Database.Statement;
+    countOlderThan: Database.Statement;
   };
 
   constructor(dbPath: string) {
@@ -106,6 +108,12 @@ export class PersistentDecisionDebrief implements DebriefWriter, DebriefReader {
       ),
       getRecent: this.db.prepare(
         `SELECT * FROM diary_entries ORDER BY timestamp DESC LIMIT ?`,
+      ),
+      purgeOlderThan: this.db.prepare(
+        `DELETE FROM diary_entries WHERE timestamp < ?`,
+      ),
+      countOlderThan: this.db.prepare(
+        `SELECT COUNT(*) as count FROM diary_entries WHERE timestamp < ?`,
       ),
     };
   }
@@ -203,6 +211,23 @@ export class PersistentDecisionDebrief implements DebriefWriter, DebriefReader {
     } catch (error) {
       console.warn('Debrief read failed', { operation: 'getRecent', limit, error });
       return [];
+    }
+  }
+
+  /**
+   * Purge debrief entries older than the given date.
+   * Returns the number of entries removed.
+   */
+  purgeOlderThan(cutoff: Date): number {
+    try {
+      const countRow = this.stmts.countOlderThan.get(cutoff.toISOString()) as { count: number };
+      if (countRow.count === 0) return 0;
+
+      this.stmts.purgeOlderThan.run(cutoff.toISOString());
+      return countRow.count;
+    } catch (error) {
+      console.error('Debrief purge failed', { operation: 'purgeOlderThan', cutoff, error });
+      return 0;
     }
   }
 
