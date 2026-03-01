@@ -1,0 +1,60 @@
+---
+import DocsLayout from "../../layouts/DocsLayout.astro";
+---
+
+<DocsLayout title="Architecture">
+  <h1>Architecture</h1>
+
+  <p>
+    DeployStack uses a two-tier architecture: a central <strong>Command</strong>
+    server and distributed <strong>Envoy</strong> agents.
+  </p>
+
+  <h2>Command</h2>
+  <p>
+    The brain of DeployStack. Command is a Fastify-based Node.js server that
+    manages all deployment state, runs the intelligent agent, and exposes both a
+    REST API and an MCP server.
+  </p>
+  <ul>
+    <li><strong>REST API</strong> — CRUD for partitions, operations, environments, orders, and deployments</li>
+    <li><strong>MCP Server</strong> — Model Context Protocol server for tool-based AI integration</li>
+    <li><strong>Agent</strong> — Intent resolution, pipeline planning, and deployment orchestration</li>
+    <li><strong>Debrief</strong> — Decision diary with SQLite persistence</li>
+    <li><strong>Entity Store</strong> — SQLite-backed storage for all entities</li>
+  </ul>
+
+  <h2>Envoy</h2>
+  <p>
+    Lightweight agents deployed on target machines. Envoys receive deployment
+    instructions from Command, execute steps locally, run health checks, and
+    report results back.
+  </p>
+  <ul>
+    <li><strong>Deployment executor</strong> — Runs shell commands with variable injection and timeouts</li>
+    <li><strong>Health reporting</strong> — Periodic status reports to Command</li>
+    <li><strong>Query engine</strong> — Local environment inspection for diagnostics</li>
+  </ul>
+
+  <h2>Data Flow</h2>
+  <pre><code>Engineer → Command (resolve intent, plan pipeline, create order)
+Command → Envoy (dispatch deployment steps)
+Envoy → Target Machine (execute commands, health checks)
+Envoy → Command (report results)
+Command → Debrief (log every decision)</code></pre>
+
+  <h2>Partition Isolation</h2>
+  <p>
+    Every partition is a logically isolated context. Queries are always scoped to
+    a single partition. The agent never sees data from other partitions, and
+    failures in one partition cannot propagate to another.
+  </p>
+
+  <h2>MCP Integration</h2>
+  <p>
+    DeployStack exposes deployment operations as MCP tools, making them
+    accessible to any MCP-compatible AI client. It also connects to external MCP
+    servers for data enrichment — monitoring, CI/CD, and infrastructure data can
+    flow into the agent's decision-making.
+  </p>
+</DocsLayout>

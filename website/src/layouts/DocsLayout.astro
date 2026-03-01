@@ -1,0 +1,43 @@
+---
+import Layout from "./Layout.astro";
+
+interface Props {
+  title: string;
+}
+
+const { title } = Astro.props;
+
+const sections = [
+  { title: "Getting Started", href: "/docs" },
+  { title: "Architecture", href: "/docs/architecture" },
+  { title: "Step Types", href: "/docs/step-types" },
+];
+
+const currentPath = Astro.url.pathname;
+---
+
+<Layout title={`${title} — DeployStack Docs`}>
+  <div class="mx-auto max-w-6xl px-6 py-12 flex gap-8">
+    <aside class="hidden md:block w-56 shrink-0">
+      <nav class="sticky top-24 space-y-1">
+        <p class="section-heading mb-4">Documentation</p>
+        {sections.map((s) => (
+          <a
+            href={s.href}
+            class:list={[
+              "block rounded-lg px-3 py-2 text-sm transition-colors",
+              currentPath === s.href || currentPath === s.href + "/"
+                ? "bg-ds-accent-dim text-ds-accent font-medium"
+                : "text-ds-text-secondary hover:text-ds-text hover:bg-ds-surface",
+            ]}
+          >
+            {s.title}
+          </a>
+        ))}
+      </nav>
+    </aside>
+    <article class="prose-docs flex-1 min-w-0">
+      <slot />
+    </article>
+  </div>
+</Layout>

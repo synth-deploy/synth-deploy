@@ -1,0 +1,61 @@
+---
+interface Props {
+  title: string;
+  description?: string;
+}
+
+const { title, description = "Deployment intelligence, not deployment automation." } = Astro.props;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content={description} />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>{title}</title>
+  </head>
+  <body class="min-h-screen">
+    <nav class="fixed top-0 left-0 right-0 z-50 border-b border-ds-border bg-ds-bg/80 backdrop-blur-lg">
+      <div class="mx-auto max-w-6xl flex items-center justify-between px-6 py-4">
+        <a href="/" class="flex items-center gap-2 text-lg font-bold text-ds-text">
+          <span class="text-ds-accent font-mono">DS</span>
+          <span>DeployStack</span>
+        </a>
+        <div class="flex items-center gap-6 text-sm">
+          <a href="/#features" class="text-ds-text-secondary hover:text-ds-text transition-colors">Features</a>
+          <a href="/#how-it-works" class="text-ds-text-secondary hover:text-ds-text transition-colors">How It Works</a>
+          <a href="/docs" class="text-ds-text-secondary hover:text-ds-text transition-colors">Docs</a>
+          <a
+            href="https://github.com/jmfullerton96/DeployStack"
+            target="_blank"
+            rel="noopener"
+            class="rounded-lg border border-ds-accent/30 bg-ds-accent-dim px-4 py-1.5 text-ds-accent hover:bg-ds-accent-hover transition-colors font-medium"
+          >
+            GitHub
+          </a>
+        </div>
+      </div>
+    </nav>
+
+    <main class="pt-16">
+      <slot />
+    </main>
+
+    <footer class="border-t border-ds-border mt-24">
+      <div class="mx-auto max-w-6xl px-6 py-12 flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-2 text-sm text-ds-text-muted">
+          <span class="text-ds-accent font-mono font-bold">DS</span>
+          <span>DeployStack</span>
+          <span class="mx-2">&middot;</span>
+          <span>Deployment intelligence, embedded.</span>
+        </div>
+        <div class="flex items-center gap-6 text-sm text-ds-text-muted">
+          <a href="/docs" class="hover:text-ds-text transition-colors">Docs</a>
+          <a href="https://github.com/jmfullerton96/DeployStack" target="_blank" rel="noopener" class="hover:text-ds-text transition-colors">GitHub</a>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

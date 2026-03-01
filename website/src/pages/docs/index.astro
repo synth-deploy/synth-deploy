@@ -1,0 +1,88 @@
+---
+import DocsLayout from "../../layouts/DocsLayout.astro";
+
+const quickStart = `git clone https://github.com/jmfullerton96/DeployStack.git
+cd DeployStack
+npm install
+npm run build
+npm start`;
+
+const apiExamples = `# List operations
+curl http://localhost:3000/api/operations
+
+# List partitions
+curl http://localhost:3000/api/partitions
+
+# List step types
+curl http://localhost:3000/api/step-types`;
+---
+
+<DocsLayout title="Getting Started">
+  <h1>Getting Started</h1>
+
+  <p>
+    DeployStack is a self-hosted deployment platform with embedded intelligence.
+    It runs as two components: <strong>Command</strong> (the central server) and
+    <strong>Envoy</strong> (lightweight agents on target machines).
+  </p>
+
+  <h2>Prerequisites</h2>
+  <ul>
+    <li>Node.js 20+</li>
+    <li>npm 10+</li>
+  </ul>
+
+  <h2>Quick Start</h2>
+
+  <pre><code>{quickStart}</code></pre>
+
+  <p>
+    Command starts on <code>http://localhost:3000</code> with demo data seeded
+    automatically (3 partitions, 3 environments, 3 operations, and sample
+    deployments).
+  </p>
+
+  <h2>Key Concepts</h2>
+
+  <h3>Partitions</h3>
+  <p>
+    Isolated tenant contexts. Each partition has its own variables, deployment
+    history, and configuration. Cross-partition data access is never allowed.
+  </p>
+
+  <h3>Operations</h3>
+  <p>
+    A named deployment workflow with ordered steps. Operations define
+    <em>what</em> gets deployed. Steps can be selected from the step type library
+    or written as custom commands.
+  </p>
+
+  <h3>Environments</h3>
+  <p>
+    Named deployment targets (production, staging, development) with their own
+    variable sets. When variables conflict between partition and environment, the
+    conflict policy determines resolution.
+  </p>
+
+  <h3>Orders</h3>
+  <p>
+    Immutable snapshots of a deployment configuration. An order captures the
+    exact steps, variables, and config at the time of deployment. Orders can be
+    re-executed for reproducible deployments.
+  </p>
+
+  <h3>Decision Diary (Debrief)</h3>
+  <p>
+    Every agent decision is logged in plain language. The diary records what
+    happened, why, and the context. Failed deployments generate automatic
+    postmortem reports.
+  </p>
+
+  <h2>API</h2>
+  <p>
+    Command exposes a RESTful API at <code>/api</code> and an MCP server at
+    <code>/mcp</code>. The UI communicates through the REST API.
+  </p>
+
+  <pre><code>{apiExamples}</code></pre>
+</DocsLayout>

@@ -1,0 +1,101 @@
+---
+import DocsLayout from "../../layouts/DocsLayout.astro";
+
+const createExample = `POST /api/step-types
+{
+  "name": "Warm Cache",
+  "category": "General",
+  "description": "Pre-warm application caches after deployment",
+  "parameters": [
+    { "name": "url", "label": "Base URL", "type": "string", "required": true },
+    { "name": "paths", "label": "Paths to warm", "type": "string", "required": true }
+  ],
+  "commandTemplate": "curl -sf \{\{url\}\}\{\{paths\}\}",
+  "partitionId": "your-partition-id"
+}`;
+
+const importExample = `# Export
+GET /api/step-types/:id/export
+
+# Import
+POST /api/step-types/import
+{ "formatVersion": 1, "stepType": { ... } }`;
+---
+
+<DocsLayout title="Step Types">
+  <h1>Step Type Library</h1>
+
+  <p>
+    DeployStack ships with 27 predefined step types across 7 categories. Each
+    step type provides a structured configuration form with validated inputs,
+    replacing raw command entry with guided parameter forms.
+  </p>
+
+  <h2>Categories</h2>
+
+  <h3>General</h3>
+  <ul>
+    <li><strong>Run Command</strong> — Execute an arbitrary shell command (the freeform escape hatch)</li>
+    <li><strong>Wait / Delay</strong> — Pause execution for a specified duration</li>
+    <li><strong>Approval Gate</strong> — Require manual approval before proceeding</li>
+    <li><strong>Send Notification</strong> — Send alerts via Slack, webhook, or email</li>
+  </ul>
+
+  <h3>File &amp; Artifact</h3>
+  <ul>
+    <li><strong>Copy Files</strong> — Copy files from source to destination</li>
+    <li><strong>Download Artifact</strong> — Download a file from a URL</li>
+    <li><strong>Extract Archive</strong> — Extract tar/zip archives</li>
+    <li><strong>Set File Permissions</strong> — chmod with optional chown</li>
+    <li><strong>Create Symlink</strong> — Create symbolic links</li>
+    <li><strong>Clean Directory</strong> — Remove files with exclude patterns</li>
+  </ul>
+
+  <h3>Service</h3>
+  <ul>
+    <li><strong>Start/Stop/Restart Service</strong> — Manage services via systemd, Docker, or PM2</li>
+    <li><strong>Scale Service</strong> — Scale to a target replica count</li>
+  </ul>
+
+  <h3>Verification</h3>
+  <ul>
+    <li><strong>HTTP Health Check</strong> — Verify a URL returns the expected status</li>
+    <li><strong>Port Check</strong> — Verify a port is open</li>
+    <li><strong>Run Test Suite</strong> — Execute tests and check results</li>
+    <li><strong>Verify File Exists</strong> — Confirm a file exists, optionally verify checksum</li>
+    <li><strong>SSL Certificate Check</strong> — Verify certificate validity and expiry</li>
+  </ul>
+
+  <h3>Database</h3>
+  <ul>
+    <li><strong>Run Database Migration</strong> — Flyway, Knex, Prisma, or Liquibase</li>
+    <li><strong>Database Backup</strong> — Create database backups</li>
+    <li><strong>Run SQL Script</strong> — Execute SQL files with transaction support</li>
+  </ul>
+
+  <h3>Container</h3>
+  <ul>
+    <li><strong>Docker Build/Push/Pull</strong> — Docker image lifecycle</li>
+    <li><strong>Kubernetes Apply</strong> — Apply manifests</li>
+    <li><strong>Kubernetes Rollout Status</strong> — Watch rollouts until completion</li>
+  </ul>
+
+  <h3>Traffic</h3>
+  <ul>
+    <li><strong>Update Load Balancer</strong> — Manage target group configuration</li>
+  </ul>
+
+  <h2>Custom Step Types</h2>
+  <p>
+    Create your own step types with custom parameter forms. Every custom step
+    automatically becomes a reusable template within its partition.
+  </p>
+  <pre><code>{createExample}</code></pre>
+
+  <h2>Import &amp; Export</h2>
+  <p>
+    Step types can be exported as portable JSON definitions and imported into
+    other deployments or shared with the community.
+  </p>
+  <pre><code>{importExample}</code></pre>
+</DocsLayout>
