@@ -4,7 +4,11 @@ import { z } from "zod";
 
 export const CreatePartitionSchema = z.object({
   name: z.string().min(1),
-  variables: z.record(z.string()).optional(),
+  variables: z.record(z.string().max(10_000, "Variable value must not exceed 10,000 characters"))
+    .refine((v) => Object.keys(v).length <= 200, {
+      message: "Maximum 200 variables per entity",
+    })
+    .optional(),
 });
 
 export const UpdatePartitionSchema = z.object({
@@ -12,7 +16,10 @@ export const UpdatePartitionSchema = z.object({
 });
 
 export const SetVariablesSchema = z.object({
-  variables: z.record(z.string()),
+  variables: z.record(z.string().max(10_000, "Variable value must not exceed 10,000 characters"))
+    .refine((v) => Object.keys(v).length <= 200, {
+      message: "Maximum 200 variables per entity",
+    }),
 });
 
 // --- Operations ---
@@ -107,12 +114,20 @@ export const UpdateDeployConfigSchema = z.object({
 
 export const CreateEnvironmentSchema = z.object({
   name: z.string().min(1),
-  variables: z.record(z.string()).optional(),
+  variables: z.record(z.string().max(10_000, "Variable value must not exceed 10,000 characters"))
+    .refine((v) => Object.keys(v).length <= 200, {
+      message: "Maximum 200 variables per entity",
+    })
+    .optional(),
 });
 
 export const UpdateEnvironmentSchema = z.object({
   name: z.string().min(1).optional(),
-  variables: z.record(z.string()).optional(),
+  variables: z.record(z.string().max(10_000, "Variable value must not exceed 10,000 characters"))
+    .refine((v) => Object.keys(v).length <= 200, {
+      message: "Maximum 200 variables per entity",
+    })
+    .optional(),
 });
 
 // --- SSRF Prevention ---

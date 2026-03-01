@@ -402,14 +402,17 @@ const mcp = createMcpServer({ agent, debrief, partitions, environments, deployme
 const app = Fastify({ logger: true });
 
 // Configure CORS origin from DEPLOYSTACK_CORS_ORIGIN env var.
-// If unset or empty: permissive (true). Single value: string. Comma-separated: string[].
+// If unset: reject all cross-origin (secure default). Single value: string. Comma-separated: string[].
 const rawCorsOrigin = process.env.DEPLOYSTACK_CORS_ORIGIN;
-const corsOrigin: true | string | string[] =
-  !rawCorsOrigin || rawCorsOrigin.trim() === ''
-    ? true
-    : rawCorsOrigin.includes(',')
-      ? rawCorsOrigin.split(',').map((o) => o.trim())
-      : rawCorsOrigin.trim();
+let corsOrigin: boolean | string | string[];
+if (!rawCorsOrigin || rawCorsOrigin.trim() === '') {
+  corsOrigin = false;
+  console.warn('[DeployStack] DEPLOYSTACK_CORS_ORIGIN is not set — CORS will reject all cross-origin requests. Set it to your UI origin (e.g., http://localhost:5173) for development.');
+} else if (rawCorsOrigin.includes(',')) {
+  corsOrigin = rawCorsOrigin.split(',').map((o) => o.trim());
+} else {
+  corsOrigin = rawCorsOrigin.trim();
+}
 
 await app.register(fastifyCors, {
   origin: corsOrigin,
