@@ -2811,8 +2811,9 @@ table a:hover {
 /* ---- v2 Dashboard ---- */
 
 .v2-dashboard {
-  max-width: 1200px;
+  max-width: 1800px;
   margin: 0 auto;
+  padding: 0 24px;
 }
 
 /* Command Card */
@@ -4240,10 +4241,22 @@ table a:hover {
 /* ---- v2 Signal cards (OperationalOverview) ---- */
 
 .v2-signals-list {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 1fr;
   gap: 8px;
   margin-bottom: 24px;
+}
+
+@media (min-width: 900px) {
+  .v2-signals-list {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1400px) {
+  .v2-signals-list {
+    grid-template-columns: repeat(3, 1fr);
+  }
 }
 
 .v2-signal-card {
