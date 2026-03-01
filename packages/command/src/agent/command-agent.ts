@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import type {
   Deployment,
   DeploymentId,
+  DeploymentStep,
   DeploymentTrigger,
   DebriefWriter,
   Environment,
@@ -16,6 +17,7 @@ import type {
   HealthCheckResult,
 } from "./health-checker.js";
 import { DefaultHealthChecker } from "./health-checker.js";
+import { runStep } from "./step-runner.js";
 
 // ---------------------------------------------------------------------------
 // Public interfaces
@@ -295,11 +297,11 @@ export class CommandAgent {
 
       // --- Step 4: Execute deployment --------------------------------------
 
-      await this.executeDeployment(deployment, partition, environment);
+      await this.executeDeployment(deployment, partition, environment, order);
 
       // --- Step 5: Post-deploy verify --------------------------------------
 
-      await this.postDeployVerify(deployment, partition, environment);
+      await this.postDeployVerify(deployment, partition, environment, order);
 
       // --- Success ---------------------------------------------------------
 
@@ -1105,65 +1107,226 @@ export class CommandAgent {
     deployment: Deployment,
     partition: Partition,
     environment: Environment,
+    order: Order,
   ): Promise<void> {
-    const entry = this.debrief.record({
-      partitionId: deployment.partitionId,
-      deploymentId: deployment.id,
-      agent: "command",
-      decisionType: "deployment-execution",
-      decision: `Executing ${deployment.operationId} v${deployment.version} on "${environment.name}" for partition "${partition.name}" — delegating to Envoy`,
-      reasoning:
-        `All preconditions passed: configuration accepted (${Object.keys(deployment.variables).length} variable(s), ` +
-        `conflicts resolved), health check confirmed "${environment.name}" is reachable. ` +
-        `Delegating execution to the Envoy agent on the target machine. The Envoy will ` +
-        `write deployment artifacts (manifest, variables, version marker), verify them locally, ` +
-        `and report back. If the Envoy is unreachable, this step will fail with a connection ` +
-        `error — check that the Envoy process is running on the target host.`,
-      context: {
-        step: "execute-deployment",
-        operationId: deployment.operationId,
-        version: deployment.version,
-        variableCount: Object.keys(deployment.variables).length,
-        partitionName: partition.name,
-        environmentName: environment.name,
-      },
-    });
-    deployment.debriefEntryIds.push(entry.id);
+    const steps = this.sortSteps(order.steps, ["pre-deploy", "post-deploy"]);
 
-    await this.delay(this.getEffectiveOptions().executionDelayMs);
+    if (steps.length === 0) {
+      const entry = this.debrief.record({
+        partitionId: deployment.partitionId,
+        deploymentId: deployment.id,
+        agent: "command",
+        decisionType: "deployment-execution",
+        decision: `No execution steps defined for ${deployment.operationId} v${deployment.version} — skipping execution phase`,
+        reasoning:
+          `The order contains no pre-deploy or post-deploy steps. Execution phase is a no-op. ` +
+          `This is valid for operations that only have verification steps or no steps at all.`,
+        context: { step: "execute-deployment", stepCount: 0 },
+      });
+      deployment.debriefEntryIds.push(entry.id);
+      return;
+    }
+
+    for (const step of steps) {
+      const startEntry = this.debrief.record({
+        partitionId: deployment.partitionId,
+        deploymentId: deployment.id,
+        agent: "command",
+        decisionType: "deployment-execution",
+        decision: `Executing step "${step.name}" (${step.type}, order ${step.order}): ${step.command}`,
+        reasoning:
+          `Running ${step.type} step "${step.name}" for ${deployment.operationId} v${deployment.version} ` +
+          `on "${environment.name}" for partition "${partition.name}". ` +
+          `${Object.keys(deployment.variables).length} variable(s) injected as environment variables. ` +
+          `Timeout: ${order.deployConfig.timeoutMs}ms.`,
+        context: {
+          step: "execute-deployment",
+          stepName: step.name,
+          stepType: step.type,
+          command: step.command,
+          timeoutMs: order.deployConfig.timeoutMs,
+        },
+      });
+      deployment.debriefEntryIds.push(startEntry.id);
+
+      const result = await runStep(step, deployment.variables, order.deployConfig.timeoutMs);
+
+      if (!result.success) {
+        const reason = result.timedOut
+          ? `Step "${step.name}" timed out after ${result.durationMs}ms (limit: ${order.deployConfig.timeoutMs}ms)`
+          : `Step "${step.name}" failed with exit code ${result.exitCode}`;
+
+        const failEntry = this.debrief.record({
+          partitionId: deployment.partitionId,
+          deploymentId: deployment.id,
+          agent: "command",
+          decisionType: "deployment-execution",
+          decision: reason,
+          reasoning:
+            `${reason}. ` +
+            (result.stderr ? `stderr: ${result.stderr}` : "No stderr output.") +
+            (result.stdout ? ` stdout: ${result.stdout}` : ""),
+          context: {
+            step: "execute-deployment",
+            stepName: step.name,
+            exitCode: result.exitCode,
+            durationMs: result.durationMs,
+            timedOut: result.timedOut,
+          },
+        });
+        deployment.debriefEntryIds.push(failEntry.id);
+
+        throw new OrchestrationError(
+          "execute-deployment",
+          reason,
+          `Halting deployment pipeline at step "${step.name}". ${result.stderr || "No stderr output."}`,
+        );
+      }
+
+      const successEntry = this.debrief.record({
+        partitionId: deployment.partitionId,
+        deploymentId: deployment.id,
+        agent: "command",
+        decisionType: "deployment-execution",
+        decision: `Step "${step.name}" completed successfully in ${result.durationMs}ms`,
+        reasoning:
+          `${step.type} step "${step.name}" exited with code 0 in ${result.durationMs}ms. ` +
+          (result.stdout ? `Output: ${result.stdout}` : "No stdout output."),
+        context: {
+          step: "execute-deployment",
+          stepName: step.name,
+          exitCode: 0,
+          durationMs: result.durationMs,
+        },
+      });
+      deployment.debriefEntryIds.push(successEntry.id);
+    }
   }
 
   private async postDeployVerify(
     deployment: Deployment,
     partition: Partition,
     environment: Environment,
+    order: Order,
   ): Promise<void> {
-    const entry = this.debrief.record({
-      partitionId: deployment.partitionId,
-      deploymentId: deployment.id,
-      agent: "command",
-      decisionType: "deployment-verification",
-      decision: `Verified: ${deployment.operationId} v${deployment.version} deployed successfully to "${environment.name}" for partition "${partition.name}"`,
-      reasoning:
-        `Deployment execution completed without errors. Verification confirms: (1) no ` +
-        `execution errors were raised, (2) no rollback was triggered, (3) the Envoy ` +
-        `reported successful artifact placement. ${Object.keys(deployment.variables).length} ` +
-        `variable(s) applied. Note: this is server-side verification based on execution ` +
-        `outcome — the Envoy's own local verification (artifact checksums, service ` +
-        `health) provides the ground-truth confirmation in its debrief entries.`,
-      context: {
-        step: "post-deploy-verify",
-        variableCount: Object.keys(deployment.variables).length,
-        operationId: deployment.operationId,
-        version: deployment.version,
-      },
-    });
-    deployment.debriefEntryIds.push(entry.id);
+    const steps = this.sortSteps(order.steps, ["verification"]);
+
+    if (steps.length === 0) {
+      const entry = this.debrief.record({
+        partitionId: deployment.partitionId,
+        deploymentId: deployment.id,
+        agent: "command",
+        decisionType: "deployment-verification",
+        decision: `No verification steps defined — marking deployment as verified based on successful execution`,
+        reasoning:
+          `Deployment execution completed without errors. No explicit verification steps ` +
+          `are configured for this operation. Verification is based on execution outcome: ` +
+          `all pre-deploy and post-deploy steps exited with code 0. ` +
+          `${Object.keys(deployment.variables).length} variable(s) applied.`,
+        context: {
+          step: "post-deploy-verify",
+          variableCount: Object.keys(deployment.variables).length,
+          operationId: deployment.operationId,
+          version: deployment.version,
+        },
+      });
+      deployment.debriefEntryIds.push(entry.id);
+      return;
+    }
+
+    for (const step of steps) {
+      const startEntry = this.debrief.record({
+        partitionId: deployment.partitionId,
+        deploymentId: deployment.id,
+        agent: "command",
+        decisionType: "deployment-verification",
+        decision: `Running verification step "${step.name}": ${step.command}`,
+        reasoning:
+          `Executing verification step "${step.name}" to confirm deployment of ` +
+          `${deployment.operationId} v${deployment.version} on "${environment.name}". ` +
+          `Timeout: ${order.deployConfig.timeoutMs}ms.`,
+        context: {
+          step: "post-deploy-verify",
+          stepName: step.name,
+          command: step.command,
+          timeoutMs: order.deployConfig.timeoutMs,
+        },
+      });
+      deployment.debriefEntryIds.push(startEntry.id);
+
+      const result = await runStep(step, deployment.variables, order.deployConfig.timeoutMs);
+
+      if (!result.success) {
+        const reason = result.timedOut
+          ? `Verification step "${step.name}" timed out after ${result.durationMs}ms`
+          : `Verification step "${step.name}" failed with exit code ${result.exitCode}`;
+
+        const failEntry = this.debrief.record({
+          partitionId: deployment.partitionId,
+          deploymentId: deployment.id,
+          agent: "command",
+          decisionType: "deployment-verification",
+          decision: reason,
+          reasoning:
+            `${reason}. Deployment was executed but verification failed — the deployment ` +
+            `may have succeeded but the verification command did not confirm it. ` +
+            (result.stderr ? `stderr: ${result.stderr}` : "No stderr output."),
+          context: {
+            step: "post-deploy-verify",
+            stepName: step.name,
+            exitCode: result.exitCode,
+            durationMs: result.durationMs,
+            timedOut: result.timedOut,
+          },
+        });
+        deployment.debriefEntryIds.push(failEntry.id);
+
+        throw new OrchestrationError(
+          "post-deploy-verify",
+          reason,
+          `Verification failed at step "${step.name}". The deployment commands completed ` +
+          `but verification could not confirm success. ${result.stderr || "No stderr output."}`,
+        );
+      }
+
+      const successEntry = this.debrief.record({
+        partitionId: deployment.partitionId,
+        deploymentId: deployment.id,
+        agent: "command",
+        decisionType: "deployment-verification",
+        decision: `Verification step "${step.name}" passed in ${result.durationMs}ms`,
+        reasoning:
+          `Verification step "${step.name}" exited with code 0 in ${result.durationMs}ms. ` +
+          (result.stdout ? `Output: ${result.stdout}` : "No stdout output."),
+        context: {
+          step: "post-deploy-verify",
+          stepName: step.name,
+          exitCode: 0,
+          durationMs: result.durationMs,
+        },
+      });
+      deployment.debriefEntryIds.push(successEntry.id);
+    }
   }
 
   // -----------------------------------------------------------------------
   // Utilities
   // -----------------------------------------------------------------------
+
+  private sortSteps(
+    steps: DeploymentStep[],
+    types: DeploymentStep["type"][],
+  ): DeploymentStep[] {
+    const typeOrder = new Map(types.map((t, i) => [t, i]));
+    return steps
+      .filter((s) => typeOrder.has(s.type))
+      .sort((a, b) => {
+        const ta = typeOrder.get(a.type)!;
+        const tb = typeOrder.get(b.type)!;
+        if (ta !== tb) return ta - tb;
+        return a.order - b.order;
+      });
+  }
 
   private delay(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));

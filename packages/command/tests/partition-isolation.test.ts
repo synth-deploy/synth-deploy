@@ -376,7 +376,7 @@ describe("Partition Isolation", () => {
       // B only has success-path entries
       const bSuccess = findDecisions(
         partitionB.getDebriefEntries(),
-        "Marking deployment",
+        "Marking deployment of",
       );
       expect(bSuccess).toHaveLength(1);
     });

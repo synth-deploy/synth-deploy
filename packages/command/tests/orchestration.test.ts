@@ -176,8 +176,8 @@ describe("Deployment Orchestration Engine", () => {
       expect(findDecisions(entries, "pipeline")).toHaveLength(1);
       expect(findDecisions(entries, "Accepted configuration")).toHaveLength(1);
       expect(findDecisions(entries, "Proceeding with deployment")).toHaveLength(1);
-      expect(findDecisions(entries, "Executing")).toHaveLength(1);
-      expect(findDecisions(entries, "Marking deployment")).toHaveLength(1);
+      expect(findDecisions(entries, "No execution steps defined")).toHaveLength(1);
+      expect(findDecisions(entries, "Marking deployment of")).toHaveLength(1);
     });
 
     it("handles deployment with no variable conflicts", async () => {
@@ -195,7 +195,7 @@ describe("Deployment Orchestration Engine", () => {
       });
 
       const entries = diary.getByDeployment(result.id);
-      const completion = findDecisions(entries, "Marking deployment")[0];
+      const completion = findDecisions(entries, "Marking deployment of")[0];
       expect(completion.reasoning).toContain("No variable conflicts");
     });
   });
