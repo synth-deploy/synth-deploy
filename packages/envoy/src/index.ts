@@ -34,7 +34,10 @@ if (COMMAND_URL) {
   reporter = new CommandReporter(COMMAND_URL, envoyId);
 }
 
-const agent = new EnvoyAgent(debrief, state, BASE_DIR, reporter);
+// LLM client for diagnostic enhancement — gracefully degrades if no API key
+const llm = new LlmClient(debrief, "envoy");
+
+const agent = new EnvoyAgent(debrief, state, BASE_DIR, reporter, llm);
 
 debrief.record({
   partitionId: null,
@@ -146,8 +149,7 @@ debrief.record({
 // --- Query engine with optional LLM ---
 
 const scanner = new EnvironmentScanner(BASE_DIR, state);
-const llmClient = new LlmClient(debrief, "envoy");
-const queryEngine = new QueryEngine(debrief, state, scanner, llmClient);
+const queryEngine = new QueryEngine(debrief, state, scanner, llm);
 
 // --- Start server ---
 
@@ -225,4 +227,5 @@ export type {
   DiagnosticReport,
   DiagnosticEvidence,
   FailureType,
+  LogFinding,
 } from "./agent/diagnostic-investigator.js";

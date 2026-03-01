@@ -4,6 +4,7 @@ import type {
   DeploymentId,
   PartitionId,
   EnvironmentId,
+  LlmClient,
 } from "@deploystack/core";
 import { LocalStateStore } from "../state/local-state.js";
 import type { LocalDeploymentRecord } from "../state/local-state.js";
@@ -100,10 +101,11 @@ export class EnvoyAgent {
     private state: LocalStateStore,
     private baseDir: string,
     reporter?: CommandReporter,
+    llm?: LlmClient,
   ) {
     this.executor = new DeploymentExecutor(baseDir);
     this.scanner = new EnvironmentScanner(baseDir, state);
-    this.investigator = new DiagnosticInvestigator(state);
+    this.investigator = new DiagnosticInvestigator(state, llm);
     this.reporter = reporter ?? null;
   }
 

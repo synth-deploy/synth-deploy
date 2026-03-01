@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import type { LlmClient, LlmResult } from "@deploystack/core";
 import type { LocalStateStore } from "../state/local-state.js";
 import type { DeploymentInstruction } from "./envoy-agent.js";
 import type { ExecutionResult } from "./deployment-executor.js";
@@ -179,9 +180,14 @@ const LOG_PATTERNS: LogPattern[] = [
  * If it can't determine the cause, it says so and lists what it checked.
  */
 export class DiagnosticInvestigator {
+  private llm: LlmClient | null;
+
   constructor(
     private state: LocalStateStore,
-  ) {}
+    llm?: LlmClient,
+  ) {
+    this.llm = llm ?? null;
+  }
 
   /**
    * Investigate a failed deployment.
@@ -235,6 +241,339 @@ export class DiagnosticInvestigator {
       historyContext,
       execResult,
     );
+  }
+
+  /**
+   * Investigate a failed deployment with LLM enhancement.
+   *
+   * Same pipeline as `investigate()` but:
+   * - Uses `scanLogsAsync()` to fall back to LLM when regex finds nothing
+   * - Uses `buildReportAsync()` to produce LLM-enhanced reports
+   * - Falls back to deterministic behavior on any LLM failure
+   */
+  async investigateAsync(
+    workspacePath: string,
+    instruction: DeploymentInstruction,
+    execResult?: ExecutionResult | null,
+  ): Promise<DiagnosticReport> {
+    const evidence: DiagnosticEvidence[] = [];
+
+    // --- Gather evidence (deterministic + LLM-enhanced log scan) ---
+
+    const logFindings = await this.scanLogsAsync(workspacePath, evidence, instruction);
+    const statusState = this.checkStatusFile(workspacePath, evidence);
+    const healthState = this.checkHealthFile(workspacePath, evidence);
+    const artifactState = this.checkArtifactCompleteness(workspacePath, evidence);
+    const historyContext = this.checkDeploymentHistory(instruction, evidence);
+
+    if (execResult?.error) {
+      evidence.push({
+        source: "execution-result",
+        finding: `Executor reported: ${execResult.error}`,
+        relevance: "Direct error from the deployment execution phase",
+      });
+    }
+
+    // --- Classify the failure (always deterministic) ---
+
+    const failureType = this.classifyFailure(
+      logFindings,
+      statusState,
+      healthState,
+      artifactState,
+    );
+
+    // --- Produce the diagnostic (LLM-enhanced) ---
+
+    return this.buildReportAsync(
+      failureType,
+      instruction,
+      evidence,
+      logFindings,
+      statusState,
+      healthState,
+      artifactState,
+      historyContext,
+      execResult,
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // LLM-enhanced methods
+  // -------------------------------------------------------------------------
+
+  /**
+   * Scan logs with LLM fallback.
+   *
+   * 1. Runs existing regex patterns (deterministic)
+   * 2. If zero findings AND LLM is available, sends last 50 log lines to LLM
+   * 3. Parses LLM response into LogFinding structures
+   * 4. Falls back to empty findings on LLM failure
+   */
+  async scanLogsAsync(
+    workspacePath: string,
+    evidence: DiagnosticEvidence[],
+    instruction: DeploymentInstruction,
+  ): Promise<LogFinding[]> {
+    // Step 1: deterministic regex scan
+    const findings = this.readLogs(workspacePath, evidence);
+
+    // Step 2: if regex found something, no need for LLM
+    if (findings.length > 0) {
+      return findings;
+    }
+
+    // Step 3: if no LLM available, return empty findings
+    if (!this.llm || !this.llm.isAvailable()) {
+      return findings;
+    }
+
+    // Step 4: collect last 50 lines from all log files
+    const logsDir = path.join(workspacePath, "logs");
+    if (!fs.existsSync(logsDir)) {
+      return findings;
+    }
+
+    let logFiles: string[];
+    try {
+      logFiles = fs.readdirSync(logsDir).filter((f) => f.endsWith(".log"));
+    } catch {
+      return findings;
+    }
+
+    const tailLines: string[] = [];
+    for (const logFile of logFiles) {
+      const logPath = path.join(logsDir, logFile);
+      try {
+        const content = fs.readFileSync(logPath, "utf-8");
+        const lines = content.split("\n").filter((l) => l.trim().length > 0);
+        const last50 = lines.slice(-50);
+        for (const line of last50) {
+          tailLines.push(`[${logFile}] ${line}`);
+        }
+      } catch {
+        // skip unreadable files — already recorded in evidence by readLogs
+      }
+    }
+
+    if (tailLines.length === 0) {
+      return findings;
+    }
+
+    // Step 5: call LLM for pattern identification
+    const llmResult: LlmResult = await this.llm.classify({
+      systemPrompt:
+        "You are a deployment log analyst. Analyze the following log lines and identify " +
+        "failure patterns. Respond ONLY with a JSON array of objects, each with:\n" +
+        '- "logFile": the source log file name (from the [filename] prefix)\n' +
+        '- "failureType": one of "service-crash", "health-timeout", "dependency-unavailable", "partial-deployment", "unknown"\n' +
+        '- "detail": a specific, actionable description of what went wrong\n' +
+        '- "line": the most relevant log line\n\n' +
+        "If no failure patterns are found, respond with an empty array: []\n" +
+        "Do NOT include any text outside the JSON array.",
+      prompt:
+        `Service: ${instruction.operationId} v${instruction.version}\n` +
+        `Environment: ${instruction.environmentName}\n\n` +
+        `Last log lines:\n${tailLines.join("\n")}`,
+      promptSummary: `Log pattern analysis for ${instruction.operationId} v${instruction.version} (regex found nothing, LLM fallback)`,
+      partitionId: instruction.partitionId,
+      deploymentId: instruction.deploymentId,
+      maxTokens: 1024,
+    });
+
+    if (!llmResult.ok) {
+      return findings;
+    }
+
+    // Step 6: parse LLM response into LogFinding structures
+    try {
+      const parsed = this.parseLlmLogFindings(llmResult.text);
+      if (parsed.length > 0) {
+        evidence.push({
+          source: "llm-log-analysis",
+          finding: `LLM identified ${parsed.length} pattern(s) that regex missed`,
+          relevance: "LLM fallback analysis — regex patterns found nothing, LLM detected potential issues",
+        });
+      }
+      return parsed;
+    } catch {
+      // LLM returned unparseable response — fall back to empty findings
+      return findings;
+    }
+  }
+
+  /**
+   * Build a diagnostic report with LLM enhancement.
+   *
+   * 1. Produces the deterministic template-based report as a baseline
+   * 2. If LLM is available, sends failure type + evidence for situation-specific report
+   * 3. Falls back to the template report on LLM failure
+   * 4. Records every LLM call to debrief
+   */
+  async buildReportAsync(
+    failureType: FailureType,
+    instruction: DeploymentInstruction,
+    evidence: DiagnosticEvidence[],
+    logFindings: LogFinding[],
+    statusState: string | null,
+    healthState: string | null,
+    artifactState: ArtifactState,
+    historyContext: HistoryContext,
+    execResult?: ExecutionResult | null,
+  ): Promise<DiagnosticReport> {
+    // Step 1: produce deterministic baseline report
+    const baseReport = this.buildReport(
+      failureType,
+      instruction,
+      evidence,
+      logFindings,
+      statusState,
+      healthState,
+      artifactState,
+      historyContext,
+      execResult,
+    );
+
+    // Step 2: if no LLM available, return baseline
+    if (!this.llm || !this.llm.isAvailable()) {
+      return baseReport;
+    }
+
+    // Step 3: call LLM for situation-specific report
+    const evidenceSummary = evidence
+      .map((e) => `[${e.source}] ${e.finding} — ${e.relevance}`)
+      .join("\n");
+
+    const logFindingSummary = logFindings.length > 0
+      ? logFindings.map((f) => `[${f.logFile}] ${f.failureType}: ${f.detail}`).join("\n")
+      : "No specific log findings.";
+
+    const llmResult: LlmResult = await this.llm.reason({
+      systemPrompt:
+        "You are a deployment diagnostics expert writing a report for an engineer at 2am. " +
+        "Be specific, actionable, and concise. Every sentence must help the engineer fix the problem.\n\n" +
+        "You will receive a classified failure type, evidence collected from the deployment workspace, " +
+        "and log findings. Produce a diagnostic report with exactly these fields:\n" +
+        '- "summary": one sentence describing what happened\n' +
+        '- "rootCause": why it happened, based on the evidence provided\n' +
+        '- "recommendation": what to do next, specific enough to copy-paste commands\n' +
+        '- "traditionalComparison": what a dumb deployment agent would have said instead\n\n' +
+        "Respond ONLY with a JSON object containing these four string fields. " +
+        "Do NOT include any text outside the JSON object.",
+      prompt:
+        `Failure type: ${failureType}\n` +
+        `Service: ${instruction.operationId} v${instruction.version}\n` +
+        `Environment: ${instruction.environmentName} (partition: ${instruction.partitionName})\n` +
+        `${execResult?.error ? `Execution error: ${execResult.error}\n` : ""}` +
+        `\nEvidence:\n${evidenceSummary}\n` +
+        `\nLog findings:\n${logFindingSummary}\n` +
+        `\nHistory: ${historyContext.previousDeployCount} previous deployments, ` +
+        `${historyContext.previousFailureCount} previous failures` +
+        `${historyContext.previousVersion ? `, previous version: ${historyContext.previousVersion}` : ""}\n` +
+        `${historyContext.isFirstDeployment ? "This is the first deployment to this environment." : ""}`,
+      promptSummary: `Diagnostic report generation for ${instruction.operationId} v${instruction.version} (${failureType})`,
+      partitionId: instruction.partitionId,
+      deploymentId: instruction.deploymentId,
+      maxTokens: 2048,
+    });
+
+    if (!llmResult.ok) {
+      return baseReport;
+    }
+
+    // Step 4: parse LLM response and merge with baseline
+    try {
+      const parsed = this.parseLlmReport(llmResult.text);
+      return {
+        failureType: baseReport.failureType, // always deterministic
+        summary: parsed.summary ?? baseReport.summary,
+        rootCause: parsed.rootCause ?? baseReport.rootCause,
+        recommendation: parsed.recommendation ?? baseReport.recommendation,
+        evidence: baseReport.evidence, // always deterministic
+        traditionalComparison: parsed.traditionalComparison ?? baseReport.traditionalComparison,
+      };
+    } catch {
+      // LLM returned unparseable response — fall back to baseline
+      return baseReport;
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // LLM response parsing
+  // -------------------------------------------------------------------------
+
+  private parseLlmLogFindings(text: string): LogFinding[] {
+    // Extract JSON array from response (LLM may include markdown fences)
+    const jsonMatch = text.match(/\[[\s\S]*\]/);
+    if (!jsonMatch) return [];
+
+    const raw: unknown = JSON.parse(jsonMatch[0]);
+    if (!Array.isArray(raw)) return [];
+
+    const validFailureTypes: FailureType[] = [
+      "service-crash", "health-timeout", "dependency-unavailable",
+      "partial-deployment", "unknown",
+    ];
+
+    const results: LogFinding[] = [];
+    for (const item of raw) {
+      if (
+        typeof item === "object" && item !== null &&
+        typeof (item as Record<string, unknown>).logFile === "string" &&
+        typeof (item as Record<string, unknown>).failureType === "string" &&
+        typeof (item as Record<string, unknown>).detail === "string" &&
+        typeof (item as Record<string, unknown>).line === "string"
+      ) {
+        const rec = item as Record<string, string>;
+        const ft = validFailureTypes.includes(rec.failureType as FailureType)
+          ? (rec.failureType as FailureType)
+          : "unknown";
+        results.push({
+          logFile: rec.logFile,
+          failureType: ft,
+          detail: rec.detail,
+          line: rec.line,
+        });
+      }
+    }
+    return results;
+  }
+
+  private parseLlmReport(text: string): Partial<{
+    summary: string;
+    rootCause: string;
+    recommendation: string;
+    traditionalComparison: string;
+  }> {
+    // Extract JSON object from response (LLM may include markdown fences)
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return {};
+
+    const raw: unknown = JSON.parse(jsonMatch[0]);
+    if (typeof raw !== "object" || raw === null) return {};
+
+    const obj = raw as Record<string, unknown>;
+    const result: Partial<{
+      summary: string;
+      rootCause: string;
+      recommendation: string;
+      traditionalComparison: string;
+    }> = {};
+
+    if (typeof obj.summary === "string" && obj.summary.length > 0) {
+      result.summary = obj.summary;
+    }
+    if (typeof obj.rootCause === "string" && obj.rootCause.length > 0) {
+      result.rootCause = obj.rootCause;
+    }
+    if (typeof obj.recommendation === "string" && obj.recommendation.length > 0) {
+      result.recommendation = obj.recommendation;
+    }
+    if (typeof obj.traditionalComparison === "string" && obj.traditionalComparison.length > 0) {
+      result.traditionalComparison = obj.traditionalComparison;
+    }
+
+    return result;
   }
 
   // -------------------------------------------------------------------------
@@ -886,7 +1225,7 @@ export class DiagnosticInvestigator {
 // Internal types
 // ---------------------------------------------------------------------------
 
-interface LogFinding {
+export interface LogFinding {
   logFile: string;
   failureType: FailureType;
   detail: string;
