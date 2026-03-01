@@ -50,8 +50,12 @@ export function registerEnvironmentRoutes(
           variables: parsed.data.variables,
         });
         return { environment };
-      } catch {
-        return reply.status(404).send({ error: "Environment not found" });
+      } catch (err) {
+        if (err instanceof Error && err.message.toLowerCase().includes("not found")) {
+          return reply.status(404).send({ error: "Environment not found" });
+        }
+        app.log.error(err, "Failed to update environment");
+        return reply.status(500).send({ error: "Internal server error" });
       }
     },
   );

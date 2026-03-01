@@ -48,8 +48,12 @@ export function registerPartitionRoutes(
         name: parsed.data.name?.trim(),
       });
       return { partition };
-    } catch {
-      return reply.status(404).send({ error: "Partition not found" });
+    } catch (err) {
+      if (err instanceof Error && err.message.toLowerCase().includes("not found")) {
+        return reply.status(404).send({ error: "Partition not found" });
+      }
+      app.log.error(err, "Failed to update partition");
+      return reply.status(500).send({ error: "Internal server error" });
     }
   });
 
@@ -111,8 +115,12 @@ export function registerPartitionRoutes(
       try {
         const partition = partitions.setVariables(request.params.id, parsed.data.variables);
         return { partition };
-      } catch {
-        return reply.status(404).send({ error: "Partition not found" });
+      } catch (err) {
+        if (err instanceof Error && err.message.toLowerCase().includes("not found")) {
+          return reply.status(404).send({ error: "Partition not found" });
+        }
+        app.log.error(err, "Failed to set partition variables");
+        return reply.status(500).send({ error: "Internal server error" });
       }
     },
   );
