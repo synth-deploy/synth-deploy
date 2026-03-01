@@ -19,6 +19,7 @@ import type {
   DeployConfig,
   AppSettings,
 } from "./types.js";
+import type { StepTypeDefinition } from "./step-types.js";
 import type { CreateOrderParams } from "./order-store.js";
 
 export interface IPartitionStore {
@@ -53,11 +54,18 @@ export interface IOperationStore {
   updateStep(
     id: OperationId,
     stepId: string,
-    updates: { name?: string; type?: DeploymentStepType; command?: string; order?: number },
+    updates: { name?: string; type?: DeploymentStepType; command?: string; order?: number; stepTypeId?: string; stepTypeConfig?: Record<string, unknown> },
   ): Operation;
   removeStep(id: OperationId, stepId: string): Operation;
   reorderSteps(id: OperationId, orderedStepIds: string[]): Operation;
   updateDeployConfig(id: OperationId, config: Partial<DeployConfig>): Operation;
+}
+
+export interface IStepTypeStore {
+  create(stepType: StepTypeDefinition): StepTypeDefinition;
+  get(id: string): StepTypeDefinition | undefined;
+  list(partitionId?: string): StepTypeDefinition[];
+  delete(id: string): boolean;
 }
 
 export interface IOrderStore {

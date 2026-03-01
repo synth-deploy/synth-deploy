@@ -35,15 +35,61 @@ const DeploymentStepTypeSchema = z.enum(["pre-deploy", "post-deploy", "verificat
 export const CreateStepSchema = z.object({
   name: z.string().min(1),
   type: DeploymentStepTypeSchema,
-  command: z.string().min(1),
+  command: z.string().min(1).optional(),
   order: z.number().int().nonnegative().optional(),
-});
+  stepTypeId: z.string().optional(),
+  stepTypeConfig: z.record(z.unknown()).optional(),
+}).refine(
+  (data) => data.command || data.stepTypeId,
+  { message: "Either command or stepTypeId must be provided" },
+);
 
 export const UpdateStepSchema = z.object({
   name: z.string().min(1).optional(),
   type: DeploymentStepTypeSchema.optional(),
   command: z.string().min(1).optional(),
   order: z.number().int().nonnegative().optional(),
+  stepTypeId: z.string().optional(),
+  stepTypeConfig: z.record(z.unknown()).optional(),
+});
+
+// --- Step Types ---
+
+const StepTypeParameterSchema = z.object({
+  name: z.string().min(1),
+  label: z.string().min(1),
+  type: z.enum(["string", "number", "boolean", "select"]),
+  required: z.boolean(),
+  default: z.union([z.string(), z.number(), z.boolean()]).optional(),
+  options: z.array(z.string()).optional(),
+  description: z.string().optional(),
+  validation: z.object({
+    pattern: z.string().optional(),
+    min: z.number().optional(),
+    max: z.number().optional(),
+  }).optional(),
+});
+
+export const CreateStepTypeSchema = z.object({
+  name: z.string().min(1),
+  category: z.enum(["General", "File & Artifact", "Service", "Verification", "Database", "Container", "Traffic"]),
+  description: z.string().min(1),
+  parameters: z.array(StepTypeParameterSchema),
+  commandTemplate: z.string().min(1),
+  partitionId: z.string().optional(),
+});
+
+export const ImportStepTypeSchema = z.object({
+  formatVersion: z.literal(1),
+  stepType: z.object({
+    id: z.string().min(1),
+    name: z.string().min(1),
+    category: z.enum(["General", "File & Artifact", "Service", "Verification", "Database", "Container", "Traffic"]),
+    description: z.string().min(1),
+    parameters: z.array(StepTypeParameterSchema),
+    commandTemplate: z.string().min(1),
+  }),
+  partitionId: z.string().optional(),
 });
 
 export const ReorderStepsSchema = z.object({

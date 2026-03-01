@@ -1,9 +1,18 @@
 import { useState } from "react";
-import type { DeploymentStep, DeploymentStepType } from "../types.js";
+import type { DeploymentStep, DeploymentStepType, StepTypeDefinition } from "../types.js";
+import StepTypePicker from "./StepTypePicker.js";
+import StepTypeForm from "./StepTypeForm.js";
 
 interface Props {
   steps: DeploymentStep[];
-  onAdd: (step: { name: string; type: DeploymentStepType; command: string; order?: number }) => Promise<void>;
+  onAdd: (step: {
+    name: string;
+    type: DeploymentStepType;
+    command?: string;
+    order?: number;
+    stepTypeId?: string;
+    stepTypeConfig?: Record<string, unknown>;
+  }) => Promise<void>;
   onUpdate: (stepId: string, updates: Partial<DeploymentStep>) => Promise<void>;
   onDelete: (stepId: string) => Promise<void>;
   onReorder: (stepIds: string[]) => Promise<void>;
@@ -11,26 +20,19 @@ interface Props {
 
 const STEP_TYPES: DeploymentStepType[] = ["pre-deploy", "post-deploy", "verification"];
 
+type AddMode = "closed" | "picker" | "form" | "freeform";
+
 export default function StepEditor({ steps, onAdd, onUpdate, onDelete, onReorder }: Props) {
-  const [name, setName] = useState("");
-  const [type, setType] = useState<DeploymentStepType>("pre-deploy");
-  const [command, setCommand] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState<Partial<DeploymentStep>>({});
   const [error, setError] = useState<string | null>(null);
+  const [addMode, setAddMode] = useState<AddMode>("closed");
+  const [selectedStepType, setSelectedStepType] = useState<StepTypeDefinition | null>(null);
 
-  async function handleAdd() {
-    if (!name.trim() || !command.trim()) return;
-    setError(null);
-    try {
-      await onAdd({ name: name.trim(), type, command: command.trim(), order: steps.length });
-      setName("");
-      setCommand("");
-      setType("pre-deploy");
-    } catch (e: any) {
-      setError(e.message);
-    }
-  }
+  // Freeform fields (for "Run Command" / manual entry)
+  const [freeformName, setFreeformName] = useState("");
+  const [freeformType, setFreeformType] = useState<DeploymentStepType>("pre-deploy");
+  const [freeformCommand, setFreeformCommand] = useState("");
 
   function startEdit(step: DeploymentStep) {
     setEditingId(step.id);
@@ -69,6 +71,57 @@ export default function StepEditor({ steps, onAdd, onUpdate, onDelete, onReorder
     } catch (e: any) {
       setError(e.message);
     }
+  }
+
+  function handleStepTypeSelected(stepType: StepTypeDefinition) {
+    setSelectedStepType(stepType);
+    setAddMode("form");
+  }
+
+  async function handleStepTypeFormSubmit(data: {
+    name: string;
+    type: DeploymentStepType;
+    stepTypeId: string;
+    stepTypeConfig: Record<string, unknown>;
+  }) {
+    setError(null);
+    try {
+      await onAdd({
+        name: data.name,
+        type: data.type,
+        stepTypeId: data.stepTypeId,
+        stepTypeConfig: data.stepTypeConfig,
+        order: steps.length,
+      });
+      setAddMode("closed");
+      setSelectedStepType(null);
+    } catch (e: any) {
+      setError(e.message);
+    }
+  }
+
+  async function handleFreeformAdd() {
+    if (!freeformName.trim() || !freeformCommand.trim()) return;
+    setError(null);
+    try {
+      await onAdd({
+        name: freeformName.trim(),
+        type: freeformType,
+        command: freeformCommand.trim(),
+        order: steps.length,
+      });
+      setFreeformName("");
+      setFreeformCommand("");
+      setFreeformType("pre-deploy");
+      setAddMode("closed");
+    } catch (e: any) {
+      setError(e.message);
+    }
+  }
+
+  function closeAdd() {
+    setAddMode("closed");
+    setSelectedStepType(null);
   }
 
   const sorted = [...steps].sort((a, b) => a.order - b.order);
@@ -166,26 +219,56 @@ export default function StepEditor({ steps, onAdd, onUpdate, onDelete, onReorder
         <p className="text-muted" style={{ margin: "12px 0" }}>No deployment steps defined. Add one below.</p>
       )}
 
-      <div className="step-add-form">
-        <input
-          placeholder="Step name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
+      {/* Add step controls */}
+      {addMode === "closed" && (
+        <div className="step-add-buttons">
+          <button className="btn btn-primary" onClick={() => setAddMode("picker")}>
+            Add Step from Library
+          </button>
+          <button className="btn" onClick={() => setAddMode("freeform")}>
+            Add Custom Command
+          </button>
+        </div>
+      )}
+
+      {addMode === "picker" && (
+        <StepTypePicker
+          onSelect={handleStepTypeSelected}
+          onCancel={closeAdd}
         />
-        <select value={type} onChange={(e) => setType(e.target.value as DeploymentStepType)}>
-          {STEP_TYPES.map((t) => (
-            <option key={t} value={t}>{t}</option>
-          ))}
-        </select>
-        <input
-          placeholder="Command (e.g., npm run migrate)"
-          value={command}
-          onChange={(e) => setCommand(e.target.value)}
-          className="mono"
-          style={{ flex: 1 }}
+      )}
+
+      {addMode === "form" && selectedStepType && (
+        <StepTypeForm
+          stepType={selectedStepType}
+          onSubmit={handleStepTypeFormSubmit}
+          onBack={() => setAddMode("picker")}
         />
-        <button className="btn btn-primary" onClick={handleAdd}>Add Step</button>
-      </div>
+      )}
+
+      {addMode === "freeform" && (
+        <div className="step-add-form">
+          <input
+            placeholder="Step name"
+            value={freeformName}
+            onChange={(e) => setFreeformName(e.target.value)}
+          />
+          <select value={freeformType} onChange={(e) => setFreeformType(e.target.value as DeploymentStepType)}>
+            {STEP_TYPES.map((t) => (
+              <option key={t} value={t}>{t}</option>
+            ))}
+          </select>
+          <input
+            placeholder="Command (e.g., npm run migrate)"
+            value={freeformCommand}
+            onChange={(e) => setFreeformCommand(e.target.value)}
+            className="mono"
+            style={{ flex: 1 }}
+          />
+          <button className="btn btn-primary" onClick={handleFreeformAdd}>Add Step</button>
+          <button className="btn" onClick={closeAdd}>Cancel</button>
+        </div>
+      )}
     </div>
   );
 }

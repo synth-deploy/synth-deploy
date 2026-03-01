@@ -9,6 +9,47 @@ export interface DeploymentStep {
   type: DeploymentStepType;
   command: string;
   order: number;
+  stepTypeId?: string;
+  stepTypeConfig?: Record<string, unknown>;
+}
+
+export type StepTypeParameterType = "string" | "number" | "boolean" | "select";
+
+export interface StepTypeParameter {
+  name: string;
+  label: string;
+  type: StepTypeParameterType;
+  required: boolean;
+  default?: string | number | boolean;
+  options?: string[];
+  description?: string;
+  validation?: {
+    pattern?: string;
+    min?: number;
+    max?: number;
+  };
+}
+
+export type StepTypeSource = "predefined" | "custom" | "community";
+
+export type StepTypeCategory =
+  | "General"
+  | "File & Artifact"
+  | "Service"
+  | "Verification"
+  | "Database"
+  | "Container"
+  | "Traffic";
+
+export interface StepTypeDefinition {
+  id: string;
+  name: string;
+  category: StepTypeCategory;
+  description: string;
+  parameters: StepTypeParameter[];
+  commandTemplate: string;
+  source: StepTypeSource;
+  partitionId?: string;
 }
 
 export interface DeployConfig {

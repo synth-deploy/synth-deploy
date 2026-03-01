@@ -17,6 +17,7 @@ import type {
   AppSettings,
 } from "./types.js";
 import { DEFAULT_APP_SETTINGS, DEFAULT_DEPLOY_CONFIG } from "./types.js";
+import type { StepTypeDefinition } from "./step-types.js";
 import type { CreateOrderParams } from "./order-store.js";
 
 // ---------------------------------------------------------------------------
@@ -102,7 +103,27 @@ export function openEntityDatabase(dbPath: string): Database.Database {
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS step_types (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      category TEXT NOT NULL,
+      description TEXT NOT NULL,
+      parameters TEXT NOT NULL,
+      command_template TEXT NOT NULL,
+      source TEXT NOT NULL DEFAULT 'custom',
+      partition_id TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_step_types_partition ON step_types(partition_id);
   `);
+
+  // Add step_type_id and step_type_config columns if they don't exist (migration)
+  try {
+    db.exec(`ALTER TABLE deployment_steps ADD COLUMN step_type_id TEXT`);
+  } catch { /* column already exists */ }
+  try {
+    db.exec(`ALTER TABLE deployment_steps ADD COLUMN step_type_config TEXT`);
+  } catch { /* column already exists */ }
 
   return db;
 }
@@ -330,14 +351,14 @@ export class PersistentOperationStore {
         `DELETE FROM operation_environments WHERE operation_id = ?`,
       ),
       insertStep: db.prepare(
-        `INSERT INTO deployment_steps (id, operation_id, name, type, command, step_order)
-         VALUES (@id, @operation_id, @name, @type, @command, @step_order)`,
+        `INSERT INTO deployment_steps (id, operation_id, name, type, command, step_order, step_type_id, step_type_config)
+         VALUES (@id, @operation_id, @name, @type, @command, @step_order, @step_type_id, @step_type_config)`,
       ),
       getSteps: db.prepare(
         `SELECT * FROM deployment_steps WHERE operation_id = ? ORDER BY step_order ASC`,
       ),
       updateStep: db.prepare(
-        `UPDATE deployment_steps SET name = @name, type = @type, command = @command, step_order = @step_order WHERE id = @id`,
+        `UPDATE deployment_steps SET name = @name, type = @type, command = @command, step_order = @step_order, step_type_id = @step_type_id, step_type_config = @step_type_config WHERE id = @id`,
       ),
       deleteStep: db.prepare(`DELETE FROM deployment_steps WHERE id = ?`),
       deleteAllSteps: db.prepare(`DELETE FROM deployment_steps WHERE operation_id = ?`),
@@ -423,6 +444,8 @@ export class PersistentOperationStore {
       type: step.type,
       command: step.command,
       step_order: step.order,
+      step_type_id: step.stepTypeId ?? null,
+      step_type_config: step.stepTypeConfig ? JSON.stringify(step.stepTypeConfig) : null,
     });
     op.steps.push(step);
     op.steps.sort((a, b) => a.order - b.order);
@@ -432,7 +455,7 @@ export class PersistentOperationStore {
   updateStep(
     id: OperationId,
     stepId: string,
-    updates: { name?: string; type?: DeploymentStepType; command?: string; order?: number },
+    updates: { name?: string; type?: DeploymentStepType; command?: string; order?: number; stepTypeId?: string; stepTypeConfig?: Record<string, unknown> },
   ): Operation {
     const op = this.get(id);
     if (!op) throw new Error(`Operation not found: ${id}`);
@@ -444,6 +467,10 @@ export class PersistentOperationStore {
       type: updates.type ?? step.type,
       command: updates.command ?? step.command,
       step_order: updates.order ?? step.order,
+      step_type_id: updates.stepTypeId !== undefined ? updates.stepTypeId : (step.stepTypeId ?? null),
+      step_type_config: updates.stepTypeConfig !== undefined
+        ? JSON.stringify(updates.stepTypeConfig)
+        : (step.stepTypeConfig ? JSON.stringify(step.stepTypeConfig) : null),
     };
     this.stmts.updateStep.run(updated);
     return this.get(id)!;
@@ -471,6 +498,8 @@ export class PersistentOperationStore {
           type: step.type,
           command: step.command,
           step_order: i,
+          step_type_id: step.stepTypeId ?? null,
+          step_type_config: step.stepTypeConfig ? JSON.stringify(step.stepTypeConfig) : null,
         });
       }
     })();
@@ -513,16 +542,21 @@ interface StepRow {
   type: string;
   command: string;
   step_order: number;
+  step_type_id: string | null;
+  step_type_config: string | null;
 }
 
 function rowToStep(row: StepRow): DeploymentStep {
-  return {
+  const step: DeploymentStep = {
     id: row.id,
     name: row.name,
     type: row.type as DeploymentStepType,
     command: row.command,
     order: row.step_order,
   };
+  if (row.step_type_id) step.stepTypeId = row.step_type_id;
+  if (row.step_type_config) step.stepTypeConfig = JSON.parse(row.step_type_config);
+  return step;
 }
 
 // ---------------------------------------------------------------------------
@@ -731,6 +765,95 @@ function rowToDeployment(row: DeploymentRow): Deployment {
     completedAt: row.completed_at ? new Date(row.completed_at) : null,
     failureReason: row.failure_reason,
   };
+}
+
+// ---------------------------------------------------------------------------
+// PersistentSettingsStore
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// PersistentStepTypeStore
+// ---------------------------------------------------------------------------
+
+export class PersistentStepTypeStore {
+  private stmts: {
+    insert: Database.Statement;
+    getById: Database.Statement;
+    list: Database.Statement;
+    listByPartition: Database.Statement;
+    deleteById: Database.Statement;
+  };
+
+  constructor(private db: Database.Database) {
+    this.stmts = {
+      insert: db.prepare(
+        `INSERT INTO step_types (id, name, category, description, parameters, command_template, source, partition_id)
+         VALUES (@id, @name, @category, @description, @parameters, @command_template, @source, @partition_id)`,
+      ),
+      getById: db.prepare(`SELECT * FROM step_types WHERE id = ?`),
+      list: db.prepare(`SELECT * FROM step_types ORDER BY category, name ASC`),
+      listByPartition: db.prepare(
+        `SELECT * FROM step_types WHERE partition_id = ? OR partition_id IS NULL ORDER BY category, name ASC`,
+      ),
+      deleteById: db.prepare(`DELETE FROM step_types WHERE id = ?`),
+    };
+  }
+
+  create(stepType: StepTypeDefinition): StepTypeDefinition {
+    this.stmts.insert.run({
+      id: stepType.id,
+      name: stepType.name,
+      category: stepType.category,
+      description: stepType.description,
+      parameters: JSON.stringify(stepType.parameters),
+      command_template: stepType.commandTemplate,
+      source: stepType.source,
+      partition_id: stepType.partitionId ?? null,
+    });
+    return stepType;
+  }
+
+  get(id: string): StepTypeDefinition | undefined {
+    const row = this.stmts.getById.get(id) as StepTypeRow | undefined;
+    return row ? rowToStepType(row) : undefined;
+  }
+
+  list(partitionId?: string): StepTypeDefinition[] {
+    const rows = (partitionId
+      ? this.stmts.listByPartition.all(partitionId)
+      : this.stmts.list.all()) as StepTypeRow[];
+    return rows.map(rowToStepType);
+  }
+
+  delete(id: string): boolean {
+    const result = this.stmts.deleteById.run(id);
+    return result.changes > 0;
+  }
+}
+
+interface StepTypeRow {
+  id: string;
+  name: string;
+  category: string;
+  description: string;
+  parameters: string;
+  command_template: string;
+  source: string;
+  partition_id: string | null;
+}
+
+function rowToStepType(row: StepTypeRow): StepTypeDefinition {
+  const st: StepTypeDefinition = {
+    id: row.id,
+    name: row.name,
+    category: row.category as StepTypeDefinition["category"],
+    description: row.description,
+    parameters: JSON.parse(row.parameters),
+    commandTemplate: row.command_template,
+    source: row.source as StepTypeDefinition["source"],
+  };
+  if (row.partition_id) st.partitionId = row.partition_id;
+  return st;
 }
 
 // ---------------------------------------------------------------------------

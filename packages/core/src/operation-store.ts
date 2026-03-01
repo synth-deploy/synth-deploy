@@ -77,7 +77,7 @@ export class OperationStore {
   updateStep(
     id: OperationId,
     stepId: string,
-    updates: { name?: string; type?: DeploymentStepType; command?: string; order?: number },
+    updates: { name?: string; type?: DeploymentStepType; command?: string; order?: number; stepTypeId?: string; stepTypeConfig?: Record<string, unknown> },
   ): Operation {
     const operation = this.operations.get(id);
     if (!operation) throw new Error(`Operation not found: ${id}`);
@@ -87,6 +87,8 @@ export class OperationStore {
     if (updates.type !== undefined) step.type = updates.type;
     if (updates.command !== undefined) step.command = updates.command;
     if (updates.order !== undefined) step.order = updates.order;
+    if (updates.stepTypeId !== undefined) step.stepTypeId = updates.stepTypeId;
+    if (updates.stepTypeConfig !== undefined) step.stepTypeConfig = updates.stepTypeConfig;
     operation.steps.sort((a, b) => a.order - b.order);
     return operation;
   }

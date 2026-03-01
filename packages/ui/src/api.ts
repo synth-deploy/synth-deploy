@@ -12,6 +12,7 @@ import type {
   AppSettings,
   CommandInfo,
   Order,
+  StepTypeDefinition,
 } from "./types.js";
 
 export type { OperationHistory };
@@ -86,7 +87,7 @@ export async function listOperationSteps(operationId: string): Promise<Deploymen
 
 export async function createOperationStep(
   operationId: string,
-  step: { name: string; type: DeploymentStepType; command: string; order?: number },
+  step: { name: string; type: DeploymentStepType; command?: string; order?: number; stepTypeId?: string; stepTypeConfig?: Record<string, unknown> },
 ): Promise<DeploymentStep> {
   const data = await fetchJson<{ step: DeploymentStep }>(`/api/operations/${operationId}/steps`, {
     method: "POST",
@@ -442,4 +443,48 @@ export async function listEnvoys(): Promise<EnvoyRegistryEntry[]> {
 export async function getEnvoyHealth(id: string): Promise<EnvoyRegistryEntry> {
   const data = await fetchJson<{ envoy: EnvoyRegistryEntry }>(`/api/envoys/${id}/health`);
   return data.envoy;
+}
+
+// --- Step Types ---
+
+export async function listStepTypes(partitionId?: string): Promise<StepTypeDefinition[]> {
+  const url = partitionId ? `/api/step-types?partitionId=${partitionId}` : "/api/step-types";
+  const data = await fetchJson<{ stepTypes: StepTypeDefinition[] }>(url);
+  return data.stepTypes;
+}
+
+export async function getStepType(id: string): Promise<StepTypeDefinition> {
+  const data = await fetchJson<{ stepType: StepTypeDefinition }>(`/api/step-types/${id}`);
+  return data.stepType;
+}
+
+export async function createStepType(stepType: {
+  name: string;
+  category: StepTypeDefinition["category"];
+  description: string;
+  parameters: StepTypeDefinition["parameters"];
+  commandTemplate: string;
+  partitionId?: string;
+}): Promise<StepTypeDefinition> {
+  const data = await fetchJson<{ stepType: StepTypeDefinition }>("/api/step-types", {
+    method: "POST",
+    body: JSON.stringify(stepType),
+  });
+  return data.stepType;
+}
+
+export async function deleteStepType(id: string): Promise<void> {
+  await fetchJson(`/api/step-types/${id}`, { method: "DELETE" });
+}
+
+export async function exportStepType(id: string): Promise<unknown> {
+  return fetchJson(`/api/step-types/${id}/export`);
+}
+
+export async function importStepType(data: unknown): Promise<StepTypeDefinition> {
+  const result = await fetchJson<{ stepType: StepTypeDefinition }>("/api/step-types/import", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+  return result.stepType;
 }

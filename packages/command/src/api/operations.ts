@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import type { FastifyInstance } from "fastify";
-import type { IOperationStore, IEnvironmentStore, DeploymentStep } from "@deploystack/core";
+import type { IOperationStore, IEnvironmentStore, IStepTypeStore, DeploymentStep } from "@deploystack/core";
+import { getPredefinedStepType, resolveCommandTemplate } from "@deploystack/core";
 import {
   CreateOperationSchema, UpdateOperationSchema, AddEnvironmentSchema,
   CreateStepSchema, UpdateStepSchema, ReorderStepsSchema, UpdateDeployConfigSchema,
@@ -10,6 +11,7 @@ export function registerOperationRoutes(
   app: FastifyInstance,
   operations: IOperationStore,
   environments: IEnvironmentStore,
+  stepTypes?: IStepTypeStore,
 ): void {
   // Create an operation
   app.post("/api/operations", async (request, reply) => {
@@ -146,13 +148,31 @@ export function registerOperationRoutes(
         return reply.status(400).send({ error: "Invalid input", details: parsed.error.format() });
       }
 
+      let command = parsed.data.command?.trim() ?? "";
+      const { stepTypeId, stepTypeConfig } = parsed.data;
+
+      // Resolve command from step type if stepTypeId is provided
+      if (stepTypeId && !command) {
+        const stepTypeDef = getPredefinedStepType(stepTypeId) ?? stepTypes?.get(stepTypeId);
+        if (!stepTypeDef) {
+          return reply.status(400).send({ error: `Step type not found: ${stepTypeId}` });
+        }
+        command = resolveCommandTemplate(stepTypeDef.commandTemplate, stepTypeConfig ?? {});
+      }
+
+      if (!command) {
+        return reply.status(400).send({ error: "Either command or a valid stepTypeId must be provided" });
+      }
+
       const step: DeploymentStep = {
         id: crypto.randomUUID(),
         name: parsed.data.name.trim(),
         type: parsed.data.type,
-        command: parsed.data.command.trim(),
+        command,
         order: parsed.data.order ?? operation.steps.length,
       };
+      if (stepTypeId) step.stepTypeId = stepTypeId;
+      if (stepTypeConfig) step.stepTypeConfig = stepTypeConfig;
 
       operations.addStep(request.params.id, step);
 

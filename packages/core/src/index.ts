@@ -53,6 +53,7 @@ export type {
   IOrderStore,
   IDeploymentStore,
   ISettingsStore,
+  IStepTypeStore,
 } from "./store-interfaces.js";
 export {
   openEntityDatabase,
@@ -62,7 +63,23 @@ export {
   PersistentOrderStore,
   PersistentDeploymentStore,
   PersistentSettingsStore,
+  PersistentStepTypeStore,
 } from "./persistent-stores.js";
+export type {
+  StepTypeParameterType,
+  StepTypeParameter,
+  StepTypeSource,
+  StepTypeCategory,
+  StepTypeDefinition,
+  StepTypeExport,
+} from "./step-types.js";
+export {
+  resolveCommandTemplate,
+  PREDEFINED_STEP_TYPES,
+  getPredefinedStepType,
+  listPredefinedStepTypes,
+  STEP_TYPE_CATEGORIES,
+} from "./step-types.js";
 export { PartitionContainer } from "./partition-container.js";
 export type {
   PrecedenceEntry,

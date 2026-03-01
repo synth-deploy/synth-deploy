@@ -105,6 +105,10 @@ export interface DeploymentStep {
   type: DeploymentStepType;
   command: string;
   order: number;
+  /** ID of the step type used to create this step (if any) */
+  stepTypeId?: string;
+  /** Parameter values supplied when creating from a step type */
+  stepTypeConfig?: Record<string, unknown>;
 }
 
 export interface DeployConfig {
