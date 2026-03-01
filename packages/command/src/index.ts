@@ -6,9 +6,9 @@ import Fastify from "fastify";
 import fastifyCors from "@fastify/cors";
 import fastifyStatic from "@fastify/static";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { PersistentDecisionDebrief, PartitionStore, OperationStore, EnvironmentStore, SettingsStore, OrderStore, LlmClient, DEFAULT_DEPLOY_CONFIG } from "@deploystack/core";
+import { PersistentDecisionDebrief, openEntityDatabase, PersistentPartitionStore, PersistentOperationStore, PersistentEnvironmentStore, PersistentSettingsStore, PersistentDeploymentStore, PersistentOrderStore, LlmClient, DEFAULT_DEPLOY_CONFIG } from "@deploystack/core";
 import type { Deployment, DeploymentStep, DeployConfig } from "@deploystack/core";
-import { CommandAgent, InMemoryDeploymentStore } from "./agent/command-agent.js";
+import { CommandAgent } from "./agent/command-agent.js";
 import { createMcpServer } from "./mcp/server.js";
 import { registerDeploymentRoutes } from "./api/deployments.js";
 import { registerHealthRoutes } from "./api/health.js";
@@ -26,18 +26,19 @@ const DATA_DIR = path.resolve(process.env.DEPLOYSTACK_DATA_DIR ?? "data");
 mkdirSync(DATA_DIR, { recursive: true });
 
 const debrief = new PersistentDecisionDebrief(path.join(DATA_DIR, "debrief.db"));
-const partitions = new PartitionStore();
-const operations = new OperationStore();
-const environments = new EnvironmentStore();
-const settings = new SettingsStore();
-const deployments = new InMemoryDeploymentStore();
-const orders = new OrderStore();
+const entityDb = openEntityDatabase(path.join(DATA_DIR, "deploystack.db"));
+const partitions = new PersistentPartitionStore(entityDb);
+const operations = new PersistentOperationStore(entityDb);
+const environments = new PersistentEnvironmentStore(entityDb);
+const settings = new PersistentSettingsStore(entityDb);
+const deployments = new PersistentDeploymentStore(entityDb);
+const orders = new PersistentOrderStore(entityDb);
 const agent = new CommandAgent(debrief, deployments, orders, undefined, {}, settings);
 const llm = new LlmClient(debrief, "command");
 
 // --- Seed demo data so the server is immediately usable ---
 
-if (process.env.DEPLOYSTACK_SEED_DEMO !== 'false') {
+if (process.env.DEPLOYSTACK_SEED_DEMO !== 'false' && partitions.list().length === 0) {
   function hoursAgo(h: number): Date { return new Date(Date.now() - h * 3600_000); }
 
   // Environments
@@ -70,9 +71,9 @@ if (process.env.DEPLOYSTACK_SEED_DEMO !== 'false') {
   const webApp = operations.create("web-app", [prodEnv.id, stagingEnv.id, devEnv.id]);
   const apiService = operations.create("api-service", [prodEnv.id, stagingEnv.id]);
   const workerService = operations.create("worker-service", [prodEnv.id]);
-  for (const s of webAppSteps) webApp.steps.push(s);
-  for (const s of apiSteps) apiService.steps.push(s);
-  for (const s of workerSteps) workerService.steps.push(s);
+  for (const s of webAppSteps) operations.addStep(webApp.id, s);
+  for (const s of apiSteps) operations.addStep(apiService.id, s);
+  for (const s of workerSteps) operations.addStep(workerService.id, s);
 
   // Deploy config variants
   const standardConfig: DeployConfig = { ...DEFAULT_DEPLOY_CONFIG, healthCheckRetries: 2 };
@@ -365,8 +366,10 @@ if (process.env.DEPLOYSTACK_SEED_DEMO !== 'false') {
   });
 
   console.log('Demo seed data created (set DEPLOYSTACK_SEED_DEMO=false to disable)');
-} else {
+} else if (process.env.DEPLOYSTACK_SEED_DEMO === 'false') {
   console.log('Demo seed data skipped (DEPLOYSTACK_SEED_DEMO=false)');
+} else {
+  console.log('Demo seed data skipped (database already populated)');
 }
 
 // --- Create MCP server ---
@@ -476,6 +479,7 @@ app.delete("/mcp", async (request, reply) => {
 
 app.addHook("onClose", async () => {
   debrief.close();
+  entityDb.close();
   for (const transport of mcpTransports.values()) {
     await transport.close();
   }

@@ -1,11 +1,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CommandAgent, DeploymentStore } from "../agent/command-agent.js";
-import type { PartitionStore, OperationStore } from "@deploystack/core";
-
-interface EnvironmentStore {
-  get(id: string): { id: string; name: string; variables: Record<string, string> } | undefined;
-}
+import type { IPartitionStore, IOperationStore, IEnvironmentStore } from "@deploystack/core";
 
 /**
  * Register MCP tools on the server. These are the actions MCP clients
@@ -14,10 +10,10 @@ interface EnvironmentStore {
 export function registerTools(
   mcp: McpServer,
   agent: CommandAgent,
-  partitions: PartitionStore,
-  environments: EnvironmentStore,
+  partitions: IPartitionStore,
+  environments: IEnvironmentStore,
   deployments: DeploymentStore,
-  operations: OperationStore,
+  operations: IOperationStore,
 ): void {
   mcp.registerTool(
     "trigger-deployment",

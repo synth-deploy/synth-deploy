@@ -1,15 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { DeploymentTriggerSchema, generatePostmortem } from "@deploystack/core";
-import type { PartitionStore, DebriefWriter, DebriefReader, OrderStore, Operation, SettingsStore } from "@deploystack/core";
+import type { IPartitionStore, IEnvironmentStore, IOperationStore, IOrderStore, ISettingsStore, DebriefWriter, DebriefReader } from "@deploystack/core";
 import type { CommandAgent, DeploymentStore } from "../agent/command-agent.js";
-
-interface EnvironmentStore {
-  get(id: string): { id: string; name: string; variables: Record<string, string> } | undefined;
-}
-
-interface OperationStore {
-  get(id: string): Operation | undefined;
-}
 
 /**
  * REST API routes for deployments. These are the traditional (non-MCP) interface
@@ -18,13 +10,13 @@ interface OperationStore {
 export function registerDeploymentRoutes(
   app: FastifyInstance,
   agent: CommandAgent,
-  partitions: PartitionStore,
-  environments: EnvironmentStore,
+  partitions: IPartitionStore,
+  environments: IEnvironmentStore,
   deployments: DeploymentStore,
   debrief: DebriefWriter & DebriefReader,
-  operations: OperationStore,
-  orders: OrderStore,
-  settings: SettingsStore,
+  operations: IOperationStore,
+  orders: IOrderStore,
+  settings: ISettingsStore,
 ): void {
   // Trigger a deployment
   app.post("/api/deployments", async (request, reply) => {

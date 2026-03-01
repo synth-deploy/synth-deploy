@@ -43,6 +43,23 @@ export { EnvironmentStore } from "./environment-store.js";
 export { SettingsStore } from "./settings-store.js";
 export { OrderStore } from "./order-store.js";
 export type { CreateOrderParams } from "./order-store.js";
+export type {
+  IPartitionStore,
+  IEnvironmentStore,
+  IOperationStore,
+  IOrderStore,
+  IDeploymentStore,
+  ISettingsStore,
+} from "./store-interfaces.js";
+export {
+  openEntityDatabase,
+  PersistentPartitionStore,
+  PersistentEnvironmentStore,
+  PersistentOperationStore,
+  PersistentOrderStore,
+  PersistentDeploymentStore,
+  PersistentSettingsStore,
+} from "./persistent-stores.js";
 export { PartitionContainer } from "./partition-container.js";
 export type {
   PrecedenceEntry,

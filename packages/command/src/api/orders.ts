@@ -1,17 +1,14 @@
 import type { FastifyInstance } from "fastify";
 import type {
-  OrderStore,
-  OperationStore,
-  PartitionStore,
+  IOrderStore,
+  IOperationStore,
+  IPartitionStore,
+  IEnvironmentStore,
+  ISettingsStore,
   DebriefWriter,
   DebriefReader,
-  SettingsStore,
 } from "@deploystack/core";
 import type { CommandAgent, DeploymentStore } from "../agent/command-agent.js";
-
-interface EnvironmentStore {
-  get(id: string): { id: string; name: string; variables: Record<string, string> } | undefined;
-}
 
 /**
  * REST API routes for Orders (immutable deployment snapshots).
@@ -19,14 +16,14 @@ interface EnvironmentStore {
  */
 export function registerOrderRoutes(
   app: FastifyInstance,
-  orders: OrderStore,
+  orders: IOrderStore,
   agent: CommandAgent,
-  partitions: PartitionStore,
-  environments: EnvironmentStore,
-  operations: OperationStore,
+  partitions: IPartitionStore,
+  environments: IEnvironmentStore,
+  operations: IOperationStore,
   deployments: DeploymentStore,
   debrief: DebriefWriter & DebriefReader,
-  settings: SettingsStore,
+  settings: ISettingsStore,
 ): void {
   // List orders (supports ?operationId and ?partitionId filters)
   app.get("/api/orders", async (request) => {

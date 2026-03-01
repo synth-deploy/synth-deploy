@@ -1,9 +1,9 @@
 import type { FastifyInstance } from "fastify";
-import type { SettingsStore, AppSettings } from "@deploystack/core";
+import type { ISettingsStore, AppSettings } from "@deploystack/core";
 
 export function registerSettingsRoutes(
   app: FastifyInstance,
-  settings: SettingsStore,
+  settings: ISettingsStore,
 ): void {
   // Get all settings
   app.get("/api/settings", async () => {

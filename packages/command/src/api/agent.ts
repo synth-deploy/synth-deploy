@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import type { PartitionStore, DebriefWriter, DebriefReader, Operation, Partition, Environment, SettingsStore, LlmResult } from "@deploystack/core";
+import type { IPartitionStore, IEnvironmentStore, IOperationStore, ISettingsStore, DebriefWriter, DebriefReader, Operation, Partition, Environment, LlmResult } from "@deploystack/core";
 import type { LlmClient } from "@deploystack/core";
 import type { CommandAgent, DeploymentStore } from "../agent/command-agent.js";
 
@@ -65,21 +65,6 @@ interface DeploymentContext {
     deployCount: number;
     variableCount: number;
   }>;
-}
-
-// ---------------------------------------------------------------------------
-// Entity stores interface (matches what index.ts exposes)
-// ---------------------------------------------------------------------------
-
-interface OperationStore {
-  get(id: string): Operation | undefined;
-  list(): Operation[];
-  create(name: string, environmentIds?: string[]): Operation;
-}
-
-interface EnvironmentStore {
-  get(id: string): Environment | undefined;
-  list(): Environment[];
 }
 
 // ---------------------------------------------------------------------------
@@ -426,9 +411,9 @@ function convertLlmVersion(
 function interpretIntent(
   intent: string,
   partialConfig: IntentRequest["partialConfig"],
-  operations: OperationStore,
-  partitionStore: PartitionStore,
-  environmentStore: EnvironmentStore,
+  operations: IOperationStore,
+  partitionStore: IPartitionStore,
+  environmentStore: IEnvironmentStore,
 ): IntentResult {
   const lower = intent.toLowerCase();
   const allOperations = operations.list();
@@ -587,8 +572,8 @@ function resolveVersion(
 
 function generateContext(
   deployments: DeploymentStore,
-  environmentStore: EnvironmentStore,
-  partitionStore: PartitionStore,
+  environmentStore: IEnvironmentStore,
+  partitionStore: IPartitionStore,
 ): DeploymentContext {
   const allDeployments = deployments.list();
   const allEnvironments = environmentStore.list();
@@ -752,12 +737,12 @@ function formatAgo(date: Date): string {
 export function registerAgentRoutes(
   app: FastifyInstance,
   agent: CommandAgent,
-  partitions: PartitionStore,
-  environments: EnvironmentStore,
-  operations: OperationStore,
+  partitions: IPartitionStore,
+  environments: IEnvironmentStore,
+  operations: IOperationStore,
   deployments: DeploymentStore,
   debrief: DebriefWriter & DebriefReader,
-  settings: SettingsStore,
+  settings: ISettingsStore,
   llm?: LlmClient,
 ): void {
   // Periodic cleanup of abandoned conversations (every 5 minutes)

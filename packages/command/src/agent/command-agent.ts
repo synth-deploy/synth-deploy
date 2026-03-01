@@ -10,7 +10,7 @@ import type {
   Order,
   AppSettings,
 } from "@deploystack/core";
-import type { OrderStore } from "@deploystack/core";
+import type { IOrderStore } from "@deploystack/core";
 import type {
   ServiceHealthChecker,
   HealthCheckResult,
@@ -163,7 +163,7 @@ export class CommandAgent {
   constructor(
     private debrief: DebriefWriter,
     private deployments: DeploymentStore,
-    private orders: OrderStore,
+    private orders: IOrderStore,
     private healthChecker: ServiceHealthChecker = new DefaultHealthChecker(),
     options: Partial<AgentOptions> = {},
     private settingsReader?: { get(): AppSettings },

@@ -1,12 +1,8 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { DebriefWriter, DebriefReader, PartitionStore, OperationStore } from "@deploystack/core";
+import type { DebriefWriter, DebriefReader, IPartitionStore, IOperationStore, IEnvironmentStore } from "@deploystack/core";
 import type { CommandAgent, DeploymentStore } from "../agent/command-agent.js";
 import { registerTools } from "./tools.js";
 import { registerResources } from "./resources.js";
-
-interface EnvironmentStore {
-  get(id: string): { id: string; name: string; variables: Record<string, string> } | undefined;
-}
 
 /**
  * Create and configure the MCP server with all DeployStack tools and resources.
@@ -14,10 +10,10 @@ interface EnvironmentStore {
 export function createMcpServer(deps: {
   agent: CommandAgent;
   debrief: DebriefWriter & DebriefReader;
-  partitions: PartitionStore;
-  environments: EnvironmentStore;
+  partitions: IPartitionStore;
+  environments: IEnvironmentStore;
   deployments: DeploymentStore;
-  operations: OperationStore;
+  operations: IOperationStore;
 }): McpServer {
   const mcp = new McpServer(
     {

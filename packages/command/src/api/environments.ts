@@ -1,10 +1,10 @@
 import type { FastifyInstance } from "fastify";
-import type { EnvironmentStore, OperationStore } from "@deploystack/core";
+import type { IEnvironmentStore, IOperationStore } from "@deploystack/core";
 
 export function registerEnvironmentRoutes(
   app: FastifyInstance,
-  environments: EnvironmentStore,
-  operations: OperationStore,
+  environments: IEnvironmentStore,
+  operations: IOperationStore,
 ): void {
   // List all environments
   app.get("/api/environments", async () => {

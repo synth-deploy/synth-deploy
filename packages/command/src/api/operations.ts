@@ -1,11 +1,11 @@
 import crypto from "node:crypto";
 import type { FastifyInstance } from "fastify";
-import type { OperationStore, EnvironmentStore, DeploymentStep, DeploymentStepType, DeployConfig } from "@deploystack/core";
+import type { IOperationStore, IEnvironmentStore, DeploymentStep, DeploymentStepType, DeployConfig } from "@deploystack/core";
 
 export function registerOperationRoutes(
   app: FastifyInstance,
-  operations: OperationStore,
-  environments: EnvironmentStore,
+  operations: IOperationStore,
+  environments: IEnvironmentStore,
 ): void {
   // Create an operation
   app.post("/api/operations", async (request, reply) => {
@@ -166,8 +166,7 @@ export function registerOperationRoutes(
         order: order ?? operation.steps.length,
       };
 
-      operation.steps.push(step);
-      operation.steps.sort((a, b) => a.order - b.order);
+      operations.addStep(request.params.id, step);
 
       return reply.status(201).send({ step });
     },
@@ -194,14 +193,15 @@ export function registerOperationRoutes(
         order?: number;
       };
 
-      if (name !== undefined) step.name = name.trim();
-      if (type !== undefined) step.type = type;
-      if (command !== undefined) step.command = command.trim();
-      if (order !== undefined) step.order = order;
+      const updates: { name?: string; type?: DeploymentStepType; command?: string; order?: number } = {};
+      if (name !== undefined) updates.name = name.trim();
+      if (type !== undefined) updates.type = type;
+      if (command !== undefined) updates.command = command.trim();
+      if (order !== undefined) updates.order = order;
 
-      operation.steps.sort((a, b) => a.order - b.order);
+      const updated = operations.updateStep(request.params.id, request.params.stepId, updates);
 
-      return { step };
+      return { step: updated.steps.find((s) => s.id === request.params.stepId) };
     },
   );
 
@@ -227,13 +227,9 @@ export function registerOperationRoutes(
         }
       }
 
-      // Renumber steps 0..N-1 in the provided order
-      for (let i = 0; i < stepIds.length; i++) {
-        stepMap.get(stepIds[i])!.order = i;
-      }
-      operation.steps.sort((a, b) => a.order - b.order);
+      const updated = operations.reorderSteps(request.params.id, stepIds);
 
-      return { steps: operation.steps };
+      return { steps: updated.steps };
     },
   );
 
@@ -241,18 +237,12 @@ export function registerOperationRoutes(
   app.delete<{ Params: { id: string; stepId: string } }>(
     "/api/operations/:id/steps/:stepId",
     async (request, reply) => {
-      const operation = operations.get(request.params.id);
-      if (!operation) {
-        return reply.status(404).send({ error: "Operation not found" });
+      try {
+        operations.removeStep(request.params.id, request.params.stepId);
+        return { deleted: true };
+      } catch {
+        return reply.status(404).send({ error: "Operation or step not found" });
       }
-
-      const idx = operation.steps.findIndex((s) => s.id === request.params.stepId);
-      if (idx === -1) {
-        return reply.status(404).send({ error: "Step not found" });
-      }
-
-      operation.steps.splice(idx, 1);
-      return { deleted: true };
     },
   );
 
@@ -274,15 +264,13 @@ export function registerOperationRoutes(
   app.put<{ Params: { id: string } }>(
     "/api/operations/:id/deploy-config",
     async (request, reply) => {
-      const operation = operations.get(request.params.id);
-      if (!operation) {
+      try {
+        const updates = request.body as Partial<DeployConfig>;
+        const operation = operations.updateDeployConfig(request.params.id, updates);
+        return { deployConfig: operation.deployConfig };
+      } catch {
         return reply.status(404).send({ error: "Operation not found" });
       }
-
-      const updates = request.body as Partial<DeployConfig>;
-      operation.deployConfig = { ...operation.deployConfig, ...updates };
-
-      return { deployConfig: operation.deployConfig };
     },
   );
 }
