@@ -12,3 +12,6 @@ data/
 *.db
 *.db-wal
 *.db-shm
+
+# Coverage reports
+coverage/
