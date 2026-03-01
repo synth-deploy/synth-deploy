@@ -31,7 +31,8 @@ export function registerHealthRoutes(
       options.entityDb.prepare("SELECT 1").get();
       checks.db = { ok: true, responseTimeMs: Date.now() - start };
     } catch (err) {
-      checks.db = { ok: false, error: err instanceof Error ? err.message : String(err) };
+      app.log.error(err, "Health check: database unavailable");
+      checks.db = { ok: false, error: "Database unavailable" };
     }
 
     // Filesystem check
@@ -39,7 +40,8 @@ export function registerHealthRoutes(
       fs.accessSync(options.dataDir, fs.constants.R_OK | fs.constants.W_OK);
       checks.fs = { ok: true };
     } catch (err) {
-      checks.fs = { ok: false, error: err instanceof Error ? err.message : String(err) };
+      app.log.error(err, "Health check: filesystem unavailable");
+      checks.fs = { ok: false, error: "Filesystem unavailable" };
     }
 
     // Envoy check (optional)
@@ -56,7 +58,8 @@ export function registerHealthRoutes(
           ...(res.ok ? {} : { error: `HTTP ${res.status}` }),
         };
       } catch (err) {
-        checks.envoy = { ok: false, error: err instanceof Error ? err.message : String(err) };
+        app.log.error(err, "Health check: envoy unreachable");
+        checks.envoy = { ok: false, error: "Envoy unreachable" };
       }
     }
 
