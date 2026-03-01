@@ -185,6 +185,21 @@ function recordConversation(conversationId: string | undefined, intent: string, 
   conversations.set(conversationId, entries);
 }
 
+/** @internal Exported for testing only */
+export function cleanupStaleConversations(): number {
+  const now = Date.now();
+  let removed = 0;
+  for (const [id, entries] of conversations) {
+    // Remove conversation if all entries are expired
+    const newest = entries.reduce((max, e) => Math.max(max, e.timestamp), 0);
+    if (now - newest >= CONVERSATION_TTL_MS) {
+      conversations.delete(id);
+      removed++;
+    }
+  }
+  return removed;
+}
+
 // ---------------------------------------------------------------------------
 // LLM-powered intent interpretation
 // ---------------------------------------------------------------------------
@@ -745,6 +760,14 @@ export function registerAgentRoutes(
   settings: SettingsStore,
   llm?: LlmClient,
 ): void {
+  // Periodic cleanup of abandoned conversations (every 5 minutes)
+  const cleanupInterval = setInterval(cleanupStaleConversations, 5 * 60 * 1000);
+
+  // Clear interval on server shutdown
+  app.addHook('onClose', async () => {
+    clearInterval(cleanupInterval);
+  });
+
   /**
    * Interpret a plain-language deployment intent.
    * Uses LLM when available, falls back to regex extraction.

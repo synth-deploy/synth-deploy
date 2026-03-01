@@ -8,7 +8,7 @@ import { registerDeploymentRoutes } from "../src/api/deployments.js";
 import { registerOperationRoutes } from "../src/api/operations.js";
 import { registerPartitionRoutes } from "../src/api/partitions.js";
 import { registerEnvironmentRoutes } from "../src/api/environments.js";
-import { registerAgentRoutes, conversations, sanitizeUserInput, validateExtractedVersion, validateExtractedVariables } from "../src/api/agent.js";
+import { registerAgentRoutes, conversations, sanitizeUserInput, validateExtractedVersion, validateExtractedVariables, cleanupStaleConversations } from "../src/api/agent.js";
 
 // ---------------------------------------------------------------------------
 // Test server setup
@@ -816,5 +816,46 @@ describe("Agent mode — input sanitization", () => {
     const result = validateExtractedVariables({ VALID_KEY: longValue, SHORT_KEY: "ok" });
     expect(result).not.toHaveProperty("VALID_KEY");
     expect(result).toHaveProperty("SHORT_KEY", "ok");
+  });
+});
+
+describe("Agent mode — conversation cleanup", () => {
+  it("removes conversations where all entries are expired", () => {
+    conversations.clear();
+
+    const staleId = "stale-convo-1";
+    conversations.set(staleId, [
+      { intent: "old intent", resolved: { operationId: { value: "", confidence: "missing" }, partitionId: { value: "", confidence: "missing" }, environmentId: { value: "", confidence: "missing" }, version: { value: "", confidence: "missing" }, variables: {} }, timestamp: Date.now() - 31 * 60 * 1000 },
+    ]);
+
+    const freshId = "fresh-convo-1";
+    conversations.set(freshId, [
+      { intent: "recent intent", resolved: { operationId: { value: "", confidence: "missing" }, partitionId: { value: "", confidence: "missing" }, environmentId: { value: "", confidence: "missing" }, version: { value: "", confidence: "missing" }, variables: {} }, timestamp: Date.now() },
+    ]);
+
+    const removed = cleanupStaleConversations();
+
+    expect(removed).toBe(1);
+    expect(conversations.has(staleId)).toBe(false);
+    expect(conversations.has(freshId)).toBe(true);
+
+    conversations.clear();
+  });
+
+  it("keeps conversations with at least one non-expired entry", () => {
+    conversations.clear();
+
+    const mixedId = "mixed-convo";
+    conversations.set(mixedId, [
+      { intent: "old", resolved: { operationId: { value: "", confidence: "missing" }, partitionId: { value: "", confidence: "missing" }, environmentId: { value: "", confidence: "missing" }, version: { value: "", confidence: "missing" }, variables: {} }, timestamp: Date.now() - 31 * 60 * 1000 },
+      { intent: "recent", resolved: { operationId: { value: "", confidence: "missing" }, partitionId: { value: "", confidence: "missing" }, environmentId: { value: "", confidence: "missing" }, version: { value: "", confidence: "missing" }, variables: {} }, timestamp: Date.now() },
+    ]);
+
+    const removed = cleanupStaleConversations();
+
+    expect(removed).toBe(0);
+    expect(conversations.has(mixedId)).toBe(true);
+
+    conversations.clear();
   });
 });
