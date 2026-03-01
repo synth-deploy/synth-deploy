@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { listOperations, listEnvironments } from "../../api.js";
+import { listOperations, listEnvironments, createOperation } from "../../api.js";
 import type { Operation, Environment } from "../../types.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
 
@@ -11,6 +11,33 @@ export default function OperationListPanel({ title }: Props) {
   const [operations, setOperations] = useState<Operation[]>([]);
   const [environments, setEnvironments] = useState<Environment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [name, setName] = useState("");
+  const [selectedEnvs, setSelectedEnvs] = useState<string[]>([]);
+  const [error, setError] = useState("");
+
+  const toggleEnv = (id: string) => {
+    setSelectedEnvs((prev) =>
+      prev.includes(id) ? prev.filter((e) => e !== id) : [...prev, id]
+    );
+  };
+
+  const handleCreate = async () => {
+    if (!name.trim()) {
+      setError("Name is required");
+      return;
+    }
+    try {
+      const op = await createOperation(name.trim(), selectedEnvs);
+      setOperations((prev) => [...prev, op]);
+      setName("");
+      setSelectedEnvs([]);
+      setError("");
+      setShowForm(false);
+    } catch (e: any) {
+      setError(e.message || "Failed to create operation");
+    }
+  };
 
   useEffect(() => {
     Promise.all([listOperations(), listEnvironments()])
@@ -34,8 +61,40 @@ export default function OperationListPanel({ title }: Props) {
               Deployment blueprints. Static until an Order snapshots them for execution.
             </div>
           </div>
-          <button className="v2-create-btn v2-create-btn-operation">+ Create Operation</button>
+          <button className="v2-create-btn v2-create-btn-operation" onClick={() => setShowForm(!showForm)}>
+            {showForm ? "Cancel" : "+ Create Operation"}
+          </button>
         </div>
+
+        {showForm && (
+          <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--border)" }}>
+            {error && <div className="error-msg" style={{ marginBottom: 8 }}>{error}</div>}
+            <div style={{ marginBottom: 8 }}>
+              <input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Operation name"
+                autoFocus
+                style={{ width: "100%", padding: "6px 10px", fontSize: 13, border: "1px solid var(--border)", borderRadius: 4, background: "var(--bg-secondary)", color: "var(--text-primary)" }}
+              />
+            </div>
+            <div style={{ marginBottom: 8, display: "flex", flexWrap: "wrap", gap: 6 }}>
+              {environments.map((env) => (
+                <label key={env.id} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, cursor: "pointer", color: "var(--text-secondary)" }}>
+                  <input
+                    type="checkbox"
+                    checked={selectedEnvs.includes(env.id)}
+                    onChange={() => toggleEnv(env.id)}
+                  />
+                  {env.name}
+                </label>
+              ))}
+            </div>
+            <button className="v2-create-btn v2-create-btn-operation" onClick={handleCreate} style={{ fontSize: 12, padding: "4px 12px" }}>
+              Create
+            </button>
+          </div>
+        )}
 
         <div className="v2-entity-list-items">
           {operations.map((op) => (

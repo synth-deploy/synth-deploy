@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { listPartitions, listOrders, listEnvironments, listDeployments } from "../../api.js";
+import { listPartitions, listOrders, listEnvironments, listDeployments, createPartition } from "../../api.js";
 import type { Partition, Order, Environment, Deployment } from "../../types.js";
 import { useCanvas } from "../../context/CanvasContext.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
@@ -16,6 +16,25 @@ export default function PartitionListPanel({ title }: Props) {
   const [environments, setEnvironments] = useState<Environment[]>([]);
   const [deployments, setDeployments] = useState<Deployment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [name, setName] = useState("");
+  const [error, setError] = useState("");
+
+  const handleCreate = async () => {
+    if (!name.trim()) {
+      setError("Name is required");
+      return;
+    }
+    try {
+      const p = await createPartition(name.trim());
+      setPartitions((prev) => [...prev, p]);
+      setName("");
+      setError("");
+      setShowForm(false);
+    } catch (e: any) {
+      setError(e.message || "Failed to create partition");
+    }
+  };
 
   useEffect(() => {
     Promise.all([listPartitions(), listOrders(), listEnvironments(), listDeployments()])
@@ -41,8 +60,28 @@ export default function PartitionListPanel({ title }: Props) {
               Isolated configuration boundaries. Each Partition is completely separated from every other.
             </div>
           </div>
-          <button className="v2-create-btn v2-create-btn-partition">+ Create Partition</button>
+          <button className="v2-create-btn v2-create-btn-partition" onClick={() => setShowForm(!showForm)}>
+            {showForm ? "Cancel" : "+ Create Partition"}
+          </button>
         </div>
+
+        {showForm && (
+          <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--border)" }}>
+            {error && <div className="error-msg" style={{ marginBottom: 8 }}>{error}</div>}
+            <div style={{ marginBottom: 8 }}>
+              <input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Partition name"
+                autoFocus
+                style={{ width: "100%", padding: "6px 10px", fontSize: 13, border: "1px solid var(--border)", borderRadius: 4, background: "var(--bg-secondary)", color: "var(--text-primary)" }}
+              />
+            </div>
+            <button className="v2-create-btn v2-create-btn-partition" onClick={handleCreate} style={{ fontSize: 12, padding: "4px 12px" }}>
+              Create
+            </button>
+          </div>
+        )}
 
         <div className="v2-entity-list-items">
           {partitions.map((p) => {
