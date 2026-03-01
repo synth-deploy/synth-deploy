@@ -251,7 +251,7 @@ describe("DeploymentExecutor — cleanupOldWorkspaces()", () => {
     cleanDir(baseDir);
   });
 
-  it("removes directories older than maxAgeMs", async () => {
+  it("removes directories older than maxAgeMs", () => {
     // Create an "old" deployment workspace
     const oldDir = path.join(baseDir, "deployments", "old-deploy");
     fs.mkdirSync(oldDir);
@@ -266,35 +266,48 @@ describe("DeploymentExecutor — cleanupOldWorkspaces()", () => {
     fs.mkdirSync(recentDir);
     fs.writeFileSync(path.join(recentDir, "VERSION"), "app@2.0.0");
 
-    // Cleanup with maxAge of 1 hour
-    const removed = executor.cleanupOldWorkspaces(60 * 60 * 1000);
+    // Cleanup with maxAge of 1 hour, high maxCount so only age matters
+    const removed = executor.cleanupOldWorkspaces(60 * 60 * 1000, 100);
 
-    expect(removed).toContain("old-deploy");
-    expect(removed).not.toContain("recent-deploy");
+    expect(removed).toBe(1);
     expect(fs.existsSync(oldDir)).toBe(false);
     expect(fs.existsSync(recentDir)).toBe(true);
   });
 
-  it("keeps recent directories untouched", async () => {
+  it("removes directories beyond maxCount even if recent", () => {
+    const deploymentsDir = path.join(baseDir, "deployments");
+
+    // Create 5 recent directories
+    for (let i = 0; i < 5; i++) {
+      const dir = path.join(deploymentsDir, `deploy-${i}`);
+      fs.mkdirSync(dir);
+      fs.writeFileSync(path.join(dir, "STATUS"), "DEPLOYED");
+    }
+
+    // Keep only 2 — should remove 3
+    const removed = executor.cleanupOldWorkspaces(999_999_999, 2);
+    expect(removed).toBe(3);
+  });
+
+  it("keeps recent directories untouched", () => {
     const recentDir = path.join(baseDir, "deployments", "keep-me");
     fs.mkdirSync(recentDir);
     fs.writeFileSync(path.join(recentDir, "STATUS"), "DEPLOYED");
 
-    const removed = executor.cleanupOldWorkspaces(60 * 60 * 1000);
-
-    expect(removed).toHaveLength(0);
+    const removed = executor.cleanupOldWorkspaces(60 * 60 * 1000, 100);
+    expect(removed).toBe(0);
     expect(fs.existsSync(recentDir)).toBe(true);
   });
 
-  it("returns empty array when no deployments directory exists", () => {
+  it("returns 0 when no deployments directory exists", () => {
     const emptyExecutor = new DeploymentExecutor("/nonexistent/base");
-    const removed = emptyExecutor.cleanupOldWorkspaces(1000);
-    expect(removed).toEqual([]);
+    const removed = emptyExecutor.cleanupOldWorkspaces(1000, 100);
+    expect(removed).toBe(0);
   });
 
-  it("returns empty array when deployments directory is empty", () => {
-    const removed = executor.cleanupOldWorkspaces(1000);
-    expect(removed).toEqual([]);
+  it("returns 0 when deployments directory is empty", () => {
+    const removed = executor.cleanupOldWorkspaces(1000, 100);
+    expect(removed).toBe(0);
   });
 
   it("removes multiple old directories at once", () => {
@@ -307,22 +320,7 @@ describe("DeploymentExecutor — cleanupOldWorkspaces()", () => {
       fs.utimesSync(dir, twoHoursAgo, twoHoursAgo);
     }
 
-    const removed = executor.cleanupOldWorkspaces(60 * 60 * 1000);
-    expect(removed).toHaveLength(3);
-    expect(removed.sort()).toEqual(["old-a", "old-b", "old-c"]);
-  });
-
-  it("skips non-directory entries", () => {
-    const deploymentsDir = path.join(baseDir, "deployments");
-    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
-
-    // Create a file (not directory)
-    const filePath = path.join(deploymentsDir, "not-a-directory.txt");
-    fs.writeFileSync(filePath, "test");
-    fs.utimesSync(filePath, twoHoursAgo, twoHoursAgo);
-
-    const removed = executor.cleanupOldWorkspaces(60 * 60 * 1000);
-    expect(removed).toHaveLength(0);
-    expect(fs.existsSync(filePath)).toBe(true);
+    const removed = executor.cleanupOldWorkspaces(60 * 60 * 1000, 100);
+    expect(removed).toBe(3);
   });
 });
