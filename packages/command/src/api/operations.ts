@@ -1,6 +1,10 @@
 import crypto from "node:crypto";
 import type { FastifyInstance } from "fastify";
-import type { IOperationStore, IEnvironmentStore, DeploymentStep, DeploymentStepType, DeployConfig } from "@deploystack/core";
+import type { IOperationStore, IEnvironmentStore, DeploymentStep } from "@deploystack/core";
+import {
+  CreateOperationSchema, UpdateOperationSchema, AddEnvironmentSchema,
+  CreateStepSchema, UpdateStepSchema, ReorderStepsSchema, UpdateDeployConfigSchema,
+} from "./schemas.js";
 
 export function registerOperationRoutes(
   app: FastifyInstance,
@@ -9,24 +13,20 @@ export function registerOperationRoutes(
 ): void {
   // Create an operation
   app.post("/api/operations", async (request, reply) => {
-    const { name, environmentIds } = request.body as {
-      name?: string;
-      environmentIds?: string[];
-    };
-
-    if (!name || typeof name !== "string" || name.trim().length === 0) {
-      return reply.status(400).send({ error: "name is required" });
+    const parsed = CreateOperationSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: "Invalid input", details: parsed.error.format() });
     }
 
     // Validate environment IDs if provided
-    const envIds = environmentIds ?? [];
+    const envIds = parsed.data.environmentIds ?? [];
     for (const envId of envIds) {
       if (!environments.get(envId)) {
         return reply.status(404).send({ error: `Environment not found: ${envId}` });
       }
     }
 
-    const operation = operations.create(name.trim(), envIds);
+    const operation = operations.create(parsed.data.name.trim(), envIds);
     return reply.status(201).send({ operation });
   });
 
@@ -52,11 +52,14 @@ export function registerOperationRoutes(
 
   // Update operation
   app.put<{ Params: { id: string } }>("/api/operations/:id", async (request, reply) => {
-    const { name } = request.body as { name?: string };
+    const parsed = UpdateOperationSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: "Invalid input", details: parsed.error.format() });
+    }
 
     try {
       const operation = operations.update(request.params.id, {
-        name: name?.trim(),
+        name: parsed.data.name?.trim(),
       });
       return { operation };
     } catch {
@@ -80,11 +83,11 @@ export function registerOperationRoutes(
   app.post<{ Params: { id: string } }>(
     "/api/operations/:id/environments",
     async (request, reply) => {
-      const { environmentId } = request.body as { environmentId?: string };
-
-      if (!environmentId) {
-        return reply.status(400).send({ error: "environmentId is required" });
+      const parsed = AddEnvironmentSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.status(400).send({ error: "Invalid input", details: parsed.error.format() });
       }
+      const { environmentId } = parsed.data;
 
       if (!environments.get(environmentId)) {
         return reply.status(404).send({ error: `Environment not found: ${environmentId}` });
@@ -138,32 +141,17 @@ export function registerOperationRoutes(
         return reply.status(404).send({ error: "Operation not found" });
       }
 
-      const { name, type, command, order } = request.body as {
-        name?: string;
-        type?: DeploymentStepType;
-        command?: string;
-        order?: number;
-      };
-
-      if (!name || !type || !command) {
-        return reply
-          .status(400)
-          .send({ error: "name, type, and command are required" });
-      }
-
-      const validTypes: DeploymentStepType[] = ["pre-deploy", "post-deploy", "verification"];
-      if (!validTypes.includes(type)) {
-        return reply
-          .status(400)
-          .send({ error: `type must be one of: ${validTypes.join(", ")}` });
+      const parsed = CreateStepSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.status(400).send({ error: "Invalid input", details: parsed.error.format() });
       }
 
       const step: DeploymentStep = {
         id: crypto.randomUUID(),
-        name: name.trim(),
-        type,
-        command: command.trim(),
-        order: order ?? operation.steps.length,
+        name: parsed.data.name.trim(),
+        type: parsed.data.type,
+        command: parsed.data.command.trim(),
+        order: parsed.data.order ?? operation.steps.length,
       };
 
       operations.addStep(request.params.id, step);
@@ -186,18 +174,16 @@ export function registerOperationRoutes(
         return reply.status(404).send({ error: "Step not found" });
       }
 
-      const { name, type, command, order } = request.body as {
-        name?: string;
-        type?: DeploymentStepType;
-        command?: string;
-        order?: number;
-      };
+      const parsed = UpdateStepSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.status(400).send({ error: "Invalid input", details: parsed.error.format() });
+      }
 
-      const updates: { name?: string; type?: DeploymentStepType; command?: string; order?: number } = {};
-      if (name !== undefined) updates.name = name.trim();
-      if (type !== undefined) updates.type = type;
-      if (command !== undefined) updates.command = command.trim();
-      if (order !== undefined) updates.order = order;
+      const updates: Record<string, unknown> = {};
+      if (parsed.data.name !== undefined) updates.name = parsed.data.name.trim();
+      if (parsed.data.type !== undefined) updates.type = parsed.data.type;
+      if (parsed.data.command !== undefined) updates.command = parsed.data.command.trim();
+      if (parsed.data.order !== undefined) updates.order = parsed.data.order;
 
       const updated = operations.updateStep(request.params.id, request.params.stepId, updates);
 
@@ -214,10 +200,11 @@ export function registerOperationRoutes(
         return reply.status(404).send({ error: "Operation not found" });
       }
 
-      const { stepIds } = request.body as { stepIds?: string[] };
-      if (!stepIds || !Array.isArray(stepIds)) {
-        return reply.status(400).send({ error: "stepIds array is required" });
+      const parsed = ReorderStepsSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.status(400).send({ error: "Invalid input", details: parsed.error.format() });
       }
+      const { stepIds } = parsed.data;
 
       // Validate all step IDs exist
       const stepMap = new Map(operation.steps.map((s) => [s.id, s]));
@@ -264,9 +251,13 @@ export function registerOperationRoutes(
   app.put<{ Params: { id: string } }>(
     "/api/operations/:id/deploy-config",
     async (request, reply) => {
+      const parsed = UpdateDeployConfigSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.status(400).send({ error: "Invalid input", details: parsed.error.format() });
+      }
+
       try {
-        const updates = request.body as Partial<DeployConfig>;
-        const operation = operations.updateDeployConfig(request.params.id, updates);
+        const operation = operations.updateDeployConfig(request.params.id, parsed.data);
         return { deployConfig: operation.deployConfig };
       } catch {
         return reply.status(404).send({ error: "Operation not found" });

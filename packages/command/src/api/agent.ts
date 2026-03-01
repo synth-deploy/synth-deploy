@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import type { IPartitionStore, IEnvironmentStore, IOperationStore, ISettingsStore, DebriefWriter, DebriefReader, Operation, Partition, Environment, LlmResult } from "@deploystack/core";
 import type { LlmClient } from "@deploystack/core";
 import type { CommandAgent, DeploymentStore } from "../agent/command-agent.js";
+import { IntentRequestSchema, QueryRequestSchema } from "./schemas.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -760,11 +761,11 @@ export function registerAgentRoutes(
    * Does NOT trigger a deployment — the UI confirms first.
    */
   app.post("/api/agent/interpret-intent", async (request, reply) => {
-    const body = request.body as IntentRequest;
-
-    if (!body.intent || typeof body.intent !== "string") {
-      return reply.status(400).send({ error: "Intent string is required" });
+    const parsed = IntentRequestSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: "Invalid input", details: parsed.error.format() });
     }
+    const body = parsed.data as IntentRequest;
 
     const allOperations = operations.list();
     const allPartitions = partitions.list();
@@ -911,13 +912,12 @@ export function registerAgentRoutes(
    * Navigation/data intents resolve entities and return view params.
    */
   app.post("/api/agent/query", async (request, reply) => {
-    const body = request.body as { query: string; conversationId?: string };
-
-    if (!body.query || typeof body.query !== "string") {
-      return reply.status(400).send({ error: "Query string is required" });
+    const parsed = QueryRequestSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: "Invalid input", details: parsed.error.format() });
     }
 
-    const query = body.query.trim();
+    const query = parsed.data.query.trim();
     const lower = query.toLowerCase();
     const allOperations = operations.list();
     const allPartitions = partitions.list();

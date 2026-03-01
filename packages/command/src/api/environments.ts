@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import type { IEnvironmentStore, IOperationStore } from "@deploystack/core";
+import { CreateEnvironmentSchema, UpdateEnvironmentSchema } from "./schemas.js";
 
 export function registerEnvironmentRoutes(
   app: FastifyInstance,
@@ -13,16 +14,12 @@ export function registerEnvironmentRoutes(
 
   // Create an environment
   app.post("/api/environments", async (request, reply) => {
-    const { name, variables } = request.body as {
-      name?: string;
-      variables?: Record<string, string>;
-    };
-
-    if (!name || typeof name !== "string" || name.trim().length === 0) {
-      return reply.status(400).send({ error: "name is required" });
+    const parsed = CreateEnvironmentSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: "Invalid input", details: parsed.error.format() });
     }
 
-    const environment = environments.create(name.trim(), variables ?? {});
+    const environment = environments.create(parsed.data.name.trim(), parsed.data.variables ?? {});
     return reply.status(201).send({ environment });
   });
 
@@ -42,15 +39,15 @@ export function registerEnvironmentRoutes(
   app.put<{ Params: { id: string } }>(
     "/api/environments/:id",
     async (request, reply) => {
-      const { name, variables } = request.body as {
-        name?: string;
-        variables?: Record<string, string>;
-      };
+      const parsed = UpdateEnvironmentSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.status(400).send({ error: "Invalid input", details: parsed.error.format() });
+      }
 
       try {
         const environment = environments.update(request.params.id, {
-          name: name?.trim(),
-          variables,
+          name: parsed.data.name?.trim(),
+          variables: parsed.data.variables,
         });
         return { environment };
       } catch {

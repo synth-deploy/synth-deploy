@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { DeploymentTriggerSchema, generatePostmortem } from "@deploystack/core";
 import type { IPartitionStore, IEnvironmentStore, IOperationStore, IOrderStore, ISettingsStore, DebriefWriter, DebriefReader } from "@deploystack/core";
 import type { CommandAgent, DeploymentStore } from "../agent/command-agent.js";
+import { DeploymentListQuerySchema, DebriefQuerySchema } from "./schemas.js";
 
 /**
  * REST API routes for deployments. These are the traditional (non-MCP) interface
@@ -29,7 +30,8 @@ export function registerDeploymentRoutes(
     }
 
     const trigger = parsed.data;
-    const { orderId } = (request.body as Record<string, unknown>) ?? {};
+    const body = request.body as Record<string, unknown> | null;
+    const orderId = body && typeof body === "object" && "orderId" in body ? body.orderId : undefined;
     const envEnabled = settings.get().environmentsEnabled;
 
     // Validate operation exists
@@ -93,7 +95,8 @@ export function registerDeploymentRoutes(
 
   // List deployments (optionally filtered by partition)
   app.get("/api/deployments", async (request) => {
-    const { partitionId } = request.query as { partitionId?: string };
+    const qParsed = DeploymentListQuerySchema.safeParse(request.query);
+    const { partitionId } = qParsed.success ? qParsed.data : {};
     const list = partitionId ? deployments.getByPartition(partitionId) : deployments.list();
 
     return { deployments: list };
@@ -124,13 +127,10 @@ export function registerDeploymentRoutes(
 
   // Get recent debrief entries (supports filtering by partition and decision type)
   app.get("/api/debrief", async (request) => {
-    const { limit, partitionId, decisionType } = request.query as {
-      limit?: string;
-      partitionId?: string;
-      decisionType?: string;
-    };
+    const qParsed = DebriefQuerySchema.safeParse(request.query);
+    const { limit, partitionId, decisionType } = qParsed.success ? qParsed.data : {};
 
-    const max = limit ? parseInt(limit, 10) : 50;
+    const max = limit ?? 50;
 
     // No filters — fast path
     if (!partitionId && !decisionType) {

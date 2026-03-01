@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import type { ISettingsStore, AppSettings } from "@deploystack/core";
+import { UpdateSettingsSchema } from "./schemas.js";
 
 export function registerSettingsRoutes(
   app: FastifyInstance,
@@ -11,9 +12,12 @@ export function registerSettingsRoutes(
   });
 
   // Update settings (partial merge)
-  app.put("/api/settings", async (request) => {
-    const updates = request.body as Partial<AppSettings>;
-    const updated = settings.update(updates);
+  app.put("/api/settings", async (request, reply) => {
+    const parsed = UpdateSettingsSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: "Invalid input", details: parsed.error.format() });
+    }
+    const updated = settings.update(parsed.data as Partial<AppSettings>);
     return { settings: updated };
   });
 

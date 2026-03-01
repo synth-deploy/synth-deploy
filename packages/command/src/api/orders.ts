@@ -9,6 +9,7 @@ import type {
   DebriefReader,
 } from "@deploystack/core";
 import type { CommandAgent, DeploymentStore } from "../agent/command-agent.js";
+import { OrderListQuerySchema, CreateOrderSchema } from "./schemas.js";
 
 /**
  * REST API routes for Orders (immutable deployment snapshots).
@@ -27,10 +28,8 @@ export function registerOrderRoutes(
 ): void {
   // List orders (supports ?operationId and ?partitionId filters)
   app.get("/api/orders", async (request) => {
-    const { operationId, partitionId } = request.query as {
-      operationId?: string;
-      partitionId?: string;
-    };
+    const parsed = OrderListQuerySchema.safeParse(request.query);
+    const { operationId, partitionId } = parsed.success ? parsed.data : {};
 
     let list;
     if (operationId) {
@@ -61,20 +60,17 @@ export function registerOrderRoutes(
 
   // Create an order manually (pre-stage without deploying)
   app.post("/api/orders", async (request, reply) => {
-    const { operationId, partitionId, environmentId, version } = request.body as {
-      operationId?: string;
-      partitionId?: string;
-      environmentId?: string;
-      version?: string;
-    };
+    const parsed = CreateOrderSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: "Invalid input", details: parsed.error.format() });
+    }
 
+    const { operationId, partitionId, environmentId, version } = parsed.data;
     const envEnabled = settings.get().environmentsEnabled;
 
-    if (!operationId || !partitionId || !version || (envEnabled && !environmentId)) {
+    if (envEnabled && !environmentId) {
       return reply.status(400).send({
-        error: envEnabled
-          ? "Missing required fields: operationId, partitionId, environmentId, version"
-          : "Missing required fields: operationId, partitionId, version",
+        error: "Missing required field: environmentId (environments are enabled)",
       });
     }
 

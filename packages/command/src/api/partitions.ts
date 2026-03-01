@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import type { IPartitionStore, DebriefReader } from "@deploystack/core";
 import { generateOperationHistory } from "@deploystack/core";
 import type { DeploymentStore } from "../agent/command-agent.js";
+import { CreatePartitionSchema, UpdatePartitionSchema, SetVariablesSchema } from "./schemas.js";
 
 export function registerPartitionRoutes(
   app: FastifyInstance,
@@ -16,16 +17,12 @@ export function registerPartitionRoutes(
 
   // Create a partition
   app.post("/api/partitions", async (request, reply) => {
-    const { name, variables } = request.body as {
-      name?: string;
-      variables?: Record<string, string>;
-    };
-
-    if (!name || typeof name !== "string" || name.trim().length === 0) {
-      return reply.status(400).send({ error: "name is required" });
+    const parsed = CreatePartitionSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: "Invalid input", details: parsed.error.format() });
     }
 
-    const partition = partitions.create(name.trim(), variables ?? {});
+    const partition = partitions.create(parsed.data.name.trim(), parsed.data.variables ?? {});
     return reply.status(201).send({ partition });
   });
 
@@ -40,11 +37,14 @@ export function registerPartitionRoutes(
 
   // Update partition (name)
   app.put<{ Params: { id: string } }>("/api/partitions/:id", async (request, reply) => {
-    const { name } = request.body as { name?: string };
+    const parsed = UpdatePartitionSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: "Invalid input", details: parsed.error.format() });
+    }
 
     try {
       const partition = partitions.update(request.params.id, {
-        name: name?.trim(),
+        name: parsed.data.name?.trim(),
       });
       return { partition };
     } catch {
@@ -66,16 +66,13 @@ export function registerPartitionRoutes(
   app.put<{ Params: { id: string } }>(
     "/api/partitions/:id/variables",
     async (request, reply) => {
-      const { variables } = request.body as {
-        variables?: Record<string, string>;
-      };
-
-      if (!variables || typeof variables !== "object") {
-        return reply.status(400).send({ error: "variables object is required" });
+      const parsed = SetVariablesSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.status(400).send({ error: "Invalid input", details: parsed.error.format() });
       }
 
       try {
-        const partition = partitions.setVariables(request.params.id, variables);
+        const partition = partitions.setVariables(request.params.id, parsed.data.variables);
         return { partition };
       } catch {
         return reply.status(404).send({ error: "Partition not found" });
