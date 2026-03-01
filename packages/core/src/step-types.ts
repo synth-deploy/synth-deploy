@@ -43,7 +43,11 @@ export type StepTypeCategory =
   | "Cloud & Infrastructure"
   | "Configuration & Secrets"
   | "Monitoring & Observability"
-  | "Rollback & Recovery";
+  | "Rollback & Recovery"
+  | "Git & Versioning"
+  | "Security & Compliance"
+  | "Package & Artifact Management"
+  | "SSH & Remote Execution";
 
 export interface StepTypeDefinition {
   id: string;
@@ -811,6 +815,238 @@ export const PREDEFINED_STEP_TYPES: StepTypeDefinition[] = [
     commandTemplate: "pg_restore -d ${{connection_var}} {{backup_path}}",
     source: "predefined",
   },
+
+  // --- Git & Versioning ---
+  {
+    id: "git-tag",
+    name: "Git Tag",
+    category: "Git & Versioning",
+    description: "Create and push a git tag for the release",
+    parameters: [
+      { name: "tag_name", label: "Tag Name", type: "string", required: true, description: "Tag name (e.g., v1.2.3)" },
+      { name: "message", label: "Message", type: "string", required: false, description: "Tag annotation message" },
+      { name: "push", label: "Push to Remote", type: "boolean", required: false, default: true, description: "Push the tag to origin" },
+    ],
+    commandTemplate: "git tag -a {{tag_name}} -m '{{message}}' && git push origin {{tag_name}}",
+    source: "predefined",
+  },
+  {
+    id: "bump-version",
+    name: "Bump Version",
+    category: "Git & Versioning",
+    description: "Bump the version number in project files",
+    parameters: [
+      { name: "bump_type", label: "Bump Type", type: "select", required: true, options: ["major", "minor", "patch"], description: "Semver bump type" },
+      { name: "file_path", label: "Version File", type: "string", required: false, default: "package.json", description: "File containing the version" },
+    ],
+    commandTemplate: "npm version {{bump_type}} --no-git-tag-version",
+    source: "predefined",
+  },
+  {
+    id: "generate-changelog",
+    name: "Generate Changelog",
+    category: "Git & Versioning",
+    description: "Generate a changelog from git history",
+    parameters: [
+      { name: "from_ref", label: "From Ref", type: "string", required: false, description: "Starting git ref (defaults to last tag)" },
+      { name: "to_ref", label: "To Ref", type: "string", required: false, default: "HEAD", description: "Ending git ref" },
+      { name: "output_file", label: "Output File", type: "string", required: false, default: "CHANGELOG.md", description: "Changelog output path" },
+    ],
+    commandTemplate: "git log {{from_ref}}..{{to_ref}} --pretty=format:'- %s' > {{output_file}}",
+    source: "predefined",
+  },
+  {
+    id: "create-github-release",
+    name: "Create GitHub Release",
+    category: "Git & Versioning",
+    description: "Create a GitHub release with notes and artifacts",
+    parameters: [
+      { name: "tag", label: "Tag", type: "string", required: true, description: "Release tag" },
+      { name: "title", label: "Title", type: "string", required: true, description: "Release title" },
+      { name: "notes_file", label: "Notes File", type: "string", required: false, description: "Path to release notes file" },
+      { name: "prerelease", label: "Pre-release", type: "boolean", required: false, default: false, description: "Mark as pre-release" },
+    ],
+    commandTemplate: "gh release create {{tag}} --title '{{title}}' --notes-file {{notes_file}}",
+    source: "predefined",
+  },
+
+  // --- Security & Compliance ---
+  {
+    id: "scan-docker-image",
+    name: "Scan Docker Image",
+    category: "Security & Compliance",
+    description: "Run a vulnerability scan on a Docker image",
+    parameters: [
+      { name: "image", label: "Image", type: "string", required: true, description: "Docker image to scan" },
+      { name: "scanner", label: "Scanner", type: "select", required: false, options: ["trivy", "grype", "snyk"], default: "trivy", description: "Vulnerability scanner" },
+      { name: "severity", label: "Min Severity", type: "select", required: false, options: ["LOW", "MEDIUM", "HIGH", "CRITICAL"], default: "HIGH", description: "Minimum severity to report" },
+    ],
+    commandTemplate: "trivy image --severity {{severity}} {{image}}",
+    source: "predefined",
+  },
+  {
+    id: "sign-artifact",
+    name: "Sign Artifact",
+    category: "Security & Compliance",
+    description: "Cryptographically sign a build artifact or container image",
+    parameters: [
+      { name: "artifact", label: "Artifact", type: "string", required: true, description: "Path or image reference to sign" },
+      { name: "method", label: "Method", type: "select", required: true, options: ["cosign", "gpg", "sigstore"], description: "Signing method" },
+      { name: "key_ref", label: "Key Reference", type: "string", required: false, description: "Signing key path or KMS reference" },
+    ],
+    commandTemplate: "cosign sign --key {{key_ref}} {{artifact}}",
+    source: "predefined",
+  },
+  {
+    id: "rotate-secret",
+    name: "Rotate Secret",
+    category: "Security & Compliance",
+    description: "Rotate a secret or credential and update dependent services",
+    parameters: [
+      { name: "secret_name", label: "Secret Name", type: "string", required: true, description: "Name of the secret to rotate" },
+      { name: "provider", label: "Provider", type: "select", required: true, options: ["vault", "aws-secrets-manager", "gcp-secrets", "az-keyvault"], description: "Secrets provider" },
+    ],
+    commandTemplate: "echo 'Rotating secret {{secret_name}} via {{provider}}'",
+    source: "predefined",
+  },
+  {
+    id: "verify-compliance",
+    name: "Verify Compliance",
+    category: "Security & Compliance",
+    description: "Run a compliance check against a policy set",
+    parameters: [
+      { name: "policy_path", label: "Policy Path", type: "string", required: true, description: "Path to policy definitions (OPA, Conftest)" },
+      { name: "target", label: "Target", type: "string", required: true, description: "File or directory to check against policies" },
+      { name: "engine", label: "Engine", type: "select", required: false, options: ["opa", "conftest", "checkov"], default: "conftest", description: "Policy engine" },
+    ],
+    commandTemplate: "conftest test {{target}} --policy {{policy_path}}",
+    source: "predefined",
+  },
+  {
+    id: "dependency-audit",
+    name: "Dependency Audit",
+    category: "Security & Compliance",
+    description: "Audit project dependencies for known vulnerabilities",
+    parameters: [
+      { name: "tool", label: "Tool", type: "select", required: false, options: ["npm-audit", "pip-audit", "bundler-audit"], default: "npm-audit", description: "Audit tool" },
+      { name: "severity", label: "Min Severity", type: "select", required: false, options: ["low", "moderate", "high", "critical"], default: "high", description: "Minimum severity to fail on" },
+    ],
+    commandTemplate: "npm audit --audit-level={{severity}}",
+    source: "predefined",
+  },
+
+  // --- Package & Artifact Management ---
+  {
+    id: "install-dependencies",
+    name: "Install Dependencies",
+    category: "Package & Artifact Management",
+    description: "Install project dependencies using a package manager",
+    parameters: [
+      { name: "manager", label: "Package Manager", type: "select", required: true, options: ["npm", "yarn", "pnpm", "pip", "bundler"], description: "Package manager" },
+      { name: "production", label: "Production Only", type: "boolean", required: false, default: true, description: "Install only production dependencies" },
+      { name: "working_dir", label: "Working Directory", type: "string", required: false, description: "Project directory" },
+    ],
+    commandTemplate: "npm ci --omit=dev",
+    source: "predefined",
+  },
+  {
+    id: "publish-package",
+    name: "Publish Package",
+    category: "Package & Artifact Management",
+    description: "Publish a package to a registry",
+    parameters: [
+      { name: "registry", label: "Registry", type: "select", required: false, options: ["npm", "pypi", "rubygems", "maven"], default: "npm", description: "Package registry" },
+      { name: "tag", label: "Tag", type: "string", required: false, default: "latest", description: "Distribution tag" },
+      { name: "dry_run", label: "Dry Run", type: "boolean", required: false, default: false, description: "Preview without publishing" },
+    ],
+    commandTemplate: "npm publish --tag {{tag}}",
+    source: "predefined",
+  },
+  {
+    id: "upload-to-registry",
+    name: "Upload to Registry",
+    category: "Package & Artifact Management",
+    description: "Upload a build artifact to an artifact registry",
+    parameters: [
+      { name: "artifact_path", label: "Artifact Path", type: "string", required: true, description: "Path to the artifact" },
+      { name: "registry_url", label: "Registry URL", type: "string", required: true, description: "Target registry URL" },
+      { name: "repository", label: "Repository", type: "string", required: true, description: "Repository name in the registry" },
+    ],
+    commandTemplate: "echo 'Uploading {{artifact_path}} to {{registry_url}}/{{repository}}'",
+    source: "predefined",
+  },
+  {
+    id: "build-project",
+    name: "Build Project",
+    category: "Package & Artifact Management",
+    description: "Build a project using its build tool",
+    parameters: [
+      { name: "tool", label: "Build Tool", type: "select", required: true, options: ["npm", "gradle", "maven", "make", "cargo"], description: "Build tool" },
+      { name: "target", label: "Build Target", type: "string", required: false, default: "build", description: "Build target or script name" },
+      { name: "working_dir", label: "Working Directory", type: "string", required: false, description: "Project directory" },
+    ],
+    commandTemplate: "npm run {{target}}",
+    source: "predefined",
+  },
+
+  // --- SSH & Remote Execution ---
+  {
+    id: "ssh-command",
+    name: "SSH Command",
+    category: "SSH & Remote Execution",
+    description: "Execute a command on a remote host via SSH",
+    parameters: [
+      { name: "host", label: "Host", type: "string", required: true, description: "Remote host (user@hostname)" },
+      { name: "command", label: "Command", type: "string", required: true, description: "Command to execute remotely" },
+      { name: "key_path", label: "Key Path", type: "string", required: false, description: "Path to SSH private key" },
+      { name: "port", label: "Port", type: "number", required: false, default: 22, description: "SSH port" },
+    ],
+    commandTemplate: "ssh -o StrictHostKeyChecking=accept-new -p {{port}} {{host}} '{{command}}'",
+    source: "predefined",
+  },
+  {
+    id: "scp-upload",
+    name: "SCP Upload",
+    category: "SSH & Remote Execution",
+    description: "Upload files to a remote host via SCP",
+    parameters: [
+      { name: "source", label: "Local Source", type: "string", required: true, description: "Local file or directory path" },
+      { name: "host", label: "Host", type: "string", required: true, description: "Remote host (user@hostname)" },
+      { name: "destination", label: "Remote Destination", type: "string", required: true, description: "Remote path" },
+      { name: "recursive", label: "Recursive", type: "boolean", required: false, default: false, description: "Copy directories recursively" },
+    ],
+    commandTemplate: "scp -r {{source}} {{host}}:{{destination}}",
+    source: "predefined",
+  },
+  {
+    id: "rsync-deploy",
+    name: "Rsync Deploy",
+    category: "SSH & Remote Execution",
+    description: "Sync files to a remote host using rsync",
+    parameters: [
+      { name: "source", label: "Local Source", type: "string", required: true, description: "Local directory to sync" },
+      { name: "host", label: "Host", type: "string", required: true, description: "Remote host (user@hostname)" },
+      { name: "destination", label: "Remote Destination", type: "string", required: true, description: "Remote directory path" },
+      { name: "exclude", label: "Exclude Patterns", type: "string", required: false, description: "Patterns to exclude (comma-separated)" },
+      { name: "delete", label: "Delete Extra", type: "boolean", required: false, default: false, description: "Delete files on destination not in source" },
+    ],
+    commandTemplate: "rsync -avz {{source}} {{host}}:{{destination}}",
+    source: "predefined",
+  },
+  {
+    id: "ssh-tunnel",
+    name: "SSH Tunnel",
+    category: "SSH & Remote Execution",
+    description: "Create an SSH tunnel for port forwarding",
+    parameters: [
+      { name: "host", label: "Host", type: "string", required: true, description: "Remote host (user@hostname)" },
+      { name: "local_port", label: "Local Port", type: "number", required: true, description: "Local port to bind" },
+      { name: "remote_port", label: "Remote Port", type: "number", required: true, description: "Remote port to forward" },
+      { name: "remote_host", label: "Remote Target Host", type: "string", required: false, default: "localhost", description: "Host on the remote side" },
+    ],
+    commandTemplate: "ssh -N -L {{local_port}}:{{remote_host}}:{{remote_port}} {{host}}",
+    source: "predefined",
+  },
 ];
 
 // Fast lookup by ID
@@ -836,4 +1072,8 @@ export const STEP_TYPE_CATEGORIES: StepTypeCategory[] = [
   "Configuration & Secrets",
   "Monitoring & Observability",
   "Rollback & Recovery",
+  "Git & Versioning",
+  "Security & Compliance",
+  "Package & Artifact Management",
+  "SSH & Remote Execution",
 ];

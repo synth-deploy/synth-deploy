@@ -26,7 +26,7 @@ POST /api/step-types/import
   <h1>Step Type Library</h1>
 
   <p>
-    DeployStack ships with 52 predefined step types across 11 categories. Each
+    DeployStack ships with 69 predefined step types across 15 categories. Each
     step type provides a structured configuration form with validated inputs,
     replacing raw command entry with guided parameter forms.
   </p>
@@ -123,6 +123,39 @@ POST /api/step-types/import
     <li><strong>Blue-Green Switch</strong> — Switch traffic between blue and green environments</li>
     <li><strong>Canary Promote</strong> — Promote or roll back a canary deployment</li>
     <li><strong>Database Restore</strong> — Restore a database from a backup file</li>
+  </ul>
+
+  <h3>Git &amp; Versioning</h3>
+  <ul>
+    <li><strong>Git Tag</strong> — Create and push release tags</li>
+    <li><strong>Bump Version</strong> — Bump semver in project files</li>
+    <li><strong>Generate Changelog</strong> — Generate changelog from git history</li>
+    <li><strong>Create GitHub Release</strong> — Create releases with notes and artifacts</li>
+  </ul>
+
+  <h3>Security &amp; Compliance</h3>
+  <ul>
+    <li><strong>Scan Docker Image</strong> — Vulnerability scanning (Trivy, Grype, Snyk)</li>
+    <li><strong>Sign Artifact</strong> — Cryptographic signing (cosign, GPG, Sigstore)</li>
+    <li><strong>Rotate Secret</strong> — Secret rotation across providers</li>
+    <li><strong>Verify Compliance</strong> — Policy checks (OPA, Conftest, Checkov)</li>
+    <li><strong>Dependency Audit</strong> — Audit dependencies for vulnerabilities</li>
+  </ul>
+
+  <h3>Package &amp; Artifact Management</h3>
+  <ul>
+    <li><strong>Install Dependencies</strong> — Install via npm, yarn, pnpm, pip, or bundler</li>
+    <li><strong>Publish Package</strong> — Publish to npm, PyPI, RubyGems, or Maven</li>
+    <li><strong>Upload to Registry</strong> — Upload artifacts to registries</li>
+    <li><strong>Build Project</strong> — Build using npm, Gradle, Maven, Make, or Cargo</li>
+  </ul>
+
+  <h3>SSH &amp; Remote Execution</h3>
+  <ul>
+    <li><strong>SSH Command</strong> — Execute commands on remote hosts</li>
+    <li><strong>SCP Upload</strong> — Upload files via SCP</li>
+    <li><strong>Rsync Deploy</strong> — Sync files using rsync</li>
+    <li><strong>SSH Tunnel</strong> — Create port-forwarding tunnels</li>
   </ul>
 
   <h2>Custom Step Types</h2>

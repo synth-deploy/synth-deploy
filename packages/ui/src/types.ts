@@ -43,7 +43,11 @@ export type StepTypeCategory =
   | "Cloud & Infrastructure"
   | "Configuration & Secrets"
   | "Monitoring & Observability"
-  | "Rollback & Recovery";
+  | "Rollback & Recovery"
+  | "Git & Versioning"
+  | "Security & Compliance"
+  | "Package & Artifact Management"
+  | "SSH & Remote Execution";
 
 export interface StepTypeDefinition {
   id: string;
