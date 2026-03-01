@@ -91,6 +91,11 @@ export const UpdateSettingsSchema = z.object({
     logoUrl: z.string(),
     accentColor: z.string().optional(),
   }).optional().nullable(),
+  mcpServers: z.array(z.object({
+    name: z.string(),
+    url: z.string().url(),
+    description: z.string().optional(),
+  })).optional(),
 });
 
 // --- Orders ---

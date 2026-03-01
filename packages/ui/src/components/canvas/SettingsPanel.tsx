@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { getSettings, updateSettings, getCommandInfo } from "../../api.js";
-import type { AppSettings, CommandInfo, ConflictPolicy } from "../../types.js";
+import type { AppSettings, CommandInfo, ConflictPolicy, McpServerConfig } from "../../types.js";
 import { useSettings } from "../../context/SettingsContext.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
 import DeployConfigEditor from "../DeployConfigEditor.js";
@@ -20,6 +20,11 @@ export default function SettingsPanel({ title }: Props) {
   const [coBrandingOperatorName, setCoBrandingOperatorName] = useState("");
   const [coBrandingLogoUrl, setCoBrandingLogoUrl] = useState("");
   const [coBrandingAccentColor, setCoBrandingAccentColor] = useState("");
+  const [mcpServers, setMcpServers] = useState<McpServerConfig[]>([]);
+  const [mcpSaved, setMcpSaved] = useState(false);
+  const [mcpNewName, setMcpNewName] = useState("");
+  const [mcpNewUrl, setMcpNewUrl] = useState("");
+  const [mcpNewDescription, setMcpNewDescription] = useState("");
 
   useEffect(() => {
     Promise.all([getSettings(), getCommandInfo()])
@@ -29,6 +34,7 @@ export default function SettingsPanel({ title }: Props) {
         setCoBrandingOperatorName(s.coBranding?.operatorName ?? "");
         setCoBrandingLogoUrl(s.coBranding?.logoUrl ?? "");
         setCoBrandingAccentColor(s.coBranding?.accentColor ?? "");
+        setMcpServers(s.mcpServers ?? []);
         setLoading(false);
       })
       .catch(() => setLoading(false));
@@ -89,6 +95,32 @@ export default function SettingsPanel({ title }: Props) {
     setCoBrandingLogoUrl("");
     setCoBrandingAccentColor("");
     await refreshGlobalSettings();
+  }
+
+  function handleAddMcpServer() {
+    if (!mcpNewName || !mcpNewUrl) return;
+    const server: McpServerConfig = {
+      name: mcpNewName,
+      url: mcpNewUrl,
+      ...(mcpNewDescription ? { description: mcpNewDescription } : {}),
+    };
+    setMcpServers([...mcpServers, server]);
+    setMcpNewName("");
+    setMcpNewUrl("");
+    setMcpNewDescription("");
+  }
+
+  function handleRemoveMcpServer(index: number) {
+    setMcpServers(mcpServers.filter((_, i) => i !== index));
+  }
+
+  async function handleSaveMcpServers() {
+    if (!settings) return;
+    const updated = await updateSettings({ mcpServers } as Partial<AppSettings>);
+    setSettings(updated);
+    setMcpServers(updated.mcpServers ?? []);
+    setMcpSaved(true);
+    setTimeout(() => setMcpSaved(false), 2000);
   }
 
   if (loading) return <CanvasPanelHost title={title}><div className="loading">Loading...</div></CanvasPanelHost>;
@@ -340,6 +372,94 @@ export default function SettingsPanel({ title }: Props) {
                 </button>
               )}
             </div>
+          </div>
+        </div>
+
+        {/* MCP Servers */}
+        <div className="section">
+          <div className="card">
+            <div className="card-header">
+              <h3>External MCP Servers</h3>
+            </div>
+            <div className="settings-description" style={{ marginBottom: 12 }}>
+              Connect to external MCP servers (monitoring, incident management, etc.)
+              for pre-deployment intelligence. Unreachable servers are skipped gracefully.
+            </div>
+
+            {mcpServers.length > 0 && (
+              <div style={{ marginBottom: 16 }}>
+                {mcpServers.map((server, index) => (
+                  <div
+                    key={index}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      padding: "8px 0",
+                      borderBottom: "1px solid var(--border-color, #e2e8f0)",
+                    }}
+                  >
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 500 }}>{server.name}</div>
+                      <div style={{ fontSize: "0.85em", opacity: 0.7 }}>{server.url}</div>
+                      {server.description && (
+                        <div style={{ fontSize: "0.85em", opacity: 0.6 }}>{server.description}</div>
+                      )}
+                    </div>
+                    <button
+                      className="btn"
+                      onClick={() => handleRemoveMcpServer(index)}
+                      style={{ padding: "4px 8px", fontSize: "0.85em" }}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label>Server Name</label>
+                <input
+                  value={mcpNewName}
+                  onChange={(e) => setMcpNewName(e.target.value)}
+                  placeholder="e.g. datadog-monitor"
+                  style={{ maxWidth: 300 }}
+                />
+              </div>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label>Server URL</label>
+                <input
+                  value={mcpNewUrl}
+                  onChange={(e) => setMcpNewUrl(e.target.value)}
+                  placeholder="http://localhost:4000/mcp"
+                  style={{ maxWidth: 400 }}
+                />
+              </div>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label>Description (optional)</label>
+                <input
+                  value={mcpNewDescription}
+                  onChange={(e) => setMcpNewDescription(e.target.value)}
+                  placeholder="Datadog monitoring integration"
+                  style={{ maxWidth: 400 }}
+                />
+              </div>
+              <div>
+                <button
+                  className="btn"
+                  onClick={handleAddMcpServer}
+                  disabled={!mcpNewName || !mcpNewUrl}
+                >
+                  Add Server
+                </button>
+              </div>
+            </div>
+
+            <button className="btn btn-primary" onClick={handleSaveMcpServers}>
+              {mcpSaved ? "Saved" : "Save MCP Servers"}
+            </button>
           </div>
         </div>
       </div>
