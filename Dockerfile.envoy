@@ -43,7 +43,12 @@ RUN npm ci --omit=dev
 COPY --from=build /app/packages/core/dist packages/core/dist/
 COPY --from=build /app/packages/envoy/dist packages/envoy/dist/
 
+# Create non-root user
+RUN groupadd --gid 1000 deploystack && \
+    useradd --uid 1000 --gid deploystack --shell /bin/sh --create-home deploystack
+
 # Deployment workspace directory
+RUN mkdir -p /workspace && chown deploystack:deploystack /workspace
 VOLUME /workspace
 ENV DEPLOYSTACK_COMMAND_URL=http://command:3000
 ENV NODE_ENV=production
@@ -52,5 +57,7 @@ EXPOSE 3001
 
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
   CMD curl -f http://localhost:3001/health || exit 1
+
+USER deploystack
 
 CMD ["node", "packages/envoy/dist/index.js"]
