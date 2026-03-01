@@ -421,7 +421,7 @@ const auth = registerAuthMiddleware(app);
 // Register REST routes
 registerHealthRoutes(app, { entityDb, dataDir: DATA_DIR, envoyUrl });
 registerDeploymentRoutes(app, agent, partitions, environments, deployments, debrief, operations, orders, settings);
-registerEnvoyReportRoutes(app, debrief);
+registerEnvoyReportRoutes(app, debrief, deployments);
 registerOperationRoutes(app, operations, environments, stepTypeStore);
 registerStepTypeRoutes(app, stepTypeStore);
 registerPartitionRoutes(app, partitions, deployments, debrief);

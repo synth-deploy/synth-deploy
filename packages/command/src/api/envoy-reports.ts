@@ -1,6 +1,8 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { DecisionTypeEnum } from "@deploystack/core";
 import type { DebriefWriter, DecisionType } from "@deploystack/core";
+import type { DeploymentStore } from "../agent/command-agent.js";
 
 // ---------------------------------------------------------------------------
 // Schema — validates incoming Envoy reports
@@ -12,7 +14,7 @@ const DebriefEntrySchema = z.object({
   partitionId: z.string().nullable(),
   deploymentId: z.string().nullable(),
   agent: z.enum(["command", "envoy"]),
-  decisionType: z.string(),
+  decisionType: DecisionTypeEnum,
   decision: z.string(),
   reasoning: z.string(),
   context: z.record(z.unknown()),
@@ -59,6 +61,7 @@ const EnvoyReportSchema = z.object({
 export function registerEnvoyReportRoutes(
   app: FastifyInstance,
   debrief: DebriefWriter,
+  deployments: DeploymentStore,
 ): void {
   app.post("/api/envoy/report", async (request, reply) => {
     const parsed = EnvoyReportSchema.safeParse(request.body);
@@ -70,6 +73,30 @@ export function registerEnvoyReportRoutes(
     }
 
     const report = parsed.data;
+
+    // Validate partition boundary: each debrief entry's deploymentId must
+    // belong to the claimed partitionId. Reject cross-partition reports.
+    for (const entry of report.debriefEntries) {
+      if (entry.deploymentId && entry.partitionId) {
+        const deployment = deployments.get(entry.deploymentId);
+        if (!deployment || deployment.partitionId !== entry.partitionId) {
+          debrief.record({
+            partitionId: entry.partitionId,
+            deploymentId: entry.deploymentId,
+            agent: "command",
+            decisionType: "system",
+            decision: "Rejected Envoy report: partition boundary violation",
+            reasoning: `Deployment ${entry.deploymentId} does not belong to partition ${entry.partitionId}. Report from envoy ${report.envoyId} rejected.`,
+            context: { envoyId: report.envoyId, reportedPartitionId: entry.partitionId },
+          });
+          return reply.status(403).send({
+            error: "Partition boundary violation",
+            detail: `Deployment ${entry.deploymentId} does not belong to partition ${entry.partitionId}`,
+          });
+        }
+      }
+    }
+
     let ingested = 0;
 
     // Ingest each Envoy debrief entry into Command's debrief.
