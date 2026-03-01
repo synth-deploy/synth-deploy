@@ -79,7 +79,7 @@ const StepTypeParameterSchema = z.object({
 
 export const CreateStepTypeSchema = z.object({
   name: z.string().min(1),
-  category: z.enum(["General", "File & Artifact", "Service", "Verification", "Database", "Container", "Traffic"]),
+  category: z.enum(["General", "File & Artifact", "Service", "Verification", "Database", "Container", "Networking & Traffic", "Cloud & Infrastructure", "Configuration & Secrets", "Monitoring & Observability", "Rollback & Recovery"]),
   description: z.string().min(1),
   parameters: z.array(StepTypeParameterSchema),
   commandTemplate: z.string().min(1),
@@ -91,7 +91,7 @@ export const ImportStepTypeSchema = z.object({
   stepType: z.object({
     id: z.string().min(1),
     name: z.string().min(1),
-    category: z.enum(["General", "File & Artifact", "Service", "Verification", "Database", "Container", "Traffic"]),
+    category: z.enum(["General", "File & Artifact", "Service", "Verification", "Database", "Container", "Networking & Traffic", "Cloud & Infrastructure", "Configuration & Secrets", "Monitoring & Observability", "Rollback & Recovery"]),
     description: z.string().min(1),
     parameters: z.array(StepTypeParameterSchema),
     commandTemplate: z.string().min(1),

@@ -26,7 +26,7 @@ POST /api/step-types/import
   <h1>Step Type Library</h1>
 
   <p>
-    DeployStack ships with 27 predefined step types across 7 categories. Each
+    DeployStack ships with 52 predefined step types across 11 categories. Each
     step type provides a structured configuration form with validated inputs,
     replacing raw command entry with guided parameter forms.
   </p>
@@ -80,9 +80,49 @@ POST /api/step-types/import
     <li><strong>Kubernetes Rollout Status</strong> — Watch rollouts until completion</li>
   </ul>
 
-  <h3>Traffic</h3>
+  <h3>Networking &amp; Traffic</h3>
   <ul>
     <li><strong>Update Load Balancer</strong> — Manage target group configuration</li>
+    <li><strong>Update DNS Record</strong> — Create or update DNS records (Route53, Cloudflare, GCP DNS)</li>
+    <li><strong>Invalidate CDN Cache</strong> — Purge CDN entries (CloudFront, Cloudflare, Fastly)</li>
+    <li><strong>Update Firewall Rule</strong> — Add or update security group / firewall rules</li>
+    <li><strong>Configure Reverse Proxy</strong> — Update and reload nginx, HAProxy, or Caddy</li>
+    <li><strong>Set Maintenance Page</strong> — Enable or disable a maintenance page</li>
+  </ul>
+
+  <h3>Cloud &amp; Infrastructure</h3>
+  <ul>
+    <li><strong>Terraform Plan/Apply</strong> — Preview and apply infrastructure changes</li>
+    <li><strong>Upload to S3</strong> — Upload files to AWS S3</li>
+    <li><strong>Upload to GCS</strong> — Upload files to Google Cloud Storage</li>
+    <li><strong>CloudFormation Deploy</strong> — Deploy AWS CloudFormation stacks</li>
+    <li><strong>AWS CLI / Google Cloud CLI / Azure CLI</strong> — Run provider-specific commands</li>
+  </ul>
+
+  <h3>Configuration &amp; Secrets</h3>
+  <ul>
+    <li><strong>Render Template</strong> — Generate config files from templates (envsubst, Jinja2, Handlebars)</li>
+    <li><strong>Inject Env File</strong> — Generate .env files from deployment variables</li>
+    <li><strong>Fetch Secret</strong> — Retrieve secrets from Vault, AWS SSM, GCP Secrets, or Azure Key Vault</li>
+    <li><strong>Validate Config</strong> — Validate configuration files (JSON, YAML, TOML, nginx, Apache)</li>
+  </ul>
+
+  <h3>Monitoring &amp; Observability</h3>
+  <ul>
+    <li><strong>Create Deploy Marker</strong> — Record deployments in Datadog, New Relic, Grafana, or PagerDuty</li>
+    <li><strong>Check Metric Threshold</strong> — Poll metrics and verify they stay within bounds</li>
+    <li><strong>Configure Log Forwarding</strong> — Set up log forwarding to aggregation services</li>
+    <li><strong>Silence Alerts</strong> — Temporarily mute alerts during deployment</li>
+    <li><strong>Verify Log Output</strong> — Check logs for expected patterns</li>
+  </ul>
+
+  <h3>Rollback &amp; Recovery</h3>
+  <ul>
+    <li><strong>Snapshot Restore</strong> — Restore from a system snapshot</li>
+    <li><strong>Rollback Deployment</strong> — Roll back via Kubernetes, Docker, or systemd</li>
+    <li><strong>Blue-Green Switch</strong> — Switch traffic between blue and green environments</li>
+    <li><strong>Canary Promote</strong> — Promote or roll back a canary deployment</li>
+    <li><strong>Database Restore</strong> — Restore a database from a backup file</li>
   </ul>
 
   <h2>Custom Step Types</h2>

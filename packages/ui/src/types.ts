@@ -39,7 +39,11 @@ export type StepTypeCategory =
   | "Verification"
   | "Database"
   | "Container"
-  | "Traffic";
+  | "Networking & Traffic"
+  | "Cloud & Infrastructure"
+  | "Configuration & Secrets"
+  | "Monitoring & Observability"
+  | "Rollback & Recovery";
 
 export interface StepTypeDefinition {
   id: string;

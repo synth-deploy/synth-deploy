@@ -39,7 +39,11 @@ export type StepTypeCategory =
   | "Verification"
   | "Database"
   | "Container"
-  | "Traffic";
+  | "Networking & Traffic"
+  | "Cloud & Infrastructure"
+  | "Configuration & Secrets"
+  | "Monitoring & Observability"
+  | "Rollback & Recovery";
 
 export interface StepTypeDefinition {
   id: string;
@@ -435,11 +439,11 @@ export const PREDEFINED_STEP_TYPES: StepTypeDefinition[] = [
     source: "predefined",
   },
 
-  // --- Traffic ---
+  // --- Networking & Traffic ---
   {
     id: "update-load-balancer",
     name: "Update Load Balancer",
-    category: "Traffic",
+    category: "Networking & Traffic",
     description: "Update load balancer target group configuration",
     parameters: [
       { name: "target_group", label: "Target Group", type: "string", required: true, description: "Target group name or ARN" },
@@ -447,6 +451,364 @@ export const PREDEFINED_STEP_TYPES: StepTypeDefinition[] = [
       { name: "weight", label: "Weight", type: "number", required: false, default: 100, description: "Traffic weight (0-100)" },
     ],
     commandTemplate: "aws elbv2 register-targets --target-group-arn {{target_group}} --targets Id={{instances}}",
+    source: "predefined",
+  },
+  {
+    id: "update-dns-record",
+    name: "Update DNS Record",
+    category: "Networking & Traffic",
+    description: "Create or update a DNS record",
+    parameters: [
+      { name: "provider", label: "Provider", type: "select", required: true, options: ["route53", "cloudflare", "gcp-dns"], description: "DNS provider" },
+      { name: "domain", label: "Domain", type: "string", required: true, description: "Domain name to update" },
+      { name: "record_type", label: "Record Type", type: "select", required: false, options: ["A", "CNAME", "AAAA"], default: "A", description: "DNS record type" },
+      { name: "value", label: "Value", type: "string", required: true, description: "Record value (IP or hostname)" },
+      { name: "ttl", label: "TTL (seconds)", type: "number", required: false, default: 300, description: "Time to live" },
+    ],
+    commandTemplate: "echo 'Updating {{record_type}} record for {{domain}} to {{value}} via {{provider}}'",
+    source: "predefined",
+  },
+  {
+    id: "invalidate-cdn-cache",
+    name: "Invalidate CDN Cache",
+    category: "Networking & Traffic",
+    description: "Purge or invalidate CDN cache entries",
+    parameters: [
+      { name: "provider", label: "Provider", type: "select", required: true, options: ["cloudfront", "cloudflare", "fastly"], description: "CDN provider" },
+      { name: "distribution_id", label: "Distribution ID", type: "string", required: true, description: "CDN distribution or zone identifier" },
+      { name: "paths", label: "Paths", type: "string", required: false, default: "/*", description: "Paths to invalidate (comma-separated)" },
+    ],
+    commandTemplate: "aws cloudfront create-invalidation --distribution-id {{distribution_id}} --paths {{paths}}",
+    source: "predefined",
+  },
+  {
+    id: "update-firewall-rule",
+    name: "Update Firewall Rule",
+    category: "Networking & Traffic",
+    description: "Add or update a firewall or security group rule",
+    parameters: [
+      { name: "group_id", label: "Security Group / Firewall ID", type: "string", required: true, description: "Security group or firewall identifier" },
+      { name: "port", label: "Port", type: "number", required: true, description: "Port number to allow" },
+      { name: "protocol", label: "Protocol", type: "select", required: false, options: ["tcp", "udp"], default: "tcp", description: "Network protocol" },
+      { name: "source_cidr", label: "Source CIDR", type: "string", required: false, default: "0.0.0.0/0", description: "Allowed source CIDR block" },
+    ],
+    commandTemplate: "aws ec2 authorize-security-group-ingress --group-id {{group_id}} --protocol {{protocol}} --port {{port}} --cidr {{source_cidr}}",
+    source: "predefined",
+  },
+  {
+    id: "configure-reverse-proxy",
+    name: "Configure Reverse Proxy",
+    category: "Networking & Traffic",
+    description: "Update reverse proxy configuration and reload",
+    parameters: [
+      { name: "config_path", label: "Config Path", type: "string", required: true, description: "Path to proxy config file" },
+      { name: "upstream", label: "Upstream", type: "string", required: true, description: "Upstream server address (host:port)" },
+      { name: "server", label: "Server", type: "select", required: false, options: ["nginx", "haproxy", "caddy"], default: "nginx", description: "Proxy server type" },
+    ],
+    commandTemplate: "nginx -t && systemctl reload nginx",
+    source: "predefined",
+  },
+  {
+    id: "set-maintenance-page",
+    name: "Set Maintenance Page",
+    category: "Networking & Traffic",
+    description: "Enable or disable a maintenance page",
+    parameters: [
+      { name: "action", label: "Action", type: "select", required: true, options: ["enable", "disable"], description: "Enable or disable maintenance mode" },
+      { name: "page_path", label: "Page Path", type: "string", required: false, description: "Path to maintenance page HTML" },
+    ],
+    commandTemplate: "echo 'Maintenance mode: {{action}}'",
+    source: "predefined",
+  },
+
+  // --- Cloud & Infrastructure ---
+  {
+    id: "terraform-plan",
+    name: "Terraform Plan",
+    category: "Cloud & Infrastructure",
+    description: "Run terraform plan to preview infrastructure changes",
+    parameters: [
+      { name: "working_dir", label: "Working Directory", type: "string", required: true, description: "Terraform project directory" },
+      { name: "var_file", label: "Variable File", type: "string", required: false, description: "Path to .tfvars file" },
+      { name: "target", label: "Target Resource", type: "string", required: false, description: "Specific resource to target" },
+    ],
+    commandTemplate: "terraform -chdir={{working_dir}} plan -input=false",
+    source: "predefined",
+  },
+  {
+    id: "terraform-apply",
+    name: "Terraform Apply",
+    category: "Cloud & Infrastructure",
+    description: "Apply terraform changes to infrastructure",
+    parameters: [
+      { name: "working_dir", label: "Working Directory", type: "string", required: true, description: "Terraform project directory" },
+      { name: "var_file", label: "Variable File", type: "string", required: false, description: "Path to .tfvars file" },
+      { name: "auto_approve", label: "Auto Approve", type: "boolean", required: false, default: true, description: "Skip interactive approval" },
+    ],
+    commandTemplate: "terraform -chdir={{working_dir}} apply -input=false -auto-approve",
+    source: "predefined",
+  },
+  {
+    id: "upload-to-s3",
+    name: "Upload to S3",
+    category: "Cloud & Infrastructure",
+    description: "Upload files to an AWS S3 bucket",
+    parameters: [
+      { name: "source", label: "Source Path", type: "string", required: true, description: "Local path to upload" },
+      { name: "bucket", label: "S3 Bucket", type: "string", required: true, description: "Target S3 bucket name" },
+      { name: "prefix", label: "Key Prefix", type: "string", required: false, description: "S3 key prefix (folder path)" },
+      { name: "recursive", label: "Recursive", type: "boolean", required: false, default: false, description: "Upload directory recursively" },
+    ],
+    commandTemplate: "aws s3 cp {{source}} s3://{{bucket}}/{{prefix}} --recursive",
+    source: "predefined",
+  },
+  {
+    id: "upload-to-gcs",
+    name: "Upload to GCS",
+    category: "Cloud & Infrastructure",
+    description: "Upload files to a Google Cloud Storage bucket",
+    parameters: [
+      { name: "source", label: "Source Path", type: "string", required: true, description: "Local path to upload" },
+      { name: "bucket", label: "GCS Bucket", type: "string", required: true, description: "Target GCS bucket name" },
+      { name: "prefix", label: "Key Prefix", type: "string", required: false, description: "GCS object prefix" },
+    ],
+    commandTemplate: "gsutil cp -r {{source}} gs://{{bucket}}/{{prefix}}",
+    source: "predefined",
+  },
+  {
+    id: "cloudformation-deploy",
+    name: "CloudFormation Deploy",
+    category: "Cloud & Infrastructure",
+    description: "Deploy an AWS CloudFormation stack",
+    parameters: [
+      { name: "stack_name", label: "Stack Name", type: "string", required: true, description: "CloudFormation stack name" },
+      { name: "template", label: "Template", type: "string", required: true, description: "Path to CloudFormation template" },
+      { name: "parameters_file", label: "Parameters File", type: "string", required: false, description: "Path to parameters JSON file" },
+    ],
+    commandTemplate: "aws cloudformation deploy --stack-name {{stack_name}} --template-file {{template}} --capabilities CAPABILITY_IAM",
+    source: "predefined",
+  },
+  {
+    id: "aws-cli",
+    name: "AWS CLI",
+    category: "Cloud & Infrastructure",
+    description: "Run an arbitrary AWS CLI command",
+    parameters: [
+      { name: "service", label: "Service", type: "string", required: true, description: "AWS service (e.g., s3, ec2, lambda)" },
+      { name: "command", label: "Command", type: "string", required: true, description: "CLI subcommand and arguments" },
+      { name: "region", label: "Region", type: "string", required: false, description: "AWS region override" },
+    ],
+    commandTemplate: "aws {{service}} {{command}}",
+    source: "predefined",
+  },
+  {
+    id: "gcloud-cli",
+    name: "Google Cloud CLI",
+    category: "Cloud & Infrastructure",
+    description: "Run an arbitrary gcloud CLI command",
+    parameters: [
+      { name: "command", label: "Command", type: "string", required: true, description: "gcloud subcommand and arguments" },
+      { name: "project", label: "Project", type: "string", required: false, description: "GCP project ID" },
+    ],
+    commandTemplate: "gcloud {{command}}",
+    source: "predefined",
+  },
+  {
+    id: "az-cli",
+    name: "Azure CLI",
+    category: "Cloud & Infrastructure",
+    description: "Run an arbitrary Azure CLI command",
+    parameters: [
+      { name: "command", label: "Command", type: "string", required: true, description: "az subcommand and arguments" },
+      { name: "resource_group", label: "Resource Group", type: "string", required: false, description: "Azure resource group" },
+    ],
+    commandTemplate: "az {{command}}",
+    source: "predefined",
+  },
+
+  // --- Configuration & Secrets ---
+  {
+    id: "render-template",
+    name: "Render Template",
+    category: "Configuration & Secrets",
+    description: "Generate a config file from a template with variable substitution",
+    parameters: [
+      { name: "template_path", label: "Template Path", type: "string", required: true, description: "Path to the template file" },
+      { name: "output_path", label: "Output Path", type: "string", required: true, description: "Path for the rendered output" },
+      { name: "engine", label: "Template Engine", type: "select", required: false, options: ["envsubst", "jinja2", "handlebars"], default: "envsubst", description: "Template rendering engine" },
+    ],
+    commandTemplate: "envsubst < {{template_path}} > {{output_path}}",
+    source: "predefined",
+  },
+  {
+    id: "inject-env-file",
+    name: "Inject Env File",
+    category: "Configuration & Secrets",
+    description: "Generate a .env file from deployment variables",
+    parameters: [
+      { name: "output_path", label: "Output Path", type: "string", required: true, description: "Path for the .env file" },
+      { name: "prefix", label: "Variable Prefix", type: "string", required: false, description: "Only include variables with this prefix" },
+    ],
+    commandTemplate: "env | sort > {{output_path}}",
+    source: "predefined",
+  },
+  {
+    id: "fetch-secret",
+    name: "Fetch Secret",
+    category: "Configuration & Secrets",
+    description: "Retrieve a secret from a secrets manager",
+    parameters: [
+      { name: "provider", label: "Provider", type: "select", required: true, options: ["vault", "aws-ssm", "gcp-secrets", "az-keyvault"], description: "Secrets provider" },
+      { name: "secret_name", label: "Secret Name", type: "string", required: true, description: "Name or path of the secret" },
+      { name: "output_var", label: "Output Variable", type: "string", required: true, description: "Environment variable to store the secret in" },
+    ],
+    commandTemplate: "echo 'Fetching secret {{secret_name}} from {{provider}}'",
+    source: "predefined",
+  },
+  {
+    id: "validate-config",
+    name: "Validate Config",
+    category: "Configuration & Secrets",
+    description: "Validate a configuration file against a schema or syntax check",
+    parameters: [
+      { name: "config_path", label: "Config Path", type: "string", required: true, description: "Path to the configuration file" },
+      { name: "format", label: "Format", type: "select", required: true, options: ["json", "yaml", "toml", "nginx", "apache"], description: "Configuration file format" },
+    ],
+    commandTemplate: "cat {{config_path}} | python3 -m json.tool > /dev/null",
+    source: "predefined",
+  },
+
+  // --- Monitoring & Observability ---
+  {
+    id: "create-deploy-marker",
+    name: "Create Deploy Marker",
+    category: "Monitoring & Observability",
+    description: "Record a deployment event in a monitoring system",
+    parameters: [
+      { name: "provider", label: "Provider", type: "select", required: true, options: ["datadog", "newrelic", "grafana", "pagerduty"], description: "Monitoring provider" },
+      { name: "service_name", label: "Service Name", type: "string", required: true, description: "Name of the deployed service" },
+      { name: "version", label: "Version", type: "string", required: true, description: "Deployed version" },
+      { name: "description", label: "Description", type: "string", required: false, description: "Deployment description" },
+    ],
+    commandTemplate: "echo 'Deploy marker: {{service_name}} v{{version}} via {{provider}}'",
+    source: "predefined",
+  },
+  {
+    id: "check-metric-threshold",
+    name: "Check Metric Threshold",
+    category: "Monitoring & Observability",
+    description: "Poll a metric and verify it stays within acceptable bounds",
+    parameters: [
+      { name: "metric_name", label: "Metric Name", type: "string", required: true, description: "Name of the metric to check" },
+      { name: "threshold", label: "Threshold", type: "number", required: true, description: "Maximum acceptable value" },
+      { name: "poll_interval", label: "Poll Interval (seconds)", type: "number", required: false, default: 10, description: "Seconds between checks" },
+      { name: "timeout", label: "Timeout (seconds)", type: "number", required: false, default: 120, description: "Maximum polling duration" },
+    ],
+    commandTemplate: "echo 'Checking metric {{metric_name}} <= {{threshold}} for {{timeout}}s'",
+    source: "predefined",
+  },
+  {
+    id: "configure-log-forwarding",
+    name: "Configure Log Forwarding",
+    category: "Monitoring & Observability",
+    description: "Set up or update log forwarding to a log aggregation service",
+    parameters: [
+      { name: "log_path", label: "Log Path", type: "string", required: true, description: "Path to log file or directory" },
+      { name: "destination", label: "Destination", type: "string", required: true, description: "Log aggregation endpoint" },
+      { name: "format", label: "Format", type: "select", required: false, options: ["json", "syslog", "plaintext"], default: "json", description: "Log format" },
+    ],
+    commandTemplate: "echo 'Forwarding logs from {{log_path}} to {{destination}} as {{format}}'",
+    source: "predefined",
+  },
+  {
+    id: "silence-alerts",
+    name: "Silence Alerts",
+    category: "Monitoring & Observability",
+    description: "Temporarily silence monitoring alerts during deployment",
+    parameters: [
+      { name: "service_name", label: "Service Name", type: "string", required: true, description: "Service to silence alerts for" },
+      { name: "duration_minutes", label: "Duration (minutes)", type: "number", required: true, default: 15, description: "How long to silence alerts" },
+      { name: "provider", label: "Provider", type: "select", required: false, options: ["datadog", "pagerduty", "opsgenie"], default: "pagerduty", description: "Alert provider" },
+    ],
+    commandTemplate: "echo 'Silencing {{service_name}} alerts for {{duration_minutes}} minutes via {{provider}}'",
+    source: "predefined",
+  },
+  {
+    id: "verify-log-output",
+    name: "Verify Log Output",
+    category: "Monitoring & Observability",
+    description: "Check application logs for expected output or absence of errors",
+    parameters: [
+      { name: "log_path", label: "Log Path", type: "string", required: true, description: "Path to log file" },
+      { name: "expected_pattern", label: "Expected Pattern", type: "string", required: true, description: "Regex pattern that should appear in logs" },
+      { name: "timeout", label: "Timeout (seconds)", type: "number", required: false, default: 30, description: "How long to wait for the pattern" },
+    ],
+    commandTemplate: "timeout {{timeout}} grep -m1 '{{expected_pattern}}' <(tail -f {{log_path}})",
+    source: "predefined",
+  },
+
+  // --- Rollback & Recovery ---
+  {
+    id: "snapshot-restore",
+    name: "Snapshot Restore",
+    category: "Rollback & Recovery",
+    description: "Restore a system or service from a snapshot",
+    parameters: [
+      { name: "snapshot_id", label: "Snapshot ID", type: "string", required: true, description: "Identifier of the snapshot to restore" },
+      { name: "target", label: "Target", type: "string", required: true, description: "Target volume, instance, or path to restore to" },
+    ],
+    commandTemplate: "echo 'Restoring snapshot {{snapshot_id}} to {{target}}'",
+    source: "predefined",
+  },
+  {
+    id: "rollback-deployment",
+    name: "Rollback Deployment",
+    category: "Rollback & Recovery",
+    description: "Roll back a service to a previous version",
+    parameters: [
+      { name: "service_name", label: "Service Name", type: "string", required: true, description: "Name of the service to roll back" },
+      { name: "method", label: "Method", type: "select", required: true, options: ["kubernetes", "docker", "systemd"], description: "Rollback method" },
+      { name: "target_version", label: "Target Version", type: "string", required: false, description: "Version to roll back to (defaults to previous)" },
+    ],
+    commandTemplate: "kubectl rollout undo deployment/{{service_name}}",
+    source: "predefined",
+  },
+  {
+    id: "blue-green-switch",
+    name: "Blue-Green Switch",
+    category: "Rollback & Recovery",
+    description: "Switch traffic between blue and green environments",
+    parameters: [
+      { name: "target_env", label: "Target Environment", type: "select", required: true, options: ["blue", "green"], description: "Environment to route traffic to" },
+      { name: "lb_config", label: "Load Balancer Config", type: "string", required: true, description: "Load balancer target group or config path" },
+    ],
+    commandTemplate: "echo 'Switching traffic to {{target_env}} environment via {{lb_config}}'",
+    source: "predefined",
+  },
+  {
+    id: "canary-promote",
+    name: "Canary Promote",
+    category: "Rollback & Recovery",
+    description: "Promote a canary deployment to full production or roll back",
+    parameters: [
+      { name: "action", label: "Action", type: "select", required: true, options: ["promote", "rollback"], description: "Promote canary or roll back" },
+      { name: "service_name", label: "Service Name", type: "string", required: true, description: "Service running the canary" },
+      { name: "traffic_percentage", label: "Traffic %", type: "number", required: false, default: 100, description: "Traffic percentage for promotion" },
+    ],
+    commandTemplate: "echo 'Canary {{action}} for {{service_name}} at {{traffic_percentage}}%'",
+    source: "predefined",
+  },
+  {
+    id: "database-restore",
+    name: "Database Restore",
+    category: "Rollback & Recovery",
+    description: "Restore a database from a backup file",
+    parameters: [
+      { name: "backup_path", label: "Backup Path", type: "string", required: true, description: "Path to the backup file" },
+      { name: "connection_var", label: "Connection Variable", type: "string", required: true, description: "Environment variable with connection string" },
+      { name: "format", label: "Format", type: "select", required: false, options: ["sql", "custom", "directory"], default: "custom", description: "Backup format" },
+    ],
+    commandTemplate: "pg_restore -d ${{connection_var}} {{backup_path}}",
     source: "predefined",
   },
 ];
@@ -469,5 +831,9 @@ export const STEP_TYPE_CATEGORIES: StepTypeCategory[] = [
   "Verification",
   "Database",
   "Container",
-  "Traffic",
+  "Networking & Traffic",
+  "Cloud & Infrastructure",
+  "Configuration & Secrets",
+  "Monitoring & Observability",
+  "Rollback & Recovery",
 ];
