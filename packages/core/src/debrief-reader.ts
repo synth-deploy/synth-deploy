@@ -1,8 +1,18 @@
+import type { LlmClient, LlmResult } from "./llm-client.js";
 import type { DebriefEntry, Deployment, DeploymentId } from "./types.js";
 
 // ---------------------------------------------------------------------------
 // Public types
 // ---------------------------------------------------------------------------
+
+export interface LlmPostmortem {
+  executiveSummary: string;
+  timeline: Array<{ timestamp: string; event: string; significance: string }>;
+  rootCause: string;
+  contributingFactors: string[];
+  remediationSteps: string[];
+  lessonsLearned: string[];
+}
 
 export interface PostmortemReport {
   /** One-line summary: what was deployed, where, and what happened. */
@@ -131,6 +141,204 @@ export function generatePostmortem(
     outcome,
     formatted,
   };
+}
+
+// ---------------------------------------------------------------------------
+// LLM-powered postmortem generator
+// ---------------------------------------------------------------------------
+
+/**
+ * System prompt for LLM-powered postmortem generation.
+ *
+ * Exported for testability — tests can verify the prompt includes
+ * the expected structure without calling the LLM.
+ */
+export const POSTMORTEM_SYSTEM_PROMPT = `You are a deployment postmortem analyst for DeployStack. You receive a chronological trail of agent decisions from a deployment and produce a structured postmortem report in JSON format.
+
+Your analysis must be:
+- Specific to the deployment data provided — never generic
+- Actionable — every remediation step must be something an engineer can do right now
+- Causal — trace the chain of events that led to the outcome
+
+Respond with ONLY a JSON object (no markdown, no code fences) matching this exact structure:
+{
+  "executiveSummary": "One paragraph summarizing what happened, why, and the impact",
+  "timeline": [
+    { "timestamp": "ISO timestamp or relative description", "event": "What happened", "significance": "Why this matters in the causal chain" }
+  ],
+  "rootCause": "The fundamental reason the deployment ended the way it did",
+  "contributingFactors": ["Factor 1", "Factor 2"],
+  "remediationSteps": ["Specific step 1", "Specific step 2"],
+  "lessonsLearned": ["Lesson 1", "Lesson 2"]
+}`;
+
+/**
+ * Build the user prompt containing the debrief trail for LLM analysis.
+ *
+ * Data gathering is deterministic — the same entries always produce the
+ * same prompt. Only the LLM synthesis step is non-deterministic.
+ */
+export function buildPostmortemPrompt(
+  entries: DebriefEntry[],
+  deployment: Deployment,
+): string {
+  const sorted = [...entries].sort(
+    (a, b) => a.timestamp.getTime() - b.timestamp.getTime(),
+  );
+
+  const lines: string[] = [];
+  lines.push(`Deployment ID: ${deployment.id}`);
+  lines.push(`Status: ${deployment.status}`);
+  lines.push(`Version: ${deployment.version}`);
+  lines.push(`Operation: ${deployment.operationId}`);
+  lines.push(`Environment: ${deployment.environmentId}`);
+  lines.push(`Partition: ${deployment.partitionId}`);
+  lines.push(`Started: ${deployment.createdAt.toISOString()}`);
+  if (deployment.completedAt) {
+    lines.push(`Completed: ${deployment.completedAt.toISOString()}`);
+  }
+  if (deployment.failureReason) {
+    lines.push(`Failure reason: ${deployment.failureReason}`);
+  }
+  lines.push("");
+  lines.push("--- Debrief Trail ---");
+  lines.push("");
+
+  for (const entry of sorted) {
+    lines.push(`[${entry.timestamp.toISOString()}] ${entry.decisionType.toUpperCase()}`);
+    lines.push(`  Agent: ${entry.agent}`);
+    lines.push(`  Decision: ${entry.decision}`);
+    lines.push(`  Reasoning: ${entry.reasoning}`);
+    if (Object.keys(entry.context).length > 0) {
+      lines.push(`  Context: ${JSON.stringify(entry.context)}`);
+    }
+    lines.push("");
+  }
+
+  lines.push("Analyze this deployment trail and produce a structured postmortem.");
+  return lines.join("\n");
+}
+
+/**
+ * Parse the LLM response text into a structured LlmPostmortem.
+ * Returns null if the response cannot be parsed.
+ */
+export function parseLlmPostmortemResponse(text: string): LlmPostmortem | null {
+  try {
+    const parsed = JSON.parse(text) as Record<string, unknown>;
+
+    // Validate required fields are present and have correct types
+    if (typeof parsed.executiveSummary !== "string") return null;
+    if (typeof parsed.rootCause !== "string") return null;
+    if (!Array.isArray(parsed.timeline)) return null;
+    if (!Array.isArray(parsed.contributingFactors)) return null;
+    if (!Array.isArray(parsed.remediationSteps)) return null;
+    if (!Array.isArray(parsed.lessonsLearned)) return null;
+
+    // Validate timeline entries
+    const timeline: LlmPostmortem["timeline"] = [];
+    for (const item of parsed.timeline) {
+      if (
+        typeof item !== "object" ||
+        item === null ||
+        typeof (item as Record<string, unknown>).timestamp !== "string" ||
+        typeof (item as Record<string, unknown>).event !== "string" ||
+        typeof (item as Record<string, unknown>).significance !== "string"
+      ) {
+        return null;
+      }
+      timeline.push({
+        timestamp: (item as Record<string, string>).timestamp,
+        event: (item as Record<string, string>).event,
+        significance: (item as Record<string, string>).significance,
+      });
+    }
+
+    return {
+      executiveSummary: parsed.executiveSummary,
+      timeline,
+      rootCause: parsed.rootCause,
+      contributingFactors: parsed.contributingFactors.filter(
+        (f): f is string => typeof f === "string",
+      ),
+      remediationSteps: parsed.remediationSteps.filter(
+        (s): s is string => typeof s === "string",
+      ),
+      lessonsLearned: parsed.lessonsLearned.filter(
+        (l): l is string => typeof l === "string",
+      ),
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Generate an LLM-powered postmortem from a deployment's debrief entries.
+ *
+ * Data gathering is deterministic — the same entries always produce the same
+ * LLM prompt. Only the report synthesis uses the LLM.
+ *
+ * Falls back to the heuristic {@link generatePostmortem} when:
+ * - No LLM client is provided
+ * - The LLM is unavailable (no API key configured)
+ * - The LLM call fails (timeout, rate limit, network error)
+ * - The LLM response cannot be parsed into the expected structure
+ */
+export async function generatePostmortemAsync(
+  entries: DebriefEntry[],
+  deployment: Deployment,
+  llm?: LlmClient,
+): Promise<{ llmPostmortem: LlmPostmortem; heuristicFallback: false } | { heuristicReport: PostmortemReport; heuristicFallback: true }> {
+  // No LLM provided — deterministic fallback
+  if (!llm) {
+    return {
+      heuristicReport: generatePostmortem(entries, deployment),
+      heuristicFallback: true,
+    };
+  }
+
+  // Build prompt deterministically from debrief entries
+  const prompt = buildPostmortemPrompt(entries, deployment);
+
+  // Call LLM for synthesis
+  let result: LlmResult;
+  try {
+    result = await llm.reason({
+      prompt,
+      systemPrompt: POSTMORTEM_SYSTEM_PROMPT,
+      promptSummary: `Postmortem generation for deployment ${deployment.id}`,
+      partitionId: deployment.partitionId,
+      deploymentId: deployment.id,
+      maxTokens: 4096,
+    });
+  } catch {
+    // Unexpected error — fall back to heuristic
+    return {
+      heuristicReport: generatePostmortem(entries, deployment),
+      heuristicFallback: true,
+    };
+  }
+
+  // LLM unavailable or call failed — deterministic fallback
+  if (!result.ok) {
+    return {
+      heuristicReport: generatePostmortem(entries, deployment),
+      heuristicFallback: true,
+    };
+  }
+
+  // Parse the LLM response
+  const llmPostmortem = parseLlmPostmortemResponse(result.text);
+  if (!llmPostmortem) {
+    // Could not parse — fall back to heuristic
+    return {
+      heuristicReport: generatePostmortem(entries, deployment),
+      heuristicFallback: true,
+    };
+  }
+
+  return { llmPostmortem, heuristicFallback: false };
 }
 
 function buildSummary(entries: DebriefEntry[], deployment: Deployment): string {

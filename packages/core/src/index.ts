@@ -70,7 +70,14 @@ export type {
 } from "./partition-container.js";
 export { PartitionManager } from "./partition-manager.js";
 export type { DeploymentStoreReader } from "./partition-manager.js";
-export { generatePostmortem, generateOperationHistory } from "./debrief-reader.js";
+export {
+  generatePostmortem,
+  generatePostmortemAsync,
+  generateOperationHistory,
+  buildPostmortemPrompt,
+  parseLlmPostmortemResponse,
+  POSTMORTEM_SYSTEM_PROMPT,
+} from "./debrief-reader.js";
 export { LlmClient, createOpenAICompatibleAdapter } from "./llm-client.js";
 export type { LlmProvider, LlmConfig, LlmCallParams, LlmResult } from "./llm-client.js";
 export type {
@@ -84,4 +91,5 @@ export type {
   DeploymentSummary,
   ConfigurationPattern,
   EnvironmentNote,
+  LlmPostmortem,
 } from "./debrief-reader.js";
