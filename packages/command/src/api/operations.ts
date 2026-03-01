@@ -64,8 +64,12 @@ export function registerOperationRoutes(
         name: parsed.data.name?.trim(),
       });
       return { operation };
-    } catch {
-      return reply.status(404).send({ error: "Operation not found" });
+    } catch (err) {
+      if (err instanceof Error && err.message.toLowerCase().includes("not found")) {
+        return reply.status(404).send({ error: "Operation not found" });
+      }
+      app.log.error(err, "Failed to update operation");
+      return reply.status(500).send({ error: "Internal server error" });
     }
   });
 
@@ -98,8 +102,12 @@ export function registerOperationRoutes(
       try {
         const operation = operations.addEnvironment(request.params.id, environmentId);
         return { operation };
-      } catch {
-        return reply.status(404).send({ error: "Operation not found" });
+      } catch (err) {
+        if (err instanceof Error && err.message.toLowerCase().includes("not found")) {
+          return reply.status(404).send({ error: "Operation not found" });
+        }
+        app.log.error(err, "Failed to add environment to operation");
+        return reply.status(500).send({ error: "Internal server error" });
       }
     },
   );
@@ -114,8 +122,12 @@ export function registerOperationRoutes(
           request.params.envId,
         );
         return { operation };
-      } catch {
-        return reply.status(404).send({ error: "Operation not found" });
+      } catch (err) {
+        if (err instanceof Error && err.message.toLowerCase().includes("not found")) {
+          return reply.status(404).send({ error: "Operation not found" });
+        }
+        app.log.error(err, "Failed to remove environment from operation");
+        return reply.status(500).send({ error: "Internal server error" });
       }
     },
   );
@@ -247,8 +259,12 @@ export function registerOperationRoutes(
       try {
         operations.removeStep(request.params.id, request.params.stepId);
         return { deleted: true };
-      } catch {
-        return reply.status(404).send({ error: "Operation or step not found" });
+      } catch (err) {
+        if (err instanceof Error && err.message.toLowerCase().includes("not found")) {
+          return reply.status(404).send({ error: "Operation or step not found" });
+        }
+        app.log.error(err, "Failed to delete step");
+        return reply.status(500).send({ error: "Internal server error" });
       }
     },
   );
@@ -279,8 +295,12 @@ export function registerOperationRoutes(
       try {
         const operation = operations.updateDeployConfig(request.params.id, parsed.data);
         return { deployConfig: operation.deployConfig };
-      } catch {
-        return reply.status(404).send({ error: "Operation not found" });
+      } catch (err) {
+        if (err instanceof Error && err.message.toLowerCase().includes("not found")) {
+          return reply.status(404).send({ error: "Operation not found" });
+        }
+        app.log.error(err, "Failed to update deploy config");
+        return reply.status(500).send({ error: "Internal server error" });
       }
     },
   );
