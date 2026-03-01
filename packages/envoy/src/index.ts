@@ -3,6 +3,7 @@ import path from "node:path";
 import fs from "node:fs";
 import { DecisionDebrief } from "@deploystack/core";
 import { EnvoyAgent } from "./agent/envoy-agent.js";
+import { DeploymentExecutor } from "./agent/deployment-executor.js";
 import { LocalStateStore } from "./state/local-state.js";
 import { createEnvoyServer } from "./server.js";
 
@@ -143,6 +144,22 @@ debrief.record({
 // --- Start server ---
 
 const app = createEnvoyServer(agent, state);
+
+// Periodic workspace cleanup (every 10 minutes): keep last 50 or 30 days
+const workspaceExecutor = new DeploymentExecutor(BASE_DIR);
+const WORKSPACE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+const WORKSPACE_MAX_COUNT = 50;
+
+const workspaceCleanupInterval = setInterval(() => {
+  const removed = workspaceExecutor.cleanupOldWorkspaces(WORKSPACE_MAX_AGE_MS, WORKSPACE_MAX_COUNT);
+  if (removed > 0) {
+    app.log.info(`Cleaned up ${removed} old deployment workspace(s)`);
+  }
+}, 10 * 60 * 1000);
+
+app.addHook("onClose", async () => {
+  clearInterval(workspaceCleanupInterval);
+});
 
 app.listen({ port: PORT, host: HOST }, (err) => {
   if (err) {

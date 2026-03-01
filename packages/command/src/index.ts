@@ -432,8 +432,13 @@ if (existsSync(uiDistPath)) {
 
 // --- Mount MCP Streamable HTTP transport ---
 
-// MCP sessions keyed by session ID
-const mcpTransports = new Map<string, StreamableHTTPServerTransport>();
+// MCP sessions keyed by session ID, with creation timestamp for auto-cleanup
+interface McpSession {
+  transport: StreamableHTTPServerTransport;
+  createdAt: number;
+}
+const mcpTransports = new Map<string, McpSession>();
+const MCP_SESSION_TTL_MS = 60 * 60 * 1000; // 1 hour
 
 app.post("/mcp", async (request, reply) => {
   const sessionId = (request.headers["mcp-session-id"] as string) ?? undefined;
@@ -441,7 +446,7 @@ app.post("/mcp", async (request, reply) => {
   let transport: StreamableHTTPServerTransport;
 
   if (sessionId && mcpTransports.has(sessionId)) {
-    transport = mcpTransports.get(sessionId)!;
+    transport = mcpTransports.get(sessionId)!.transport;
   } else {
     transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: () => crypto.randomUUID(),
@@ -450,7 +455,7 @@ app.post("/mcp", async (request, reply) => {
     // After connect, the transport has a sessionId
     const newSessionId = transport.sessionId;
     if (newSessionId) {
-      mcpTransports.set(newSessionId, transport);
+      mcpTransports.set(newSessionId, { transport, createdAt: Date.now() });
     }
   }
 
@@ -466,7 +471,7 @@ app.get("/mcp", async (request, reply) => {
     return reply.status(400).send({ error: "Invalid or missing session ID" });
   }
 
-  const transport = mcpTransports.get(sessionId)!;
+  const transport = mcpTransports.get(sessionId)!.transport;
   await transport.handleRequest(request.raw, reply.raw);
   reply.hijack();
 });
@@ -475,20 +480,37 @@ app.get("/mcp", async (request, reply) => {
 app.delete("/mcp", async (request, reply) => {
   const sessionId = request.headers["mcp-session-id"] as string | undefined;
   if (sessionId && mcpTransports.has(sessionId)) {
-    const transport = mcpTransports.get(sessionId)!;
-    await transport.close();
+    const session = mcpTransports.get(sessionId)!;
+    await session.transport.close();
     mcpTransports.delete(sessionId);
   }
   return reply.status(200).send({ status: "session closed" });
 });
 
+// Periodic MCP session cleanup (every 10 minutes)
+const mcpCleanupInterval = setInterval(async () => {
+  const now = Date.now();
+  let closed = 0;
+  for (const [id, session] of mcpTransports) {
+    if (now - session.createdAt > MCP_SESSION_TTL_MS) {
+      try { await session.transport.close(); } catch { /* already closed */ }
+      mcpTransports.delete(id);
+      closed++;
+    }
+  }
+  if (closed > 0) {
+    app.log.info(`Cleaned up ${closed} expired MCP session(s)`);
+  }
+}, 10 * 60 * 1000);
+
 // --- Graceful shutdown hook ---
 
 app.addHook("onClose", async () => {
+  clearInterval(mcpCleanupInterval);
   debrief.close();
   entityDb.close();
-  for (const transport of mcpTransports.values()) {
-    await transport.close();
+  for (const session of mcpTransports.values()) {
+    await session.transport.close();
   }
   mcpTransports.clear();
   console.log("DeployStack Command shutting down — resources cleaned up");
