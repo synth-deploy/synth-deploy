@@ -179,12 +179,19 @@ export interface CoBrandingConfig {
   accentColor?: string;
 }
 
+export interface McpServerConfig {
+  name: string;
+  url: string;
+  description?: string;
+}
+
 export interface AppSettings {
   environmentsEnabled: boolean;
   agent: AgentSettings;
   deploymentDefaults: DeploymentDefaults;
   envoy: EnvoyEndpointConfig;
   coBranding?: CoBrandingConfig;
+  mcpServers?: McpServerConfig[];
 }
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
@@ -203,4 +210,5 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     url: "http://localhost:3001",
     timeoutMs: 10000,
   },
+  mcpServers: [],
 };

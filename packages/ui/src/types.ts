@@ -50,12 +50,19 @@ export interface CoBrandingConfig {
   accentColor?: string;
 }
 
+export interface McpServerConfig {
+  name: string;
+  url: string;
+  description?: string;
+}
+
 export interface AppSettings {
   environmentsEnabled: boolean;
   agent: AgentSettings;
   deploymentDefaults: DeploymentDefaults;
   envoy: EnvoyEndpointConfig;
   coBranding?: CoBrandingConfig;
+  mcpServers?: McpServerConfig[];
 }
 
 export interface CommandInfo {

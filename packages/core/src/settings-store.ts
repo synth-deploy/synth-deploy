@@ -31,6 +31,9 @@ export class SettingsStore {
     if ("coBranding" in partial) {
       this.settings.coBranding = partial.coBranding ?? undefined;
     }
+    if (partial.mcpServers !== undefined) {
+      this.settings.mcpServers = partial.mcpServers;
+    }
     return structuredClone(this.settings);
   }
 }

@@ -18,6 +18,7 @@ import type {
 } from "./health-checker.js";
 import { DefaultHealthChecker } from "./health-checker.js";
 import { runStep } from "./step-runner.js";
+import type { McpClientManager, McpToolResult } from "./mcp-client-manager.js";
 
 // ---------------------------------------------------------------------------
 // Public interfaces
@@ -161,6 +162,7 @@ export class OrchestrationError extends Error {
 export class CommandAgent {
   private options: AgentOptions;
   private explicitOptions: Partial<AgentOptions>;
+  mcpClientManager?: McpClientManager;
 
   constructor(
     private debrief: DebriefWriter,
@@ -418,6 +420,79 @@ export class CommandAgent {
     });
 
     return order;
+  }
+
+  // -----------------------------------------------------------------------
+  // External MCP checks — pre-deployment intelligence from external servers
+  // -----------------------------------------------------------------------
+
+  /**
+   * Survey connected MCP servers and record available external intelligence
+   * to the Debrief. This runs before deployment to surface any relevant
+   * monitoring data, incident context, or diagnostic tools.
+   *
+   * Returns the list of tool call results (empty if no servers are connected).
+   * Never throws — external server failures must not block deployments.
+   */
+  async runExternalChecks(
+    partitionId: string,
+    environmentId: string,
+  ): Promise<McpToolResult[]> {
+    if (
+      !this.mcpClientManager ||
+      this.mcpClientManager.getConnectedServers().length === 0
+    ) {
+      return [];
+    }
+
+    const results: McpToolResult[] = [];
+
+    try {
+      const tools = await this.mcpClientManager.listTools();
+      const connectedServers = this.mcpClientManager.getConnectedServers();
+
+      this.debrief.record({
+        partitionId,
+        deploymentId: null,
+        agent: "command",
+        decisionType: "diagnostic-investigation",
+        decision: `${tools.length} external tool(s) available from ${connectedServers.length} MCP server(s)`,
+        reasoning:
+          "Pre-deployment check: surveyed connected MCP servers for available intelligence. " +
+          `Servers: ${connectedServers.join(", ")}. ` +
+          (tools.length > 0
+            ? `Available tools: ${tools.map((t) => `${t.server}/${t.name}`).join(", ")}.`
+            : "No tools exposed by connected servers."),
+        context: {
+          servers: connectedServers,
+          toolCount: tools.length,
+          tools: tools.map((t) => ({
+            server: t.server,
+            name: t.name,
+            description: t.description,
+          })),
+          environmentId,
+        },
+      });
+    } catch (error) {
+      // Never let external checks block the deployment
+      this.debrief.record({
+        partitionId,
+        deploymentId: null,
+        agent: "command",
+        decisionType: "diagnostic-investigation",
+        decision: "External MCP check failed — proceeding without external intelligence",
+        reasoning:
+          `Error surveying MCP servers: ${error instanceof Error ? error.message : String(error)}. ` +
+          "This does not affect the deployment. External data sources are supplementary.",
+        context: {
+          error: error instanceof Error ? error.message : String(error),
+          environmentId,
+        },
+      });
+    }
+
+    return results;
   }
 
   // -----------------------------------------------------------------------

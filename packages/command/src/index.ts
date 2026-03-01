@@ -10,6 +10,7 @@ import { PersistentDecisionDebrief, openEntityDatabase, PersistentPartitionStore
 import type { Deployment, DeploymentStep, DeployConfig } from "@deploystack/core";
 import { CommandAgent } from "./agent/command-agent.js";
 import { EnvoyHealthChecker } from "./agent/health-checker.js";
+import { McpClientManager } from "./agent/mcp-client-manager.js";
 import { createMcpServer } from "./mcp/server.js";
 import { registerDeploymentRoutes } from "./api/deployments.js";
 import { registerHealthRoutes } from "./api/health.js";
@@ -40,6 +41,19 @@ const envoyUrl = settings.get().envoy?.url;
 const healthChecker = envoyUrl ? new EnvoyHealthChecker(envoyUrl) : undefined;
 const agent = new CommandAgent(debrief, deployments, orders, healthChecker, {}, settings);
 const llm = new LlmClient(debrief, "command");
+
+// --- Connect to external MCP servers (if configured) ---
+
+const mcpClientManager = new McpClientManager();
+const mcpServerConfigs = settings.get().mcpServers ?? [];
+if (mcpServerConfigs.length > 0) {
+  await mcpClientManager.connectAll(mcpServerConfigs);
+  const connected = mcpClientManager.getConnectedServers();
+  if (connected.length > 0) {
+    console.log(`[MCP Client] Connected to ${connected.length} external server(s): ${connected.join(", ")}`);
+  }
+}
+agent.mcpClientManager = mcpClientManager;
 
 // --- Seed demo data so the server is immediately usable ---
 
@@ -509,6 +523,7 @@ const mcpCleanupInterval = setInterval(async () => {
 
 app.addHook("onClose", async () => {
   clearInterval(mcpCleanupInterval);
+  await mcpClientManager.disconnectAll();
   debrief.close();
   entityDb.close();
   for (const session of mcpTransports.values()) {

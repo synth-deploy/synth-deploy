@@ -24,6 +24,7 @@ export type {
   DeploymentDefaults,
   EnvoyEndpointConfig,
   CoBrandingConfig,
+  McpServerConfig,
   AppSettings,
 } from "./types.js";
 
