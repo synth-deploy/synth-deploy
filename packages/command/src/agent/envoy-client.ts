@@ -48,6 +48,85 @@ export interface EnvoyHealthResponse {
 }
 
 // ---------------------------------------------------------------------------
+// Retry with exponential backoff
+// ---------------------------------------------------------------------------
+
+interface RetryOptions {
+  maxRetries: number;
+  baseDelayMs: number;
+  retryableStatuses: Set<number>;
+}
+
+const DEFAULT_RETRY: RetryOptions = {
+  maxRetries: Number(process.env.DEPLOYSTACK_ENVOY_MAX_RETRIES ?? 3),
+  baseDelayMs: 1000,
+  retryableStatuses: new Set([502, 503, 504]),
+};
+
+function isTransientError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const msg = err.message;
+  return (
+    msg.includes("ECONNREFUSED") ||
+    msg.includes("ECONNRESET") ||
+    msg.includes("fetch failed") ||
+    msg.includes("abort") ||
+    msg.includes("ETIMEDOUT") ||
+    msg.includes("network")
+  );
+}
+
+async function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function fetchWithRetry(
+  url: string,
+  init: RequestInit,
+  timeoutMs: number,
+  opts: RetryOptions = DEFAULT_RETRY,
+): Promise<Response> {
+  let lastError: Error | undefined;
+
+  for (let attempt = 0; attempt <= opts.maxRetries; attempt++) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+      const response = await fetch(url, {
+        ...init,
+        signal: controller.signal,
+      });
+
+      // If retryable status code and we have retries left, retry
+      if (opts.retryableStatuses.has(response.status) && attempt < opts.maxRetries) {
+        const delay = opts.baseDelayMs * Math.pow(2, attempt);
+        console.log(`[envoy-client] Retryable HTTP ${response.status} on attempt ${attempt + 1}/${opts.maxRetries + 1}, retrying in ${delay}ms`);
+        await sleep(delay);
+        continue;
+      }
+
+      return response;
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+
+      if (isTransientError(err) && attempt < opts.maxRetries) {
+        const delay = opts.baseDelayMs * Math.pow(2, attempt);
+        console.log(`[envoy-client] Transient error on attempt ${attempt + 1}/${opts.maxRetries + 1}: ${lastError.message}, retrying in ${delay}ms`);
+        await sleep(delay);
+        continue;
+      }
+
+      throw lastError;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  throw lastError ?? new Error("Retry exhausted");
+}
+
+// ---------------------------------------------------------------------------
 // EnvoyClient — Command's interface to a remote Envoy
 // ---------------------------------------------------------------------------
 
@@ -70,23 +149,15 @@ export class EnvoyClient {
    * Command Agent's pre-flight health check step.
    */
   async checkHealth(): Promise<EnvoyHealthResponse> {
-    const controller = new AbortController();
-    const timeout = setTimeout(
-      () => controller.abort(),
+    const response = await fetchWithRetry(
+      `${this.baseUrl}/health`,
+      {},
       this.timeoutMs,
     );
-
-    try {
-      const response = await fetch(`${this.baseUrl}/health`, {
-        signal: controller.signal,
-      });
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-      return (await response.json()) as EnvoyHealthResponse;
-    } finally {
-      clearTimeout(timeout);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }
+    return (await response.json()) as EnvoyHealthResponse;
   }
 
   /**
@@ -102,26 +173,17 @@ export class EnvoyClient {
     environmentName: string;
     partitionName: string;
   }): Promise<EnvoyDeployResult> {
-    const controller = new AbortController();
-    // Deployments can take longer than health checks
-    const timeout = setTimeout(
-      () => controller.abort(),
-      this.timeoutMs * 3,
-    );
-
-    try {
-      const response = await fetch(`${this.baseUrl}/deploy`, {
+    const response = await fetchWithRetry(
+      `${this.baseUrl}/deploy`,
+      {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(instruction),
-        signal: controller.signal,
-      });
+      },
+      this.timeoutMs * 3,
+    );
 
-      const body = (await response.json()) as EnvoyDeployResult;
-      return body;
-    } finally {
-      clearTimeout(timeout);
-    }
+    return (await response.json()) as EnvoyDeployResult;
   }
 }
 
