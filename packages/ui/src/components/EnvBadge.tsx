@@ -1,5 +1,3 @@
-import { useMode } from "../context/ModeContext.js";
-
 export interface EnvAgentData {
   successRate: string;
   envoyHealth: "OK" | "Degraded" | "Unreachable";
@@ -22,11 +20,7 @@ function envColor(name: string): { dot: string; text: string } {
 }
 
 export default function EnvBadge({ name, agentData }: { name: string; agentData?: EnvAgentData }) {
-  const { mode } = useMode();
-  const isAgent = mode === "agent";
-  const showExpanded = isAgent && agentData;
-
-  if (!showExpanded) {
+  if (!agentData) {
     return (
       <span className={`env-badge ${envClass(name)}`}>
         {name}

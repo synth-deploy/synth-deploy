@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import { listOperations, listEnvironments } from "../../api.js";
 import type { Operation, Environment } from "../../types.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
-import EnvBadge from "../EnvBadge.js";
 
 interface Props {
   title: string;
@@ -27,41 +26,54 @@ export default function OperationListPanel({ title }: Props) {
 
   return (
     <CanvasPanelHost title={title}>
-      <div className="canvas-detail">
-        <div className="canvas-summary-strip">
-          <div className="canvas-summary-item">
-            <span className="canvas-summary-value">{operations.length}</span>
-            <span className="canvas-summary-label">Operations</span>
+      <div className="v2-entity-list">
+        <div className="v2-entity-list-header">
+          <div>
+            <div className="v2-entity-list-title">Operations</div>
+            <div className="v2-entity-list-desc">
+              Deployment blueprints. Static until an Order snapshots them for execution.
+            </div>
           </div>
-          <div className="canvas-summary-item">
-            <span className="canvas-summary-value">{environments.length}</span>
-            <span className="canvas-summary-label">Environments</span>
-          </div>
+          <button className="v2-create-btn v2-create-btn-operation">+ Create Operation</button>
         </div>
 
-        {operations.length > 0 ? (
-          <div className="canvas-activity-list">
-            {operations.map((p) => (
-              <div key={p.id} className="canvas-activity-row">
-                <span style={{ fontWeight: 500 }}>{p.name}</span>
-                <span className="flex flex-wrap gap-8">
-                  {p.environmentIds.map((eid) => {
+        <div className="v2-entity-list-items">
+          {operations.map((op) => (
+            <div key={op.id} className="v2-operation-list-item">
+              <div className="v2-operation-card-grid-bg" />
+              <div className="v2-operation-list-inner">
+                <div className="v2-operation-list-left">
+                  <div className="v2-operation-id">{op.id.slice(0, 8)}</div>
+                  <div className="v2-operation-name">{op.name}</div>
+                  <div className="v2-operation-meta">
+                    {op.steps.length} steps &middot; {op.environmentIds.length} environment{op.environmentIds.length !== 1 ? "s" : ""}
+                  </div>
+                </div>
+                <div className="v2-operation-list-envs">
+                  {op.environmentIds.map((eid) => {
                     const env = environments.find((e) => e.id === eid);
-                    return env ? <EnvBadge key={eid} name={env.name} /> : null;
+                    return env ? (
+                      <span key={eid} className="v2-partition-list-env">
+                        {env.name}
+                      </span>
+                    ) : null;
                   })}
-                  {p.environmentIds.length === 0 && <span className="text-muted">—</span>}
-                </span>
-                <span className="mono text-muted" style={{ fontSize: 12 }}>
-                  {p.id.slice(0, 8)}
-                </span>
+                  {op.environmentIds.length === 0 && (
+                    <span className="v2-empty-hint-inline">No environments</span>
+                  )}
+                </div>
+                <div className="v2-operation-steps">
+                  {Array.from({ length: Math.min(op.steps.length, 10) }).map((_, i) => (
+                    <div key={i} className="v2-operation-step-bar" />
+                  ))}
+                </div>
               </div>
-            ))}
-          </div>
-        ) : (
-          <div className="canvas-empty">
-            <p>No operations yet. Use the intent bar to create one.</p>
-          </div>
-        )}
+            </div>
+          ))}
+          {operations.length === 0 && (
+            <div className="v2-empty-hint">No operations yet. Use the Command Channel to create one.</div>
+          )}
+        </div>
       </div>
     </CanvasPanelHost>
   );

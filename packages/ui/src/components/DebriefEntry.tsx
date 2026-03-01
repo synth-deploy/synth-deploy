@@ -1,6 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router";
-import type { DebriefEntry, DecisionType } from "../types.js";
+import type { DebriefEntry } from "../types.js";
 
 const dtClassMap: Record<string, string> = {
   "pipeline-plan": "dt-plan",
@@ -66,12 +65,9 @@ export default function DebriefEntryCard({ entry }: { entry: DebriefEntry }) {
           {entry.agent}
         </span>
         {entry.deploymentId && (
-          <Link
-            to={`/deployments/${entry.deploymentId}`}
-            className="debrief-entry-deploy-link"
-          >
+          <span className="debrief-entry-deploy-link mono" style={{ fontSize: 11 }}>
             {entry.deploymentId.slice(0, 8)}
-          </Link>
+          </span>
         )}
         {entry.partitionId && (
           <span className="debrief-entry-partition text-muted" style={{ fontSize: 11, marginLeft: "auto" }}>
