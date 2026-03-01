@@ -73,7 +73,7 @@ interface DeploymentContext {
 // ---------------------------------------------------------------------------
 
 interface LlmEntityMatch {
-  id: string;
+  name: string;
   confidence: "exact" | "inferred";
   matchedFrom: string;
 }
@@ -86,7 +86,7 @@ interface LlmIntentResponse {
   variables: Record<string, string>;
   disambiguation?: Array<{
     field: string;
-    candidates: Array<{ id: string; name: string; reason: string }>;
+    candidates: Array<{ name: string; reason: string }>;
   }>;
 }
 
@@ -195,22 +195,22 @@ function buildSystemPrompt(): string {
 
 You will receive:
 - An intent string from a deployment engineer
-- Lists of known operations, partitions, and environments (with IDs and names)
+- Lists of known entity names (operations, partitions, environments)
 - Optionally, partial configuration already provided by the user
 - Optionally, previous conversation context for follow-up intents
 
 Return a JSON object with this exact schema:
 {
-  "operationId": { "id": "<operation-id>", "confidence": "exact"|"inferred", "matchedFrom": "<explanation>" } | null,
-  "partitionId": { "id": "<partition-id>", "confidence": "exact"|"inferred", "matchedFrom": "<explanation>" } | null,
-  "environmentId": { "id": "<environment-id>", "confidence": "exact"|"inferred", "matchedFrom": "<explanation>" } | null,
+  "operationId": { "name": "<operation-name>", "confidence": "exact"|"inferred", "matchedFrom": "<explanation>" } | null,
+  "partitionId": { "name": "<partition-name>", "confidence": "exact"|"inferred", "matchedFrom": "<explanation>" } | null,
+  "environmentId": { "name": "<environment-name>", "confidence": "exact"|"inferred", "matchedFrom": "<explanation>" } | null,
   "version": { "value": "<semver>", "confidence": "exact"|"inferred", "matchedFrom": "<explanation>" } | null,
   "variables": { "<KEY>": "<value>", ... },
-  "disambiguation": [{ "field": "<field>", "candidates": [{ "id": "<id>", "name": "<name>", "reason": "<why>" }] }]
+  "disambiguation": [{ "field": "<field>", "candidates": [{ "name": "<name>", "reason": "<why>" }] }]
 }
 
 Rules:
-- ONLY use IDs from the provided entity lists. Never invent IDs.
+- ONLY use names from the provided entity lists. Never invent names.
 - "exact" confidence: the intent text directly mentions or clearly refers to the entity
 - "inferred" confidence: you deduced the entity from context, abbreviations, or follow-up references
 - If an entity cannot be determined, set it to null
@@ -221,6 +221,29 @@ Rules:
 - Return ONLY valid JSON, no markdown, no explanation`;
 }
 
+const MAX_ENTITY_LIST_SIZE = 100;
+
+function appendEntityNames(
+  parts: string[],
+  label: string,
+  entities: { name: string }[],
+  includeEntities: boolean,
+): void {
+  if (!includeEntities) {
+    parts.push(`\n${label}: (entity data omitted by configuration)`);
+    return;
+  }
+  parts.push(`\n${label}:`);
+  const capped = entities.slice(0, MAX_ENTITY_LIST_SIZE);
+  for (const e of capped) {
+    parts.push(`  - "${e.name}"`);
+  }
+  if (entities.length > MAX_ENTITY_LIST_SIZE) {
+    parts.push(`  (… and ${entities.length - MAX_ENTITY_LIST_SIZE} more)`);
+  }
+  if (entities.length === 0) parts.push("  (none configured)");
+}
+
 function buildUserPrompt(
   intent: string,
   partialConfig: IntentRequest["partialConfig"],
@@ -228,34 +251,31 @@ function buildUserPrompt(
   allPartitions: Partition[],
   allEnvironments: Environment[],
   history: ConversationEntry[],
+  includeEntities: boolean,
 ): string {
   const parts: string[] = [];
 
   parts.push(`<user-intent>${sanitizeUserInput(intent)}</user-intent>`);
 
-  parts.push(`\nKnown operations:`);
-  for (const p of allOperations) {
-    parts.push(`  - id: "${p.id}", name: "${p.name}"`);
-  }
-  if (allOperations.length === 0) parts.push("  (none configured)");
-
-  parts.push(`\nKnown partitions:`);
-  for (const t of allPartitions) {
-    parts.push(`  - id: "${t.id}", name: "${t.name}"`);
-  }
-  if (allPartitions.length === 0) parts.push("  (none configured)");
-
-  parts.push(`\nKnown environments:`);
-  for (const e of allEnvironments) {
-    parts.push(`  - id: "${e.id}", name: "${e.name}"`);
-  }
-  if (allEnvironments.length === 0) parts.push("  (none configured)");
+  appendEntityNames(parts, "Known operations", allOperations, includeEntities);
+  appendEntityNames(parts, "Known partitions", allPartitions, includeEntities);
+  appendEntityNames(parts, "Known environments", allEnvironments, includeEntities);
 
   if (partialConfig) {
+    // Pre-filled fields use names resolved locally — no IDs sent to LLM
     parts.push(`\nPre-filled fields (already selected by user):`);
-    if (partialConfig.operationId) parts.push(`  operationId: "${partialConfig.operationId}"`);
-    if (partialConfig.partitionId) parts.push(`  partitionId: "${partialConfig.partitionId}"`);
-    if (partialConfig.environmentId) parts.push(`  environmentId: "${partialConfig.environmentId}"`);
+    if (partialConfig.operationId) {
+      const op = allOperations.find((o) => o.id === partialConfig.operationId);
+      parts.push(`  operation: "${op?.name ?? "unknown"}"`);
+    }
+    if (partialConfig.partitionId) {
+      const pt = allPartitions.find((p) => p.id === partialConfig.partitionId);
+      parts.push(`  partition: "${pt?.name ?? "unknown"}"`);
+    }
+    if (partialConfig.environmentId) {
+      const env = allEnvironments.find((e) => e.id === partialConfig.environmentId);
+      parts.push(`  environment: "${env?.name ?? "unknown"}"`);
+    }
     if (partialConfig.version) parts.push(`  version: "${partialConfig.version}"`);
   }
 
@@ -263,15 +283,26 @@ function buildUserPrompt(
     parts.push(`\nPrevious intents in this conversation (for follow-up context):`);
     for (const entry of history) {
       const resolved: string[] = [];
-      if (entry.resolved.operationId.confidence !== "missing") resolved.push(`operation=${entry.resolved.operationId.value}`);
-      if (entry.resolved.partitionId.confidence !== "missing") resolved.push(`partition=${entry.resolved.partitionId.value}`);
-      if (entry.resolved.environmentId.confidence !== "missing") resolved.push(`environment=${entry.resolved.environmentId.value}`);
+      if (entry.resolved.operationId.confidence !== "missing") resolved.push(`operation=${entry.resolved.operationId.matchedFrom ?? entry.resolved.operationId.value}`);
+      if (entry.resolved.partitionId.confidence !== "missing") resolved.push(`partition=${entry.resolved.partitionId.matchedFrom ?? entry.resolved.partitionId.value}`);
+      if (entry.resolved.environmentId.confidence !== "missing") resolved.push(`environment=${entry.resolved.environmentId.matchedFrom ?? entry.resolved.environmentId.value}`);
       if (entry.resolved.version.confidence !== "missing") resolved.push(`version=${entry.resolved.version.value}`);
       parts.push(`  - "${entry.intent}" → resolved: ${resolved.join(", ") || "nothing"}`);
     }
   }
 
   return parts.join("\n");
+}
+
+/** Build a case-insensitive name→ID map for a list of entities. */
+function buildNameMap(entities: { id: string; name: string }[]): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const e of entities) {
+    const key = e.name.toLowerCase();
+    // First match wins — duplicates are inherently ambiguous
+    if (!map.has(key)) map.set(key, e.id);
+  }
+  return map;
 }
 
 function parseLlmResponse(
@@ -295,21 +326,22 @@ function parseLlmResponse(
     return null; // JSON parse failure → fall back to regex
   }
 
-  const operationIds = new Set(allOperations.map((p) => p.id));
-  const partitionIds = new Set(allPartitions.map((t) => t.id));
-  const environmentIds = new Set(allEnvironments.map((e) => e.id));
+  // Map entity names → IDs locally (no IDs sent to LLM)
+  const operationNameMap = buildNameMap(allOperations);
+  const partitionNameMap = buildNameMap(allPartitions);
+  const environmentNameMap = buildNameMap(allEnvironments);
 
-  // Validate and convert each field
-  const operationField = convertLlmEntity(parsed.operationId, operationIds, partialConfig?.operationId);
-  const partitionField = convertLlmEntity(parsed.partitionId, partitionIds, partialConfig?.partitionId);
-  const envField = convertLlmEntity(parsed.environmentId, environmentIds, partialConfig?.environmentId);
+  // Validate and convert each field via name→ID lookup
+  const operationField = convertLlmEntity(parsed.operationId, operationNameMap, partialConfig?.operationId);
+  const partitionField = convertLlmEntity(parsed.partitionId, partitionNameMap, partialConfig?.partitionId);
+  const envField = convertLlmEntity(parsed.environmentId, environmentNameMap, partialConfig?.environmentId);
   const versionField = convertLlmVersion(parsed.version, partialConfig?.version);
 
-  // If any field that the LLM claimed to resolve has an invalid ID, reject the whole response
+  // If any field that the LLM claimed to resolve has an unrecognized name, reject the whole response
   if (
-    (parsed.operationId && !operationIds.has(parsed.operationId.id)) ||
-    (parsed.partitionId && !partitionIds.has(parsed.partitionId.id)) ||
-    (parsed.environmentId && !environmentIds.has(parsed.environmentId.id))
+    (parsed.operationId && !operationNameMap.has(parsed.operationId.name.toLowerCase())) ||
+    (parsed.partitionId && !partitionNameMap.has(parsed.partitionId.name.toLowerCase())) ||
+    (parsed.environmentId && !environmentNameMap.has(parsed.environmentId.name.toLowerCase()))
   ) {
     return null; // Hallucination detected → fall back to regex
   }
@@ -370,19 +402,26 @@ function parseLlmResponse(
 
 function convertLlmEntity(
   entity: LlmEntityMatch | null,
-  validIds: Set<string>,
+  nameMap: Map<string, string>,
   partialId?: string,
 ): ResolvedField {
   // Partial config takes precedence (user already selected)
-  if (partialId && validIds.has(partialId)) {
-    return { value: partialId, confidence: "exact", matchedFrom: `pre-selected by user` };
+  if (partialId) {
+    // Verify the partial ID exists in the name map values
+    const allIds = new Set(nameMap.values());
+    if (allIds.has(partialId)) {
+      return { value: partialId, confidence: "exact", matchedFrom: `pre-selected by user` };
+    }
   }
 
   if (!entity) return { value: "", confidence: "missing" };
-  if (!validIds.has(entity.id)) return { value: "", confidence: "missing" };
+
+  // Resolve name → ID locally
+  const resolvedId = nameMap.get(entity.name.toLowerCase());
+  if (!resolvedId) return { value: "", confidence: "missing" };
 
   return {
-    value: entity.id,
+    value: resolvedId,
     confidence: entity.confidence,
     matchedFrom: entity.matchedFrom,
   };
@@ -775,7 +814,8 @@ export function registerAgentRoutes(
     let method: "llm" | "regex" = "regex";
 
     // Try LLM-powered interpretation first
-    if (llm && llm.isAvailable()) {
+    const entityExposure = settings.get().agent.llmEntityExposure ?? "names";
+    if (llm && llm.isAvailable() && entityExposure !== "none") {
       const history = getConversationHistory(body.conversationId);
       const llmResult = await llm.classify({
         prompt: buildUserPrompt(
@@ -785,6 +825,7 @@ export function registerAgentRoutes(
           allPartitions,
           allEnvironments,
           history,
+          true,
         ),
         systemPrompt: buildSystemPrompt(),
         promptSummary: `Intent interpretation: "${body.intent}"`,
@@ -924,10 +965,11 @@ export function registerAgentRoutes(
     const allEnvironments = environments.list();
 
     // --- LLM classification (when available) ---
+    const queryEntityExposure = settings.get().agent.llmEntityExposure ?? "names";
     if (llm && llm.isAvailable()) {
       const llmAction = await classifyQueryWithLlm(
         llm, query, allOperations, allPartitions, allEnvironments,
-        deployments, debrief,
+        deployments, debrief, queryEntityExposure !== "none",
       );
       if (llmAction) {
         debrief.record({
@@ -1081,21 +1123,21 @@ Return a JSON object with this exact schema:
 
 View names:
 - "deployment-authoring" — for deploy actions
-- "partition-detail" — show specific partition (params: { "id": "<partition-id>" })
-- "environment-detail" — show specific environment (params: { "id": "<environment-id>" })
+- "partition-detail" — show specific partition (params: { "id": "<partition-name>" })
+- "environment-detail" — show specific environment (params: { "id": "<environment-name>" })
 - "deployment-detail" — show specific deployment (params: { "id": "<deployment-id>" })
-- "deployment-list" — show list of deployments (params: { "partitionId"?: "...", "status"?: "failed"|"succeeded" })
+- "deployment-list" — show list of deployments (params: { "partitionId"?: "<partition-name>", "status"?: "failed"|"succeeded" })
 - "overview" — show the operational overview (params: { "focus"?: "signals"|"partitions" })
 - "operation-list" — show all operations (params: {})
 - "partition-list" — show all partitions with create option (params: {})
-- "order-list" — show deployment orders (params: { "operationId"?: "...", "partitionId"?: "..." })
+- "order-list" — show deployment orders (params: { "operationId"?: "<operation-name>", "partitionId"?: "<partition-name>" })
 - "order-detail" — show a specific order (params: { "id": "<order-id>" })
-- "debrief" — show the decision diary / debrief timeline (params: { "partitionId"?: "...", "decisionType"?: "..." })
+- "debrief" — show the decision diary / debrief timeline (params: { "partitionId"?: "<partition-name>", "decisionType"?: "..." })
 - "settings" — show application settings and configuration (params: {})
 
 Rules:
-- ONLY use entity IDs from the provided lists. Never invent IDs.
-- If the query mentions an entity by name, resolve it to its ID.
+- ONLY use entity names from the provided lists. Never invent names.
+- If the query mentions an entity, return its name in the params.
 - If the query is ambiguous, default to "overview".
 - For "create" actions, include the entity name in params: { "name": "..." } and use view "partition-list" for partitions or "operation-list" for operations.
 - Return ONLY valid JSON, no markdown, no explanation.`;
@@ -1109,20 +1151,13 @@ async function classifyQueryWithLlm(
   allEnvironments: Environment[],
   deploymentStore: DeploymentStore,
   _debrief: DebriefReader,
+  includeEntities: boolean,
 ): Promise<{ action: string; view: string; params: Record<string, string>; title?: string } | null> {
   const parts: string[] = [`<user-query>${sanitizeUserInput(query)}</user-query>`];
 
-  parts.push(`\nKnown partitions:`);
-  for (const t of allPartitions) parts.push(`  - id: "${t.id}", name: "${t.name}"`);
-  if (allPartitions.length === 0) parts.push("  (none)");
-
-  parts.push(`\nKnown environments:`);
-  for (const e of allEnvironments) parts.push(`  - id: "${e.id}", name: "${e.name}"`);
-  if (allEnvironments.length === 0) parts.push("  (none)");
-
-  parts.push(`\nKnown operations:`);
-  for (const p of allOperations) parts.push(`  - id: "${p.id}", name: "${p.name}"`);
-  if (allOperations.length === 0) parts.push("  (none)");
+  appendEntityNames(parts, "Known partitions", allPartitions, includeEntities);
+  appendEntityNames(parts, "Known environments", allEnvironments, includeEntities);
+  appendEntityNames(parts, "Known operations", allOperations, includeEntities);
 
   const llmResult = await llm.classify({
     prompt: parts.join("\n"),
@@ -1142,15 +1177,30 @@ async function classifyQueryWithLlm(
     const parsed = JSON.parse(text);
     if (!parsed.action || !parsed.view) return null;
 
-    // Validate entity IDs if present
-    const partitionIds = new Set(allPartitions.map((t) => t.id));
-    const environmentIds = new Set(allEnvironments.map((e) => e.id));
+    // Build name→ID maps for local resolution
+    const partitionNameMap = buildNameMap(allPartitions);
+    const environmentNameMap = buildNameMap(allEnvironments);
+
+    // The LLM now returns names in params — resolve to IDs locally
     if (parsed.params?.id) {
-      if (parsed.view === "partition-detail" && !partitionIds.has(parsed.params.id)) return null;
-      if (parsed.view === "environment-detail" && !environmentIds.has(parsed.params.id)) return null;
+      const idLower = parsed.params.id.toLowerCase();
+      if (parsed.view === "partition-detail") {
+        const resolvedId = partitionNameMap.get(idLower);
+        if (!resolvedId) return null;
+        parsed.params.id = resolvedId;
+      } else if (parsed.view === "environment-detail") {
+        const resolvedId = environmentNameMap.get(idLower);
+        if (!resolvedId) return null;
+        parsed.params.id = resolvedId;
+      }
     }
-    if (parsed.params?.partitionId && !partitionIds.has(parsed.params.partitionId)) {
-      delete parsed.params.partitionId;
+    if (parsed.params?.partitionId) {
+      const resolvedId = partitionNameMap.get(parsed.params.partitionId.toLowerCase());
+      if (!resolvedId) {
+        delete parsed.params.partitionId;
+      } else {
+        parsed.params.partitionId = resolvedId;
+      }
     }
 
     return parsed;

@@ -19,6 +19,7 @@ export type {
   DeploymentStep,
   DeployConfig,
   ConflictPolicy,
+  LlmEntityExposure,
   AgentSettings,
   DeploymentDefaults,
   EnvoyEndpointConfig,

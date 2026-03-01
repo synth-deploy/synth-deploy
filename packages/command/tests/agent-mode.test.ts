@@ -466,9 +466,9 @@ describe("Agent mode — LLM intent interpretation", () => {
     classifyResponse = {
       ok: true,
       text: JSON.stringify({
-        operationId: { id: llmOperationId, confidence: "exact", matchedFrom: "web-app mentioned in intent" },
-        partitionId: { id: llmPartitionId, confidence: "exact", matchedFrom: "Acme Corp mentioned in intent" },
-        environmentId: { id: llmProdEnvId, confidence: "exact", matchedFrom: "production mentioned in intent" },
+        operationId: { name: "web-app", confidence: "exact", matchedFrom: "web-app mentioned in intent" },
+        partitionId: { name: "Acme Corp", confidence: "exact", matchedFrom: "Acme Corp mentioned in intent" },
+        environmentId: { name: "production", confidence: "exact", matchedFrom: "production mentioned in intent" },
         version: { value: "2.0.0", confidence: "exact", matchedFrom: "v2.0.0 in intent" },
         variables: { FEATURE: "enabled" },
       }),
@@ -511,13 +511,13 @@ describe("Agent mode — LLM intent interpretation", () => {
     expect(result.resolved.version.value).toBe("3.0.0");
   });
 
-  it("falls back to regex when LLM returns hallucinated IDs", async () => {
+  it("falls back to regex when LLM returns hallucinated names", async () => {
     classifyResponse = {
       ok: true,
       text: JSON.stringify({
-        operationId: { id: "fake-operation-id", confidence: "exact", matchedFrom: "hallucinated" },
-        partitionId: { id: llmPartitionId, confidence: "exact", matchedFrom: "Acme Corp" },
-        environmentId: { id: llmProdEnvId, confidence: "exact", matchedFrom: "production" },
+        operationId: { name: "fake-nonexistent-operation", confidence: "exact", matchedFrom: "hallucinated" },
+        partitionId: { name: "Acme Corp", confidence: "exact", matchedFrom: "Acme Corp" },
+        environmentId: { name: "production", confidence: "exact", matchedFrom: "production" },
         version: { value: "1.0.0", confidence: "exact", matchedFrom: "v1.0.0" },
         variables: {},
       }),
@@ -559,17 +559,17 @@ describe("Agent mode — LLM intent interpretation", () => {
     classifyResponse = {
       ok: true,
       text: JSON.stringify({
-        operationId: { id: llmOperationId, confidence: "exact", matchedFrom: "web-app" },
-        partitionId: { id: llmPartitionId, confidence: "exact", matchedFrom: "Acme Corp" },
-        environmentId: { id: llmProdEnvId, confidence: "inferred", matchedFrom: "inferred from context" },
+        operationId: { name: "web-app", confidence: "exact", matchedFrom: "web-app" },
+        partitionId: { name: "Acme Corp", confidence: "exact", matchedFrom: "Acme Corp" },
+        environmentId: { name: "production", confidence: "inferred", matchedFrom: "inferred from context" },
         version: { value: "1.0.0", confidence: "exact", matchedFrom: "v1.0.0" },
         variables: {},
         disambiguation: [
           {
             field: "environmentId",
             candidates: [
-              { id: llmProdEnvId, name: "production", reason: "most likely target" },
-              { id: llmStagingEnvId, name: "staging", reason: "also possible" },
+              { name: "production", reason: "most likely target" },
+              { name: "staging", reason: "also possible" },
             ],
           },
         ],
@@ -601,9 +601,9 @@ describe("Agent mode — LLM intent interpretation", () => {
     classifyResponse = {
       ok: true,
       text: JSON.stringify({
-        operationId: { id: llmOperationId, confidence: "exact", matchedFrom: "web-app" },
-        partitionId: { id: llmPartitionId, confidence: "exact", matchedFrom: "Acme Corp" },
-        environmentId: { id: llmProdEnvId, confidence: "exact", matchedFrom: "production" },
+        operationId: { name: "web-app", confidence: "exact", matchedFrom: "web-app" },
+        partitionId: { name: "Acme Corp", confidence: "exact", matchedFrom: "Acme Corp" },
+        environmentId: { name: "production", confidence: "exact", matchedFrom: "production" },
         version: { value: "1.0.0", confidence: "exact", matchedFrom: "v1.0.0" },
         variables: {},
       }),
@@ -624,9 +624,9 @@ describe("Agent mode — LLM intent interpretation", () => {
     classifyResponse = {
       ok: true,
       text: JSON.stringify({
-        operationId: { id: llmOperationId, confidence: "inferred", matchedFrom: "carried from previous intent" },
-        partitionId: { id: llmPartitionId, confidence: "inferred", matchedFrom: "carried from previous intent" },
-        environmentId: { id: llmStagingEnvId, confidence: "exact", matchedFrom: "staging mentioned in follow-up" },
+        operationId: { name: "web-app", confidence: "inferred", matchedFrom: "carried from previous intent" },
+        partitionId: { name: "Acme Corp", confidence: "inferred", matchedFrom: "carried from previous intent" },
+        environmentId: { name: "staging", confidence: "exact", matchedFrom: "staging mentioned in follow-up" },
         version: { value: "1.0.0", confidence: "inferred", matchedFrom: "carried from previous intent" },
         variables: {},
       }),
@@ -654,9 +654,9 @@ describe("Agent mode — LLM intent interpretation", () => {
     classifyResponse = {
       ok: true,
       text: JSON.stringify({
-        operationId: { id: llmOperationId, confidence: "exact", matchedFrom: "web-app" },
-        partitionId: { id: llmPartitionId, confidence: "exact", matchedFrom: "Acme" },
-        environmentId: { id: llmProdEnvId, confidence: "exact", matchedFrom: "prod" },
+        operationId: { name: "web-app", confidence: "exact", matchedFrom: "web-app" },
+        partitionId: { name: "Acme Corp", confidence: "exact", matchedFrom: "Acme" },
+        environmentId: { name: "production", confidence: "exact", matchedFrom: "prod" },
         version: { value: "9.0.0", confidence: "exact", matchedFrom: "v9.0.0" },
         variables: {},
       }),
@@ -688,9 +688,9 @@ describe("Agent mode — LLM intent interpretation", () => {
     classifyResponse = {
       ok: true,
       text: '```json\n' + JSON.stringify({
-        operationId: { id: llmOperationId, confidence: "exact", matchedFrom: "web-app" },
-        partitionId: { id: llmPartitionId, confidence: "exact", matchedFrom: "Acme" },
-        environmentId: { id: llmProdEnvId, confidence: "exact", matchedFrom: "prod" },
+        operationId: { name: "web-app", confidence: "exact", matchedFrom: "web-app" },
+        partitionId: { name: "Acme Corp", confidence: "exact", matchedFrom: "Acme" },
+        environmentId: { name: "production", confidence: "exact", matchedFrom: "prod" },
         version: { value: "5.0.0", confidence: "exact", matchedFrom: "v5.0.0" },
         variables: {},
       }) + '\n```',
@@ -722,9 +722,9 @@ describe("Agent mode — LLM intent interpretation", () => {
     classifyResponse = {
       ok: true,
       text: JSON.stringify({
-        operationId: { id: proj2Id, confidence: "exact", matchedFrom: "api-service" },
-        partitionId: { id: llmPartitionId, confidence: "exact", matchedFrom: "Acme" },
-        environmentId: { id: llmProdEnvId, confidence: "exact", matchedFrom: "production" },
+        operationId: { name: "api-service", confidence: "exact", matchedFrom: "api-service" },
+        partitionId: { name: "Acme Corp", confidence: "exact", matchedFrom: "Acme" },
+        environmentId: { name: "production", confidence: "exact", matchedFrom: "production" },
         version: { value: "1.0.0", confidence: "exact", matchedFrom: "v1.0.0" },
         variables: {},
       }),

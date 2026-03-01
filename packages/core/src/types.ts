@@ -151,11 +151,17 @@ export interface Order {
 
 export type ConflictPolicy = "strict" | "permissive";
 
+export type LlmEntityExposure = "names" | "none";
+
 export interface AgentSettings {
   defaultHealthCheckRetries: number;
   defaultTimeoutMs: number;
   conflictPolicy: ConflictPolicy;
   defaultVerificationStrategy: "basic" | "full" | "none";
+  /** Controls what entity data is sent to the LLM provider.
+   *  "names" — send entity names only (IDs resolved locally)
+   *  "none"  — omit entity lists entirely (regex-only resolution) */
+  llmEntityExposure: LlmEntityExposure;
 }
 
 export interface DeploymentDefaults {
@@ -181,6 +187,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     defaultTimeoutMs: 30000,
     conflictPolicy: "permissive",
     defaultVerificationStrategy: "basic",
+    llmEntityExposure: "names",
   },
   deploymentDefaults: {
     defaultDeployConfig: DEFAULT_DEPLOY_CONFIG,
