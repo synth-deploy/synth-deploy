@@ -24,6 +24,7 @@ import { registerOrderRoutes } from "./api/orders.js";
 import { registerEnvoyRoutes } from "./api/envoys.js";
 import { registerStepTypeRoutes } from "./api/step-types.js";
 import { registerAuthMiddleware } from "./middleware/auth.js";
+import { startStaleDeploymentScanner } from "./agent/stale-deployment-detector.js";
 
 // --- Bootstrap shared state ---
 
@@ -525,9 +526,14 @@ const mcpCleanupInterval = setInterval(async () => {
   }
 }, 10 * 60 * 1000);
 
+// --- Start stale deployment scanner ---
+
+const stopStaleScanner = startStaleDeploymentScanner(deployments, debrief);
+
 // --- Graceful shutdown hook ---
 
 app.addHook("onClose", async () => {
+  stopStaleScanner();
   clearInterval(mcpCleanupInterval);
   await mcpClientManager.disconnectAll();
   debrief.close();
