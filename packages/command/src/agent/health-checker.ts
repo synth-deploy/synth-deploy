@@ -31,3 +31,33 @@ export class DefaultHealthChecker implements ServiceHealthChecker {
     return { reachable: true, responseTimeMs: 1, error: null };
   }
 }
+
+/**
+ * Real health checker that makes HTTP requests to an Envoy health endpoint.
+ * Used when an Envoy URL is configured.
+ */
+export class EnvoyHealthChecker implements ServiceHealthChecker {
+  constructor(private readonly envoyUrl: string, private readonly timeoutMs = 5000) {}
+
+  async check(): Promise<HealthCheckResult> {
+    const start = Date.now();
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
+      const res = await fetch(`${this.envoyUrl}/health`, { signal: controller.signal });
+      clearTimeout(timeout);
+      const responseTimeMs = Date.now() - start;
+
+      if (res.ok) {
+        return { reachable: true, responseTimeMs, error: null };
+      }
+      return { reachable: false, responseTimeMs, error: `HTTP ${res.status}` };
+    } catch (err) {
+      return {
+        reachable: false,
+        responseTimeMs: null,
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
+  }
+}

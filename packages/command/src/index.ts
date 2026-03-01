@@ -9,6 +9,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { PersistentDecisionDebrief, openEntityDatabase, PersistentPartitionStore, PersistentOperationStore, PersistentEnvironmentStore, PersistentSettingsStore, PersistentDeploymentStore, PersistentOrderStore, LlmClient, DEFAULT_DEPLOY_CONFIG } from "@deploystack/core";
 import type { Deployment, DeploymentStep, DeployConfig } from "@deploystack/core";
 import { CommandAgent } from "./agent/command-agent.js";
+import { EnvoyHealthChecker } from "./agent/health-checker.js";
 import { createMcpServer } from "./mcp/server.js";
 import { registerDeploymentRoutes } from "./api/deployments.js";
 import { registerHealthRoutes } from "./api/health.js";
@@ -34,7 +35,9 @@ const environments = new PersistentEnvironmentStore(entityDb);
 const settings = new PersistentSettingsStore(entityDb);
 const deployments = new PersistentDeploymentStore(entityDb);
 const orders = new PersistentOrderStore(entityDb);
-const agent = new CommandAgent(debrief, deployments, orders, undefined, {}, settings);
+const envoyUrl = settings.get().envoy?.url;
+const healthChecker = envoyUrl ? new EnvoyHealthChecker(envoyUrl) : undefined;
+const agent = new CommandAgent(debrief, deployments, orders, healthChecker, {}, settings);
 const llm = new LlmClient(debrief, "command");
 
 // --- Seed demo data so the server is immediately usable ---
@@ -399,7 +402,7 @@ await app.register(fastifyCors, {
 const auth = registerAuthMiddleware(app);
 
 // Register REST routes
-registerHealthRoutes(app);
+registerHealthRoutes(app, { entityDb, dataDir: DATA_DIR, envoyUrl });
 registerDeploymentRoutes(app, agent, partitions, environments, deployments, debrief, operations, orders, settings);
 registerEnvoyReportRoutes(app, debrief);
 registerOperationRoutes(app, operations, environments);
