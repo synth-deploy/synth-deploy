@@ -19,6 +19,8 @@ import type {
 import { DefaultHealthChecker } from "./health-checker.js";
 import { runStep, validateCommand } from "./step-runner.js";
 import type { McpClientManager, McpToolResult } from "./mcp-client-manager.js";
+import { EnvoyClient } from "./envoy-client.js";
+import type { EnvoyDeployResult } from "./envoy-client.js";
 
 // ---------------------------------------------------------------------------
 // Public interfaces
@@ -1171,6 +1173,197 @@ export class CommandAgent {
   // -----------------------------------------------------------------------
 
   private async executeDeployment(
+    deployment: Deployment,
+    partition: Partition,
+    environment: Environment,
+    order: Order,
+  ): Promise<void> {
+    // Check if an Envoy is configured for delegation
+    const envoyConfig = this.settingsReader?.get().envoy;
+    if (envoyConfig?.url) {
+      const delegated = await this.tryDelegateToEnvoy(
+        deployment, partition, environment, order, envoyConfig,
+      );
+      if (delegated) return;
+    }
+
+    // Fall back to local execution
+    await this.executeDeploymentLocally(deployment, partition, environment, order);
+  }
+
+  /**
+   * Attempt to delegate deployment execution to a configured Envoy.
+   * Returns true if delegation succeeded (or failed with proper error handling).
+   * Returns false if the Envoy is unreachable and we should fall back to local execution.
+   */
+  private async tryDelegateToEnvoy(
+    deployment: Deployment,
+    partition: Partition,
+    environment: Environment,
+    order: Order,
+    envoyConfig: { url: string; timeoutMs: number },
+  ): Promise<boolean> {
+    const client = new EnvoyClient(envoyConfig.url, envoyConfig.timeoutMs);
+
+    // Pre-flight: check if the Envoy is healthy before delegating
+    try {
+      const health = await client.checkHealth();
+      if (health.status !== "healthy" || !health.readiness.ready) {
+        const entry = this.debrief.record({
+          partitionId: deployment.partitionId,
+          deploymentId: deployment.id,
+          agent: "command",
+          decisionType: "deployment-execution",
+          decision: `Envoy at ${envoyConfig.url} is not ready (${health.status}: ${health.readiness.reason}) — falling back to local execution`,
+          reasoning:
+            `Attempted to delegate deployment to Envoy at ${envoyConfig.url} but it reports ` +
+            `status "${health.status}" with readiness: "${health.readiness.reason}". ` +
+            `Falling back to local step execution to avoid blocking the deployment.`,
+          context: {
+            step: "execute-deployment",
+            envoyUrl: envoyConfig.url,
+            envoyStatus: health.status,
+            envoyReadiness: health.readiness,
+            fallback: "local",
+          },
+        });
+        deployment.debriefEntryIds.push(entry.id);
+        return false;
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      const entry = this.debrief.record({
+        partitionId: deployment.partitionId,
+        deploymentId: deployment.id,
+        agent: "command",
+        decisionType: "deployment-execution",
+        decision: `Envoy at ${envoyConfig.url} is unreachable (${message}) — falling back to local execution`,
+        reasoning:
+          `Attempted to contact Envoy at ${envoyConfig.url} for deployment delegation ` +
+          `but the health check failed: ${message}. Falling back to local step execution ` +
+          `so the deployment is not blocked by Envoy unavailability.`,
+        context: {
+          step: "execute-deployment",
+          envoyUrl: envoyConfig.url,
+          error: message,
+          fallback: "local",
+        },
+      });
+      deployment.debriefEntryIds.push(entry.id);
+      return false;
+    }
+
+    // Envoy is healthy — delegate the deployment
+    const delegateEntry = this.debrief.record({
+      partitionId: deployment.partitionId,
+      deploymentId: deployment.id,
+      agent: "command",
+      decisionType: "deployment-execution",
+      decision: `Delegating execution of ${deployment.operationId} v${deployment.version} to Envoy at ${envoyConfig.url}`,
+      reasoning:
+        `Envoy at ${envoyConfig.url} is healthy and ready. Delegating full deployment ` +
+        `execution for "${order.operationName}" v${order.version} on "${environment.name}" ` +
+        `for partition "${partition.name}". The Envoy will execute all steps, verify artifacts, ` +
+        `and return debrief entries for ingestion into Command's unified decision diary.`,
+      context: {
+        step: "execute-deployment",
+        envoyUrl: envoyConfig.url,
+        delegated: true,
+      },
+    });
+    deployment.debriefEntryIds.push(delegateEntry.id);
+
+    let envoyResult: EnvoyDeployResult;
+    try {
+      envoyResult = await client.deploy({
+        deploymentId: deployment.id,
+        partitionId: deployment.partitionId,
+        environmentId: deployment.environmentId,
+        operationId: deployment.operationId,
+        version: deployment.version,
+        variables: deployment.variables,
+        environmentName: environment.name,
+        partitionName: partition.name,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      throw new OrchestrationError(
+        "execute-deployment",
+        `Envoy delegation failed: ${message}`,
+        `Command delegated deployment to Envoy at ${envoyConfig.url} but the request failed: ${message}. ` +
+        `The Envoy may have gone down during execution. The deployment state on the Envoy is unknown — ` +
+        `check the Envoy's health and local state before re-triggering.`,
+      );
+    }
+
+    // Ingest debrief entries from the Envoy into Command's unified diary
+    if (envoyResult.debriefEntries && envoyResult.debriefEntries.length > 0) {
+      for (const entry of envoyResult.debriefEntries) {
+        const ingested = this.debrief.record({
+          partitionId: entry.partitionId ?? deployment.partitionId,
+          deploymentId: entry.deploymentId ?? deployment.id,
+          agent: entry.agent,
+          decisionType: entry.decisionType,
+          decision: entry.decision,
+          reasoning: entry.reasoning,
+          context: {
+            ...entry.context,
+            _envoyDelegation: {
+              envoyUrl: envoyConfig.url,
+              originalEntryId: entry.id,
+              originalTimestamp: entry.timestamp,
+            },
+          },
+        });
+        deployment.debriefEntryIds.push(ingested.id);
+      }
+    }
+
+    // Handle Envoy result
+    if (!envoyResult.success) {
+      const reason = envoyResult.failureReason ?? "Envoy reported deployment failure with no reason";
+      throw new OrchestrationError(
+        "execute-deployment",
+        `Envoy deployment failed: ${reason}`,
+        `Deployment was delegated to Envoy at ${envoyConfig.url}. The Envoy executed the deployment ` +
+        `and reported failure: ${reason}. ` +
+        `Execution took ${envoyResult.executionDurationMs}ms. ` +
+        `${envoyResult.debriefEntries?.length ?? 0} debrief entries were ingested from the Envoy. ` +
+        `Check the Envoy debrief entries above for detailed step-by-step reasoning about the failure.`,
+      );
+    }
+
+    // Record successful delegation completion
+    const completionEntry = this.debrief.record({
+      partitionId: deployment.partitionId,
+      deploymentId: deployment.id,
+      agent: "command",
+      decisionType: "deployment-execution",
+      decision: `Envoy completed deployment successfully in ${envoyResult.executionDurationMs}ms — ${envoyResult.artifacts.length} artifact(s) produced`,
+      reasoning:
+        `Envoy at ${envoyConfig.url} executed all deployment steps and verification checks successfully. ` +
+        `Execution: ${envoyResult.executionDurationMs}ms, total: ${envoyResult.totalDurationMs}ms. ` +
+        `Artifacts: ${envoyResult.artifacts.length > 0 ? envoyResult.artifacts.join(", ") : "none"}. ` +
+        `Verification: ${envoyResult.verificationPassed ? "passed" : "skipped"} ` +
+        `(${envoyResult.verificationChecks.length} check(s)). ` +
+        `${envoyResult.debriefEntries?.length ?? 0} debrief entries ingested into Command's unified diary.`,
+      context: {
+        step: "execute-deployment",
+        envoyUrl: envoyConfig.url,
+        delegated: true,
+        executionDurationMs: envoyResult.executionDurationMs,
+        totalDurationMs: envoyResult.totalDurationMs,
+        artifactCount: envoyResult.artifacts.length,
+        verificationPassed: envoyResult.verificationPassed,
+        debriefEntriesIngested: envoyResult.debriefEntries?.length ?? 0,
+      },
+    });
+    deployment.debriefEntryIds.push(completionEntry.id);
+
+    return true;
+  }
+
+  private async executeDeploymentLocally(
     deployment: Deployment,
     partition: Partition,
     environment: Environment,
