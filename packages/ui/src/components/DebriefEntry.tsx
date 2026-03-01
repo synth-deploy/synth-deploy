@@ -41,12 +41,36 @@ function formatTs(iso: string): string {
   });
 }
 
+function humanizeKey(key: string): string {
+  return key
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/[_-]/g, " ")
+    .replace(/\b\w/g, (c) => c.toLowerCase());
+}
+
+function humanizeValue(value: unknown): string {
+  if (value === null || value === undefined) return "none";
+  if (typeof value === "boolean") return value ? "yes" : "no";
+  if (typeof value === "number") return value.toLocaleString();
+  if (Array.isArray(value)) {
+    if (value.length === 0) return "none";
+    return value.map(String).join(", ");
+  }
+  if (typeof value === "object") {
+    return Object.entries(value as Record<string, unknown>)
+      .map(([k, v]) => `${humanizeKey(k)}: ${humanizeValue(v)}`)
+      .join("; ");
+  }
+  return String(value);
+}
+
 function formatContext(ctx: Record<string, unknown>): string {
-  const filtered = Object.entries(ctx).filter(
-    ([k]) => !k.startsWith("_"),
-  );
-  if (filtered.length === 0) return "";
-  return JSON.stringify(Object.fromEntries(filtered), null, 2);
+  const entries = Object.entries(ctx).filter(([k]) => !k.startsWith("_"));
+  if (entries.length === 0) return "";
+
+  return entries
+    .map(([key, value]) => `${humanizeKey(key)}: ${humanizeValue(value)}`)
+    .join("\n");
 }
 
 export default function DebriefEntryCard({ entry }: { entry: DebriefEntry }) {
@@ -87,7 +111,9 @@ export default function DebriefEntryCard({ entry }: { entry: DebriefEntry }) {
         <>
           <div className="debrief-entry-reasoning">{entry.reasoning}</div>
           {formatContext(entry.context) && (
-            <pre className="debrief-entry-context">{formatContext(entry.context)}</pre>
+            <div className="debrief-entry-context" style={{ whiteSpace: "pre-line", fontSize: 12, lineHeight: 1.5, color: "var(--text-secondary, #9ca3af)", marginTop: 8, padding: "8px 12px", background: "var(--bg-secondary, rgba(0,0,0,0.2))", borderRadius: 6 }}>
+              {formatContext(entry.context)}
+            </div>
           )}
         </>
       )}
