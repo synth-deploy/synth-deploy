@@ -664,7 +664,10 @@ describe("Agent mode — LLM intent interpretation", () => {
       responseTimeMs: 50,
     };
 
-    const beforeCount = llmDiary.getRecent(200).length;
+    // Snapshot existing entry IDs before the request so we can identify
+    // exactly which new entry was created — avoids timestamp-collision
+    // ambiguity when multiple entries share the same millisecond.
+    const existingIds = new Set(llmDiary.getRecent(200).map((e) => e.id));
 
     await llmApp.inject({
       method: "POST",
@@ -672,9 +675,8 @@ describe("Agent mode — LLM intent interpretation", () => {
       payload: { intent: "Deploy web-app v9.0.0 to prod for Acme Corp" },
     });
 
-    const entries = llmDiary.getRecent(200);
-    // getRecent returns newest-first, so new entries are at the start
-    const newEntries = entries.slice(0, entries.length - beforeCount);
+    const allEntries = llmDiary.getRecent(200);
+    const newEntries = allEntries.filter((e) => !existingIds.has(e.id));
     const systemEntry = newEntries.find(
       (e) => e.decisionType === "system" && e.decision.includes("Intent"),
     );
