@@ -120,6 +120,41 @@ const MAX_CONVERSATION_ENTRIES = 5;
 /** @internal Exported for testing only */
 export const conversations = new Map<string, ConversationEntry[]>();
 
+// ---------------------------------------------------------------------------
+// Input sanitization — prevent prompt injection and control character abuse
+// ---------------------------------------------------------------------------
+
+/** @internal Exported for testing only */
+export function sanitizeUserInput(text: string): string {
+  // Strip control characters except newline and tab
+  let sanitized = text.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
+  // Truncate to prevent prompt stuffing
+  if (sanitized.length > 1000) {
+    sanitized = sanitized.slice(0, 1000);
+  }
+  // Escape angle brackets to prevent XML tag injection
+  sanitized = sanitized.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return sanitized;
+}
+
+/** @internal Exported for testing only */
+export function validateExtractedVersion(version: string): boolean {
+  // Accept semver and common pre-release formats
+  return /^\d+\.\d+\.\d+(-[a-zA-Z0-9._]+)?$/.test(version);
+}
+
+/** @internal Exported for testing only */
+export function validateExtractedVariables(vars: Record<string, string>): Record<string, string> {
+  const validated: Record<string, string> = {};
+  for (const [key, value] of Object.entries(vars)) {
+    // Key must be alphanumeric + underscore, value max 500 chars
+    if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(key) && typeof value === 'string' && value.length <= 500) {
+      validated[key] = value;
+    }
+  }
+  return validated;
+}
+
 function getConversationHistory(conversationId: string | undefined): ConversationEntry[] {
   if (!conversationId) return [];
 
@@ -195,7 +230,7 @@ function buildUserPrompt(
 ): string {
   const parts: string[] = [];
 
-  parts.push(`Intent: "${intent}"`);
+  parts.push(`<user-intent>${sanitizeUserInput(intent)}</user-intent>`);
 
   parts.push(`\nKnown operations:`);
   for (const p of allOperations) {
@@ -268,7 +303,6 @@ function parseLlmResponse(
   const partitionField = convertLlmEntity(parsed.partitionId, partitionIds, partialConfig?.partitionId);
   const envField = convertLlmEntity(parsed.environmentId, environmentIds, partialConfig?.environmentId);
   const versionField = convertLlmVersion(parsed.version, partialConfig?.version);
-  const variables = { ...(partialConfig?.variables ?? {}), ...(parsed.variables ?? {}) };
 
   // If any field that the LLM claimed to resolve has an invalid ID, reject the whole response
   if (
@@ -278,6 +312,16 @@ function parseLlmResponse(
   ) {
     return null; // Hallucination detected → fall back to regex
   }
+
+  // Validate version if extracted by LLM
+  if (parsed.version?.value && !validateExtractedVersion(parsed.version.value)) {
+    return null; // Invalid version format → fall back to regex
+  }
+
+  // Validate extracted variables
+  const rawVariables = parsed.variables ?? {};
+  const validatedVariables = validateExtractedVariables(rawVariables);
+  const variables = { ...(partialConfig?.variables ?? {}), ...validatedVariables };
 
   const missingFields: string[] = [];
   const uiUpdates: IntentResult["uiUpdates"] = [];
@@ -1109,7 +1153,7 @@ async function classifyQueryWithLlm(
   deploymentStore: DeploymentStore,
   _debrief: DebriefReader,
 ): Promise<{ action: string; view: string; params: Record<string, string>; title?: string } | null> {
-  const parts: string[] = [`Query: "${query}"`];
+  const parts: string[] = [`<user-query>${sanitizeUserInput(query)}</user-query>`];
 
   parts.push(`\nKnown partitions:`);
   for (const t of allPartitions) parts.push(`  - id: "${t.id}", name: "${t.name}"`);

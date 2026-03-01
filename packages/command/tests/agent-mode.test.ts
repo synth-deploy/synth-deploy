@@ -8,7 +8,7 @@ import { registerDeploymentRoutes } from "../src/api/deployments.js";
 import { registerOperationRoutes } from "../src/api/operations.js";
 import { registerPartitionRoutes } from "../src/api/partitions.js";
 import { registerEnvironmentRoutes } from "../src/api/environments.js";
-import { registerAgentRoutes, conversations } from "../src/api/agent.js";
+import { registerAgentRoutes, conversations, sanitizeUserInput, validateExtractedVersion, validateExtractedVariables } from "../src/api/agent.js";
 
 // ---------------------------------------------------------------------------
 // Test server setup
@@ -746,5 +746,75 @@ describe("Agent mode — LLM intent interpretation", () => {
     );
     expect(warnUpdate).toBeDefined();
     expect(warnUpdate.message).toContain("not linked to operation");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Input sanitization tests
+// ---------------------------------------------------------------------------
+
+describe("Agent mode — input sanitization", () => {
+  it("strips control characters from intent", () => {
+    const input = "Deploy\x01\x02\x03\x07 web-app\x0B\x0C\x0E v1.0.0";
+    const result = sanitizeUserInput(input);
+    // Control characters should be removed
+    expect(result).not.toMatch(/[\x00-\x08\x0B\x0C\x0E-\x1F]/);
+    // Printable content should remain
+    expect(result).toContain("Deploy");
+    expect(result).toContain("web-app");
+    expect(result).toContain("v1.0.0");
+  });
+
+  it("truncates long inputs to 1000 characters", () => {
+    const longInput = "a".repeat(2000);
+    const result = sanitizeUserInput(longInput);
+    expect(result.length).toBe(1000);
+  });
+
+  it("escapes XML tags in user input", () => {
+    const input = "<script>alert('xss')</script>";
+    const result = sanitizeUserInput(input);
+    expect(result).not.toContain("<script>");
+    expect(result).not.toContain("</script>");
+    expect(result).toContain("&lt;script&gt;");
+    expect(result).toContain("&lt;/script&gt;");
+  });
+
+  it("validates semver version format", () => {
+    // Valid formats
+    expect(validateExtractedVersion("1.2.3")).toBe(true);
+    expect(validateExtractedVersion("1.2.3-beta.1")).toBe(true);
+    expect(validateExtractedVersion("0.0.1")).toBe(true);
+    expect(validateExtractedVersion("10.20.30-alpha")).toBe(true);
+
+    // Invalid formats
+    expect(validateExtractedVersion("not-a-version")).toBe(false);
+    expect(validateExtractedVersion("1.2")).toBe(false);
+    expect(validateExtractedVersion("../../../etc/passwd")).toBe(false);
+    expect(validateExtractedVersion("v1.2.3")).toBe(false);
+    expect(validateExtractedVersion("")).toBe(false);
+  });
+
+  it("validates variable key format", () => {
+    // Valid keys
+    const valid = validateExtractedVariables({ APP_ENV: "production", DB_HOST: "localhost" });
+    expect(valid).toHaveProperty("APP_ENV", "production");
+    expect(valid).toHaveProperty("DB_HOST", "localhost");
+
+    // Invalid keys should be excluded
+    const invalid = validateExtractedVariables({
+      "../../path": "value",
+      "key with spaces": "value",
+      "": "value",
+      "123invalid": "value",
+    });
+    expect(Object.keys(invalid)).toHaveLength(0);
+  });
+
+  it("rejects variables with values exceeding 500 chars", () => {
+    const longValue = "x".repeat(600);
+    const result = validateExtractedVariables({ VALID_KEY: longValue, SHORT_KEY: "ok" });
+    expect(result).not.toHaveProperty("VALID_KEY");
+    expect(result).toHaveProperty("SHORT_KEY", "ok");
   });
 });
