@@ -12,22 +12,24 @@ export function registerResources(
   debrief: DebriefReader,
   deployments: DeploymentStore,
 ): void {
-  // Recent debrief entries
+  // Recent debrief entries — scoped to a specific partition
   mcp.registerResource(
     "recent-debrief-entries",
-    "debrief://recent",
+    new ResourceTemplate("debrief://partition/{partitionId}/recent", {
+      list: undefined,
+    }),
     {
-      title: "Recent Debrief Entries",
+      title: "Recent Debrief Entries (Partition-Scoped)",
       description:
-        "The most recent Debrief entries across all deployments. " +
+        "The most recent Debrief entries for a specific partition. " +
         "Each entry records what the agent decided and why, in plain language.",
       mimeType: "application/json",
     },
-    async () => ({
+    async (uri, { partitionId }) => ({
       contents: [
         {
-          uri: "debrief://recent",
-          text: JSON.stringify(debrief.getRecent(20), null, 2),
+          uri: uri.href,
+          text: JSON.stringify(debrief.getByPartition(partitionId as string).slice(-20), null, 2),
         },
       ],
     }),
@@ -46,6 +48,10 @@ export function registerResources(
       mimeType: "application/json",
     },
     async (uri, { deploymentId }) => {
+      const deployment = deployments.get(deploymentId as string);
+      if (!deployment) {
+        return { contents: [{ uri: uri.href, text: JSON.stringify({ error: "Deployment not found" }) }] };
+      }
       const entries = debrief.getByDeployment(deploymentId as string);
       return {
         contents: [
