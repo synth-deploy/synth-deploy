@@ -10,7 +10,7 @@
     "dev": "npm run dev --workspace=packages/command",
     "dev:ui": "npm run dev --workspace=packages/ui",
     "build:ui": "npm run build --workspace=packages/ui",
-    "test": "npm test --workspace=packages/core --workspace=packages/command --workspace=packages/envoy",
+    "test": "npm test --workspace=packages/core --workspace=packages/command --workspace=packages/envoy --workspace=packages/ui",
     "test:integration": "vitest run --config tests/vitest.config.ts",
     "clean": "rm -rf packages/*/dist packages/*/*.tsbuildinfo"
   },
