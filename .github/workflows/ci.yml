@@ -48,3 +48,6 @@ jobs:
           name: coverage-reports
           path: packages/*/coverage/lcov.info
           retention-days: 7
+
+      - name: Run integration and e2e tests
+        run: npm run test:integration
