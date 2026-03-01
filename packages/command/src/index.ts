@@ -19,6 +19,7 @@ import { registerEnvironmentRoutes } from "./api/environments.js";
 import { registerAgentRoutes } from "./api/agent.js";
 import { registerSettingsRoutes } from "./api/settings.js";
 import { registerOrderRoutes } from "./api/orders.js";
+import { registerAuthMiddleware } from "./middleware/auth.js";
 
 // --- Bootstrap shared state ---
 
@@ -394,6 +395,9 @@ await app.register(fastifyCors, {
   origin: corsOrigin,
 });
 
+// Register authentication middleware
+const auth = registerAuthMiddleware(app);
+
 // Register REST routes
 registerHealthRoutes(app);
 registerDeploymentRoutes(app, agent, partitions, environments, deployments, debrief, operations, orders, settings);
@@ -500,6 +504,10 @@ app.listen({ port: PORT, host: HOST }, (err) => {
 
   const uiStatus = existsSync(uiDistPath) ? `UI:       http://${HOST}:${PORT}/` : "UI:       not built (run npm run build:ui)";
 
+  const authStatus = auth.enabled
+    ? "Auth:     enabled (API key required)                 "
+    : "Auth:     disabled (set DEPLOYSTACK_API_KEY)         ";
+
   const seedStatus = process.env.DEPLOYSTACK_SEED_DEMO !== 'false'
     ? "Seed: 3 partitions, 3 environments, 3 operations   \n║        5 orders, 10 deployments                     "
     : "Seed: disabled (DEPLOYSTACK_SEED_DEMO=false)        ";
@@ -512,6 +520,7 @@ app.listen({ port: PORT, host: HOST }, (err) => {
 ║  MCP:       http://${HOST}:${PORT}/mcp               ║
 ║  Health:    http://${HOST}:${PORT}/health             ║
 ║  ${uiStatus.padEnd(50)}║
+║  ${authStatus}║
 ║                                                     ║
 ║  ${seedStatus}║
 ╚══════════════════════════════════════════════════════╝
