@@ -16,6 +16,7 @@ import OrderListPanel from "./canvas/OrderListPanel.js";
 import OrderDetailPanel from "./canvas/OrderDetailPanel.js";
 import DebriefPanel from "./canvas/DebriefPanel.js";
 import SettingsPanel from "./canvas/SettingsPanel.js";
+import ErrorBoundary from "./ErrorBoundary.js";
 
 export default function AgentCanvas() {
   const { currentPanel, pushPanel } = useCanvas();
@@ -57,6 +58,7 @@ export default function AgentCanvas() {
 
   function renderPanel() {
     const panel = currentPanel;
+    const params = panel.params ?? {};
 
     switch (panel.type) {
       case "overview":
@@ -66,7 +68,7 @@ export default function AgentCanvas() {
         return (
           <PartitionDetailPanel
             key={panel.id}
-            partitionId={panel.params.id}
+            partitionId={params.id}
             title={panel.title}
           />
         );
@@ -75,7 +77,7 @@ export default function AgentCanvas() {
         return (
           <EnvironmentDetailPanel
             key={panel.id}
-            environmentId={panel.params.id}
+            environmentId={params.id}
             title={panel.title}
           />
         );
@@ -84,7 +86,7 @@ export default function AgentCanvas() {
         return (
           <DeploymentDetailPanel
             key={panel.id}
-            deploymentId={panel.params.id}
+            deploymentId={params.id}
             title={panel.title}
           />
         );
@@ -94,8 +96,8 @@ export default function AgentCanvas() {
           <DeploymentListPanel
             key={panel.id}
             title={panel.title}
-            filterStatus={panel.params.status}
-            filterPartitionId={panel.params.partitionId}
+            filterStatus={params.status}
+            filterPartitionId={params.partitionId}
           />
         );
 
@@ -104,7 +106,7 @@ export default function AgentCanvas() {
           <DeploymentAuthoringPanel
             key={panel.id}
             title={panel.title}
-            initialIntent={panel.params.intent}
+            initialIntent={params.intent}
           />
         );
 
@@ -119,8 +121,8 @@ export default function AgentCanvas() {
           <OrderListPanel
             key={panel.id}
             title={panel.title}
-            filterOperationId={panel.params.operationId}
-            filterPartitionId={panel.params.partitionId}
+            filterOperationId={params.operationId}
+            filterPartitionId={params.partitionId}
           />
         );
 
@@ -128,7 +130,7 @@ export default function AgentCanvas() {
         return (
           <OrderDetailPanel
             key={panel.id}
-            orderId={panel.params.id}
+            orderId={params.id}
             title={panel.title}
           />
         );
@@ -138,8 +140,8 @@ export default function AgentCanvas() {
           <DebriefPanel
             key={panel.id}
             title={panel.title}
-            filterPartitionId={panel.params.partitionId}
-            filterDecisionType={panel.params.decisionType}
+            filterPartitionId={params.partitionId}
+            filterDecisionType={params.decisionType}
           />
         );
 
@@ -176,7 +178,9 @@ export default function AgentCanvas() {
         {error && (
           <div className="error-msg" style={{ margin: "16px 24px 0" }}>{error}</div>
         )}
-        {renderPanel()}
+        <ErrorBoundary>
+          {renderPanel()}
+        </ErrorBoundary>
       </div>
 
       {/* Intent bar — fixed at bottom, full width */}
