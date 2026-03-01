@@ -1,0 +1,36 @@
+services:
+  command:
+    build:
+      context: .
+      dockerfile: Dockerfile.command
+    ports:
+      - "3000:3000"
+    volumes:
+      - deploystack-data:/data
+    environment:
+      - NODE_ENV=production
+      - DEPLOYSTACK_DATA_DIR=/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  envoy:
+    build:
+      context: .
+      dockerfile: Dockerfile.envoy
+    ports:
+      - "3001:3001"
+    volumes:
+      - envoy-workspace:/workspace
+    environment:
+      - NODE_ENV=production
+      - DEPLOYSTACK_COMMAND_URL=http://command:3000
+    depends_on:
+      command:
+        condition: service_healthy
+
+volumes:
+  deploystack-data:
+  envoy-workspace:

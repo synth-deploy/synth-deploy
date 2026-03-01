@@ -1,0 +1,59 @@
+# DeployStack Command — multi-stage Docker build
+# Orchestration server + UI (port 3000)
+
+# --- Stage 1: Build ---
+FROM node:22-slim AS build
+
+WORKDIR /app
+
+# Copy package manifests first for layer caching
+COPY package.json package-lock.json ./
+COPY packages/core/package.json packages/core/
+COPY packages/command/package.json packages/command/
+COPY packages/envoy/package.json packages/envoy/
+COPY packages/ui/package.json packages/ui/
+
+# Install all dependencies (including devDependencies for build)
+RUN npm ci
+
+# Copy source and config
+COPY tsconfig.base.json ./
+COPY packages/core/ packages/core/
+COPY packages/command/ packages/command/
+COPY packages/ui/ packages/ui/
+
+# Build all packages
+RUN npm run build
+
+# --- Stage 2: Runtime ---
+FROM node:22-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy package manifests for workspace resolution
+COPY package.json package-lock.json ./
+COPY packages/core/package.json packages/core/
+COPY packages/command/package.json packages/command/
+COPY packages/ui/package.json packages/ui/
+
+# Install production dependencies only
+RUN npm ci --omit=dev
+
+# Copy built artifacts
+COPY --from=build /app/packages/core/dist packages/core/dist/
+COPY --from=build /app/packages/command/dist packages/command/dist/
+COPY --from=build /app/packages/ui/dist packages/ui/dist/
+
+# SQLite data directory
+VOLUME /data
+ENV DEPLOYSTACK_DATA_DIR=/data
+ENV NODE_ENV=production
+
+EXPOSE 3000
+
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
+  CMD curl -f http://localhost:3000/health || exit 1
+
+CMD ["node", "packages/command/dist/index.js"]
