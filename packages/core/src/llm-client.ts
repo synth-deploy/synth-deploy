@@ -60,7 +60,7 @@ export class LlmClient {
       process.env.DEPLOYSTACK_LLM_MODEL ??
       DEFAULT_REASONING_MODEL;
     this._classificationModel =
-      config.classificationModel ?? DEFAULT_CLASSIFICATION_MODEL;
+      config.classificationModel ?? process.env.DEPLOYSTACK_LLM_CLASSIFICATION_MODEL ?? DEFAULT_CLASSIFICATION_MODEL;
   }
 
   /**
