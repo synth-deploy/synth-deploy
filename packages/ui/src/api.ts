@@ -412,3 +412,34 @@ export async function getCommandInfo(): Promise<CommandInfo> {
   const data = await fetchJson<{ info: CommandInfo }>("/api/settings/command-info");
   return data.info;
 }
+
+// --- Envoys ---
+
+export interface EnvoyRegistryEntry {
+  id: string;
+  url: string;
+  health: "OK" | "Degraded" | "Unreachable";
+  hostname: string | null;
+  lastSeen: string | null;
+  summary: {
+    totalDeployments: number;
+    succeeded: number;
+    failed: number;
+    executing: number;
+    environments: number;
+  } | null;
+  readiness: {
+    ready: boolean;
+    reason: string;
+  } | null;
+}
+
+export async function listEnvoys(): Promise<EnvoyRegistryEntry[]> {
+  const data = await fetchJson<{ envoys: EnvoyRegistryEntry[] }>("/api/envoys");
+  return data.envoys;
+}
+
+export async function getEnvoyHealth(id: string): Promise<EnvoyRegistryEntry> {
+  const data = await fetchJson<{ envoy: EnvoyRegistryEntry }>(`/api/envoys/${id}/health`);
+  return data.envoy;
+}

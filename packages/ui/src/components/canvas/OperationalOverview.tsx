@@ -420,7 +420,7 @@ export default function OperationalOverview() {
         label="Envoys"
         subtitle="on the ground, executing and reporting"
         onClick={() =>
-          pushPanel({ type: "deployment-list", title: "Deployments", params: {} })
+          pushPanel({ type: "envoy-registry", title: "Envoys", params: {} })
         }
       />
       <div className="v2-envoys-list">

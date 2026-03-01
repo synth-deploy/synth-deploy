@@ -20,6 +20,7 @@ import { registerEnvironmentRoutes } from "./api/environments.js";
 import { registerAgentRoutes } from "./api/agent.js";
 import { registerSettingsRoutes } from "./api/settings.js";
 import { registerOrderRoutes } from "./api/orders.js";
+import { registerEnvoyRoutes } from "./api/envoys.js";
 import { registerAuthMiddleware } from "./middleware/auth.js";
 
 // --- Bootstrap shared state ---
@@ -411,6 +412,7 @@ registerEnvironmentRoutes(app, environments, operations);
 registerAgentRoutes(app, agent, partitions, environments, operations, deployments, debrief, settings, llm);
 registerSettingsRoutes(app, settings);
 registerOrderRoutes(app, orders, agent, partitions, environments, operations, deployments, debrief, settings);
+registerEnvoyRoutes(app, settings);
 
 // --- Serve UI static files if built ---
 
