@@ -4,6 +4,7 @@ import { existsSync, mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import Fastify from "fastify";
 import fastifyCors from "@fastify/cors";
+import rateLimit from "@fastify/rate-limit";
 import fastifyStatic from "@fastify/static";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { PersistentDecisionDebrief, openEntityDatabase, PersistentPartitionStore, PersistentOperationStore, PersistentEnvironmentStore, PersistentSettingsStore, PersistentDeploymentStore, PersistentOrderStore, PersistentStepTypeStore, LlmClient, DEFAULT_DEPLOY_CONFIG } from "@deploystack/core";
@@ -417,6 +418,12 @@ if (!rawCorsOrigin || rawCorsOrigin.trim() === '') {
 
 await app.register(fastifyCors, {
   origin: corsOrigin,
+});
+
+// Rate limiting — configurable via environment variables
+await app.register(rateLimit, {
+  max: Number(process.env.DEPLOYSTACK_RATE_LIMIT_MAX ?? 100),
+  timeWindow: Number(process.env.DEPLOYSTACK_RATE_LIMIT_WINDOW_MS ?? 60_000),
 });
 
 // Register authentication middleware
