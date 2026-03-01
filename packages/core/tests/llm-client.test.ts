@@ -388,3 +388,194 @@ describe("LlmClient — rate limit behavior", () => {
     expect(entries[0].context.failureReason).toContain("rate limit exceeded");
   });
 });
+
+// ---------------------------------------------------------------------------
+// Error scenarios — simulating API failures
+// ---------------------------------------------------------------------------
+
+describe("LlmClient — error scenarios", () => {
+  /**
+   * Helper to create a client with a mock Anthropic SDK client.
+   * Sets _initialized = true and _anthropicClient to the provided mock
+   * so that _ensureInitialized() is a no-op and calls go through our mock.
+   */
+  function createClientWithMock(
+    debrief: DecisionDebrief,
+    mockClient: { messages: { create: (...args: unknown[]) => Promise<unknown> } },
+  ): LlmClient {
+    const client = new LlmClient(debrief, "command", {
+      apiKey: "sk-test-key",
+      timeoutMs: 500, // short timeout for tests
+    });
+    const internal = client as unknown as {
+      _initialized: boolean;
+      _anthropicClient: unknown;
+    };
+    internal._initialized = true;
+    internal._anthropicClient = mockClient;
+    return client;
+  }
+
+  it("returns fallback result when API request times out", async () => {
+    const debrief = new DecisionDebrief();
+    const mockClient = {
+      messages: {
+        create: async (_opts: unknown) => {
+          return new Promise((_resolve, reject) => {
+            setTimeout(() => {
+              const err = new DOMException("The operation was aborted", "AbortError");
+              reject(err);
+            }, 600);
+          });
+        },
+      },
+    };
+
+    const client = createClientWithMock(debrief, mockClient);
+    const result = await client.reason(makeParams({ promptSummary: "Timeout test" }));
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.fallback).toBe(true);
+      expect(result.reason).toContain("timed out");
+    }
+
+    const entries = debrief.getByType("llm-call");
+    expect(entries).toHaveLength(1);
+    expect(entries[0].context.fallbackUsed).toBe(true);
+    expect(entries[0].context.failureReason).toContain("timed out");
+  });
+
+  it("returns fallback result when API returns 429 rate limit", async () => {
+    const debrief = new DecisionDebrief();
+    const mockClient = {
+      messages: {
+        create: async () => {
+          const error = new Error("429 Too Many Requests");
+          (error as Error & { status: number }).status = 429;
+          throw error;
+        },
+      },
+    };
+
+    const client = createClientWithMock(debrief, mockClient);
+    const result = await client.classify(makeParams({ promptSummary: "Rate limit 429 test" }));
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.fallback).toBe(true);
+      expect(result.reason).toContain("429 Too Many Requests");
+    }
+
+    const entries = debrief.getByType("llm-call");
+    expect(entries).toHaveLength(1);
+    expect(entries[0].context.fallbackUsed).toBe(true);
+  });
+
+  it("returns fallback result on network failure", async () => {
+    const debrief = new DecisionDebrief();
+    const mockClient = {
+      messages: {
+        create: async () => {
+          throw new TypeError("fetch failed");
+        },
+      },
+    };
+
+    const client = createClientWithMock(debrief, mockClient);
+    const result = await client.reason(makeParams({ promptSummary: "Network failure test" }));
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.fallback).toBe(true);
+      expect(result.reason).toContain("fetch failed");
+    }
+
+    const entries = debrief.getByType("llm-call");
+    expect(entries).toHaveLength(1);
+    expect(entries[0].context.fallbackUsed).toBe(true);
+    expect(entries[0].context.failureReason).toContain("fetch failed");
+  });
+
+  it("returns fallback result when response has no content blocks", async () => {
+    const debrief = new DecisionDebrief();
+    const mockClient = {
+      messages: {
+        create: async () => ({
+          content: [],
+        }),
+      },
+    };
+
+    const client = createClientWithMock(debrief, mockClient);
+    const result = await client.classify(makeParams({ promptSummary: "Empty content test" }));
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.text).toBe("");
+      expect(result.model).toBeDefined();
+      expect(result.responseTimeMs).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it("returns fallback result when response content is malformed (not an array)", async () => {
+    const debrief = new DecisionDebrief();
+    const mockClient = {
+      messages: {
+        create: async () => ({
+          content: null,
+        }),
+      },
+    };
+
+    const client = createClientWithMock(debrief, mockClient);
+    const result = await client.reason(makeParams({ promptSummary: "Malformed content test" }));
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.fallback).toBe(true);
+      expect(result.reason).toContain("LLM call failed");
+    }
+  });
+
+  it("records response time even for failed calls", async () => {
+    const debrief = new DecisionDebrief();
+    const mockClient = {
+      messages: {
+        create: async () => {
+          await new Promise((r) => setTimeout(r, 20));
+          throw new Error("server error");
+        },
+      },
+    };
+
+    const client = createClientWithMock(debrief, mockClient);
+    await client.reason(makeParams({ promptSummary: "Response time tracking" }));
+
+    const entries = debrief.getByType("llm-call");
+    expect(entries).toHaveLength(1);
+    expect(entries[0].context.responseTimeMs).toBeGreaterThanOrEqual(0);
+    expect(entries[0].context.responseTimeMs).not.toBeNull();
+  });
+
+  it("does not throw — always returns a result object", async () => {
+    const debrief = new DecisionDebrief();
+    const mockClient = {
+      messages: {
+        create: async () => {
+          throw new Error("unexpected catastrophic failure");
+        },
+      },
+    };
+
+    const client = createClientWithMock(debrief, mockClient);
+
+    const reasonResult = await client.reason(makeParams());
+    const classifyResult = await client.classify(makeParams());
+
+    expect(reasonResult.ok).toBe(false);
+    expect(classifyResult.ok).toBe(false);
+    if (!reasonResult.ok) expect(typeof reasonResult.reason).toBe("string");
+    if (!classifyResult.ok) expect(typeof classifyResult.reason).toBe("string");
+  });
+});

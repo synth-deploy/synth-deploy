@@ -859,3 +859,326 @@ describe("Agent mode — conversation cleanup", () => {
     conversations.clear();
   });
 });
+
+// ---------------------------------------------------------------------------
+// LLM-powered query classification tests
+// ---------------------------------------------------------------------------
+
+describe("Agent mode — LLM query classification", () => {
+  let qApp: FastifyInstance;
+  let qDiary: DecisionDebrief;
+  let qPartitions: PartitionStore;
+  let qOperations: OperationStore;
+  let qEnvironments: EnvironmentStore;
+  let qDeployments: InMemoryDeploymentStore;
+  let qOrders: OrderStore;
+  let qSettings: SettingsStore;
+  let qAgent: CommandAgent;
+  let qMockLlm: LlmClient;
+
+  let qOperationId: string;
+  let qPartitionId: string;
+  let qProdEnvId: string;
+  let qStagingEnvId: string;
+
+  // Track what classify() should return for query classification
+  let qClassifyResponse: LlmResult;
+
+  beforeAll(async () => {
+    qDiary = new DecisionDebrief();
+    qPartitions = new PartitionStore();
+    qOperations = new OperationStore();
+    qEnvironments = new EnvironmentStore();
+    qDeployments = new InMemoryDeploymentStore();
+    qOrders = new OrderStore();
+    qSettings = new SettingsStore();
+    qAgent = new CommandAgent(qDiary, qDeployments, qOrders);
+
+    qMockLlm = new LlmClient(qDiary, "command", { apiKey: "test-key" });
+    qMockLlm.classify = async () => qClassifyResponse;
+    qMockLlm.isAvailable = () => true;
+
+    qApp = Fastify();
+    registerDeploymentRoutes(qApp, qAgent, qPartitions, qEnvironments, qDeployments, qDiary, qOperations, qOrders, qSettings);
+    registerOperationRoutes(qApp, qOperations, qEnvironments);
+    registerPartitionRoutes(qApp, qPartitions, qDeployments, qDiary);
+    registerEnvironmentRoutes(qApp, qEnvironments, qOperations);
+    registerAgentRoutes(qApp, qAgent, qPartitions, qEnvironments, qOperations, qDeployments, qDiary, qSettings, qMockLlm);
+
+    await qApp.ready();
+
+    // Seed test data
+    const envRes = await qApp.inject({
+      method: "POST",
+      url: "/api/environments",
+      payload: { name: "production", variables: { APP_ENV: "production" } },
+    });
+    qProdEnvId = JSON.parse(envRes.payload).environment.id;
+
+    const stagingRes = await qApp.inject({
+      method: "POST",
+      url: "/api/environments",
+      payload: { name: "staging", variables: { APP_ENV: "staging" } },
+    });
+    qStagingEnvId = JSON.parse(stagingRes.payload).environment.id;
+
+    const projRes = await qApp.inject({
+      method: "POST",
+      url: "/api/operations",
+      payload: { name: "web-app", environmentIds: [qProdEnvId, qStagingEnvId] },
+    });
+    qOperationId = JSON.parse(projRes.payload).operation.id;
+
+    const partRes = await qApp.inject({
+      method: "POST",
+      url: "/api/partitions",
+      payload: { name: "Acme Corp" },
+    });
+    qPartitionId = JSON.parse(partRes.payload).partition.id;
+
+    // Create a deployment so data queries have something to find
+    await qApp.inject({
+      method: "POST",
+      url: "/api/deployments",
+      payload: { operationId: qOperationId, partitionId: qPartitionId, environmentId: qProdEnvId, version: "1.0.0" },
+    });
+  });
+
+  it("navigate action: resolves 'show partition Acme Corp' to partition-detail", async () => {
+    qClassifyResponse = {
+      ok: true,
+      text: JSON.stringify({
+        action: "navigate",
+        view: "partition-detail",
+        params: { id: "Acme Corp" },
+        title: "Acme Corp",
+      }),
+      model: "claude-haiku-4-5-20251001",
+      responseTimeMs: 80,
+    };
+
+    const res = await qApp.inject({
+      method: "POST",
+      url: "/api/agent/query",
+      payload: { query: "show partition Acme Corp" },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const result = JSON.parse(res.payload);
+    expect(result.action).toBe("navigate");
+    expect(result.view).toBe("partition-detail");
+    expect(result.params.id).toBe(qPartitionId);
+  });
+
+  it("data action: resolves 'recent deployments' to deployment-list", async () => {
+    qClassifyResponse = {
+      ok: true,
+      text: JSON.stringify({
+        action: "data",
+        view: "deployment-list",
+        params: {},
+        title: "Recent Deployments",
+      }),
+      model: "claude-haiku-4-5-20251001",
+      responseTimeMs: 60,
+    };
+
+    const res = await qApp.inject({
+      method: "POST",
+      url: "/api/agent/query",
+      payload: { query: "recent deployments" },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const result = JSON.parse(res.payload);
+    expect(result.action).toBe("data");
+    expect(result.view).toBe("deployment-list");
+  });
+
+  it("deploy action: resolves 'deploy web-app' to deployment-authoring", async () => {
+    qClassifyResponse = {
+      ok: true,
+      text: JSON.stringify({
+        action: "deploy",
+        view: "deployment-authoring",
+        params: { intent: "deploy web-app" },
+        title: "Deploy web-app",
+      }),
+      model: "claude-haiku-4-5-20251001",
+      responseTimeMs: 70,
+    };
+
+    const res = await qApp.inject({
+      method: "POST",
+      url: "/api/agent/query",
+      payload: { query: "deploy web-app" },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const result = JSON.parse(res.payload);
+    expect(result.action).toBe("deploy");
+    expect(result.view).toBe("deployment-authoring");
+  });
+
+  it("create action: returns create intent for UI confirmation", async () => {
+    qClassifyResponse = {
+      ok: true,
+      text: JSON.stringify({
+        action: "create",
+        view: "partition-list",
+        params: { name: "New Corp" },
+        title: "Create Partition",
+      }),
+      model: "claude-haiku-4-5-20251001",
+      responseTimeMs: 90,
+    };
+
+    const res = await qApp.inject({
+      method: "POST",
+      url: "/api/agent/query",
+      payload: { query: "create partition New Corp" },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const result = JSON.parse(res.payload);
+    // After #63, create actions are returned as-is for UI confirmation
+    expect(result.action).toBe("create");
+    expect(result.view).toBe("partition-list");
+    expect(result.params.name).toBe("New Corp");
+  });
+
+  it("falls back to regex when LLM returns invalid JSON", async () => {
+    qClassifyResponse = {
+      ok: true,
+      text: "This is not valid JSON, just random text",
+      model: "claude-haiku-4-5-20251001",
+      responseTimeMs: 100,
+    };
+
+    const res = await qApp.inject({
+      method: "POST",
+      url: "/api/agent/query",
+      payload: { query: "show partition Acme Corp" },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const result = JSON.parse(res.payload);
+    // Regex fallback should still classify the query — it matches partition name + "show"
+    expect(result.action).toBe("navigate");
+    expect(result.view).toBe("partition-detail");
+    expect(result.params.id).toBe(qPartitionId);
+  });
+
+  it("falls back to regex when LLM returns hallucinated entity names", async () => {
+    qClassifyResponse = {
+      ok: true,
+      text: JSON.stringify({
+        action: "navigate",
+        view: "partition-detail",
+        params: { id: "Nonexistent Partition" },
+        title: "Nonexistent Partition",
+      }),
+      model: "claude-haiku-4-5-20251001",
+      responseTimeMs: 90,
+    };
+
+    const res = await qApp.inject({
+      method: "POST",
+      url: "/api/agent/query",
+      payload: { query: "show partition Acme Corp" },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const result = JSON.parse(res.payload);
+    // classifyQueryWithLlm validates the partition name and returns null for unknown names,
+    // causing fallback to regex which finds "Acme Corp" in the query
+    expect(result.action).toBe("navigate");
+    expect(result.view).toBe("partition-detail");
+    expect(result.params.id).toBe(qPartitionId);
+  });
+
+  it("falls back to regex when LLM call fails", async () => {
+    qClassifyResponse = {
+      ok: false,
+      fallback: true,
+      reason: "LLM rate limit exceeded (20 calls/min)",
+    };
+
+    const res = await qApp.inject({
+      method: "POST",
+      url: "/api/agent/query",
+      payload: { query: "deploy web-app" },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const result = JSON.parse(res.payload);
+    // Regex fallback detects "deploy" keyword
+    expect(result.action).toBe("deploy");
+    expect(result.view).toBe("deployment-authoring");
+  });
+
+  it("records debrief entry for LLM-classified queries", async () => {
+    const existingIds = new Set(qDiary.getRecent(200).map((e) => e.id));
+
+    qClassifyResponse = {
+      ok: true,
+      text: JSON.stringify({
+        action: "data",
+        view: "deployment-list",
+        params: {},
+        title: "Deployments",
+      }),
+      model: "claude-haiku-4-5-20251001",
+      responseTimeMs: 50,
+    };
+
+    await qApp.inject({
+      method: "POST",
+      url: "/api/agent/query",
+      payload: { query: "show all deployments" },
+    });
+
+    const allEntries = qDiary.getRecent(200);
+    const newEntries = allEntries.filter((e) => !existingIds.has(e.id));
+    const queryEntry = newEntries.find(
+      (e) => e.decisionType === "system" && e.decision.includes("Canvas query"),
+    );
+    expect(queryEntry).toBeDefined();
+    expect(queryEntry!.decision).toContain("data");
+    expect(queryEntry!.decision).toContain("deployment-list");
+  });
+
+  it("returns 400 for empty query", async () => {
+    const res = await qApp.inject({
+      method: "POST",
+      url: "/api/agent/query",
+      payload: { query: "" },
+    });
+
+    expect(res.statusCode).toBe(400);
+  });
+
+  it("handles LLM response missing action field by falling back to regex", async () => {
+    qClassifyResponse = {
+      ok: true,
+      text: JSON.stringify({
+        view: "deployment-list",
+        params: {},
+      }),
+      model: "claude-haiku-4-5-20251001",
+      responseTimeMs: 100,
+    };
+
+    const res = await qApp.inject({
+      method: "POST",
+      url: "/api/agent/query",
+      payload: { query: "recent deployments" },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const result = JSON.parse(res.payload);
+    // Missing action field → classifyQueryWithLlm returns null → regex fallback
+    // "deployments" matches the deployment list pattern
+    expect(result.view).toBe("deployment-list");
+  });
+});
