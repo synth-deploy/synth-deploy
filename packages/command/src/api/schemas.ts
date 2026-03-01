@@ -86,6 +86,11 @@ export const UpdateSettingsSchema = z.object({
     url: z.string().url().optional(),
     timeoutMs: z.number().int().positive().optional(),
   }).optional(),
+  coBranding: z.object({
+    operatorName: z.string(),
+    logoUrl: z.string(),
+    accentColor: z.string().optional(),
+  }).optional().nullable(),
 });
 
 // --- Orders ---

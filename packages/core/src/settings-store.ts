@@ -28,6 +28,9 @@ export class SettingsStore {
     if (partial.envoy) {
       this.settings.envoy = { ...this.settings.envoy, ...partial.envoy };
     }
+    if ("coBranding" in partial) {
+      this.settings.coBranding = partial.coBranding ?? undefined;
+    }
     return structuredClone(this.settings);
   }
 }

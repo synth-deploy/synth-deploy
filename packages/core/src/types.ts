@@ -173,11 +173,18 @@ export interface EnvoyEndpointConfig {
   timeoutMs: number;
 }
 
+export interface CoBrandingConfig {
+  operatorName: string;
+  logoUrl: string;
+  accentColor?: string;
+}
+
 export interface AppSettings {
   environmentsEnabled: boolean;
   agent: AgentSettings;
   deploymentDefaults: DeploymentDefaults;
   envoy: EnvoyEndpointConfig;
+  coBranding?: CoBrandingConfig;
 }
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {

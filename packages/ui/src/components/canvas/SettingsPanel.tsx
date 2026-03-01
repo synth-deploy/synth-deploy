@@ -16,12 +16,19 @@ export default function SettingsPanel({ title }: Props) {
   const [loading, setLoading] = useState(true);
   const [agentSaved, setAgentSaved] = useState(false);
   const [envoySaved, setEnvoySaved] = useState(false);
+  const [coBrandingSaved, setCoBrandingSaved] = useState(false);
+  const [coBrandingOperatorName, setCoBrandingOperatorName] = useState("");
+  const [coBrandingLogoUrl, setCoBrandingLogoUrl] = useState("");
+  const [coBrandingAccentColor, setCoBrandingAccentColor] = useState("");
 
   useEffect(() => {
     Promise.all([getSettings(), getCommandInfo()])
       .then(([s, info]) => {
         setSettings(s);
         setCommandInfo(info);
+        setCoBrandingOperatorName(s.coBranding?.operatorName ?? "");
+        setCoBrandingLogoUrl(s.coBranding?.logoUrl ?? "");
+        setCoBrandingAccentColor(s.coBranding?.accentColor ?? "");
         setLoading(false);
       })
       .catch(() => setLoading(false));
@@ -56,6 +63,32 @@ export default function SettingsPanel({ title }: Props) {
     setSettings(updated);
     setEnvoySaved(true);
     setTimeout(() => setEnvoySaved(false), 2000);
+  }
+
+  async function handleSaveCoBranding() {
+    if (!settings) return;
+    const coBranding = coBrandingOperatorName && coBrandingLogoUrl
+      ? {
+          operatorName: coBrandingOperatorName,
+          logoUrl: coBrandingLogoUrl,
+          ...(coBrandingAccentColor ? { accentColor: coBrandingAccentColor } : {}),
+        }
+      : null;
+    const updated = await updateSettings({ coBranding } as Partial<AppSettings>);
+    setSettings(updated);
+    setCoBrandingSaved(true);
+    await refreshGlobalSettings();
+    setTimeout(() => setCoBrandingSaved(false), 2000);
+  }
+
+  async function handleClearCoBranding() {
+    if (!settings) return;
+    const updated = await updateSettings({ coBranding: null } as Partial<AppSettings>);
+    setSettings(updated);
+    setCoBrandingOperatorName("");
+    setCoBrandingLogoUrl("");
+    setCoBrandingAccentColor("");
+    await refreshGlobalSettings();
   }
 
   if (loading) return <CanvasPanelHost title={title}><div className="loading">Loading...</div></CanvasPanelHost>;
@@ -254,6 +287,59 @@ export default function SettingsPanel({ title }: Props) {
             <button className="btn btn-primary" onClick={handleSaveEnvoy}>
               {envoySaved ? "Saved" : "Save Envoy Settings"}
             </button>
+          </div>
+        </div>
+
+        {/* Co-Branding (Optional) */}
+        <div className="section">
+          <div className="card">
+            <div className="card-header">
+              <h3>Co-Branding (Optional)</h3>
+            </div>
+            <div className="settings-description" style={{ marginBottom: 12 }}>
+              Optionally brand this instance with your organization's identity.
+              When configured, the UI shows your name and logo with "by DeployStack" beneath.
+            </div>
+            <div className="form-group">
+              <label>Operator Name</label>
+              <input
+                value={coBrandingOperatorName}
+                onChange={(e) => setCoBrandingOperatorName(e.target.value)}
+                placeholder="Your Company Name"
+                style={{ maxWidth: 400 }}
+              />
+            </div>
+            <div className="form-group">
+              <label>Logo URL</label>
+              <input
+                value={coBrandingLogoUrl}
+                onChange={(e) => setCoBrandingLogoUrl(e.target.value)}
+                placeholder="https://example.com/logo.png"
+                style={{ maxWidth: 400 }}
+              />
+            </div>
+            <div className="form-group">
+              <label>Accent Color (optional)</label>
+              <input
+                value={coBrandingAccentColor}
+                onChange={(e) => setCoBrandingAccentColor(e.target.value)}
+                placeholder="#63e1be"
+                style={{ maxWidth: 300 }}
+              />
+              <div className="settings-description">
+                A CSS color value applied to header accents when co-branding is active.
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button className="btn btn-primary" onClick={handleSaveCoBranding}>
+                {coBrandingSaved ? "Saved" : "Save Co-Branding"}
+              </button>
+              {settings.coBranding && (
+                <button className="btn" onClick={handleClearCoBranding}>
+                  Clear Co-Branding
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>
