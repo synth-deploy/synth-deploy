@@ -46,7 +46,7 @@ curl http://localhost:3000/api/step-types`;
 
   <h3>Partitions</h3>
   <p>
-    Isolated tenant contexts. Each partition has its own variables, deployment
+    Isolated deployment contexts. Each partition has its own variables, deployment
     history, and configuration. Cross-partition data access is never allowed.
   </p>
 
@@ -71,10 +71,10 @@ curl http://localhost:3000/api/step-types`;
     re-executed for reproducible deployments.
   </p>
 
-  <h3>Decision Diary (Debrief)</h3>
+  <h3>Debrief</h3>
   <p>
-    Every agent decision is logged in plain language. The diary records what
-    happened, why, and the context. Failed deployments generate automatic
+    Every agent decision is logged in plain language. The decision log records
+    what happened, why, and the context. Failed deployments generate automatic
     postmortem reports.
   </p>
 
