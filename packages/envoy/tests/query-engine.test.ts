@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { DecisionDebrief } from "@deploystack/core";
+import { DecisionDebrief, LlmClient } from "@deploystack/core";
 import type { DebriefReader, DebriefWriter } from "@deploystack/core";
 import { EnvoyAgent } from "../src/agent/envoy-agent.js";
 import type { DeploymentInstruction } from "../src/agent/envoy-agent.js";
@@ -471,6 +471,168 @@ describe("QueryEngine", () => {
         expect(typeof result.confident).toBe("boolean");
       }
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tests — QueryEngine with LLM
+// ---------------------------------------------------------------------------
+
+/**
+ * Creates an LlmClient with a mock Anthropic SDK client injected.
+ * The mock controls what `reason()` returns without requiring a real API key.
+ */
+function createMockLlmClient(
+  debrief: DecisionDebrief,
+  mockCreate: (...args: unknown[]) => Promise<unknown>,
+): LlmClient {
+  const client = new LlmClient(debrief, "envoy", {
+    apiKey: "sk-test-mock-key",
+  });
+  const internal = client as unknown as {
+    _initialized: boolean;
+    _anthropicClient: unknown;
+  };
+  internal._initialized = true;
+  internal._anthropicClient = {
+    messages: { create: mockCreate },
+  };
+  return client;
+}
+
+describe("QueryEngine — LLM-powered answering", () => {
+  let baseDir: string;
+  let diary: DecisionDebrief;
+  let state: LocalStateStore;
+  let scanner: EnvironmentScanner;
+  let agent: EnvoyAgent;
+
+  beforeEach(async () => {
+    baseDir = makeTmpDir();
+    diary = new DecisionDebrief();
+    state = new LocalStateStore();
+    scanner = new EnvironmentScanner(baseDir, state);
+    agent = new EnvoyAgent(diary, state, baseDir);
+  });
+
+  it("uses LLM answer when LLM is available and returns successfully", async () => {
+    await seedDeploymentHistory(agent, baseDir, state, diary);
+
+    const llmAnswer = "The deployment of web-app v2.0.0 introduced a new database migration that increased query latency by 40ms.";
+    const mockLlm = createMockLlmClient(diary, async () => ({
+      content: [{ type: "text", text: llmAnswer }],
+    }));
+
+    const queryEngine = new QueryEngine(diary, state, scanner, mockLlm);
+    const result = await queryEngine.queryAsync(
+      "Why did the recent deployment slow things down?",
+    );
+
+    expect(result.answer).toBe(llmAnswer);
+    expect(result.intent).toBe("deployment-diagnostic");
+    expect(result.confident).toBe(true);
+  });
+
+  it("falls back to deterministic answer when LLM is not configured", async () => {
+    await seedDeploymentHistory(agent, baseDir, state, diary);
+
+    // No LLM provided — should fall back to sync query()
+    const queryEngine = new QueryEngine(diary, state, scanner);
+    const result = await queryEngine.queryAsync(
+      "What changed in the last 30 days?",
+    );
+
+    expect(result.intent).toBe("change-history");
+    expect(result.answer).toContain("deployment(s) were executed");
+  });
+
+  it("falls back to deterministic answer when LLM has no API key", async () => {
+    await seedDeploymentHistory(agent, baseDir, state, diary);
+
+    // LlmClient with no API key — isAvailable() returns false
+    const noKeyLlm = new LlmClient(diary, "envoy", { apiKey: undefined });
+    const queryEngine = new QueryEngine(diary, state, scanner, noKeyLlm);
+    const result = await queryEngine.queryAsync(
+      "What changed in the last 30 days?",
+    );
+
+    expect(result.intent).toBe("change-history");
+    expect(result.answer).toContain("deployment(s) were executed");
+  });
+
+  it("falls back to deterministic answer when LLM call fails", async () => {
+    await seedDeploymentHistory(agent, baseDir, state, diary);
+
+    const mockLlm = createMockLlmClient(diary, async () => {
+      throw new Error("API connection refused");
+    });
+
+    const queryEngine = new QueryEngine(diary, state, scanner, mockLlm);
+    const result = await queryEngine.queryAsync(
+      "Why did the recent deployment fail?",
+    );
+
+    // Should fall back to deterministic — the answer should contain
+    // real deployment data from the sync query()
+    expect(result.intent).toBe("deployment-diagnostic");
+    expect(result.answer).toBeTruthy();
+    expect(result.answer.length).toBeGreaterThan(50);
+  });
+
+  it("skips LLM for confident environment-state queries", async () => {
+    await seedDeploymentHistory(agent, baseDir, state, diary);
+
+    let llmCalled = false;
+    const mockLlm = createMockLlmClient(diary, async () => {
+      llmCalled = true;
+      return { content: [{ type: "text", text: "LLM was called" }] };
+    });
+
+    const queryEngine = new QueryEngine(diary, state, scanner, mockLlm);
+    const result = await queryEngine.queryAsync(
+      "What's the current environment state?",
+    );
+
+    // environment-state with data is confident — LLM should be skipped
+    expect(result.intent).toBe("environment-state");
+    expect(result.confident).toBe(true);
+    expect(llmCalled).toBe(false);
+    expect(result.answer).not.toBe("LLM was called");
+  });
+
+  it("preserves evidence and intent from deterministic pass in LLM result", async () => {
+    await seedDeploymentHistory(agent, baseDir, state, diary);
+
+    const mockLlm = createMockLlmClient(diary, async () => ({
+      content: [{ type: "text", text: "LLM-enhanced answer with context." }],
+    }));
+
+    const queryEngine = new QueryEngine(diary, state, scanner, mockLlm);
+    const result = await queryEngine.queryAsync(
+      "What changed in the last 30 days?",
+    );
+
+    // The LLM answer should be used, but evidence and intent come
+    // from the deterministic pass.
+    expect(result.answer).toBe("LLM-enhanced answer with context.");
+    expect(result.intent).toBe("change-history");
+    expect(result.evidence.length).toBeGreaterThan(0);
+  });
+
+  it("sync query() still works exactly as before regardless of LLM", async () => {
+    await seedDeploymentHistory(agent, baseDir, state, diary);
+
+    const mockLlm = createMockLlmClient(diary, async () => ({
+      content: [{ type: "text", text: "LLM answer" }],
+    }));
+
+    const queryEngine = new QueryEngine(diary, state, scanner, mockLlm);
+
+    // Sync query() should never use the LLM
+    const result = queryEngine.query("What changed in the last 30 days?");
+    expect(result.intent).toBe("change-history");
+    expect(result.answer).toContain("deployment(s) were executed");
+    expect(result.answer).not.toBe("LLM answer");
   });
 });
 

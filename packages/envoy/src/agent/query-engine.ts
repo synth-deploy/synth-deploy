@@ -3,6 +3,8 @@ import type {
   DebriefReader,
   DecisionType,
 } from "@deploystack/core";
+import { LlmClient } from "@deploystack/core";
+import type { LlmResult } from "@deploystack/core";
 import type { LocalStateStore, LocalDeploymentRecord, EnvironmentSnapshot } from "../state/local-state.js";
 import type { EnvironmentScanner } from "./environment-scanner.js";
 
@@ -179,10 +181,11 @@ export class QueryEngine {
     private debrief: DebriefReader,
     private state: LocalStateStore,
     private scanner: EnvironmentScanner,
+    private llm?: LlmClient,
   ) {}
 
   /**
-   * Answer a natural language question.
+   * Answer a natural language question (synchronous, deterministic).
    */
   query(question: string): QueryResult {
     const intent = classifyIntent(question);
@@ -199,6 +202,113 @@ export class QueryEngine {
       default:
         return this.answerGeneral(question);
     }
+  }
+
+  /**
+   * Answer a natural language question, optionally using the LLM for
+   * richer analytical answers. Falls back to the deterministic `query()`
+   * when the LLM is unavailable, not configured, or returns an error.
+   */
+  async queryAsync(question: string): Promise<QueryResult> {
+    // Always compute the deterministic answer first — it serves as both
+    // the fallback and the source of grounded evidence for the LLM.
+    const deterministicResult = this.query(question);
+
+    // If there is no LLM, or it has no API key, return deterministic.
+    if (!this.llm || !this.llm.isAvailable()) {
+      return deterministicResult;
+    }
+
+    // For simple factual queries that the deterministic engine handles
+    // well (environment-state with high confidence), skip the LLM call.
+    if (deterministicResult.intent === "environment-state" && deterministicResult.confident) {
+      return deterministicResult;
+    }
+
+    // Build LLM prompts grounded in real deployment data.
+    const systemPrompt = this.buildLlmSystemPrompt();
+    const userPrompt = this.buildLlmUserPrompt(question, deterministicResult);
+
+    try {
+      const llmResult: LlmResult = await this.llm.reason({
+        prompt: userPrompt,
+        systemPrompt,
+        promptSummary: `Query answering: "${question.slice(0, 80)}"`,
+        maxTokens: 1024,
+      });
+
+      if (!llmResult.ok) {
+        // LLM declined or failed — fall back silently.
+        return deterministicResult;
+      }
+
+      // Return the LLM-enhanced answer, preserving the structured
+      // metadata from the deterministic pass.
+      return {
+        ...deterministicResult,
+        answer: llmResult.text,
+        confident: true,
+      };
+    } catch {
+      // Any unexpected error — fall back to deterministic.
+      return deterministicResult;
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // LLM prompt construction
+  // -------------------------------------------------------------------------
+
+  private buildLlmSystemPrompt(): string {
+    return [
+      "You are a DeployStack Envoy — an intelligent deployment agent running on a specific machine.",
+      "Your job is to answer questions from deployment engineers about what happened, what is running,",
+      "and what they should know before deploying. Every answer must be grounded in the deployment data",
+      "provided. Never speculate beyond the evidence. If the data is insufficient, say exactly what is",
+      "missing and suggest where to look (e.g., Server debrief, application logs, monitoring).",
+      "",
+      "Rules:",
+      "- Reference specific version numbers, operation names, timestamps, and failure reasons from the data.",
+      "- Do not give generic advice. Every statement must trace back to a data point.",
+      "- Keep answers concise and actionable — engineers read these at 2am.",
+      "- If asked about something outside the deployment data, say so plainly.",
+    ].join("\n");
+  }
+
+  private buildLlmUserPrompt(question: string, deterministicResult: QueryResult): string {
+    const parts: string[] = [];
+
+    parts.push(`Engineer's question: ${question}`);
+    parts.push("");
+    parts.push(`Classified intent: ${deterministicResult.intent}`);
+    parts.push("");
+
+    // Include the deterministic answer as grounding data
+    parts.push("=== Deployment data (ground truth) ===");
+    parts.push(deterministicResult.answer);
+    parts.push("");
+
+    // Include evidence
+    if (deterministicResult.evidence.length > 0) {
+      parts.push("=== Supporting evidence ===");
+      for (const ev of deterministicResult.evidence) {
+        parts.push(`[${ev.source}] ${ev.summary}: ${ev.detail}`);
+      }
+      parts.push("");
+    }
+
+    // Include escalation hint if present
+    if (deterministicResult.escalationHint) {
+      parts.push(`Note: ${deterministicResult.escalationHint}`);
+      parts.push("");
+    }
+
+    parts.push(
+      "Using the deployment data above, provide a clear, specific answer to the engineer's question. " +
+      "Reference actual version numbers, operation names, and timestamps from the data.",
+    );
+
+    return parts.join("\n");
   }
 
   // -------------------------------------------------------------------------

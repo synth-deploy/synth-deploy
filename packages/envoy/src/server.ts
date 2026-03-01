@@ -156,7 +156,7 @@ export function createEnvoyServer(
       });
     }
 
-    const result = queryEngine.query(parsed.data.query);
+    const result = await queryEngine.queryAsync(parsed.data.query);
     return {
       ...result,
       answeredAt: result.answeredAt.toISOString(),

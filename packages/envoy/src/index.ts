@@ -1,9 +1,11 @@
 import crypto from "node:crypto";
 import path from "node:path";
 import fs from "node:fs";
-import { DecisionDebrief } from "@deploystack/core";
+import { DecisionDebrief, LlmClient } from "@deploystack/core";
 import { EnvoyAgent } from "./agent/envoy-agent.js";
 import { DeploymentExecutor } from "./agent/deployment-executor.js";
+import { EnvironmentScanner } from "./agent/environment-scanner.js";
+import { QueryEngine } from "./agent/query-engine.js";
 import { LocalStateStore } from "./state/local-state.js";
 import { createEnvoyServer } from "./server.js";
 
@@ -141,9 +143,15 @@ debrief.record({
   context: { drift: true, driftVariable: "LOG_LEVEL", expected: "warn", actual: "debug" },
 });
 
+// --- Query engine with optional LLM ---
+
+const scanner = new EnvironmentScanner(BASE_DIR, state);
+const llmClient = new LlmClient(debrief, "envoy");
+const queryEngine = new QueryEngine(debrief, state, scanner, llmClient);
+
 // --- Start server ---
 
-const app = createEnvoyServer(agent, state);
+const app = createEnvoyServer(agent, state, queryEngine);
 
 // Periodic workspace cleanup (every 10 minutes): keep last 50 or 30 days
 const workspaceExecutor = new DeploymentExecutor(BASE_DIR);
