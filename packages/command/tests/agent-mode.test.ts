@@ -43,7 +43,7 @@ beforeAll(async () => {
   app = Fastify();
   registerDeploymentRoutes(app, agent, partitions, environments, deployments, diary, operations, orders, settings);
   registerOperationRoutes(app, operations, environments);
-  registerPartitionRoutes(app, partitions, deployments, diary);
+  registerPartitionRoutes(app, partitions, deployments, diary, orders);
   registerEnvironmentRoutes(app, environments, operations);
   registerOrderRoutes(app, orders, agent, partitions, environments, operations, deployments, diary, settings);
   registerAgentRoutes(app, agent, partitions, environments, operations, deployments, diary, settings);
@@ -454,7 +454,7 @@ describe("Agent mode — LLM intent interpretation", () => {
     llmApp = Fastify();
     registerDeploymentRoutes(llmApp, llmAgent, llmPartitions, llmEnvironments, llmDeployments, llmDiary, llmOperations, llmOrders, llmSettings);
     registerOperationRoutes(llmApp, llmOperations, llmEnvironments);
-    registerPartitionRoutes(llmApp, llmPartitions, llmDeployments, llmDiary);
+    registerPartitionRoutes(llmApp, llmPartitions, llmDeployments, llmDiary, llmOrders);
     registerEnvironmentRoutes(llmApp, llmEnvironments, llmOperations);
     registerAgentRoutes(llmApp, llmAgent, llmPartitions, llmEnvironments, llmOperations, llmDeployments, llmDiary, llmSettings, mockLlm);
 
@@ -933,7 +933,7 @@ describe("Agent mode — LLM query classification", () => {
     qApp = Fastify();
     registerDeploymentRoutes(qApp, qAgent, qPartitions, qEnvironments, qDeployments, qDiary, qOperations, qOrders, qSettings);
     registerOperationRoutes(qApp, qOperations, qEnvironments);
-    registerPartitionRoutes(qApp, qPartitions, qDeployments, qDiary);
+    registerPartitionRoutes(qApp, qPartitions, qDeployments, qDiary, qOrders);
     registerEnvironmentRoutes(qApp, qEnvironments, qOperations);
     registerOrderRoutes(qApp, qOrders, qAgent, qPartitions, qEnvironments, qOperations, qDeployments, qDiary, qSettings);
     registerAgentRoutes(qApp, qAgent, qPartitions, qEnvironments, qOperations, qDeployments, qDiary, qSettings, qMockLlm);
