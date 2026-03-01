@@ -930,37 +930,6 @@ export function registerAgentRoutes(
         deployments, debrief,
       );
       if (llmAction) {
-        // Handle create actions: perform the creation, then navigate to the result
-        if (llmAction.action === "create" && llmAction.params?.name) {
-          const entityName = llmAction.params.name;
-          if (llmAction.view === "partition-list" || llmAction.view === "partition-detail") {
-            const created = partitions.create(entityName);
-            debrief.record({
-              partitionId: created.id,
-              deploymentId: null,
-              agent: "command",
-              decisionType: "system",
-              decision: `Created partition "${created.name}" via intent bar`,
-              reasoning: `LLM classified "${query}" as create-partition`,
-              context: { query, partitionId: created.id },
-            });
-            return { action: "navigate" as const, view: "partition-detail", params: { id: created.id }, title: created.name };
-          }
-          if (llmAction.view === "operation-list") {
-            const created = operations.create(entityName, []);
-            debrief.record({
-              partitionId: null,
-              deploymentId: null,
-              agent: "command",
-              decisionType: "system",
-              decision: `Created operation "${created.name}" via intent bar`,
-              reasoning: `LLM classified "${query}" as create-operation`,
-              context: { query, operationId: created.id },
-            });
-            return { action: "navigate" as const, view: "operation-list", params: {}, title: "Operations" };
-          }
-        }
-
         debrief.record({
           partitionId: null,
           deploymentId: null,
@@ -976,38 +945,18 @@ export function registerAgentRoutes(
 
     // --- Regex fallback classification ---
 
-    // Create partition: "create partition Acme Corp" → create and navigate to detail
+    // Create partition: "create partition Acme Corp" → return create intent for UI confirmation
     const createPartitionMatch = query.match(/\bcreate\s+partition\s+(.+)/i);
     if (createPartitionMatch) {
-      const partitionName = createPartitionMatch[1].trim();
-      const created = partitions.create(partitionName);
-      debrief.record({
-        partitionId: created.id,
-        deploymentId: null,
-        agent: "command",
-        decisionType: "system",
-        decision: `Created partition "${created.name}" via intent bar`,
-        reasoning: `User requested partition creation: "${query}"`,
-        context: { query, partitionId: created.id },
-      });
-      return { action: "navigate" as const, view: "partition-detail", params: { id: created.id }, title: created.name };
+      const name = createPartitionMatch[1].trim();
+      return { action: "create" as const, view: "partition-detail", params: { name }, title: `Create "${name}"` };
     }
 
-    // Create operation: "create operation api-service" → create and navigate to operation list
+    // Create operation: "create operation api-service" → return create intent for UI confirmation
     const createOperationMatch = query.match(/\bcreate\s+operation\s+(.+)/i);
     if (createOperationMatch) {
-      const operationName = createOperationMatch[1].trim();
-      const created = operations.create(operationName, []);
-      debrief.record({
-        partitionId: null,
-        deploymentId: null,
-        agent: "command",
-        decisionType: "system",
-        decision: `Created operation "${created.name}" via intent bar`,
-        reasoning: `User requested operation creation: "${query}"`,
-        context: { query, operationId: created.id },
-      });
-      return { action: "navigate" as const, view: "operation-list", params: {}, title: "Operations" };
+      const name = createOperationMatch[1].trim();
+      return { action: "create" as const, view: "operation-list", params: { name }, title: `Create "${name}"` };
     }
 
     // Deploy intents: contains "deploy" or version-like patterns with entity names
