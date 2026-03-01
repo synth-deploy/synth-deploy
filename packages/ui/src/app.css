@@ -2741,6 +2741,42 @@ table a:hover {
   font-weight: 600;
 }
 
+/* ---- v2 Co-Branding ---- */
+
+.v2-cobranding-logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  /* Override the gradient text-fill for the co-branded state */
+  background: none;
+  -webkit-background-clip: unset;
+  -webkit-text-fill-color: unset;
+  background-clip: unset;
+}
+
+.v2-cobranding-img {
+  height: 24px;
+  width: auto;
+  object-fit: contain;
+  border-radius: 4px;
+}
+
+.v2-cobranding-name {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  font-weight: 700;
+  color: #e2e8f0;
+}
+
+.v2-cobranding-powered-by {
+  font-family: var(--font);
+  font-size: 11px;
+  font-weight: 400;
+  color: #6b7280;
+  align-self: flex-end;
+  margin-bottom: 1px;
+}
+
 /* ---- v2 Section Header ---- */
 
 .v2-section-header {

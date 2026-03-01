@@ -23,6 +23,7 @@ export type {
   AgentSettings,
   DeploymentDefaults,
   EnvoyEndpointConfig,
+  CoBrandingConfig,
   AppSettings,
 } from "./types.js";
 

@@ -784,6 +784,9 @@ export class PersistentSettingsStore {
     if (partial.envoy) {
       current.envoy = { ...current.envoy, ...partial.envoy };
     }
+    if ("coBranding" in partial) {
+      current.coBranding = partial.coBranding ?? undefined;
+    }
     this.stmts.upsert.run({ key: "app", value: JSON.stringify(current) });
     return structuredClone(current);
   }
