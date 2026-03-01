@@ -430,7 +430,14 @@ await app.register(rateLimit, {
 const auth = registerAuthMiddleware(app);
 
 // Register REST routes
-registerHealthRoutes(app, { entityDb, dataDir: DATA_DIR, envoyUrl });
+registerHealthRoutes(app, {
+  entityDb,
+  dataDir: DATA_DIR,
+  envoyUrl,
+  llmApiKey: process.env.ANTHROPIC_API_KEY,
+  llmBaseUrl: process.env.ANTHROPIC_BASE_URL,
+  mcpServers: settings.get().mcpServers,
+});
 registerDeploymentRoutes(app, agent, partitions, environments, deployments, debrief, operations, orders, settings);
 registerEnvoyReportRoutes(app, debrief, deployments);
 registerOperationRoutes(app, operations, environments, stepTypeStore);
