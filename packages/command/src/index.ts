@@ -424,7 +424,7 @@ registerDeploymentRoutes(app, agent, partitions, environments, deployments, debr
 registerEnvoyReportRoutes(app, debrief, deployments);
 registerOperationRoutes(app, operations, environments, stepTypeStore);
 registerStepTypeRoutes(app, stepTypeStore);
-registerPartitionRoutes(app, partitions, deployments, debrief);
+registerPartitionRoutes(app, partitions, deployments, debrief, orders);
 registerEnvironmentRoutes(app, environments, operations);
 registerAgentRoutes(app, agent, partitions, environments, operations, deployments, debrief, settings, llm);
 registerSettingsRoutes(app, settings);

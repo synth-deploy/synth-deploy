@@ -48,7 +48,7 @@ async function createTestServer(): Promise<TestContext> {
   }, settings);
 
   const app = Fastify();
-  registerPartitionRoutes(app, partitions, deployments, diary);
+  registerPartitionRoutes(app, partitions, deployments, diary, orders);
   registerOperationRoutes(app, operations, environments);
   registerEnvironmentRoutes(app, environments, operations);
   registerSettingsRoutes(app, settings);

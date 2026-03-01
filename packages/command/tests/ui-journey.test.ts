@@ -37,7 +37,7 @@ beforeAll(async () => {
   app = Fastify();
   registerDeploymentRoutes(app, agent, partitions, environments, deployments, diary, operations, orders, settings);
   registerOperationRoutes(app, operations, environments);
-  registerPartitionRoutes(app, partitions, deployments, diary);
+  registerPartitionRoutes(app, partitions, deployments, diary, orders);
   registerEnvironmentRoutes(app, environments, operations);
   registerOrderRoutes(app, orders, agent, partitions, environments, operations, deployments, diary, settings);
 

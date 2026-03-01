@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import type { IPartitionStore, DebriefReader } from "@deploystack/core";
+import type { IPartitionStore, DebriefReader, DebriefWriter, OrderStore } from "@deploystack/core";
 import { generateOperationHistory } from "@deploystack/core";
 import type { DeploymentStore } from "../agent/command-agent.js";
 import { CreatePartitionSchema, UpdatePartitionSchema, SetVariablesSchema } from "./schemas.js";
@@ -8,7 +8,8 @@ export function registerPartitionRoutes(
   app: FastifyInstance,
   partitions: IPartitionStore,
   deployments: DeploymentStore,
-  debrief: DebriefReader,
+  debrief: DebriefReader & DebriefWriter,
+  orders: OrderStore,
 ): void {
   // List all partitions
   app.get("/api/partitions", async () => {
@@ -53,14 +54,50 @@ export function registerPartitionRoutes(
   });
 
   // Delete partition
-  app.delete<{ Params: { id: string } }>("/api/partitions/:id", async (request, reply) => {
-    const partition = partitions.get(request.params.id);
-    if (!partition) {
-      return reply.status(404).send({ error: "Partition not found" });
-    }
-    partitions.delete(request.params.id);
-    return { deleted: true };
-  });
+  app.delete<{ Params: { id: string }; Querystring: { cascade?: string } }>(
+    "/api/partitions/:id",
+    async (request, reply) => {
+      const { id } = request.params;
+      const partition = partitions.get(id);
+      if (!partition) {
+        return reply.status(404).send({ error: "Partition not found" });
+      }
+
+      const linkedDeployments = deployments.getByPartition(id);
+      const linkedOrders = orders.getByPartition(id);
+      const hasLinks = linkedDeployments.length > 0 || linkedOrders.length > 0;
+
+      if (hasLinks && request.query.cascade !== "true") {
+        return reply.status(409).send({
+          error: "Partition has linked records",
+          deployments: linkedDeployments.length,
+          orders: linkedOrders.length,
+          hint: "Add ?cascade=true to force-delete with all linked records",
+        });
+      }
+
+      if (hasLinks && request.query.cascade === "true") {
+        // Log cascade deletion to Decision Diary
+        debrief.record({
+          partitionId: id,
+          deploymentId: null,
+          agent: "command",
+          decisionType: "system",
+          decision: `Cascade-deleted partition "${partition.name}" with ${linkedDeployments.length} deployments and ${linkedOrders.length} orders`,
+          reasoning: "User requested cascade deletion via ?cascade=true query parameter",
+          context: {
+            partitionId: id,
+            partitionName: partition.name,
+            deploymentCount: linkedDeployments.length,
+            orderCount: linkedOrders.length,
+          },
+        });
+      }
+
+      partitions.delete(id);
+      return { deleted: true, cascade: hasLinks };
+    },
+  );
 
   // Update partition variables
   app.put<{ Params: { id: string } }>(
