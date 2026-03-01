@@ -21,6 +21,32 @@ import type { StepTypeDefinition } from "./step-types.js";
 import type { CreateOrderParams } from "./order-store.js";
 
 // ---------------------------------------------------------------------------
+// Schema version — bump when table definitions change
+// ---------------------------------------------------------------------------
+
+const SCHEMA_VERSION = 1;
+
+// ---------------------------------------------------------------------------
+// Safe JSON parse — returns fallback on corruption instead of crashing
+// ---------------------------------------------------------------------------
+
+export function safeJsonParse<T>(
+  json: string,
+  fallback: T,
+  context?: { table?: string; rowId?: string; column?: string },
+): T {
+  try {
+    return JSON.parse(json);
+  } catch {
+    const where = context
+      ? ` (table=${context.table}, row=${context.rowId}, column=${context.column})`
+      : "";
+    console.warn(`[DeployStack] Corrupted JSON skipped${where}: ${json.slice(0, 120)}`);
+    return fallback;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Shared database setup
 // ---------------------------------------------------------------------------
 
@@ -28,6 +54,22 @@ export function openEntityDatabase(dbPath: string): Database.Database {
   const db = new Database(dbPath);
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
+
+  // --- Integrity check ---
+  try {
+    const result = db.pragma("integrity_check") as { integrity_check: string }[];
+    const status = result[0]?.integrity_check ?? "unknown";
+    if (status !== "ok") {
+      console.warn(
+        `[DeployStack] Database integrity check warning for ${dbPath}: ${status}`,
+      );
+    }
+  } catch (err) {
+    console.warn(
+      `[DeployStack] Could not run integrity check on ${dbPath}:`,
+      err,
+    );
+  }
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS partitions (
@@ -125,6 +167,19 @@ export function openEntityDatabase(dbPath: string): Database.Database {
     db.exec(`ALTER TABLE deployment_steps ADD COLUMN step_type_config TEXT`);
   } catch { /* column already exists */ }
 
+  // --- Schema version validation ---
+  db.exec(`CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL)`);
+  const versionRow = db.prepare(`SELECT version FROM schema_version LIMIT 1`).get() as
+    | { version: number }
+    | undefined;
+  if (!versionRow) {
+    db.prepare(`INSERT INTO schema_version (version) VALUES (?)`).run(SCHEMA_VERSION);
+  } else if (versionRow.version !== SCHEMA_VERSION) {
+    console.warn(
+      `[DeployStack] Schema version mismatch: database has v${versionRow.version}, expected v${SCHEMA_VERSION}`,
+    );
+  }
+
   return db;
 }
 
@@ -216,7 +271,7 @@ function rowToPartition(row: PartitionRow): Partition {
   return {
     id: row.id,
     name: row.name,
-    variables: JSON.parse(row.variables),
+    variables: safeJsonParse(row.variables, {}, { table: "partitions", rowId: row.id, column: "variables" }),
     createdAt: new Date(row.created_at),
   };
 }
@@ -302,7 +357,7 @@ function rowToEnvironment(row: EnvironmentRow): Environment {
   return {
     id: row.id,
     name: row.name,
-    variables: JSON.parse(row.variables),
+    variables: safeJsonParse(row.variables, {}, { table: "environments", rowId: row.id, column: "variables" }),
   };
 }
 
@@ -524,7 +579,7 @@ export class PersistentOperationStore {
       name: row.name,
       environmentIds: envRows.map((r) => r.environment_id),
       steps: stepRows.map(rowToStep),
-      deployConfig: JSON.parse(row.deploy_config),
+      deployConfig: safeJsonParse(row.deploy_config, { ...DEFAULT_DEPLOY_CONFIG }, { table: "operations", rowId: row.id, column: "deploy_config" }),
     };
   }
 }
@@ -555,7 +610,11 @@ function rowToStep(row: StepRow): DeploymentStep {
     order: row.step_order,
   };
   if (row.step_type_id) step.stepTypeId = row.step_type_id;
-  if (row.step_type_config) step.stepTypeConfig = JSON.parse(row.step_type_config);
+  if (row.step_type_config) {
+    step.stepTypeConfig = safeJsonParse(
+      row.step_type_config, {}, { table: "deployment_steps", rowId: row.id, column: "step_type_config" },
+    );
+  }
   return step;
 }
 
@@ -663,9 +722,9 @@ function rowToOrder(row: OrderRow): Order {
     environmentId: row.environment_id,
     environmentName: row.environment_name,
     version: row.version,
-    steps: JSON.parse(row.steps),
-    deployConfig: JSON.parse(row.deploy_config),
-    variables: JSON.parse(row.variables),
+    steps: safeJsonParse(row.steps, [], { table: "orders", rowId: row.id, column: "steps" }),
+    deployConfig: safeJsonParse(row.deploy_config, { ...DEFAULT_DEPLOY_CONFIG }, { table: "orders", rowId: row.id, column: "deploy_config" }),
+    variables: safeJsonParse(row.variables, {}, { table: "orders", rowId: row.id, column: "variables" }),
     createdAt: new Date(row.created_at),
   };
 }
@@ -758,8 +817,8 @@ function rowToDeployment(row: DeploymentRow): Deployment {
     environmentId: row.environment_id,
     version: row.version,
     status: row.status as Deployment["status"],
-    variables: JSON.parse(row.variables),
-    debriefEntryIds: JSON.parse(row.debrief_entry_ids),
+    variables: safeJsonParse(row.variables, {}, { table: "deployments", rowId: row.id, column: "variables" }),
+    debriefEntryIds: safeJsonParse(row.debrief_entry_ids, [], { table: "deployments", rowId: row.id, column: "debrief_entry_ids" }),
     orderId: row.order_id,
     createdAt: new Date(row.created_at),
     completedAt: row.completed_at ? new Date(row.completed_at) : null,
@@ -848,7 +907,7 @@ function rowToStepType(row: StepTypeRow): StepTypeDefinition {
     name: row.name,
     category: row.category as StepTypeDefinition["category"],
     description: row.description,
-    parameters: JSON.parse(row.parameters),
+    parameters: safeJsonParse(row.parameters, [], { table: "step_types", rowId: row.id, column: "parameters" }),
     commandTemplate: row.command_template,
     source: row.source as StepTypeDefinition["source"],
   };
@@ -887,7 +946,9 @@ export class PersistentSettingsStore {
 
   get(): AppSettings {
     const row = this.stmts.get.get("app") as { value: string } | undefined;
-    return row ? JSON.parse(row.value) : structuredClone(DEFAULT_APP_SETTINGS);
+    return row
+      ? safeJsonParse(row.value, structuredClone(DEFAULT_APP_SETTINGS), { table: "settings", rowId: "app", column: "value" })
+      : structuredClone(DEFAULT_APP_SETTINGS);
   }
 
   update(partial: Partial<AppSettings>): AppSettings {
