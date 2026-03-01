@@ -1,8 +1,10 @@
 {
   "name": "@deploystack/command",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
   "main": "dist/index.js",
   "exports": {
     ".": "./dist/index.js",
