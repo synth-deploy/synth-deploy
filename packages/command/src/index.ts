@@ -78,11 +78,11 @@ if (process.env.DEPLOYSTACK_SEED_DEMO !== 'false' && partitions.list().length ==
   const webAppSteps: DeploymentStep[] = [
     { id: crypto.randomUUID(), name: "Install dependencies", type: "pre-deploy", command: "npm ci --production", order: 1 },
     { id: crypto.randomUUID(), name: "Run migrations", type: "pre-deploy", command: "npm run db:migrate", order: 2 },
-    { id: crypto.randomUUID(), name: "Health check", type: "verification", command: "curl -f http://localhost:3000/health", order: 3 },
+    { id: crypto.randomUUID(), name: "Health check", type: "verification", command: "curl -f ${APP_URL:-http://localhost:3000}/health", order: 3 },
   ];
   const apiSteps: DeploymentStep[] = [
     { id: crypto.randomUUID(), name: "Pull image", type: "pre-deploy", command: "docker pull api-service:${VERSION}", order: 1 },
-    { id: crypto.randomUUID(), name: "Verify endpoint", type: "verification", command: "curl -f http://localhost:8080/healthz", order: 2 },
+    { id: crypto.randomUUID(), name: "Verify endpoint", type: "verification", command: "curl -f ${API_URL:-http://localhost:8080}/healthz", order: 2 },
   ];
   const workerSteps: DeploymentStep[] = [
     { id: crypto.randomUUID(), name: "Stop workers", type: "pre-deploy", command: "systemctl stop worker", order: 1 },
@@ -468,7 +468,7 @@ interface McpSession {
   createdAt: number;
 }
 const mcpTransports = new Map<string, McpSession>();
-const MCP_SESSION_TTL_MS = 60 * 60 * 1000; // 1 hour
+const MCP_SESSION_TTL_MS = Number(process.env.DEPLOYSTACK_MCP_SESSION_TTL_MS ?? 60 * 60 * 1000);
 
 app.post("/mcp", async (request, reply) => {
   const sessionId = (request.headers["mcp-session-id"] as string) ?? undefined;
@@ -518,6 +518,7 @@ app.delete("/mcp", async (request, reply) => {
 });
 
 // Periodic MCP session cleanup (every 10 minutes)
+const MCP_CLEANUP_INTERVAL_MS = Number(process.env.DEPLOYSTACK_MCP_CLEANUP_INTERVAL_MS ?? 10 * 60 * 1000);
 const mcpCleanupInterval = setInterval(async () => {
   const now = Date.now();
   let closed = 0;
@@ -531,7 +532,7 @@ const mcpCleanupInterval = setInterval(async () => {
   if (closed > 0) {
     app.log.info(`Cleaned up ${closed} expired MCP session(s)`);
   }
-}, 10 * 60 * 1000);
+}, MCP_CLEANUP_INTERVAL_MS);
 
 // --- Start stale deployment scanner ---
 
