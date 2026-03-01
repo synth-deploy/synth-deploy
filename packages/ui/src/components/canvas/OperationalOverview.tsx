@@ -130,6 +130,66 @@ export default function OperationalOverview() {
         </div>
       </div>
 
+      {/* Active signals section */}
+      {agentContext && agentContext.signals.length > 0 && (
+        <>
+          <SectionHeader
+            color="#f87171"
+            shape="diamond"
+            label="Active Signals"
+            subtitle="warnings and anomalies detected"
+          />
+          <div className="v2-signals-list">
+            {agentContext.signals.map((signal, i) => {
+              const severityColor =
+                signal.severity === "critical" ? "#dc2626"
+                : signal.severity === "warning" ? "#f59e0b"
+                : "#2563eb";
+              return (
+                <div
+                  key={i}
+                  className={`v2-signal-card v2-signal-${signal.severity}`}
+                  onClick={() =>
+                    pushPanel({
+                      type: "signal-detail",
+                      title: signal.title,
+                      params: { signal: JSON.stringify(signal) },
+                    })
+                  }
+                >
+                  <div
+                    className="v2-signal-accent-bar"
+                    style={{ background: severityColor }}
+                  />
+                  <div className="v2-signal-content">
+                    <div className="v2-signal-header">
+                      <span
+                        className="v2-signal-severity-badge"
+                        style={{
+                          color: severityColor,
+                          borderColor: `${severityColor}40`,
+                          background: `${severityColor}15`,
+                        }}
+                      >
+                        {signal.severity.toUpperCase()}
+                      </span>
+                      <span className="v2-signal-type-label">{signal.type}</span>
+                    </div>
+                    <div className="v2-signal-title">{signal.title}</div>
+                    <div className="v2-signal-detail">{signal.detail}</div>
+                    {signal.relatedEntity && (
+                      <div className="v2-signal-entity">
+                        {signal.relatedEntity.type}: {signal.relatedEntity.name}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+
       {/* Operations section */}
       <SectionHeader
         color="#6b7280"
@@ -223,6 +283,30 @@ export default function OperationalOverview() {
                   {new Date(order.createdAt).toLocaleString()}
                 </div>
               </div>
+              <button
+                className="v2-order-deploy-btn"
+                style={{
+                  background: "rgba(99,225,190,0.12)",
+                  border: "1px solid rgba(99,225,190,0.3)",
+                  color: "#63e1be",
+                  fontSize: 11,
+                  fontWeight: 600,
+                  padding: "3px 10px",
+                  borderRadius: 4,
+                  cursor: "pointer",
+                  whiteSpace: "nowrap",
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  pushPanel({
+                    type: "deployment-authoring",
+                    title: "Deploy Order",
+                    params: { orderId: order.id },
+                  });
+                }}
+              >
+                DEPLOY
+              </button>
               <div className="v2-order-status-pill">
                 <span>QUEUED</span>
               </div>

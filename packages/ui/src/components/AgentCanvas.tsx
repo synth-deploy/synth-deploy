@@ -12,6 +12,7 @@ import PartitionListPanel from "./canvas/PartitionListPanel.js";
 import OrderListPanel from "./canvas/OrderListPanel.js";
 import OrderDetailPanel from "./canvas/OrderDetailPanel.js";
 import DebriefPanel from "./canvas/DebriefPanel.js";
+import SignalDetailPanel from "./canvas/SignalDetailPanel.js";
 import SettingsPanel from "./canvas/SettingsPanel.js";
 import ErrorBoundary from "./ErrorBoundary.js";
 
@@ -90,6 +91,7 @@ export default function AgentCanvas() {
             key={panel.id}
             title={panel.title}
             initialIntent={params.intent}
+            preselectedOrderId={params.orderId}
           />
         );
 
@@ -127,6 +129,24 @@ export default function AgentCanvas() {
             filterDecisionType={params.decisionType}
           />
         );
+
+      case "signal-detail": {
+        const signal = params.signal ? JSON.parse(params.signal) : null;
+        if (!signal) {
+          return (
+            <div className="v2-empty-state">
+              <p>No signal data available.</p>
+            </div>
+          );
+        }
+        return (
+          <SignalDetailPanel
+            key={panel.id}
+            signal={signal}
+            title={panel.title}
+          />
+        );
+      }
 
       case "settings":
         return <SettingsPanel key={panel.id} title={panel.title} />;
