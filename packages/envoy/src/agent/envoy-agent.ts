@@ -16,6 +16,18 @@ import { DiagnosticInvestigator } from "./diagnostic-investigator.js";
 import type { DiagnosticReport } from "./diagnostic-investigator.js";
 
 // ---------------------------------------------------------------------------
+// Types — lifecycle state and deployment instruction/result
+// ---------------------------------------------------------------------------
+
+/**
+ * Lifecycle state of the Envoy.
+ * - "active": accepting and executing deployments normally
+ * - "draining": finishing in-flight deployments but rejecting new ones
+ * - "paused": rejecting all new deployments immediately
+ */
+export type LifecycleState = "active" | "draining" | "paused";
+
+// ---------------------------------------------------------------------------
 // Types — the Envoy's deployment instruction and result
 // ---------------------------------------------------------------------------
 
@@ -95,6 +107,7 @@ export class EnvoyAgent {
   private scanner: EnvironmentScanner;
   private investigator: DiagnosticInvestigator;
   private reporter: CommandReporter | null;
+  private _lifecycleState: LifecycleState = "active";
 
   constructor(
     private debrief: DebriefWriter,
@@ -107,6 +120,36 @@ export class EnvoyAgent {
     this.scanner = new EnvironmentScanner(baseDir, state);
     this.investigator = new DiagnosticInvestigator(state, llm);
     this.reporter = reporter ?? null;
+  }
+
+  // -------------------------------------------------------------------------
+  // Lifecycle management
+  // -------------------------------------------------------------------------
+
+  /** Current lifecycle state of this Envoy. */
+  get lifecycleState(): LifecycleState {
+    return this._lifecycleState;
+  }
+
+  /**
+   * Transition to "draining" — finish in-flight deployments but reject new ones.
+   */
+  drain(): void {
+    this._lifecycleState = "draining";
+  }
+
+  /**
+   * Transition to "paused" — reject all new deployments immediately.
+   */
+  pause(): void {
+    this._lifecycleState = "paused";
+  }
+
+  /**
+   * Resume normal operation — accept deployments again.
+   */
+  resume(): void {
+    this._lifecycleState = "active";
   }
 
   /**
@@ -124,6 +167,29 @@ export class EnvoyAgent {
   async executeDeployment(
     instruction: DeploymentInstruction,
   ): Promise<DeploymentResult> {
+    // --- Lifecycle guard: reject new deployments when draining or paused ----
+    if (this._lifecycleState !== "active") {
+      const reason =
+        this._lifecycleState === "draining"
+          ? "Envoy is draining — finishing in-flight deployments but rejecting new ones"
+          : "Envoy is paused — not accepting deployments";
+
+      return {
+        deploymentId: instruction.deploymentId,
+        success: false,
+        workspacePath: "",
+        artifacts: [],
+        executionDurationMs: 0,
+        totalDurationMs: 0,
+        verificationPassed: false,
+        verificationChecks: [],
+        failureReason: reason,
+        diagnostic: null,
+        debriefEntryIds: [],
+        debriefEntries: [],
+      };
+    }
+
     const totalStart = Date.now();
     const debriefEntryIds: string[] = [];
     const debriefEntries: DebriefEntry[] = [];
@@ -518,6 +584,7 @@ export class EnvoyAgent {
     hostname: string;
     summary: ReturnType<LocalStateStore["getSummary"]>;
     readiness: { ready: boolean; reason: string };
+    lifecycle: LifecycleState;
   } {
     const scan = this.scanner.scan();
     const readiness = this.scanner.checkReadiness();
@@ -528,6 +595,7 @@ export class EnvoyAgent {
       hostname: scan.hostname,
       summary,
       readiness,
+      lifecycle: this._lifecycleState,
     };
   }
 }

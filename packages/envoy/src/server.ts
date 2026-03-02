@@ -1,7 +1,7 @@
 import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import type { EnvoyAgent, DeploymentInstruction } from "./agent/envoy-agent.js";
+import type { EnvoyAgent, DeploymentInstruction, LifecycleState } from "./agent/envoy-agent.js";
 import type { LocalStateStore } from "./state/local-state.js";
 import type { QueryEngine } from "./agent/query-engine.js";
 import type { EscalationPackager } from "./agent/escalation-packager.js";
@@ -50,6 +50,10 @@ const EscalateGeneralSchema = z.object({
  *   POST /query                 — ask a natural language question
  *   POST /escalate/deployment   — escalate a specific deployment issue
  *   POST /escalate              — escalate a general issue
+ *   GET  /lifecycle             — current lifecycle state and in-flight count
+ *   POST /lifecycle/drain       — drain: reject new deployments, finish in-flight
+ *   POST /lifecycle/pause       — pause: reject all new deployments
+ *   POST /lifecycle/resume      — resume: accept deployments normally
  */
 export function createEnvoyServer(
   agent: EnvoyAgent,
@@ -70,6 +74,7 @@ export function createEnvoyServer(
       timestamp: new Date().toISOString(),
       readiness: status.readiness,
       summary: status.summary,
+      lifecycle: status.lifecycle,
     };
   });
 
@@ -231,6 +236,43 @@ export function createEnvoyServer(
         ...e,
         timestamp: e.timestamp.toISOString(),
       })),
+    };
+  });
+
+  // -- Lifecycle management ---------------------------------------------------
+
+  app.get("/lifecycle", async () => {
+    const status = agent.getStatus();
+    return {
+      state: agent.lifecycleState,
+      inFlightDeployments: status.summary.executing,
+    };
+  });
+
+  app.post("/lifecycle/drain", async () => {
+    agent.drain();
+    const status = agent.getStatus();
+    return {
+      state: agent.lifecycleState,
+      inFlightDeployments: status.summary.executing,
+    };
+  });
+
+  app.post("/lifecycle/pause", async () => {
+    agent.pause();
+    const status = agent.getStatus();
+    return {
+      state: agent.lifecycleState,
+      inFlightDeployments: status.summary.executing,
+    };
+  });
+
+  app.post("/lifecycle/resume", async () => {
+    agent.resume();
+    const status = agent.getStatus();
+    return {
+      state: agent.lifecycleState,
+      inFlightDeployments: status.summary.executing,
     };
   });
 
