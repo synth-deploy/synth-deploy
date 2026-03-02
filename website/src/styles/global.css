@@ -93,3 +93,29 @@
 .animate-delay-4 {
   animation-delay: 0.4s;
 }
+
+/* Scroll-triggered reveal — elements start invisible, JS adds .revealed */
+.scroll-reveal {
+  opacity: 0;
+  transform: translateY(30px);
+  transition: opacity 0.7s ease-out, transform 0.7s ease-out;
+}
+.scroll-reveal.revealed {
+  opacity: 1;
+  transform: translateY(0);
+}
+.scroll-reveal-delay-1 { transition-delay: 0.1s; }
+.scroll-reveal-delay-2 { transition-delay: 0.2s; }
+.scroll-reveal-delay-3 { transition-delay: 0.3s; }
+.scroll-reveal-delay-4 { transition-delay: 0.4s; }
+.scroll-reveal-delay-5 { transition-delay: 0.5s; }
+
+/* Entity badge */
+.entity-badge {
+  @apply inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold tracking-wide border;
+}
+
+/* Decision type dot */
+.dt-dot {
+  @apply inline-block w-2.5 h-2.5 rounded-full flex-shrink-0;
+}

@@ -14,6 +14,22 @@ export default {
           accent: "#63e1be",
           "accent-dim": "rgba(99, 225, 190, 0.15)",
           "accent-hover": "rgba(99, 225, 190, 0.25)",
+          // Entity colors
+          command: "#63e1be",
+          envoy: "#34d399",
+          partition: "#818cf8",
+          order: "#f59e0b",
+          debrief: "#e879f9",
+          // Decision type colors
+          "dt-plan": "#6366f1",
+          "dt-config": "#8b5cf6",
+          "dt-conflict": "#f59e0b",
+          "dt-health": "#06b6d4",
+          "dt-execution": "#3b82f6",
+          "dt-verification": "#10b981",
+          "dt-completion": "#16a34a",
+          "dt-failure": "#dc2626",
+          "dt-diagnostic": "#ec4899",
         },
       },
       fontFamily: {

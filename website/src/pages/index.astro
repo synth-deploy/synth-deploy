@@ -7,7 +7,7 @@ import Layout from "../layouts/Layout.astro";
   <section class="relative overflow-hidden">
     <div class="absolute inset-0 pointer-events-none">
       <div class="absolute top-1/4 left-1/4 w-96 h-96 bg-ds-accent/5 rounded-full blur-[120px]"></div>
-      <div class="absolute bottom-1/4 right-1/4 w-80 h-80 bg-indigo-500/5 rounded-full blur-[100px]"></div>
+      <div class="absolute bottom-1/3 right-1/4 w-80 h-80 bg-indigo-500/5 rounded-full blur-[100px]"></div>
     </div>
     <div class="relative mx-auto max-w-6xl px-6 pt-24 pb-20 text-center">
       <div class="animate-fade-in-up">
@@ -62,178 +62,431 @@ import Layout from "../layouts/Layout.astro";
     </div>
   </section>
 
-  <!-- Features -->
-  <section id="features" class="py-24">
+  <!-- Section 1: Simple Setup -->
+  <section id="features" class="py-28 border-t border-ds-border">
     <div class="mx-auto max-w-6xl px-6">
-      <div class="text-center mb-16">
+      <div class="text-center mb-16 scroll-reveal">
+        <p class="section-heading">Simple to Set Up</p>
+        <h2 class="text-3xl md:text-4xl font-bold mb-4">Two components. One command.</h2>
+        <p class="text-ds-text-secondary text-lg max-w-2xl mx-auto">
+          DeployStack runs as two lightweight services — Command and Envoy — that communicate
+          over HTTP. No complex infrastructure. No vendor lock-in. Self-hosted by design.
+        </p>
+      </div>
+
+      <div class="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+        <!-- Command card -->
+        <div class="glass-card p-8 scroll-reveal scroll-reveal-delay-1">
+          <div class="flex items-center gap-3 mb-4">
+            <div class="entity-badge border-ds-command/30 bg-ds-command/10 text-ds-command">
+              Command
+            </div>
+          </div>
+          <h3 class="text-lg font-semibold mb-2">The brain</h3>
+          <p class="text-ds-text-secondary leading-relaxed text-sm">
+            Central server that manages operations, partitions, and environments.
+            Runs the intelligent agent, exposes the REST API, and hosts the MCP server.
+          </p>
+          <div class="mt-4 font-mono text-xs text-ds-text-muted bg-ds-bg/50 rounded-lg px-4 py-3">
+            docker run deploystack/command
+          </div>
+        </div>
+
+        <!-- Envoy card -->
+        <div class="glass-card p-8 scroll-reveal scroll-reveal-delay-2">
+          <div class="flex items-center gap-3 mb-4">
+            <div class="entity-badge border-ds-envoy/30 bg-ds-envoy/10 text-ds-envoy">
+              Envoy
+            </div>
+          </div>
+          <h3 class="text-lg font-semibold mb-2">The hands</h3>
+          <p class="text-ds-text-secondary leading-relaxed text-sm">
+            Lightweight agents deployed on target machines. Execute deployment steps,
+            run health checks, and report results back to Command.
+          </p>
+          <div class="mt-4 font-mono text-xs text-ds-text-muted bg-ds-bg/50 rounded-lg px-4 py-3">
+            docker run deploystack/envoy
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Section 2: Intelligent Decisions -->
+  <section class="py-28 border-t border-ds-border relative overflow-hidden">
+    <div class="absolute inset-0 pointer-events-none">
+      <div class="absolute top-1/2 left-0 w-96 h-96 bg-ds-dt-plan/5 rounded-full blur-[120px]"></div>
+      <div class="absolute bottom-0 right-1/4 w-72 h-72 bg-ds-debrief/5 rounded-full blur-[100px]"></div>
+    </div>
+
+    <div class="relative mx-auto max-w-6xl px-6">
+      <div class="text-center mb-16 scroll-reveal">
+        <p class="section-heading">Intelligent Decisions</p>
+        <h2 class="text-3xl md:text-4xl font-bold mb-4">Every action explained. Every decision logged.</h2>
+        <p class="text-ds-text-secondary text-lg max-w-2xl mx-auto">
+          The agent resolves variables, plans pipelines, handles conflicts, and diagnoses
+          failures — then explains all of it in plain language. When something goes wrong
+          at 2am, the Debrief tells you exactly what happened.
+        </p>
+      </div>
+
+      <!-- Decision type showcase -->
+      <div class="grid md:grid-cols-3 gap-6 mb-16">
+        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-1">
+          <div class="flex items-center gap-2 mb-3">
+            <span class="dt-dot bg-ds-dt-plan"></span>
+            <span class="text-xs font-semibold uppercase tracking-wide text-ds-dt-plan">Pipeline Plan</span>
+          </div>
+          <p class="text-sm text-ds-text-secondary leading-relaxed">
+            Agent analyzed web-app v2.4.1 and planned a 3-step pipeline:
+            install, migrate, verify. Skipped cache-warmup — no Redis configured.
+          </p>
+        </div>
+
+        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-2">
+          <div class="flex items-center gap-2 mb-3">
+            <span class="dt-dot bg-ds-dt-conflict"></span>
+            <span class="text-xs font-semibold uppercase tracking-wide text-ds-dt-conflict">Variable Conflict</span>
+          </div>
+          <p class="text-sm text-ds-text-secondary leading-relaxed">
+            APP_ENV defined in both partition (production) and environment (staging).
+            Resolved using environment-wins policy. Logged both values for audit.
+          </p>
+        </div>
+
+        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-3">
+          <div class="flex items-center gap-2 mb-3">
+            <span class="dt-dot bg-ds-dt-diagnostic"></span>
+            <span class="text-xs font-semibold uppercase tracking-wide text-ds-dt-diagnostic">Diagnostic</span>
+          </div>
+          <p class="text-sm text-ds-text-secondary leading-relaxed">
+            Health check failed on attempt 1/3 (ECONNREFUSED on port 3000).
+            Root cause: migration step increased startup time. Retried after 5s — passed.
+          </p>
+        </div>
+      </div>
+
+      <!-- Debrief timeline mockup -->
+      <div class="max-w-2xl mx-auto scroll-reveal scroll-reveal-delay-4">
+        <div class="glass-card accent-glow overflow-hidden">
+          <div class="flex items-center gap-2 px-5 py-3 border-b border-ds-border">
+            <div class="entity-badge border-ds-debrief/30 bg-ds-debrief/10 text-ds-debrief text-[10px] py-0.5">
+              Debrief
+            </div>
+            <span class="text-xs text-ds-text-muted ml-auto">web-app v2.4.1 &rarr; acme-corp / production</span>
+          </div>
+          <div class="p-5 space-y-0">
+            <!-- Timeline entries -->
+            <div class="flex gap-3 pb-4 relative">
+              <div class="flex flex-col items-center">
+                <span class="dt-dot bg-ds-dt-plan mt-1"></span>
+                <div class="w-px flex-1 bg-ds-border mt-1"></div>
+              </div>
+              <div>
+                <p class="text-xs font-semibold text-ds-dt-plan uppercase tracking-wide">Pipeline Plan</p>
+                <p class="text-sm text-ds-text-secondary mt-0.5">Planned 3-step pipeline for web-app v2.4.1</p>
+                <p class="text-xs text-ds-text-muted mt-1">Steps: install-deps &rarr; run-migrations &rarr; health-check</p>
+              </div>
+            </div>
+
+            <div class="flex gap-3 pb-4 relative">
+              <div class="flex flex-col items-center">
+                <span class="dt-dot bg-ds-dt-config mt-1"></span>
+                <div class="w-px flex-1 bg-ds-border mt-1"></div>
+              </div>
+              <div>
+                <p class="text-xs font-semibold text-ds-dt-config uppercase tracking-wide">Configuration</p>
+                <p class="text-sm text-ds-text-secondary mt-0.5">Resolved 4 variables across partition and environment</p>
+                <p class="text-xs text-ds-text-muted mt-1">1 conflict: APP_ENV — environment value wins (staging)</p>
+              </div>
+            </div>
+
+            <div class="flex gap-3 pb-4 relative">
+              <div class="flex flex-col items-center">
+                <span class="dt-dot bg-ds-dt-execution mt-1"></span>
+                <div class="w-px flex-1 bg-ds-border mt-1"></div>
+              </div>
+              <div>
+                <p class="text-xs font-semibold text-ds-dt-execution uppercase tracking-wide">Execution</p>
+                <p class="text-sm text-ds-text-secondary mt-0.5">All 3 steps completed successfully in 17.5s</p>
+                <p class="text-xs text-ds-text-muted mt-1">install-deps: 14.2s | migrations: 3.1s | health: 0.2s</p>
+              </div>
+            </div>
+
+            <div class="flex gap-3 pb-4 relative">
+              <div class="flex flex-col items-center">
+                <span class="dt-dot bg-ds-dt-verification mt-1"></span>
+                <div class="w-px flex-1 bg-ds-border mt-1"></div>
+              </div>
+              <div>
+                <p class="text-xs font-semibold text-ds-dt-verification uppercase tracking-wide">Verification</p>
+                <p class="text-sm text-ds-text-secondary mt-0.5">Health check passed — HTTP 200 on /health in 42ms</p>
+                <p class="text-xs text-ds-text-muted mt-1">Endpoint: http://acme-web:3000/health</p>
+              </div>
+            </div>
+
+            <div class="flex gap-3 relative">
+              <div class="flex flex-col items-center">
+                <span class="dt-dot bg-ds-dt-completion mt-1"></span>
+              </div>
+              <div>
+                <p class="text-xs font-semibold text-ds-dt-completion uppercase tracking-wide">Completed</p>
+                <p class="text-sm text-ds-text-secondary mt-0.5">Deployment succeeded — all checks passed, artifacts written</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Section 3: Core Capabilities -->
+  <section class="py-28 border-t border-ds-border">
+    <div class="mx-auto max-w-6xl px-6">
+      <div class="text-center mb-16 scroll-reveal">
         <p class="section-heading">Capabilities</p>
         <h2 class="text-3xl md:text-4xl font-bold">Intelligence where friction used to be</h2>
       </div>
 
       <div class="grid md:grid-cols-2 gap-6">
-        <div class="glass-card p-8 animate-fade-in-up">
-          <div class="w-10 h-10 rounded-lg bg-ds-accent-dim flex items-center justify-center mb-4">
-            <span class="text-ds-accent text-lg">&#9881;</span>
+        <div class="glass-card p-8 scroll-reveal scroll-reveal-delay-1">
+          <div class="flex items-center gap-2 mb-4">
+            <div class="entity-badge border-ds-partition/30 bg-ds-partition/10 text-ds-partition text-[10px] py-0.5">
+              Partition
+            </div>
           </div>
-          <h3 class="text-lg font-semibold mb-2">Agent Mode</h3>
-          <p class="text-ds-text-secondary leading-relaxed">
-            Describe what you want to deploy in natural language. The agent resolves
-            operations, partitions, environments, and variables — then executes with
-            full decision transparency.
+          <h3 class="text-lg font-semibold mb-2">Absolute Isolation</h3>
+          <p class="text-ds-text-secondary leading-relaxed text-sm">
+            Each partition is a self-contained deployment context with its own
+            variables, history, and configuration. No cross-partition data access
+            or failure propagation — ever.
           </p>
         </div>
 
-        <div class="glass-card p-8 animate-fade-in-up animate-delay-1">
-          <div class="w-10 h-10 rounded-lg bg-ds-accent-dim flex items-center justify-center mb-4">
-            <span class="text-ds-accent text-lg">&#128221;</span>
+        <div class="glass-card p-8 scroll-reveal scroll-reveal-delay-2">
+          <div class="flex items-center gap-2 mb-4">
+            <div class="entity-badge border-ds-debrief/30 bg-ds-debrief/10 text-ds-debrief text-[10px] py-0.5">
+              Debrief
+            </div>
           </div>
-          <h3 class="text-lg font-semibold mb-2">Debrief</h3>
-          <p class="text-ds-text-secondary leading-relaxed">
-            Every agent decision is logged in plain language. No silent actions. When
-            something goes wrong at 2am, the decision log tells you exactly what
-            happened, why, and what to do next.
+          <h3 class="text-lg font-semibold mb-2">Decision Transparency</h3>
+          <p class="text-ds-text-secondary leading-relaxed text-sm">
+            Every agent decision is logged in plain language. When something goes wrong,
+            the decision log tells you exactly what happened, why, and what to do next.
+            Postmortems generate automatically.
           </p>
         </div>
 
-        <div class="glass-card p-8 animate-fade-in-up animate-delay-2">
-          <div class="w-10 h-10 rounded-lg bg-ds-accent-dim flex items-center justify-center mb-4">
-            <span class="text-ds-accent text-lg">&#128274;</span>
+        <div class="glass-card p-8 scroll-reveal scroll-reveal-delay-3">
+          <div class="flex items-center gap-2 mb-4">
+            <div class="entity-badge border-ds-order/30 bg-ds-order/10 text-ds-order text-[10px] py-0.5">
+              Order
+            </div>
           </div>
-          <h3 class="text-lg font-semibold mb-2">Partition Isolation</h3>
-          <p class="text-ds-text-secondary leading-relaxed">
-            Absolute data isolation between partitions. No cross-partition access or
-            failure propagation. Each partition is a self-contained deployment context
-            with its own variables, history, and configuration.
+          <h3 class="text-lg font-semibold mb-2">Immutable Snapshots</h3>
+          <p class="text-ds-text-secondary leading-relaxed text-sm">
+            Orders capture the exact configuration at deployment time — steps, variables,
+            deploy config. Re-deploy any previous order with confidence. Full audit trail
+            from intent to outcome.
           </p>
         </div>
 
-        <div class="glass-card p-8 animate-fade-in-up animate-delay-3">
-          <div class="w-10 h-10 rounded-lg bg-ds-accent-dim flex items-center justify-center mb-4">
-            <span class="text-ds-accent text-lg">&#128268;</span>
+        <div class="glass-card p-8 scroll-reveal scroll-reveal-delay-4">
+          <div class="flex items-center gap-2 mb-4">
+            <div class="entity-badge border-ds-command/30 bg-ds-command/10 text-ds-command text-[10px] py-0.5">
+              MCP
+            </div>
           </div>
-          <h3 class="text-lg font-semibold mb-2">MCP-Native</h3>
-          <p class="text-ds-text-secondary leading-relaxed">
+          <h3 class="text-lg font-semibold mb-2">Protocol-Native</h3>
+          <p class="text-ds-text-secondary leading-relaxed text-sm">
             Built on Model Context Protocol from the foundation. Connect external
             data sources, monitoring tools, and CI/CD systems through standardized
             MCP servers — not custom integrations.
-          </p>
-        </div>
-
-        <div class="glass-card p-8 animate-fade-in-up animate-delay-2">
-          <div class="w-10 h-10 rounded-lg bg-ds-accent-dim flex items-center justify-center mb-4">
-            <span class="text-ds-accent text-lg">&#128203;</span>
-          </div>
-          <h3 class="text-lg font-semibold mb-2">Step Type Library</h3>
-          <p class="text-ds-text-secondary leading-relaxed">
-            27 predefined step types across 7 categories. Create custom steps,
-            share them across your organization, and import community templates.
-            Every step renders a validated form — no more memorizing CLI flags.
-          </p>
-        </div>
-
-        <div class="glass-card p-8 animate-fade-in-up animate-delay-3">
-          <div class="w-10 h-10 rounded-lg bg-ds-accent-dim flex items-center justify-center mb-4">
-            <span class="text-ds-accent text-lg">&#128736;</span>
-          </div>
-          <h3 class="text-lg font-semibold mb-2">Orders &amp; Snapshots</h3>
-          <p class="text-ds-text-secondary leading-relaxed">
-            Immutable deployment snapshots capture the exact configuration at
-            deployment time. Re-deploy any previous order with confidence. Full
-            audit trail from intent to outcome.
           </p>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- How It Works -->
-  <section id="how-it-works" class="py-24 border-t border-ds-border">
-    <div class="mx-auto max-w-6xl px-6">
-      <div class="text-center mb-16">
+  <!-- Section 4: Architecture Flow -->
+  <section id="how-it-works" class="py-28 border-t border-ds-border relative overflow-hidden">
+    <div class="absolute inset-0 pointer-events-none">
+      <div class="absolute bottom-1/4 left-1/3 w-72 h-72 bg-ds-envoy/3 rounded-full blur-[100px]"></div>
+    </div>
+
+    <div class="relative mx-auto max-w-6xl px-6">
+      <div class="text-center mb-16 scroll-reveal">
         <p class="section-heading">Architecture</p>
-        <h2 class="text-3xl md:text-4xl font-bold">How DeployStack works</h2>
+        <h2 class="text-3xl md:text-4xl font-bold mb-4">How it all connects</h2>
+        <p class="text-ds-text-secondary text-lg max-w-2xl mx-auto">
+          The deployment flow moves from intent to execution to explanation.
+          Every step is visible. Every decision is recorded.
+        </p>
       </div>
 
-      <div class="grid md:grid-cols-3 gap-8">
-        <div class="text-center animate-fade-in-up">
-          <div class="glass-card w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 text-2xl font-mono font-bold text-ds-accent">
-            1
+      <!-- Flow diagram with entity badges -->
+      <div class="glass-card p-8 md:p-10 max-w-3xl mx-auto scroll-reveal scroll-reveal-delay-2">
+        <div class="font-mono text-sm text-center space-y-6">
+          <!-- Row 1: Engineer → Command -->
+          <div class="flex items-center justify-center gap-3 md:gap-4 flex-wrap">
+            <span class="entity-badge border-ds-text-muted/30 bg-ds-text-muted/10 text-ds-text-secondary">
+              Engineer
+            </span>
+            <span class="text-ds-text-muted">&rarr;</span>
+            <span class="entity-badge border-ds-partition/30 bg-ds-partition/10 text-ds-partition">
+              Intent / Config
+            </span>
+            <span class="text-ds-text-muted">&rarr;</span>
+            <span class="entity-badge border-ds-command/30 bg-ds-command/10 text-ds-command">
+              Command
+            </span>
           </div>
-          <h3 class="text-lg font-semibold mb-2">Command</h3>
-          <p class="text-ds-text-secondary text-sm leading-relaxed">
-            The central server. Manages operations, partitions, environments,
-            and the intelligent agent. Exposes REST API and MCP server.
-          </p>
-        </div>
+          <p class="text-ds-text-muted text-xs">resolves variables, plans pipeline, creates order</p>
 
-        <div class="text-center animate-fade-in-up animate-delay-1">
-          <div class="glass-card w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 text-2xl font-mono font-bold text-ds-accent">
-            2
+          <!-- Row 2: Command → Envoy → Target -->
+          <div class="flex items-center justify-center gap-3 md:gap-4 flex-wrap">
+            <span class="entity-badge border-ds-command/30 bg-ds-command/10 text-ds-command">
+              Command
+            </span>
+            <span class="text-ds-text-muted">&rarr;</span>
+            <span class="entity-badge border-ds-envoy/30 bg-ds-envoy/10 text-ds-envoy">
+              Envoy
+            </span>
+            <span class="text-ds-text-muted">&rarr;</span>
+            <span class="entity-badge border-amber-400/30 bg-amber-400/10 text-amber-300">
+              Target Machine
+            </span>
           </div>
-          <h3 class="text-lg font-semibold mb-2">Envoy</h3>
-          <p class="text-ds-text-secondary text-sm leading-relaxed">
-            Lightweight agents deployed on target machines. Execute deployment
-            steps, run health checks, and report results back to Command.
-          </p>
-        </div>
+          <p class="text-ds-text-muted text-xs">executes steps, verifies health, writes artifacts</p>
 
-        <div class="text-center animate-fade-in-up animate-delay-2">
-          <div class="glass-card w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 text-2xl font-mono font-bold text-ds-accent">
-            3
-          </div>
-          <h3 class="text-lg font-semibold mb-2">Debrief</h3>
-          <p class="text-ds-text-secondary text-sm leading-relaxed">
-            The decision log. Every action, conflict resolution, and failure
-            diagnosis is recorded in plain language. Generates postmortems
-            automatically.
-          </p>
-        </div>
-      </div>
-
-      <!-- Flow diagram -->
-      <div class="mt-16 glass-card p-8 max-w-3xl mx-auto animate-fade-in-up animate-delay-3">
-        <div class="font-mono text-sm text-center space-y-4">
-          <div class="flex items-center justify-center gap-4 flex-wrap">
-            <span class="rounded-lg border border-ds-accent/30 bg-ds-accent-dim px-3 py-1.5 text-ds-accent">Engineer</span>
-            <span class="text-ds-text-muted">&rarr;</span>
-            <span class="rounded-lg border border-indigo-400/30 bg-indigo-400/10 px-3 py-1.5 text-indigo-300">Intent / Config</span>
-            <span class="text-ds-text-muted">&rarr;</span>
-            <span class="rounded-lg border border-ds-accent/30 bg-ds-accent-dim px-3 py-1.5 text-ds-accent">Command</span>
-          </div>
-          <div class="text-ds-text-muted text-xs">resolves variables, plans pipeline, creates order</div>
-          <div class="flex items-center justify-center gap-4 flex-wrap">
-            <span class="rounded-lg border border-ds-accent/30 bg-ds-accent-dim px-3 py-1.5 text-ds-accent">Command</span>
-            <span class="text-ds-text-muted">&rarr;</span>
-            <span class="rounded-lg border border-emerald-400/30 bg-emerald-400/10 px-3 py-1.5 text-emerald-300">Envoy</span>
-            <span class="text-ds-text-muted">&rarr;</span>
-            <span class="rounded-lg border border-amber-400/30 bg-amber-400/10 px-3 py-1.5 text-amber-300">Target Machine</span>
-          </div>
-          <div class="text-ds-text-muted text-xs">executes steps, verifies, reports back</div>
-          <div class="flex items-center justify-center gap-4 flex-wrap">
-            <span class="rounded-lg border border-fuchsia-400/30 bg-fuchsia-400/10 px-3 py-1.5 text-fuchsia-300">Debrief</span>
+          <!-- Row 3: Debrief ← everything -->
+          <div class="flex items-center justify-center gap-3 md:gap-4 flex-wrap">
+            <span class="entity-badge border-ds-debrief/30 bg-ds-debrief/10 text-ds-debrief">
+              Debrief
+            </span>
             <span class="text-ds-text-muted">&larr;</span>
-            <span class="text-ds-text-secondary">every decision logged</span>
+            <span class="text-ds-text-secondary text-xs">every decision logged from both Command and Envoy</span>
           </div>
+        </div>
+      </div>
+
+      <!-- Stats row -->
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mt-12 max-w-3xl mx-auto">
+        <div class="text-center scroll-reveal scroll-reveal-delay-1">
+          <p class="text-2xl md:text-3xl font-bold text-ds-accent">69</p>
+          <p class="text-xs text-ds-text-muted uppercase tracking-wide mt-1">Step Types</p>
+        </div>
+        <div class="text-center scroll-reveal scroll-reveal-delay-2">
+          <p class="text-2xl md:text-3xl font-bold text-ds-partition">15</p>
+          <p class="text-xs text-ds-text-muted uppercase tracking-wide mt-1">Categories</p>
+        </div>
+        <div class="text-center scroll-reveal scroll-reveal-delay-3">
+          <p class="text-2xl md:text-3xl font-bold text-ds-debrief">12</p>
+          <p class="text-xs text-ds-text-muted uppercase tracking-wide mt-1">Decision Types</p>
+        </div>
+        <div class="text-center scroll-reveal scroll-reveal-delay-4">
+          <p class="text-2xl md:text-3xl font-bold text-ds-envoy">0</p>
+          <p class="text-xs text-ds-text-muted uppercase tracking-wide mt-1">Silent Failures</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Section 5: Operational Depth -->
+  <section class="py-28 border-t border-ds-border">
+    <div class="mx-auto max-w-6xl px-6">
+      <div class="text-center mb-16 scroll-reveal">
+        <p class="section-heading">Operational Depth</p>
+        <h2 class="text-3xl md:text-4xl font-bold mb-4">Built for engineers who get paged</h2>
+        <p class="text-ds-text-secondary text-lg max-w-2xl mx-auto">
+          DeployStack is designed for the worst moments — when a deploy fails at 2am
+          and you need to understand what happened immediately, not after reading logs
+          for twenty minutes.
+        </p>
+      </div>
+
+      <div class="grid md:grid-cols-3 gap-6">
+        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-1">
+          <h3 class="text-base font-semibold mb-2 flex items-center gap-2">
+            <span class="dt-dot bg-ds-dt-failure"></span>
+            Failure Diagnosis
+          </h3>
+          <p class="text-sm text-ds-text-secondary leading-relaxed">
+            When a step fails, the agent investigates: is it a network issue, a config
+            problem, or an application error? The Debrief explains the root cause and
+            suggests next steps.
+          </p>
+        </div>
+
+        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-2">
+          <h3 class="text-base font-semibold mb-2 flex items-center gap-2">
+            <span class="dt-dot bg-ds-dt-health"></span>
+            Health Awareness
+          </h3>
+          <p class="text-sm text-ds-text-secondary leading-relaxed">
+            Pre-flight and post-deploy health checks. Envoys report readiness state,
+            lifecycle phase, and deployment capacity. Command won't send work to a
+            draining or degraded Envoy.
+          </p>
+        </div>
+
+        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-3">
+          <h3 class="text-base font-semibold mb-2 flex items-center gap-2">
+            <span class="dt-dot bg-ds-dt-config"></span>
+            Variable Resolution
+          </h3>
+          <p class="text-sm text-ds-text-secondary leading-relaxed">
+            Variables cascade from environment to partition to operation. Conflicts are
+            detected and resolved by configurable policy. Every resolution is logged —
+            no more mystery overrides.
+          </p>
         </div>
       </div>
     </div>
   </section>
 
   <!-- CTA -->
-  <section class="py-24 border-t border-ds-border">
-    <div class="mx-auto max-w-6xl px-6 text-center">
+  <section class="py-28 border-t border-ds-border relative overflow-hidden">
+    <div class="absolute inset-0 pointer-events-none">
+      <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-ds-accent/5 rounded-full blur-[120px]"></div>
+    </div>
+    <div class="relative mx-auto max-w-6xl px-6 text-center scroll-reveal">
       <h2 class="text-3xl md:text-4xl font-bold mb-4">Ready to deploy smarter?</h2>
       <p class="text-ds-text-secondary text-lg mb-8 max-w-xl mx-auto">
         DeployStack is open source and self-hosted. Get started in minutes.
       </p>
-      <a
-        href="https://github.com/jmfullerton96/DeployStack"
-        target="_blank"
-        rel="noopener"
-        class="inline-block rounded-lg bg-ds-accent px-8 py-3 text-ds-bg font-semibold hover:bg-ds-accent/90 transition-colors"
-      >
-        View on GitHub
-      </a>
+      <div class="flex items-center justify-center gap-4">
+        <a
+          href="https://github.com/jmfullerton96/DeployStack"
+          target="_blank"
+          rel="noopener"
+          class="inline-block rounded-lg bg-ds-accent px-8 py-3 text-ds-bg font-semibold hover:bg-ds-accent/90 transition-colors"
+        >
+          View on GitHub
+        </a>
+        <a
+          href="/docs/installation"
+          class="rounded-lg border border-ds-border px-6 py-3 text-ds-text hover:border-ds-accent/30 hover:bg-ds-surface transition-colors"
+        >
+          Installation Guide
+        </a>
+      </div>
     </div>
   </section>
 </Layout>
+
+<!-- Scroll reveal observer -->
+<script>
+  const observer = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add("revealed");
+        }
+      });
+    },
+    { threshold: 0.1, rootMargin: "0px 0px -50px 0px" },
+  );
+
+  document.querySelectorAll(".scroll-reveal").forEach((el) => observer.observe(el));
+</script>
