@@ -1178,79 +1178,68 @@ export class CommandAgent {
     environment: Environment,
     order: Order,
   ): Promise<void> {
-    // Check if an Envoy is configured for delegation
     const envoyConfig = this.settingsReader?.get().envoy;
-    if (envoyConfig?.url) {
-      const delegated = await this.tryDelegateToEnvoy(
+
+    // When a settingsReader is present (production), Command delegates all
+    // execution to Envoy. If Envoy is unreachable, the deployment fails
+    // explicitly — no silent local fallback.
+    if (this.settingsReader) {
+      if (!envoyConfig?.url) {
+        throw new OrchestrationError(
+          "execute-deployment",
+          "No Envoy configured — cannot execute deployment",
+          `Command cannot execute deployment steps locally. An Envoy must be configured ` +
+          `and reachable to run deployments. Configure an Envoy URL in settings ` +
+          `(Settings → envoy.url) and ensure the Envoy is running and healthy.`,
+        );
+      }
+
+      await this.delegateToEnvoy(
         deployment, partition, environment, order, envoyConfig,
       );
-      if (delegated) return;
+      return;
     }
 
-    // Fall back to local execution
-    await this.executeDeploymentLocally(deployment, partition, environment, order);
+    // No settingsReader — local execution for test environments only
+    await this.executeLocal(deployment, partition, environment, order);
   }
 
   /**
-   * Attempt to delegate deployment execution to a configured Envoy.
-   * Returns true if delegation succeeded (or failed with proper error handling).
-   * Returns false if the Envoy is unreachable and we should fall back to local execution.
+   * Delegate deployment execution to the configured Envoy.
+   * Throws OrchestrationError if the Envoy is unreachable or reports failure.
    */
-  private async tryDelegateToEnvoy(
+  private async delegateToEnvoy(
     deployment: Deployment,
     partition: Partition,
     environment: Environment,
     order: Order,
     envoyConfig: { url: string; timeoutMs: number },
-  ): Promise<boolean> {
+  ): Promise<void> {
     const client = new EnvoyClient(envoyConfig.url, envoyConfig.timeoutMs);
 
     // Pre-flight: check if the Envoy is healthy before delegating
     try {
       const health = await client.checkHealth();
       if (health.status !== "healthy" || !health.readiness.ready) {
-        const entry = this.debrief.record({
-          partitionId: deployment.partitionId,
-          deploymentId: deployment.id,
-          agent: "command",
-          decisionType: "deployment-execution",
-          decision: `Envoy at ${envoyConfig.url} is not ready (${health.status}: ${health.readiness.reason}) — falling back to local execution`,
-          reasoning:
-            `Attempted to delegate deployment to Envoy at ${envoyConfig.url} but it reports ` +
-            `status "${health.status}" with readiness: "${health.readiness.reason}". ` +
-            `Falling back to local step execution to avoid blocking the deployment.`,
-          context: {
-            step: "execute-deployment",
-            envoyUrl: envoyConfig.url,
-            envoyStatus: health.status,
-            envoyReadiness: health.readiness,
-            fallback: "local",
-          },
-        });
-        deployment.debriefEntryIds.push(entry.id);
-        return false;
+        throw new OrchestrationError(
+          "execute-deployment",
+          `Envoy at ${envoyConfig.url} is not ready (${health.status}: ${health.readiness.reason})`,
+          `Deployment cannot proceed because the Envoy at ${envoyConfig.url} reports ` +
+          `status "${health.status}" with readiness: "${health.readiness.reason}". ` +
+          `The target machine's Envoy must be healthy before deployments can run. ` +
+          `Check the Envoy process, then re-trigger the deployment.`,
+        );
       }
     } catch (err) {
+      if (err instanceof OrchestrationError) throw err;
       const message = err instanceof Error ? err.message : String(err);
-      const entry = this.debrief.record({
-        partitionId: deployment.partitionId,
-        deploymentId: deployment.id,
-        agent: "command",
-        decisionType: "deployment-execution",
-        decision: `Envoy at ${envoyConfig.url} is unreachable (${message}) — falling back to local execution`,
-        reasoning:
-          `Attempted to contact Envoy at ${envoyConfig.url} for deployment delegation ` +
-          `but the health check failed: ${message}. Falling back to local step execution ` +
-          `so the deployment is not blocked by Envoy unavailability.`,
-        context: {
-          step: "execute-deployment",
-          envoyUrl: envoyConfig.url,
-          error: message,
-          fallback: "local",
-        },
-      });
-      deployment.debriefEntryIds.push(entry.id);
-      return false;
+      throw new OrchestrationError(
+        "execute-deployment",
+        `Envoy at ${envoyConfig.url} is unreachable: ${message}`,
+        `Deployment cannot proceed because the Envoy at ${envoyConfig.url} is not responding: ${message}. ` +
+        `Command does not execute deployment steps locally — an Envoy must be running on the target machine. ` +
+        `Verify the Envoy process is running, check network connectivity, then re-trigger the deployment.`,
+      );
     }
 
     // Envoy is healthy — delegate the deployment
@@ -1360,10 +1349,10 @@ export class CommandAgent {
     });
     deployment.debriefEntryIds.push(completionEntry.id);
 
-    return true;
   }
 
-  private async executeDeploymentLocally(
+  /** Local step execution — used only in test environments without a settingsReader. */
+  private async executeLocal(
     deployment: Deployment,
     partition: Partition,
     environment: Environment,

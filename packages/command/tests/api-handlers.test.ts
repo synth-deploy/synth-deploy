@@ -42,10 +42,13 @@ async function createTestServer(): Promise<TestContext> {
   const deployments = new InMemoryDeploymentStore();
   const orders = new OrderStore();
   const settings = new SettingsStore();
+  // Do NOT pass settings as settingsReader to CommandAgent — with Envoy-only
+  // enforcement (#115), a settingsReader triggers Envoy delegation which needs
+  // a real Envoy. Tests use the local execution path (no settingsReader).
   const agent = new CommandAgent(diary, deployments, orders, undefined, {
     healthCheckBackoffMs: 1,
     executionDelayMs: 1,
-  }, settings);
+  });
 
   const app = Fastify();
   registerPartitionRoutes(app, partitions, deployments, diary, orders);
