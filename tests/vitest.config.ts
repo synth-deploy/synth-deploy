@@ -7,7 +7,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export default defineConfig({
   test: {
     root: __dirname,
-    include: ["integration/**/*.test.ts", "e2e/**/*.test.ts"],
+    include: ["integration/**/*.test.ts", "e2e/**/*.test.ts", "scenarios/**/*.test.ts"],
   },
   resolve: {
     alias: {

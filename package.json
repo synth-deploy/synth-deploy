@@ -13,6 +13,7 @@
     "test": "npm test --workspace=packages/core --workspace=packages/command --workspace=packages/envoy --workspace=packages/ui",
     "test:coverage": "npm test --workspace=packages/core --workspace=packages/command --workspace=packages/envoy --workspace=packages/ui -- --coverage",
     "test:integration": "vitest run --config tests/vitest.config.ts",
+    "test:scenarios": "vitest run --config tests/vitest.config.ts scenarios/",
     "clean": "rm -rf packages/*/dist packages/*/*.tsbuildinfo"
   },
   "engines": {
