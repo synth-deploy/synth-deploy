@@ -1,0 +1,399 @@
+---
+import DocsLayout from "../../layouts/DocsLayout.astro";
+
+const installScript = `# Install both Command and Envoy
+curl -fsSL https://raw.githubusercontent.com/deploystack/deploystack/main/install.sh | bash
+
+# Or clone and run locally
+git clone https://github.com/deploystack/deploystack.git
+cd deploystack
+./install.sh --local`;
+
+const installOptions = `./install.sh [OPTIONS]
+
+Options:
+  --component <name>   command, envoy, or all (default: all)
+  --install-dir <path> Installation directory (default: /opt/deploystack)
+  --data-dir <path>    Data/SQLite directory (default: /var/lib/deploystack)
+  --local              Use current directory as source instead of cloning
+  --command-url <url>  Command URL for Envoy (default: http://localhost:3000)`;
+
+const dockerStart = `# Clone the repository
+git clone https://github.com/deploystack/deploystack.git
+cd deploystack
+
+# Start both services
+docker compose up -d
+
+# Verify
+curl http://localhost:3000/health
+curl http://localhost:3001/health`;
+
+const dockerCustom = `services:
+  command:
+    build:
+      context: .
+      dockerfile: Dockerfile.command
+    ports:
+      - "3000:3000"
+    volumes:
+      - deploystack-data:/data
+    environment:
+      - NODE_ENV=production
+      - DEPLOYSTACK_DATA_DIR=/data
+      - DEPLOYSTACK_API_KEY=your-secret-key
+      - DEPLOYSTACK_CORS_ORIGIN=https://deploy.example.com
+      - DEPLOYSTACK_SEED_DEMO=false
+      - ANTHROPIC_API_KEY=sk-ant-...
+    mem_limit: 512m
+    cpus: 1.0
+
+  envoy:
+    build:
+      context: .
+      dockerfile: Dockerfile.envoy
+    ports:
+      - "3001:3001"
+    volumes:
+      - envoy-workspace:/workspace
+    environment:
+      - NODE_ENV=production
+      - DEPLOYSTACK_COMMAND_URL=http://command:3000
+    depends_on:
+      command:
+        condition: service_healthy
+    mem_limit: 512m
+    cpus: 1.0
+
+volumes:
+  deploystack-data:
+  envoy-workspace:`;
+
+const systemdCommands = `# Command service
+sudo systemctl start deploystack-command
+sudo systemctl status deploystack-command
+journalctl -u deploystack-command -f
+
+# Envoy service
+sudo systemctl start deploystack-envoy
+sudo systemctl status deploystack-envoy
+journalctl -u deploystack-envoy -f`;
+
+const macosCommands = `# Command service
+launchctl load ~/Library/LaunchAgents/com.deploystack.command.plist
+launchctl unload ~/Library/LaunchAgents/com.deploystack.command.plist
+tail -f /var/lib/deploystack/command.log
+
+# Envoy service
+launchctl load ~/Library/LaunchAgents/com.deploystack.envoy.plist
+launchctl unload ~/Library/LaunchAgents/com.deploystack.envoy.plist
+tail -f /var/lib/deploystack/envoy.log`;
+
+const multiEnvoyDocker = `# On target machine: run Envoy pointed at your Command server
+docker run -d \\
+  --name deploystack-envoy \\
+  -p 3001:3001 \\
+  -v envoy-workspace:/workspace \\
+  -e DEPLOYSTACK_COMMAND_URL=http://command-host:3000 \\
+  -e ENVOY_PORT=3001 \\
+  deploystack-envoy`;
+
+const multiEnvoyInstall = `# On target machine: install Envoy only
+./install.sh --component envoy --command-url http://command-host:3000`;
+---
+
+<DocsLayout title="Installation & Configuration">
+  <h1>Installation & Configuration</h1>
+
+  <p>
+    This guide covers installing and configuring DeployStack for production use.
+    DeployStack runs as two components: <strong>Command</strong> (the orchestration
+    server) and <strong>Envoy</strong> (lightweight deployment agents on target machines).
+  </p>
+
+  <h2>Prerequisites</h2>
+
+  <table>
+    <thead>
+      <tr><th>Dependency</th><th>Required Version</th><th>Notes</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><strong>Node.js</strong></td><td>22+</td><td>Runtime for both Command and Envoy</td></tr>
+      <tr><td><strong>npm</strong></td><td>10+</td><td>Ships with Node.js 22</td></tr>
+      <tr><td><strong>SQLite</strong></td><td>bundled</td><td>Embedded via better-sqlite3; no external install needed</td></tr>
+      <tr><td><strong>Docker</strong></td><td>24+ (optional)</td><td>Only required for Docker-based deployment</td></tr>
+      <tr><td><strong>Git</strong></td><td>2.x</td><td>For cloning the repository (unless using Docker images)</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Quick Start with install.sh</h2>
+
+  <p>
+    The installer script sets up Command and/or Envoy as system services on Linux
+    (systemd) or macOS (launchd). It clones the repository, builds all packages,
+    copies artifacts to the install directory, and creates service definitions.
+  </p>
+
+  <pre><code>{installScript}</code></pre>
+
+  <h3>Installer Options</h3>
+
+  <pre><code>{installOptions}</code></pre>
+
+  <p>
+    After installation, the script prints service management commands specific to
+    your OS. Default paths:
+  </p>
+  <ul>
+    <li><strong>Install directory:</strong> <code>/opt/deploystack</code></li>
+    <li><strong>Data directory:</strong> <code>/var/lib/deploystack</code> (SQLite databases, logs, Envoy workspaces)</li>
+  </ul>
+
+  <h3>Linux (systemd)</h3>
+  <pre><code>{systemdCommands}</code></pre>
+
+  <h3>macOS (launchd)</h3>
+  <pre><code>{macosCommands}</code></pre>
+
+  <h2>Docker Deployment</h2>
+
+  <p>
+    The included <code>docker-compose.yml</code> runs both Command and Envoy with
+    health checks, volume persistence, and resource limits.
+  </p>
+
+  <pre><code>{dockerStart}</code></pre>
+
+  <p>
+    Command listens on port <strong>3000</strong> and Envoy on port <strong>3001</strong>.
+    The Envoy container waits for Command's health check to pass before starting.
+  </p>
+
+  <h3>Production docker-compose.yml</h3>
+
+  <p>
+    Customize the compose file for production by setting environment variables,
+    disabling demo seed data, and enabling authentication:
+  </p>
+
+  <pre><code>{dockerCustom}</code></pre>
+
+  <h3>Docker Volumes</h3>
+
+  <table>
+    <thead>
+      <tr><th>Volume</th><th>Container Path</th><th>Purpose</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>deploystack-data</code></td><td><code>/data</code></td><td>Command's SQLite databases (entities + debrief)</td></tr>
+      <tr><td><code>envoy-workspace</code></td><td><code>/workspace</code></td><td>Envoy's deployment workspaces and artifacts</td></tr>
+    </tbody>
+  </table>
+
+  <p>
+    Both containers run as a non-root <code>deploystack</code> user (UID/GID 1000)
+    with memory limited to 512 MB and 1 CPU core by default.
+  </p>
+
+  <h2>Configuration Reference</h2>
+
+  <h3>Command Environment Variables</h3>
+
+  <table>
+    <thead>
+      <tr><th>Variable</th><th>Default</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>PORT</code></td><td><code>3000</code></td><td>HTTP port for the Command server</td></tr>
+      <tr><td><code>HOST</code></td><td><code>0.0.0.0</code></td><td>Bind address</td></tr>
+      <tr><td><code>NODE_ENV</code></td><td><code>development</code></td><td>Set to <code>production</code> for deployed environments</td></tr>
+      <tr><td><code>DEPLOYSTACK_DATA_DIR</code></td><td><code>data</code></td><td>Directory for SQLite databases (deploystack.db, debrief.db)</td></tr>
+      <tr><td><code>DEPLOYSTACK_API_KEY</code></td><td><em>unset</em></td><td>Enables bearer token authentication on all endpoints except <code>GET /health</code>. When unset, auth is disabled.</td></tr>
+      <tr><td><code>DEPLOYSTACK_CORS_ORIGIN</code></td><td><em>unset (reject all)</em></td><td>Allowed CORS origin(s). Single URL or comma-separated list. When unset, all cross-origin requests are rejected.</td></tr>
+      <tr><td><code>DEPLOYSTACK_SEED_DEMO</code></td><td><code>true</code></td><td>Set to <code>false</code> to skip demo data seeding on first run</td></tr>
+      <tr><td><code>DEPLOYSTACK_RATE_LIMIT_MAX</code></td><td><code>100</code></td><td>Maximum requests per time window</td></tr>
+      <tr><td><code>DEPLOYSTACK_RATE_LIMIT_WINDOW_MS</code></td><td><code>60000</code></td><td>Rate limit window in milliseconds</td></tr>
+      <tr><td><code>DEPLOYSTACK_MCP_SESSION_TTL_MS</code></td><td><code>3600000</code></td><td>MCP session time-to-live (1 hour)</td></tr>
+      <tr><td><code>DEPLOYSTACK_MCP_CLEANUP_INTERVAL_MS</code></td><td><code>600000</code></td><td>MCP session cleanup interval (10 minutes)</td></tr>
+      <tr><td><code>ANTHROPIC_API_KEY</code></td><td><em>unset</em></td><td>API key for LLM-powered agent features (intent resolution, diagnostics). Agent degrades gracefully without it.</td></tr>
+      <tr><td><code>ANTHROPIC_BASE_URL</code></td><td><em>unset</em></td><td>Custom base URL for the Anthropic API (useful for proxies)</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Envoy Environment Variables</h3>
+
+  <table>
+    <thead>
+      <tr><th>Variable</th><th>Default</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>ENVOY_PORT</code></td><td><code>3001</code></td><td>HTTP port for the Envoy agent</td></tr>
+      <tr><td><code>ENVOY_HOST</code></td><td><code>0.0.0.0</code></td><td>Bind address</td></tr>
+      <tr><td><code>ENVOY_BASE_DIR</code></td><td><code>.envoy</code> (cwd)</td><td>Base directory for deployment workspaces and local state</td></tr>
+      <tr><td><code>DEPLOYSTACK_COMMAND_URL</code></td><td><em>empty</em></td><td>URL of the Command server (e.g., <code>http://command:3000</code>). Required for Envoy to report results back.</td></tr>
+      <tr><td><code>ANTHROPIC_API_KEY</code></td><td><em>unset</em></td><td>Enables LLM-powered diagnostic investigation on the Envoy. Degrades gracefully without it.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Application Settings (API-managed)</h3>
+
+  <p>
+    These settings are managed through the <code>PUT /api/settings</code> endpoint
+    and stored in SQLite. They control runtime behavior independent of environment
+    variables.
+  </p>
+
+  <table>
+    <thead>
+      <tr><th>Setting</th><th>Default</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>environmentsEnabled</code></td><td><code>true</code></td><td>Enable multi-environment support</td></tr>
+      <tr><td><code>agent.conflictPolicy</code></td><td><code>permissive</code></td><td>How to resolve partition/environment variable conflicts (<code>strict</code> or <code>permissive</code>)</td></tr>
+      <tr><td><code>agent.defaultHealthCheckRetries</code></td><td><code>1</code></td><td>Default health check retry count for new operations</td></tr>
+      <tr><td><code>agent.defaultTimeoutMs</code></td><td><code>30000</code></td><td>Default step execution timeout</td></tr>
+      <tr><td><code>agent.defaultVerificationStrategy</code></td><td><code>basic</code></td><td>Default verification strategy (<code>basic</code>, <code>full</code>, or <code>none</code>)</td></tr>
+      <tr><td><code>agent.llmEntityExposure</code></td><td><code>names</code></td><td>What entity data is sent to the LLM (<code>names</code> or <code>none</code>)</td></tr>
+      <tr><td><code>envoy.url</code></td><td><code>http://localhost:3001</code></td><td>URL of the Envoy agent for Command to dispatch deployments</td></tr>
+      <tr><td><code>envoy.timeoutMs</code></td><td><code>10000</code></td><td>Timeout for Command-to-Envoy HTTP requests</td></tr>
+      <tr><td><code>coBranding</code></td><td><em>unset</em></td><td>Optional operator branding: <code>operatorName</code>, <code>logoUrl</code>, <code>accentColor</code></td></tr>
+      <tr><td><code>mcpServers</code></td><td><code>[]</code></td><td>External MCP servers for data enrichment (array of <code>{`{name, url, description?}`}</code>)</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Architecture Overview</h2>
+
+  <pre><code>{`┌─────────────┐          ┌─────────────┐
+│   Command   │◄────────►│    Envoy    │
+│  (port 3000)│          │  (port 3001)│
+├─────────────┤          ├─────────────┤
+│ REST API    │ dispatch │ Executor    │
+│ MCP Server  │─────────►│ Health      │
+│ Agent       │          │ Scanner     │
+│ Debrief     │◄─────────│ Reporter    │
+│ Entity DB   │  report  │ Query       │
+└──────┬──────┘          └──────┬──────┘
+       │                        │
+  SQLite DBs             Workspace Dir
+  (deploystack.db,       (deployment
+   debrief.db)            artifacts)`}</code></pre>
+
+  <p>
+    <strong>Command</strong> is the orchestration server. It stores all entities
+    (partitions, operations, environments, orders, deployments) in SQLite, runs the
+    intelligent agent, and exposes both a REST API and an MCP server. The UI is
+    served as static files from Command.
+  </p>
+
+  <p>
+    <strong>Envoy</strong> is a lightweight agent deployed on target machines. It
+    receives deployment instructions from Command, executes shell commands in
+    isolated workspaces, runs health checks and verification, and reports results
+    back. Envoy maintains its own local state and can run LLM-powered diagnostics
+    when deployments fail.
+  </p>
+
+  <p>
+    Communication flows one direction at dispatch time (Command sends instructions
+    to Envoy) and one direction at report time (Envoy posts results back to
+    Command). There is no persistent connection between them.
+  </p>
+
+  <h2>Multi-Envoy Setup</h2>
+
+  <p>
+    For deploying across multiple machines, install Envoy on each target and point
+    them at your Command server.
+  </p>
+
+  <h3>With Docker</h3>
+  <pre><code>{multiEnvoyDocker}</code></pre>
+
+  <h3>With install.sh</h3>
+  <pre><code>{multiEnvoyInstall}</code></pre>
+
+  <h3>Registering Envoys with Command</h3>
+  <p>
+    After starting an Envoy, configure Command to dispatch to it by updating the
+    Envoy endpoint in settings:
+  </p>
+  <pre><code>{`curl -X PUT http://localhost:3000/api/settings \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer your-api-key" \\
+  -d '{"envoy": {"url": "http://envoy-host:3001", "timeoutMs": 10000}}'`}</code></pre>
+
+  <p>
+    Each Envoy identifies itself to Command using a generated ID based on its
+    host and port (e.g., <code>envoy-0.0.0.0:3001</code>). Envoys report
+    deployment results and debrief entries back to Command automatically when
+    <code>DEPLOYSTACK_COMMAND_URL</code> is set.
+  </p>
+
+  <h2>Troubleshooting</h2>
+
+  <h3>Command fails to start: "EACCES: permission denied"</h3>
+  <p>
+    The data directory is not writable. Ensure the <code>DEPLOYSTACK_DATA_DIR</code>
+    path exists and is owned by the user running Command. In Docker, the
+    <code>deploystack</code> user (UID 1000) must own the mounted volume.
+  </p>
+
+  <h3>Envoy cannot reach Command</h3>
+  <p>
+    Verify <code>DEPLOYSTACK_COMMAND_URL</code> is set and reachable from the Envoy
+    host. In Docker Compose, use the service name (<code>http://command:3000</code>).
+    For remote setups, ensure firewalls allow traffic on port 3000.
+  </p>
+  <pre><code>{`# From the Envoy host
+curl -f http://command-host:3000/health`}</code></pre>
+
+  <h3>CORS errors in the browser</h3>
+  <p>
+    Set <code>DEPLOYSTACK_CORS_ORIGIN</code> to your UI's origin. For development:
+  </p>
+  <pre><code>DEPLOYSTACK_CORS_ORIGIN=http://localhost:5173</code></pre>
+  <p>
+    For production with multiple origins:
+  </p>
+  <pre><code>DEPLOYSTACK_CORS_ORIGIN=https://deploy.example.com,https://admin.example.com</code></pre>
+
+  <h3>Authentication: "401 Unauthorized"</h3>
+  <p>
+    When <code>DEPLOYSTACK_API_KEY</code> is set, all requests except
+    <code>GET /health</code> require an <code>Authorization: Bearer &lt;key&gt;</code>
+    header. Verify the key matches exactly.
+  </p>
+
+  <h3>Demo data keeps appearing</h3>
+  <p>
+    Command seeds demo data on first startup if the database is empty. To disable:
+  </p>
+  <pre><code>DEPLOYSTACK_SEED_DEMO=false</code></pre>
+
+  <h3>Agent features not working (intent resolution, diagnostics)</h3>
+  <p>
+    LLM-powered features require <code>ANTHROPIC_API_KEY</code> to be set. Without
+    it, the agent degrades gracefully: deployments still work, but natural-language
+    intent resolution and diagnostic investigation are disabled. Check the health
+    endpoint for LLM connectivity status:
+  </p>
+  <pre><code>{`curl http://localhost:3000/health | jq .checks.llm`}</code></pre>
+
+  <h3>High memory usage</h3>
+  <p>
+    Both containers default to 512 MB memory limits. If deployments involve large
+    artifacts or many concurrent operations, increase <code>mem_limit</code> in the
+    compose file. For bare-metal installs, monitor with:
+  </p>
+  <pre><code>{`# systemd
+systemctl status deploystack-command
+journalctl -u deploystack-command --since "1 hour ago" | grep -i memory`}</code></pre>
+
+  <h3>Envoy workspace filling up disk</h3>
+  <p>
+    Envoy automatically cleans up old deployment workspaces every 10 minutes,
+    keeping the most recent 50 workspaces or those less than 30 days old. If disk
+    usage is still a concern, reduce the workspace retention or mount a larger
+    volume.
+  </p>
+</DocsLayout>
