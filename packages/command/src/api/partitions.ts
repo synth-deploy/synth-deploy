@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import type { IPartitionStore, DebriefReader, DebriefWriter, OrderStore } from "@deploystack/core";
+import type { IPartitionStore, DebriefReader, DebriefWriter, IOrderStore } from "@deploystack/core";
 import { generateOperationHistory } from "@deploystack/core";
 import type { DeploymentStore } from "../agent/command-agent.js";
 import { CreatePartitionSchema, UpdatePartitionSchema, SetVariablesSchema } from "./schemas.js";
@@ -9,7 +9,7 @@ export function registerPartitionRoutes(
   partitions: IPartitionStore,
   deployments: DeploymentStore,
   debrief: DebriefReader & DebriefWriter,
-  orders: OrderStore,
+  orders: IOrderStore,
 ): void {
   // List all partitions
   app.get("/api/partitions", async () => {

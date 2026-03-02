@@ -2,6 +2,7 @@ import type {
   ServiceHealthChecker,
   HealthCheckResult,
 } from "./health-checker.js";
+import type { DecisionType } from "@deploystack/core";
 
 // ---------------------------------------------------------------------------
 // Types — Envoy API responses
@@ -25,7 +26,7 @@ export interface EnvoyDeployResult {
     partitionId: string | null;
     deploymentId: string | null;
     agent: "command" | "envoy";
-    decisionType: string;
+    decisionType: DecisionType;
     decision: string;
     reasoning: string;
     context: Record<string, unknown>;
