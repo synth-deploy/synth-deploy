@@ -23,6 +23,7 @@ import { registerAgentRoutes } from "./api/agent.js";
 import { registerSettingsRoutes } from "./api/settings.js";
 import { registerOrderRoutes } from "./api/orders.js";
 import { registerEnvoyRoutes } from "./api/envoys.js";
+import { EnvoyRegistry } from "./agent/envoy-registry.js";
 import { registerStepTypeRoutes } from "./api/step-types.js";
 import { registerAuthMiddleware } from "./middleware/auth.js";
 import { startStaleDeploymentScanner } from "./agent/stale-deployment-detector.js";
@@ -42,6 +43,7 @@ const settings = new PersistentSettingsStore(entityDb);
 const deployments = new PersistentDeploymentStore(entityDb);
 const orders = new PersistentOrderStore(entityDb);
 const stepTypeStore = new PersistentStepTypeStore(entityDb);
+const envoyRegistry = new EnvoyRegistry();
 const envoyUrl = settings.get().envoy?.url;
 const healthChecker = envoyUrl ? new EnvoyHealthChecker(envoyUrl) : undefined;
 const agent = new CommandAgent(debrief, deployments, orders, healthChecker, {}, settings);
@@ -448,7 +450,7 @@ registerEnvironmentRoutes(app, environments, operations);
 registerAgentRoutes(app, agent, partitions, environments, operations, deployments, debrief, settings, llm);
 registerSettingsRoutes(app, settings);
 registerOrderRoutes(app, orders, agent, partitions, environments, operations, deployments, debrief, settings);
-registerEnvoyRoutes(app, settings);
+registerEnvoyRoutes(app, settings, envoyRegistry);
 
 // --- Serve UI static files if built ---
 
