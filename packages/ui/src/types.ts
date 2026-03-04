@@ -192,6 +192,13 @@ export type DecisionType =
   | "diagnostic-investigation"
   | "environment-scan"
   | "system"
+  | "llm-call"
+  | "artifact-analysis"
+  | "plan-generation"
+  | "plan-approval"
+  | "plan-rejection"
+  | "rollback-execution"
+  | "cross-system-context"
   | "order-created";
 
 export type AgentType = "command" | "envoy";
@@ -206,6 +213,7 @@ export interface DebriefEntry {
   decision: string;
   reasoning: string;
   context: Record<string, unknown>;
+  actor?: string;
 }
 
 export interface Order {

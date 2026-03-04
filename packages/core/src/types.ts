@@ -126,6 +126,7 @@ export interface DebriefEntry {
   decision: string;
   reasoning: string;
   context: Record<string, unknown>;
+  actor?: string;
 }
 
 // --- Partition ---

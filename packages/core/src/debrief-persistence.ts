@@ -20,6 +20,7 @@ interface DebriefRow {
   decision: string;
   reasoning: string;
   context: string;
+  actor: string | null;
 }
 
 function rowToEntry(row: DebriefRow): DebriefEntry {
@@ -33,6 +34,7 @@ function rowToEntry(row: DebriefRow): DebriefEntry {
     decision: row.decision,
     reasoning: row.reasoning,
     context: JSON.parse(row.context),
+    actor: row.actor ?? undefined,
   };
 }
 
@@ -79,7 +81,8 @@ export class PersistentDecisionDebrief implements DebriefWriter, DebriefReader {
         decision_type TEXT NOT NULL,
         decision TEXT NOT NULL,
         reasoning TEXT NOT NULL,
-        context TEXT NOT NULL DEFAULT '{}'
+        context TEXT NOT NULL DEFAULT '{}',
+        actor TEXT
       );
 
       CREATE INDEX IF NOT EXISTS idx_diary_deployment ON diary_entries(deployment_id);
@@ -88,10 +91,17 @@ export class PersistentDecisionDebrief implements DebriefWriter, DebriefReader {
       CREATE INDEX IF NOT EXISTS idx_diary_timestamp ON diary_entries(timestamp);
     `);
 
+    // Migration: add actor column to existing databases
+    try {
+      this.db.exec(`ALTER TABLE diary_entries ADD COLUMN actor TEXT`);
+    } catch {
+      // Column already exists — safe to ignore
+    }
+
     this.stmts = {
       insert: this.db.prepare(`
-        INSERT INTO diary_entries (id, timestamp, partition_id, deployment_id, agent, decision_type, decision, reasoning, context)
-        VALUES (@id, @timestamp, @partition_id, @deployment_id, @agent, @decision_type, @decision, @reasoning, @context)
+        INSERT INTO diary_entries (id, timestamp, partition_id, deployment_id, agent, decision_type, decision, reasoning, context, actor)
+        VALUES (@id, @timestamp, @partition_id, @deployment_id, @agent, @decision_type, @decision, @reasoning, @context, @actor)
       `),
       getById: this.db.prepare(`SELECT * FROM diary_entries WHERE id = ?`),
       getByDeployment: this.db.prepare(
@@ -129,7 +139,13 @@ export class PersistentDecisionDebrief implements DebriefWriter, DebriefReader {
       decision: params.decision,
       reasoning: params.reasoning,
       context: params.context ?? {},
+      actor: params.actor,
     };
+
+    // Conversational query responses are excluded from the debrief.
+    // The Debrief records actions and decisions, not LLM conversation history.
+    // The entry object is still returned for caller convenience but is not persisted.
+    if (params.isConversation) return entry;
 
     try {
       this.stmts.insert.run({
@@ -142,6 +158,7 @@ export class PersistentDecisionDebrief implements DebriefWriter, DebriefReader {
         decision: entry.decision,
         reasoning: entry.reasoning,
         context: JSON.stringify(entry.context),
+        actor: entry.actor ?? null,
       });
     } catch (error) {
       console.error('Debrief persistence failed', { operation: 'record', entryId: entry.id, error });

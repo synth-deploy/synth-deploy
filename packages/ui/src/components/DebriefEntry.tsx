@@ -13,7 +13,13 @@ const dtClassMap: Record<string, string> = {
   "diagnostic-investigation": "dt-diagnostic",
   "environment-scan": "dt-scan",
   system: "dt-system",
-  "order-created": "dt-order",
+  "llm-call": "dt-system",
+  "artifact-analysis": "dt-diagnostic",
+  "plan-generation": "dt-plan",
+  "plan-approval": "dt-completion",
+  "plan-rejection": "dt-failure",
+  "rollback-execution": "dt-failure",
+  "cross-system-context": "dt-scan",
 };
 
 const dtLabels: Record<string, string> = {
@@ -28,7 +34,13 @@ const dtLabels: Record<string, string> = {
   "diagnostic-investigation": "Diagnostic",
   "environment-scan": "Scan",
   system: "System",
-  "order-created": "Order",
+  "llm-call": "LLM",
+  "artifact-analysis": "Analysis",
+  "plan-generation": "Plan Gen",
+  "plan-approval": "Approved",
+  "plan-rejection": "Rejected",
+  "rollback-execution": "Rollback",
+  "cross-system-context": "Cross-System",
 };
 
 function formatTs(iso: string): string {
@@ -88,6 +100,11 @@ export default function DebriefEntryCard({ entry }: { entry: DebriefEntry }) {
         <span className={`agent-badge agent-badge-${entry.agent}`}>
           {entry.agent}
         </span>
+        {entry.actor && (
+          <span className="debrief-entry-actor text-muted" style={{ fontSize: 11 }}>
+            Actor: {entry.actor}
+          </span>
+        )}
         {entry.deploymentId && (
           <span className="debrief-entry-deploy-link mono" style={{ fontSize: 11 }}>
             {entry.deploymentId.slice(0, 8)}
