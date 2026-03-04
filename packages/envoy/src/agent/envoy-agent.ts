@@ -6,8 +6,7 @@ import type {
   EnvironmentId,
   LlmClient,
 } from "@deploystack/core";
-import { LocalStateStore } from "../state/local-state.js";
-import type { LocalDeploymentRecord } from "../state/local-state.js";
+import type { EnvoyKnowledgeStore } from "../state/knowledge-store.js";
 import { EnvironmentScanner } from "./environment-scanner.js";
 import { DeploymentExecutor } from "./deployment-executor.js";
 import type { VerificationResult } from "./deployment-executor.js";
@@ -111,7 +110,7 @@ export class EnvoyAgent {
 
   constructor(
     private debrief: DebriefWriter,
-    private state: LocalStateStore,
+    private state: EnvoyKnowledgeStore,
     private baseDir: string,
     reporter?: CommandReporter,
     llm?: LlmClient,
@@ -582,7 +581,7 @@ export class EnvoyAgent {
   getStatus(): {
     healthy: boolean;
     hostname: string;
-    summary: ReturnType<LocalStateStore["getSummary"]>;
+    summary: ReturnType<EnvoyKnowledgeStore["getSummary"]>;
     readiness: { ready: boolean; reason: string };
     lifecycle: LifecycleState;
   } {

@@ -3,10 +3,10 @@ import type {
   DebriefReader,
 } from "@deploystack/core";
 import type {
-  LocalStateStore,
+  EnvoyKnowledgeStore,
   LocalDeploymentRecord,
   EnvironmentSnapshot,
-} from "../state/local-state.js";
+} from "../state/knowledge-store.js";
 import type { EnvironmentScanner, EnvironmentScanResult } from "./environment-scanner.js";
 import type { DiagnosticReport } from "./diagnostic-investigator.js";
 
@@ -74,7 +74,7 @@ export interface EscalationPackage {
 export class EscalationPackager {
   constructor(
     private debrief: DebriefReader,
-    private state: LocalStateStore,
+    private state: EnvoyKnowledgeStore,
     private scanner: EnvironmentScanner,
     private envoyId: string = "envoy-local",
   ) {}

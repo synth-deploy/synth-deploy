@@ -4,39 +4,16 @@ import type {
   PartitionId,
   EnvironmentId,
 } from "@deploystack/core";
+import type {
+  EnvoyKnowledgeStore,
+  LocalDeploymentRecord,
+  EnvironmentSnapshot,
+  StoredPlan,
+  SystemKnowledgeEntry,
+} from "./knowledge-store.js";
 
-// ---------------------------------------------------------------------------
-// Types — what the Envoy remembers about its local environment
-// ---------------------------------------------------------------------------
-
-export interface LocalDeploymentRecord {
-  /** The deployment ID assigned by the Server */
-  deploymentId: DeploymentId;
-  partitionId: PartitionId;
-  environmentId: EnvironmentId;
-  operationId: string;
-  version: string;
-  variables: Record<string, string>;
-  status: "executing" | "succeeded" | "failed";
-  receivedAt: Date;
-  completedAt: Date | null;
-  /** Where the deployment artifacts were written locally */
-  workspacePath: string;
-  failureReason: string | null;
-}
-
-export interface EnvironmentSnapshot {
-  id: string;
-  environmentId: EnvironmentId;
-  partitionId: PartitionId;
-  /** What version is currently deployed in this environment */
-  currentVersion: string | null;
-  currentDeploymentId: DeploymentId | null;
-  /** Variables that are active in this environment */
-  activeVariables: Record<string, string>;
-  /** When this snapshot was last updated */
-  lastUpdated: Date;
-}
+// Re-export types so existing imports continue to work
+export type { LocalDeploymentRecord, EnvironmentSnapshot } from "./knowledge-store.js";
 
 /**
  * Environment key — unique identifier for a partition+environment pair.
@@ -47,20 +24,19 @@ function envKey(partitionId: PartitionId, environmentId: EnvironmentId): string 
 }
 
 // ---------------------------------------------------------------------------
-// LocalStateStore — the Envoy's memory of what it has done
+// LocalStateStore — in-memory implementation of EnvoyKnowledgeStore
 // ---------------------------------------------------------------------------
 
 /**
- * Persists the Envoy's local knowledge: what deployments have been
- * executed, what the current state of each environment looks like, and
- * the history of everything that has happened on this machine.
- *
- * In-memory for now. Same interface pattern as core — swap to SQLite
- * when the in-memory version proves itself.
+ * In-memory implementation of EnvoyKnowledgeStore. Used for testing and
+ * development. Same interface as the SQLite-backed PersistentEnvoyKnowledgeStore
+ * — swap freely depending on context.
  */
-export class LocalStateStore {
+export class LocalStateStore implements EnvoyKnowledgeStore {
   private deployments = new Map<DeploymentId, LocalDeploymentRecord>();
   private environments = new Map<string, EnvironmentSnapshot>();
+  private plans: StoredPlan[] = [];
+  private systemKnowledge = new Map<string, SystemKnowledgeEntry>();
 
   // -- Deployment records ---------------------------------------------------
 
@@ -160,6 +136,69 @@ export class LocalStateStore {
 
   listEnvironments(): EnvironmentSnapshot[] {
     return [...this.environments.values()];
+  }
+
+  // -- Plan retention -------------------------------------------------------
+
+  storePlan(plan: StoredPlan): void {
+    this.plans.push(plan);
+  }
+
+  getSuccessfulPlans(
+    artifactType: string,
+    environmentId?: string,
+  ): StoredPlan[] {
+    return this.plans.filter(
+      (p) =>
+        p.artifactType === artifactType &&
+        p.outcome === "succeeded" &&
+        (environmentId === undefined || p.environmentId === environmentId),
+    );
+  }
+
+  getFailedPlans(
+    artifactType: string,
+    environmentId?: string,
+  ): StoredPlan[] {
+    return this.plans.filter(
+      (p) =>
+        p.artifactType === artifactType &&
+        p.outcome === "failed" &&
+        (environmentId === undefined || p.environmentId === environmentId),
+    );
+  }
+
+  getLatestPlan(
+    artifactType: string,
+    environmentId: string,
+  ): StoredPlan | undefined {
+    const matching = this.plans
+      .filter(
+        (p) =>
+          p.artifactType === artifactType &&
+          p.environmentId === environmentId,
+      )
+      .sort(
+        (a, b) => b.executedAt.getTime() - a.executedAt.getTime(),
+      );
+    return matching[0];
+  }
+
+  // -- System knowledge -----------------------------------------------------
+
+  recordSystemKnowledge(knowledge: SystemKnowledgeEntry): void {
+    const key = `${knowledge.category}:${knowledge.key}`;
+    this.systemKnowledge.set(key, knowledge);
+  }
+
+  getSystemKnowledge(category: string): SystemKnowledgeEntry[] {
+    return [...this.systemKnowledge.values()].filter(
+      (k) => k.category === category,
+    );
+  }
+
+  getAllSystemKnowledge(): SystemKnowledgeEntry[] {
+    return [...this.systemKnowledge.values()];
   }
 
   // -- Summary for health reporting -----------------------------------------

@@ -5,7 +5,7 @@ import type {
 } from "@deploystack/core";
 import { LlmClient } from "@deploystack/core";
 import type { LlmResult } from "@deploystack/core";
-import type { LocalStateStore, LocalDeploymentRecord, EnvironmentSnapshot } from "../state/local-state.js";
+import type { EnvoyKnowledgeStore, LocalDeploymentRecord, EnvironmentSnapshot } from "../state/knowledge-store.js";
 import type { EnvironmentScanner } from "./environment-scanner.js";
 
 // ---------------------------------------------------------------------------
@@ -179,7 +179,7 @@ function classifyIntent(query: string): QueryIntent {
 export class QueryEngine {
   constructor(
     private debrief: DebriefReader,
-    private state: LocalStateStore,
+    private state: EnvoyKnowledgeStore,
     private scanner: EnvironmentScanner,
     private llm?: LlmClient,
   ) {}
