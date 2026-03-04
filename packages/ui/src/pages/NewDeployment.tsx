@@ -9,17 +9,13 @@ import {
 } from "../api.js";
 import type { Operation, Partition, Environment } from "../types.js";
 import type { IntentResult } from "../api.js";
-import { useMode } from "../context/ModeContext.js";
 import { useSettings } from "../context/SettingsContext.js";
 import DeploymentContextPanel from "../components/DeploymentContextPanel.js";
-import IntentBar from "../components/IntentBar.js";
 
 export default function NewDeployment() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { mode } = useMode();
   const { settings: appSettings } = useSettings();
-  const isAgent = mode === "agent";
   const environmentsEnabled = appSettings?.environmentsEnabled ?? true;
 
   const [operations, setOperations] = useState<Operation[]>([]);
@@ -30,18 +26,16 @@ export default function NewDeployment() {
   const [interpreting, setInterpreting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Shared deployment config state — used by both modes
+  // Deployment config state
   const [operationId, setOperationId] = useState(searchParams.get("operationId") ?? "");
   const [partitionId, setPartitionId] = useState(searchParams.get("partitionId") ?? "");
   const [environmentId, setEnvironmentId] = useState("");
   const [version, setVersion] = useState("");
   const [varEntries, setVarEntries] = useState<Array<[string, string]>>([]);
-  const [newKey, setNewKey] = useState("");
-  const [newValue, setNewValue] = useState("");
 
-  // Agent mode state
+  // Intent state
+  const [intent, setIntent] = useState("");
   const [intentResult, setIntentResult] = useState<IntentResult | null>(null);
-  const [lastIntent, setLastIntent] = useState("");
   const conversationIdRef = useRef(crypto.randomUUID());
 
   const intentFromUrl = searchParams.get("intent");
@@ -56,23 +50,17 @@ export default function NewDeployment() {
     });
   }, []);
 
-  // Auto-submit intent from URL query param (from global intent bar).
-  // handleIntentSubmit is intentionally omitted — ref guard prevents re-execution.
+  // Auto-submit intent from URL query param (from command channel).
+  // handleIntentSubmit is intentionally omitted -- ref guard prevents re-execution.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
-    if (intentFromUrl && isAgent && !loading && !intentSubmittedRef.current) {
+    if (intentFromUrl && !loading && !intentSubmittedRef.current) {
       intentSubmittedRef.current = true;
       handleIntentSubmit(intentFromUrl);
     }
-  }, [intentFromUrl, isAgent, loading]);
+  }, [intentFromUrl, loading]);
 
-  // Filter environments to those linked to selected operation
-  const selectedOperation = operations.find((p) => p.id === operationId);
-  const availableEnvs = selectedOperation
-    ? environments.filter((e) => selectedOperation.environmentIds.includes(e.id))
-    : environments;
-
-  // --- Shared deploy logic (both modes call this) ---
+  // --- Deploy logic ---
 
   async function deployWithCurrentConfig() {
     if (!operationId || !partitionId || !version.trim() || (environmentsEnabled && !environmentId)) {
@@ -89,7 +77,6 @@ export default function NewDeployment() {
         if (k.trim()) variables[k.trim()] = v;
       }
 
-      // Same triggerDeployment call regardless of mode — identical artifacts
       const result = await triggerDeployment({
         operationId,
         partitionId,
@@ -99,40 +86,20 @@ export default function NewDeployment() {
       });
 
       navigate(`/deployments/${result.deployment.id}`);
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
       setSubmitting(false);
     }
   }
 
-  // --- Traditional mode handlers ---
+  // --- Intent handlers ---
 
-  function handleAddVar() {
-    if (!newKey.trim()) return;
-    setVarEntries([...varEntries, [newKey.trim(), newValue]]);
-    setNewKey("");
-    setNewValue("");
-  }
-
-  function handleRemoveVar(index: number) {
-    setVarEntries(varEntries.filter((_, i) => i !== index));
-  }
-
-  function handleTraditionalSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    deployWithCurrentConfig();
-  }
-
-  // --- Agent mode handlers ---
-
-  async function handleIntentSubmit(intent: string) {
+  async function handleIntentSubmit(intentText: string) {
     setInterpreting(true);
     setError(null);
-    setLastIntent(intent);
 
     try {
-      // Pass current partial config so agent can fill gaps
-      const result = await interpretIntent(intent, {
+      const result = await interpretIntent(intentText, {
         operationId: operationId || undefined,
         partitionId: partitionId || undefined,
         environmentId: environmentId || undefined,
@@ -142,7 +109,7 @@ export default function NewDeployment() {
 
       setIntentResult(result);
 
-      // Apply resolved fields to shared config state (UI updates)
+      // Apply resolved fields to config state
       for (const update of result.uiUpdates) {
         switch (update.field) {
           case "operationId":
@@ -166,15 +133,14 @@ export default function NewDeployment() {
         setVarEntries(newVars);
       }
 
-      // If fully resolved, deploy immediately — response is UI updating, not text
+      // If fully resolved, deploy immediately
       if (result.ready) {
-        // Small delay so user sees fields populate before deploy fires
         setTimeout(() => {
           deployWithResolvedConfig(result);
         }, 300);
       }
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
     } finally {
       setInterpreting(false);
     }
@@ -196,10 +162,18 @@ export default function NewDeployment() {
       });
 
       navigate(`/deployments/${deployResult.deployment.id}`);
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
       setSubmitting(false);
     }
+  }
+
+  function handleIntentFormSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!intent.trim() || submitting || interpreting) return;
+    const text = intent.trim();
+    setIntent("");
+    handleIntentSubmit(text);
   }
 
   // --- Helper: name lookups for resolved display ---
@@ -218,218 +192,116 @@ export default function NewDeployment() {
 
   if (loading) return <div className="loading">Loading...</div>;
 
-  // =========================================================================
-  // AGENT MODE LAYOUT
-  // =========================================================================
-
-  if (isAgent) {
-    return (
-      <div className="agent-deploy-layout">
-        <div className="page-header">
-          <h2>New Deployment</h2>
-          <span className="mode-badge mode-badge-agent">Agent Mode</span>
-        </div>
-
-        {error && <div className="error-msg">{error}</div>}
-
-        {/* Contextual information — fills the space where form fields were */}
-        <DeploymentContextPanel />
-
-        {/* Resolved config preview — shows when intent has been interpreted */}
-        {intentResult && (
-          <div className="resolved-config-card card">
-            <div className="card-header">
-              <h3>Resolved Configuration</h3>
-              {intentResult.ready && (
-                <span className="badge badge-succeeded">Ready</span>
-              )}
-            </div>
-            <div className="resolved-fields">
-              <ResolvedFieldDisplay
-                label="Operation"
-                field={intentResult.resolved.operationId}
-                displayValue={intentResult.resolved.operationId.value ? operationName(intentResult.resolved.operationId.value) : ""}
-              />
-              <ResolvedFieldDisplay
-                label="Partition"
-                field={intentResult.resolved.partitionId}
-                displayValue={intentResult.resolved.partitionId.value ? partitionName(intentResult.resolved.partitionId.value) : ""}
-              />
-              {environmentsEnabled && (
-                <ResolvedFieldDisplay
-                  label="Environment"
-                  field={intentResult.resolved.environmentId}
-                  displayValue={intentResult.resolved.environmentId.value ? envName(intentResult.resolved.environmentId.value) : ""}
-                />
-              )}
-              <ResolvedFieldDisplay
-                label="Version"
-                field={intentResult.resolved.version}
-                displayValue={intentResult.resolved.version.value}
-              />
-            </div>
-
-            {Object.keys(intentResult.resolved.variables).length > 0 && (
-              <div className="resolved-variables">
-                <div className="resolved-field-label">Variables</div>
-                {Object.entries(intentResult.resolved.variables).map(([k, v]) => (
-                  <div key={k} className="resolved-var-row">
-                    <span className="mono">{k}</span>
-                    <span className="mono">{v}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {(() => {
-              const missing = environmentsEnabled
-                ? intentResult.missingFields
-                : intentResult.missingFields.filter((f) => f !== "environmentId");
-              return missing.length > 0 ? (
-                <div className="resolved-missing">
-                  <strong>Missing: {missing.join(", ")}</strong>
-                  <div style={{ marginTop: 4, fontSize: 12 }}>
-                    Try including {missing.map((f) => {
-                      if (f === "operationId") return "the operation name";
-                      if (f === "partitionId") return "the partition name";
-                      if (f === "environmentId") return '"production" or "staging"';
-                      if (f === "version") return 'a version like "v1.2.3"';
-                      return f;
-                    }).join(", ")} in your intent, or switch to traditional mode.
-                  </div>
-                </div>
-              ) : null;
-            })()}
-
-            {!intentResult.ready && (
-              <button
-                className="btn btn-primary mt-16"
-                disabled={submitting || intentResult.missingFields.length > 0}
-                onClick={() => deployWithCurrentConfig()}
-              >
-                {submitting ? "Deploying..." : "Confirm & Deploy"}
-              </button>
-            )}
-          </div>
-        )}
-
-        {/* Intent bar — fixed at bottom of deploy area */}
-        <IntentBar
-          onIntentResolved={setIntentResult}
-          onSubmitIntent={handleIntentSubmit}
-          disabled={submitting}
-          processing={interpreting}
-        />
-      </div>
-    );
-  }
-
-  // =========================================================================
-  // TRADITIONAL MODE LAYOUT (original form, unchanged behavior)
-  // =========================================================================
-
   return (
-    <div>
+    <div className="agent-deploy-layout">
       <div className="page-header">
         <h2>New Deployment</h2>
-        <span className="mode-badge mode-badge-traditional">Traditional Mode</span>
       </div>
 
       {error && <div className="error-msg">{error}</div>}
 
-      <div className="card" style={{ maxWidth: 600 }}>
-        <form onSubmit={handleTraditionalSubmit}>
-          <div className="form-group">
-            <label>Operation</label>
-            <select value={operationId} onChange={(e) => { setOperationId(e.target.value); setEnvironmentId(""); }}>
-              <option value="">Select an operation...</option>
-              {operations.map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
+      {/* Contextual information */}
+      <DeploymentContextPanel />
+
+      {/* Resolved config preview -- shows when intent has been interpreted */}
+      {intentResult && (
+        <div className="resolved-config-card card">
+          <div className="card-header">
+            <h3>Resolved Configuration</h3>
+            {intentResult.ready && (
+              <span className="badge badge-succeeded">Ready</span>
+            )}
           </div>
-
-          <div className="form-group">
-            <label>Partition</label>
-            <select value={partitionId} onChange={(e) => setPartitionId(e.target.value)}>
-              <option value="">Select a partition...</option>
-              {partitions.map((t) => (
-                <option key={t.id} value={t.id}>{t.name}</option>
-              ))}
-            </select>
-          </div>
-
-          {environmentsEnabled && (
-            <div className="form-group">
-              <label>Environment</label>
-              <select value={environmentId} onChange={(e) => setEnvironmentId(e.target.value)}>
-                <option value="">Select an environment...</option>
-                {availableEnvs.map((e) => (
-                  <option key={e.id} value={e.id}>{e.name}</option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          <div className="form-group">
-            <label>Version</label>
-            <input
-              value={version}
-              onChange={(e) => setVersion(e.target.value)}
-              placeholder="e.g., 1.0.0"
+          <div className="resolved-fields">
+            <ResolvedFieldDisplay
+              label="Operation"
+              field={intentResult.resolved.operationId}
+              displayValue={intentResult.resolved.operationId.value ? operationName(intentResult.resolved.operationId.value) : ""}
+            />
+            <ResolvedFieldDisplay
+              label="Partition"
+              field={intentResult.resolved.partitionId}
+              displayValue={intentResult.resolved.partitionId.value ? partitionName(intentResult.resolved.partitionId.value) : ""}
+            />
+            {environmentsEnabled && (
+              <ResolvedFieldDisplay
+                label="Environment"
+                field={intentResult.resolved.environmentId}
+                displayValue={intentResult.resolved.environmentId.value ? envName(intentResult.resolved.environmentId.value) : ""}
+              />
+            )}
+            <ResolvedFieldDisplay
+              label="Version"
+              field={intentResult.resolved.version}
+              displayValue={intentResult.resolved.version.value}
             />
           </div>
 
-          <div className="form-group">
-            <label>Variables (optional)</label>
-            {varEntries.length > 0 && (
-              <table className="var-table" style={{ marginBottom: 8 }}>
-                <thead>
-                  <tr>
-                    <th>Key</th>
-                    <th>Value</th>
-                    <th style={{ width: 40 }}></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {varEntries.map(([k, v], i) => (
-                    <tr key={i}>
-                      <td><span className="mono">{k}</span></td>
-                      <td><span className="mono">{v}</span></td>
-                      <td>
-                        <button type="button" className="remove-btn" onClick={() => handleRemoveVar(i)}>&times;</button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-            <div className="inline-form">
-              <div className="form-group">
-                <input
-                  placeholder="Key"
-                  value={newKey}
-                  onChange={(e) => setNewKey(e.target.value)}
-                  style={{ minWidth: 120 }}
-                />
-              </div>
-              <div className="form-group">
-                <input
-                  placeholder="Value"
-                  value={newValue}
-                  onChange={(e) => setNewValue(e.target.value)}
-                  style={{ minWidth: 120 }}
-                />
-              </div>
-              <button type="button" className="btn btn-sm" onClick={handleAddVar}>Add</button>
+          {Object.keys(intentResult.resolved.variables).length > 0 && (
+            <div className="resolved-variables">
+              <div className="resolved-field-label">Variables</div>
+              {Object.entries(intentResult.resolved.variables).map(([k, v]) => (
+                <div key={k} className="resolved-var-row">
+                  <span className="mono">{k}</span>
+                  <span className="mono">{v}</span>
+                </div>
+              ))}
             </div>
-          </div>
+          )}
 
-          <button type="submit" className="btn btn-primary" disabled={submitting}>
-            {submitting ? "Deploying..." : "Trigger Deployment"}
+          {(() => {
+            const missing = environmentsEnabled
+              ? intentResult.missingFields
+              : intentResult.missingFields.filter((f) => f !== "environmentId");
+            return missing.length > 0 ? (
+              <div className="resolved-missing">
+                <strong>Missing: {missing.join(", ")}</strong>
+                <div style={{ marginTop: 4, fontSize: 12 }}>
+                  Try including {missing.map((f) => {
+                    if (f === "operationId") return "the operation name";
+                    if (f === "partitionId") return "the partition name";
+                    if (f === "environmentId") return '"production" or "staging"';
+                    if (f === "version") return 'a version like "v1.2.3"';
+                    return f;
+                  }).join(", ")} in your intent.
+                </div>
+              </div>
+            ) : null;
+          })()}
+
+          {!intentResult.ready && (
+            <button
+              className="btn btn-primary mt-16"
+              disabled={submitting || intentResult.missingFields.length > 0}
+              onClick={() => deployWithCurrentConfig()}
+            >
+              {submitting ? "Deploying..." : "Confirm & Deploy"}
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Intent bar */}
+      <form className="intent-bar" onSubmit={handleIntentFormSubmit}>
+        <div className="intent-bar-inner">
+          <span className="intent-bar-icon">&gt;</span>
+          <input
+            className="intent-bar-input"
+            type="text"
+            value={intent}
+            onChange={(e) => setIntent(e.target.value)}
+            placeholder="Issue intent... e.g. deploy Acme to staging"
+            disabled={submitting || interpreting}
+          />
+          <button
+            type="submit"
+            className="intent-bar-submit"
+            disabled={!intent.trim() || submitting || interpreting}
+          >
+            {interpreting ? "..." : "Go"}
           </button>
-        </form>
-      </div>
+        </div>
+      </form>
     </div>
   );
 }

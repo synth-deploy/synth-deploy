@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router";
-import { useMode } from "../context/ModeContext.js";
 import { getRecentDebrief } from "../api.js";
 import type { DebriefEntry } from "../types.js";
 
@@ -68,28 +67,25 @@ function DiaryEntry({ entry }: { entry: DebriefEntry }) {
 }
 
 export default function DiaryPanel() {
-  const { mode } = useMode();
-  const isAgent = mode === "agent";
   const [entries, setEntries] = useState<DebriefEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const fetchEntries = () => {
-    if (!isAgent) return;
     setError(null);
     setLoading(true);
     getRecentDebrief({ limit: 10 })
       .then(setEntries)
-      .catch((e: any) => setError(e.message || "Failed to load decision diary"))
+      .catch((e: unknown) => setError(e instanceof Error ? e.message : "Failed to load decision diary"))
       .finally(() => setLoading(false));
   };
 
   useEffect(() => {
     fetchEntries();
-  }, [isAgent]);
+  }, []);
 
   return (
-    <div className={`diary-panel ${isAgent ? "diary-panel-visible" : ""}`}>
+    <div className="diary-panel diary-panel-visible">
       <div className="diary-panel-content">
         <div className="diary-panel-header">
           <span className="diary-panel-title">Decision Diary</span>

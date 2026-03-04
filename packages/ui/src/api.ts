@@ -307,6 +307,16 @@ export async function getHealth(): Promise<{ status: string; service: string; ti
   return fetchJson("/health");
 }
 
+export interface LlmHealthStatus {
+  configured: boolean;
+  healthy: boolean;
+  provider?: string;
+}
+
+export async function getLlmHealth(): Promise<LlmHealthStatus> {
+  return fetchJson("/api/health/llm");
+}
+
 // --- Agent Mode ---
 
 export interface ResolvedField {

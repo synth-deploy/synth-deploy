@@ -440,6 +440,7 @@ registerHealthRoutes(app, {
   llmApiKey: process.env.ANTHROPIC_API_KEY,
   llmBaseUrl: process.env.ANTHROPIC_BASE_URL,
   mcpServers: settings.get().mcpServers,
+  llmClient: llm,
 });
 registerDeploymentRoutes(app, agent, partitions, environments, deployments, debrief, operations, orders, settings);
 registerEnvoyReportRoutes(app, debrief, deployments);
