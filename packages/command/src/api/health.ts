@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import type { FastifyInstance } from "fastify";
 import type Database from "better-sqlite3";
+import type { LlmClient } from "@deploystack/core";
 
 interface HealthCheckOptions {
   entityDb: Database.Database;
@@ -9,6 +10,7 @@ interface HealthCheckOptions {
   llmApiKey?: string;
   llmBaseUrl?: string;
   mcpServers?: Array<{ name: string; url: string }>;
+  llmClient?: LlmClient;
 }
 
 interface CheckResult {
@@ -16,6 +18,10 @@ interface CheckResult {
   error?: string;
   responseTimeMs?: number;
 }
+
+// Cached LLM health result (30-second TTL)
+let llmHealthCache: { healthy: boolean; checkedAt: number } | null = null;
+const LLM_HEALTH_CACHE_TTL_MS = 30_000;
 
 export function registerHealthRoutes(
   app: FastifyInstance,
@@ -145,4 +151,89 @@ export function registerHealthRoutes(
       timestamp: new Date().toISOString(),
     };
   });
+
+  // --- Dedicated LLM health endpoint ---
+  // Used by the UI's LlmGate to determine if the LLM connection is configured and reachable.
+
+  app.get("/api/health/llm", async () => {
+    const llmClient = options?.llmClient;
+
+    // Check configuration via the LlmClient instance
+    const configured = llmClient ? llmClient.isAvailable() : false;
+
+    if (!configured) {
+      return {
+        configured: false,
+        healthy: false,
+        provider: detectProvider(),
+      };
+    }
+
+    // Check cached health result
+    const now = Date.now();
+    if (llmHealthCache && now - llmHealthCache.checkedAt < LLM_HEALTH_CACHE_TTL_MS) {
+      return {
+        configured: true,
+        healthy: llmHealthCache.healthy,
+        provider: detectProvider(),
+      };
+    }
+
+    // Lightweight ping to verify the provider is reachable
+    let healthy = false;
+    try {
+      const apiKey = options?.llmApiKey ?? process.env.DEPLOYSTACK_LLM_API_KEY;
+      const baseUrl = options?.llmBaseUrl ?? process.env.DEPLOYSTACK_LLM_BASE_URL ?? "https://api.anthropic.com";
+      const provider = detectProvider();
+
+      if (provider === "anthropic" && apiKey) {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 5000);
+        const res = await fetch(`${baseUrl}/v1/messages`, {
+          method: "POST",
+          headers: {
+            "x-api-key": apiKey,
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "claude-haiku-4-5-20251001",
+            max_tokens: 1,
+            messages: [{ role: "user", content: "ping" }],
+          }),
+          signal: controller.signal,
+        });
+        clearTimeout(timeout);
+        healthy = res.status < 500;
+      } else if (provider === "openai-compatible") {
+        // For openai-compatible, just check the base URL is reachable
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 5000);
+        const res = await fetch(baseUrl.replace(/\/+$/, "") + "/models", {
+          signal: controller.signal,
+          headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
+        });
+        clearTimeout(timeout);
+        healthy = res.status < 500;
+      } else {
+        // For bedrock/vertex, assume healthy if configured (SDK handles auth)
+        healthy = true;
+      }
+    } catch (err) {
+      app.log.error(err, "LLM health check failed");
+      healthy = false;
+    }
+
+    llmHealthCache = { healthy, checkedAt: now };
+
+    return {
+      configured: true,
+      healthy,
+      provider: detectProvider(),
+    };
+  });
+}
+
+function detectProvider(): string | undefined {
+  return process.env.DEPLOYSTACK_LLM_PROVIDER ?? "anthropic";
 }

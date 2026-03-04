@@ -307,12 +307,14 @@ export async function getHealth(): Promise<{ status: string; service: string; ti
   return fetchJson("/health");
 }
 
-export async function getLlmHealth(): Promise<{
+export interface LlmHealthStatus {
   configured: boolean;
   healthy: boolean;
-  provider: string | null;
-  lastChecked: string;
-}> {
+  provider?: string;
+  lastChecked?: string;
+}
+
+export async function getLlmHealth(): Promise<LlmHealthStatus> {
   return fetchJson("/api/health/llm");
 }
 

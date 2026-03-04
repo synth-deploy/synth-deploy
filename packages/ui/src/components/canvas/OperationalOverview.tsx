@@ -12,13 +12,14 @@ import {
 import type { Deployment, Partition, Environment, Operation, Order, DebriefEntry } from "../../types.js";
 import type { DeploymentContext } from "../../api.js";
 import { useCanvas } from "../../context/CanvasContext.js";
-import Breadcrumb from "../Breadcrumb.js";
+import { useSettings } from "../../context/SettingsContext.js";
 import SectionHeader from "../SectionHeader.js";
 import CommandEye from "../CommandEye.js";
 import DeploymentParticles from "../DeploymentParticles.js";
 
 export default function OperationalOverview() {
   const { pushPanel } = useCanvas();
+  const { settings } = useSettings();
 
   const [deployments, setDeployments] = useState<Deployment[]>([]);
   const [partitions, setPartitions] = useState<Partition[]>([]);
@@ -96,7 +97,26 @@ export default function OperationalOverview() {
 
   return (
     <div className="v2-dashboard">
-      <Breadcrumb path={[]} onHome={() => {}} />
+      <div className="v2-breadcrumb">
+        {settings?.coBranding ? (
+          <span className="v2-breadcrumb-logo v2-cobranding-logo">
+            <img
+              src={settings.coBranding.logoUrl}
+              alt={settings.coBranding.operatorName}
+              className="v2-cobranding-img"
+            />
+            <span
+              className="v2-cobranding-name"
+              style={settings.coBranding.accentColor ? { color: settings.coBranding.accentColor } : undefined}
+            >
+              {settings.coBranding.operatorName}
+            </span>
+            <span className="v2-cobranding-powered-by">by DeployStack</span>
+          </span>
+        ) : (
+          <span className="v2-breadcrumb-logo">DeployStack</span>
+        )}
+      </div>
 
       {/* Command status card */}
       <div className="v2-command-card">

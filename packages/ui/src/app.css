@@ -4624,3 +4624,194 @@ table a:hover {
   border-top: 1px solid var(--border);
 }
 
+/* =====================================================================
+   LLM Gate — connection requirement screen
+   ===================================================================== */
+
+.llm-gate-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  background: var(--v2-bg);
+}
+
+.llm-gate-loading-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid rgba(99, 225, 190, 0.15);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: llm-gate-spin 0.8s linear infinite;
+}
+
+@keyframes llm-gate-spin {
+  to { transform: rotate(360deg); }
+}
+
+.llm-gate-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  background: var(--v2-bg);
+  background-image:
+    radial-gradient(ellipse at 15% 10%, rgba(99,225,190,0.025) 0%, transparent 50%),
+    radial-gradient(ellipse at 85% 90%, rgba(129,140,248,0.02) 0%, transparent 50%);
+  padding: 24px;
+}
+
+.llm-gate-card {
+  max-width: 520px;
+  width: 100%;
+  background: var(--v2-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 40px 36px;
+  backdrop-filter: blur(12px);
+}
+
+.llm-gate-logo {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 1px;
+  margin-bottom: 24px;
+}
+
+.llm-gate-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 12px;
+}
+
+.llm-gate-message {
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin-bottom: 24px;
+}
+
+.llm-gate-detail {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-muted);
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  margin-bottom: 20px;
+  word-break: break-all;
+}
+
+.llm-gate-setup {
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  margin-bottom: 24px;
+}
+
+.llm-gate-setup-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.llm-gate-setup-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin-bottom: 10px;
+}
+
+.llm-gate-setup-step:last-child {
+  margin-bottom: 0;
+}
+
+.llm-gate-step-number {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  background: var(--accent-dim);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.llm-gate-setup-step code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--accent);
+  background: rgba(99, 225, 190, 0.08);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
+.llm-gate-retry {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent-dim);
+  color: var(--accent);
+  border: 1px solid rgba(99, 225, 190, 0.25);
+  border-radius: var(--radius);
+  padding: 8px 20px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.llm-gate-retry:hover {
+  background: var(--accent-hover);
+  border-color: rgba(99, 225, 190, 0.4);
+}
+
+/* Warning banner for configured-but-unhealthy state */
+
+.llm-gate-warning-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(234, 88, 12, 0.08);
+  border-bottom: 1px solid rgba(234, 88, 12, 0.2);
+  padding: 8px 16px;
+  font-size: 13px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.llm-gate-warning-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ea580c;
+  flex-shrink: 0;
+  animation: llm-gate-pulse 2s ease-in-out infinite;
+}
+
+@keyframes llm-gate-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.llm-gate-warning-text {
+  color: #fdba74;
+}
+
