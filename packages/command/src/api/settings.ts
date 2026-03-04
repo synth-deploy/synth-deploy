@@ -74,22 +74,6 @@ export function registerSettingsRoutes(
     return { settings: sanitizeLlmSettings(updated) };
   });
 
-  // LLM health check endpoint
-  app.get("/api/health/llm", async () => {
-    const currentSettings = settings.get();
-    const configured =
-      !!currentSettings.llm?.provider &&
-      (typeof process.env.DEPLOYSTACK_LLM_API_KEY === "string" &&
-        process.env.DEPLOYSTACK_LLM_API_KEY.length > 0);
-
-    return {
-      configured,
-      healthy: configured, // Lightweight check — full health check is done via LlmClient.healthCheck()
-      provider: currentSettings.llm?.provider ?? null,
-      lastChecked: new Date().toISOString(),
-    };
-  });
-
   // Read-only command info
   app.get("/api/settings/command-info", async () => {
     return {
