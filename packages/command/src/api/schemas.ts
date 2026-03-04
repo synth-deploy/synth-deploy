@@ -184,6 +184,47 @@ function isSsrfSafeUrl(url: string): boolean {
 
 // --- Settings ---
 
+const LlmProviderEnum = z.enum(["claude", "openai", "gemini", "grok", "deepseek", "ollama", "custom"]);
+
+/**
+ * LLM base URL validator. Allows localhost/private IPs for local providers
+ * like Ollama, but validates URL format.
+ */
+function isValidLlmBaseUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+const LlmFallbackConfigSchema = z.object({
+  provider: LlmProviderEnum,
+  apiKeyConfigured: z.boolean().optional(),
+  baseUrl: z.string().refine(isValidLlmBaseUrl, {
+    message: "Must be a valid http or https URL",
+  }).optional(),
+  model: z.string().min(1),
+  timeoutMs: z.number().int().positive({ message: "Timeout must be a positive number" }),
+});
+
+const LlmProviderConfigSchema = z.object({
+  provider: LlmProviderEnum,
+  apiKeyConfigured: z.boolean().optional(),
+  apiKey: z.string().optional(),
+  baseUrl: z.string().refine(isValidLlmBaseUrl, {
+    message: "Must be a valid http or https URL",
+  }).optional(),
+  reasoningModel: z.string().min(1),
+  classificationModel: z.string().min(1),
+  timeoutMs: z.number().int().positive({ message: "Timeout must be a positive number" }),
+  rateLimitPerMin: z.number().int().positive({ message: "Rate limit must be a positive number" }),
+  fallbacks: z.array(LlmFallbackConfigSchema).optional(),
+});
+
+export { LlmProviderConfigSchema };
+
 export const UpdateSettingsSchema = z.object({
   environmentsEnabled: z.boolean().optional(),
   agent: z.object({
@@ -191,6 +232,7 @@ export const UpdateSettingsSchema = z.object({
     defaultTimeoutMs: z.number().int().positive().optional(),
     conflictPolicy: z.enum(["permissive", "strict"]).optional(),
     defaultVerificationStrategy: z.enum(["basic", "full", "none"]).optional(),
+    llmOverride: LlmProviderConfigSchema.partial().optional(),
   }).optional(),
   deploymentDefaults: z.object({
     defaultDeployConfig: UpdateDeployConfigSchema.optional(),
@@ -213,6 +255,7 @@ export const UpdateSettingsSchema = z.object({
     }),
     description: z.string().optional(),
   })).optional(),
+  llm: LlmProviderConfigSchema.optional(),
 });
 
 // --- Orders ---

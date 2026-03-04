@@ -105,6 +105,34 @@ export interface McpServerConfig {
   description?: string;
 }
 
+export type LlmProvider = "claude" | "openai" | "gemini" | "grok" | "deepseek" | "ollama" | "custom";
+
+export interface LlmFallbackConfig {
+  provider: LlmProvider;
+  apiKeyConfigured: boolean;
+  baseUrl?: string;
+  model: string;
+  timeoutMs: number;
+}
+
+export interface LlmProviderConfig {
+  provider: LlmProvider;
+  apiKeyConfigured: boolean;
+  baseUrl?: string;
+  reasoningModel: string;
+  classificationModel: string;
+  timeoutMs: number;
+  rateLimitPerMin: number;
+  fallbacks?: LlmFallbackConfig[];
+}
+
+export interface LlmHealthStatus {
+  configured: boolean;
+  healthy: boolean;
+  provider?: string;
+  lastChecked?: string;
+}
+
 export interface AppSettings {
   environmentsEnabled: boolean;
   agent: AgentSettings;
@@ -112,6 +140,7 @@ export interface AppSettings {
   envoy: EnvoyEndpointConfig;
   coBranding?: CoBrandingConfig;
   mcpServers?: McpServerConfig[];
+  llm?: LlmProviderConfig;
 }
 
 export interface CommandInfo {
