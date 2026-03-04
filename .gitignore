@@ -15,3 +15,6 @@ data/
 
 # Coverage reports
 coverage/
+
+# Astro generated files
+.astro/
