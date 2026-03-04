@@ -77,11 +77,66 @@ export interface Operation {
 
 export type ConflictPolicy = "strict" | "permissive";
 
+export type TaskModelTask =
+  | "logClassification"
+  | "diagnosticSynthesis"
+  | "postmortemGeneration"
+  | "queryAnswering";
+
+export interface TaskModelConfig {
+  logClassification?: string;
+  diagnosticSynthesis?: string;
+  postmortemGeneration?: string;
+  queryAnswering?: string;
+}
+
+export interface TaskModelMeta {
+  label: string;
+  tier: string;
+  tokenBudget: string;
+  reasoningDepth: string;
+}
+
+export const TASK_MODEL_META: Record<TaskModelTask, TaskModelMeta> = {
+  logClassification: {
+    label: "Log pattern classification",
+    tier: "Lightweight",
+    tokenBudget: "~1,024",
+    reasoningDepth: "Structured classification",
+  },
+  diagnosticSynthesis: {
+    label: "Diagnostic report synthesis",
+    tier: "Mid-range",
+    tokenBudget: "~2,048",
+    reasoningDepth: "Evidence \u2192 narrative",
+  },
+  postmortemGeneration: {
+    label: "Postmortem generation",
+    tier: "Capable",
+    tokenBudget: "~4,096",
+    reasoningDepth: "Multi-event causal chain",
+  },
+  queryAnswering: {
+    label: "Query answering",
+    tier: "Mid-range",
+    tokenBudget: "~1,024",
+    reasoningDepth: "Data-grounded synthesis",
+  },
+};
+
+export interface CapabilityVerificationResult {
+  task: string;
+  model: string;
+  status: "verified" | "marginal" | "insufficient";
+  explanation: string;
+}
+
 export interface AgentSettings {
   defaultHealthCheckRetries: number;
   defaultTimeoutMs: number;
   conflictPolicy: ConflictPolicy;
   defaultVerificationStrategy: "basic" | "full" | "none";
+  taskModels?: TaskModelConfig;
 }
 
 export interface DeploymentDefaults {

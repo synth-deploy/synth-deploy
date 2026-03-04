@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
-import { getSettings, updateSettings, getCommandInfo } from "../../api.js";
-import type { AppSettings, CommandInfo, ConflictPolicy, McpServerConfig } from "../../types.js";
+import { getSettings, updateSettings, getCommandInfo, verifyTaskModel } from "../../api.js";
+import type { AppSettings, CommandInfo, ConflictPolicy, McpServerConfig, TaskModelTask, CapabilityVerificationResult } from "../../types.js";
+import { TASK_MODEL_META } from "../../types.js";
 import { useSettings } from "../../context/SettingsContext.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
 import DeployConfigEditor from "../DeployConfigEditor.js";
@@ -25,6 +26,10 @@ export default function SettingsPanel({ title }: Props) {
   const [mcpNewName, setMcpNewName] = useState("");
   const [mcpNewUrl, setMcpNewUrl] = useState("");
   const [mcpNewDescription, setMcpNewDescription] = useState("");
+  const [useOneModel, setUseOneModel] = useState(true);
+  const [taskModelSaved, setTaskModelSaved] = useState(false);
+  const [verificationResults, setVerificationResults] = useState<Record<string, CapabilityVerificationResult>>({});
+  const [verifyingTask, setVerifyingTask] = useState<string | null>(null);
 
   useEffect(() => {
     Promise.all([getSettings(), getCommandInfo()])
@@ -121,6 +126,74 @@ export default function SettingsPanel({ title }: Props) {
     setMcpServers(updated.mcpServers ?? []);
     setMcpSaved(true);
     setTimeout(() => setMcpSaved(false), 2000);
+  }
+
+  // --- Task Model handlers ---
+
+  useEffect(() => {
+    if (settings?.agent?.taskModels) {
+      const tm = settings.agent.taskModels;
+      const hasAny = Object.values(tm).some((v) => v && v.length > 0);
+      if (hasAny) setUseOneModel(false);
+    }
+  }, [settings?.agent?.taskModels]);
+
+  function getTaskModel(task: TaskModelTask): string {
+    return settings?.agent?.taskModels?.[task] ?? "";
+  }
+
+  function updateTaskModel(task: TaskModelTask, model: string) {
+    if (!settings) return;
+    const current = settings.agent.taskModels ?? {};
+    setSettings({
+      ...settings,
+      agent: {
+        ...settings.agent,
+        taskModels: { ...current, [task]: model || undefined },
+      },
+    });
+  }
+
+  async function handleSaveTaskModels() {
+    if (!settings) return;
+    const updated = await updateSettings({
+      agent: { ...settings.agent, taskModels: settings.agent.taskModels },
+    });
+    setSettings(updated);
+    setTaskModelSaved(true);
+    setTimeout(() => setTaskModelSaved(false), 2000);
+  }
+
+  function handleClearTaskModels() {
+    if (!settings) return;
+    setSettings({
+      ...settings,
+      agent: { ...settings.agent, taskModels: undefined },
+    });
+    setUseOneModel(true);
+    setVerificationResults({});
+  }
+
+  async function handleVerifyTaskModel(task: TaskModelTask) {
+    const model = getTaskModel(task);
+    if (!model) return;
+    setVerifyingTask(task);
+    try {
+      const result = await verifyTaskModel(task, model);
+      setVerificationResults((prev) => ({ ...prev, [task]: result }));
+    } catch {
+      setVerificationResults((prev) => ({
+        ...prev,
+        [task]: {
+          task,
+          model,
+          status: "insufficient" as const,
+          explanation: "Verification request failed.",
+        },
+      }));
+    } finally {
+      setVerifyingTask(null);
+    }
   }
 
   if (loading) return <CanvasPanelHost title={title}><div className="loading">Loading...</div></CanvasPanelHost>;
@@ -319,6 +392,80 @@ export default function SettingsPanel({ title }: Props) {
             <button className="btn btn-primary" onClick={handleSaveEnvoy}>
               {envoySaved ? "Saved" : "Save Envoy Settings"}
             </button>
+          </div>
+        </div>
+
+        {/* Per-Task Model Configuration */}
+        <div className="section">
+          <div className="card">
+            <div className="card-header">
+              <h3>Per-Task Model Configuration</h3>
+            </div>
+            <div className="settings-description" style={{ marginBottom: 12 }}>
+              Route different tasks to different models for cost and performance optimization.
+            </div>
+            <div className="form-group">
+              <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+                <input
+                  type="checkbox"
+                  checked={useOneModel}
+                  onChange={() => {
+                    if (!useOneModel) {
+                      handleClearTaskModels();
+                    } else {
+                      setUseOneModel(false);
+                    }
+                  }}
+                />
+                Use one model for all tasks
+              </label>
+            </div>
+            {!useOneModel && (
+              <>
+                {(["logClassification", "diagnosticSynthesis", "postmortemGeneration", "queryAnswering"] as TaskModelTask[]).map((task) => {
+                  const meta = TASK_MODEL_META[task];
+                  const result = verificationResults[task];
+                  return (
+                    <div key={task} className="form-group" style={{ marginBottom: 8 }}>
+                      <label style={{ fontSize: "0.9em" }}>
+                        {meta.label}
+                        <span style={{ fontSize: "0.8em", color: "var(--text-secondary)", marginLeft: 8 }}>
+                          ({meta.tier} | {meta.tokenBudget})
+                        </span>
+                      </label>
+                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                        <input
+                          value={getTaskModel(task)}
+                          onChange={(e) => updateTaskModel(task, e.target.value)}
+                          placeholder="Model ID (leave empty for default)"
+                          style={{ flex: 1, maxWidth: 300 }}
+                        />
+                        <button
+                          className="btn"
+                          onClick={() => handleVerifyTaskModel(task)}
+                          disabled={!getTaskModel(task) || verifyingTask === task}
+                          style={{ fontSize: "0.8em", padding: "4px 8px" }}
+                        >
+                          {verifyingTask === task ? "..." : "Test"}
+                        </button>
+                        {result && (
+                          <span
+                            title={result.explanation}
+                            className={`status-badge status-${result.status === "verified" ? "succeeded" : result.status === "marginal" ? "pending" : "failed"}`}
+                            style={{ fontSize: "0.8em" }}
+                          >
+                            {result.status}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+                <button className="btn btn-primary" onClick={handleSaveTaskModels}>
+                  {taskModelSaved ? "Saved" : "Save Task Models"}
+                </button>
+              </>
+            )}
           </div>
         </div>
 
