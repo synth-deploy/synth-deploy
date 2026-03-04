@@ -28,6 +28,10 @@ export type {
   SecurityBoundary,
   ConflictPolicy,
   LlmEntityExposure,
+  LlmProvider,
+  LlmProviderConfig,
+  LlmFallbackConfig,
+  LlmHealthStatus,
   AgentSettings,
   DeploymentDefaults,
   EnvoyEndpointConfig,
@@ -82,8 +86,8 @@ export {
   parseLlmPostmortemResponse,
   POSTMORTEM_SYSTEM_PROMPT,
 } from "./debrief-reader.js";
-export { LlmClient, createOpenAICompatibleAdapter } from "./llm-client.js";
-export type { LlmProvider, LlmConfig, LlmCallParams, LlmResult } from "./llm-client.js";
+export { LlmClient, createOpenAICompatibleAdapter, resolveProviderToSdk, defaultBaseUrlForProvider, buildLlmConfigFromSettings } from "./llm-client.js";
+export type { LlmSdkProvider, LlmProvider as LlmSdkProviderLegacy, LlmConfig, LlmCallParams, LlmResult, LlmProviderAdapter } from "./llm-client.js";
 export type {
   PostmortemReport,
   TimelineEntry,

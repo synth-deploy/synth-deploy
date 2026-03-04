@@ -1,15 +1,23 @@
 import type { DebriefWriter } from "./debrief.js";
-import type { AgentType } from "./types.js";
+import type { AgentType, LlmProviderConfig, LlmHealthStatus } from "./types.js";
 
 // ---------------------------------------------------------------------------
 // Public types
 // ---------------------------------------------------------------------------
 
-export type LlmProvider = "anthropic" | "bedrock" | "vertex" | "openai-compatible";
+/**
+ * SDK-level provider identifier — maps to the actual SDK/transport used.
+ * This is distinct from the user-facing LlmProvider type in types.ts which
+ * represents the provider brand (claude, openai, gemini, etc.).
+ */
+export type LlmSdkProvider = "anthropic" | "bedrock" | "vertex" | "openai-compatible";
+
+/** @deprecated Use LlmSdkProvider instead. Kept for backward compatibility. */
+export type LlmProvider = LlmSdkProvider;
 
 export interface LlmConfig {
   apiKey?: string;
-  provider?: LlmProvider;
+  provider?: LlmSdkProvider;
   baseUrl?: string;
   model?: string;
   reasoningModel?: string;
@@ -38,6 +46,34 @@ export type LlmResult =
   | { ok: false; fallback: true; reason: string };
 
 // ---------------------------------------------------------------------------
+// Provider adapter interface
+// ---------------------------------------------------------------------------
+
+/**
+ * Abstraction layer for LLM provider SDKs. Each supported provider implements
+ * this interface, allowing the LlmClient to route calls without provider-specific
+ * logic leaking into agent behavior.
+ */
+export interface LlmProviderAdapter {
+  /** Human-readable name for logging/debrief */
+  readonly name: string;
+  /** Whether this adapter has all required configuration */
+  isConfigured(): boolean;
+  /** Human-readable reason if not configured */
+  notConfiguredReason(): string;
+  /** Initialize the underlying SDK client (lazy, called once) */
+  initialize(): Promise<void>;
+  /** Send a message and return the response text */
+  call(opts: {
+    model: string;
+    maxTokens: number;
+    systemPrompt: string;
+    messages: Array<{ role: string; content: string }>;
+    signal?: AbortSignal;
+  }): Promise<{ text: string }>;
+}
+
+// ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
@@ -48,6 +84,88 @@ export const DEFAULT_TIMEOUT_MS = 30_000;
 export const DEFAULT_RATE_LIMIT_PER_MINUTE = 20;
 
 // ---------------------------------------------------------------------------
+// Provider-to-SDK mapping
+// ---------------------------------------------------------------------------
+
+/**
+ * Maps user-facing provider names to the SDK-level provider used internally.
+ * Claude uses the native Anthropic SDK; OpenAI, Gemini, Grok, DeepSeek use
+ * the OpenAI-compatible adapter; Ollama uses OpenAI-compatible with localhost
+ * defaults; Custom is always OpenAI-compatible.
+ */
+export function resolveProviderToSdk(
+  provider: import("./types.js").LlmProvider,
+): LlmSdkProvider {
+  switch (provider) {
+    case "claude":
+      return "anthropic";
+    case "openai":
+    case "gemini":
+    case "grok":
+    case "deepseek":
+      return "openai-compatible";
+    case "ollama":
+      return "openai-compatible";
+    case "custom":
+      return "openai-compatible";
+    default:
+      return "openai-compatible";
+  }
+}
+
+/**
+ * Returns the default base URL for known providers.
+ */
+export function defaultBaseUrlForProvider(
+  provider: import("./types.js").LlmProvider,
+): string | undefined {
+  switch (provider) {
+    case "openai":
+      return "https://api.openai.com/v1";
+    case "gemini":
+      return "https://generativelanguage.googleapis.com/v1beta/openai";
+    case "grok":
+      return "https://api.x.ai/v1";
+    case "deepseek":
+      return "https://api.deepseek.com/v1";
+    case "ollama":
+      return "http://localhost:11434/v1";
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * Builds an LlmConfig from a persisted LlmProviderConfig (settings store)
+ * with env var fallback. The apiKey is read from the environment variable
+ * DEPLOYSTACK_LLM_API_KEY since we never store it in settings.
+ */
+export function buildLlmConfigFromSettings(
+  providerConfig?: LlmProviderConfig,
+): LlmConfig {
+  if (!providerConfig) {
+    // No settings configured — fall back to pure env var resolution
+    return {};
+  }
+
+  const sdkProvider = resolveProviderToSdk(providerConfig.provider);
+  const baseUrl =
+    providerConfig.baseUrl ??
+    defaultBaseUrlForProvider(providerConfig.provider);
+
+  return {
+    provider: sdkProvider,
+    baseUrl,
+    reasoningModel: providerConfig.reasoningModel,
+    classificationModel: providerConfig.classificationModel,
+    timeoutMs: providerConfig.timeoutMs,
+    rateLimitPerMinute: providerConfig.rateLimitPerMin,
+    // API key is always read from env — never stored in settings
+    apiKey: process.env.DEPLOYSTACK_LLM_API_KEY,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // LlmClient
 // ---------------------------------------------------------------------------
 
@@ -55,13 +173,14 @@ export class LlmClient {
   private _anthropicClient: unknown = null;
   private _initialized = false;
   private readonly _apiKey: string | undefined;
-  private readonly _provider: LlmProvider;
+  private readonly _provider: LlmSdkProvider;
   private readonly _baseUrl: string | undefined;
   private readonly _reasoningModel: string;
   private readonly _classificationModel: string;
   private readonly _timeoutMs: number;
   private readonly _rateLimitPerMinute: number;
   private _callTimestamps: number[] = [];
+  private _lastHealthCheck: LlmHealthStatus | null = null;
 
   constructor(
     private readonly _debrief: DebriefWriter,
@@ -71,7 +190,7 @@ export class LlmClient {
     this._apiKey = config.apiKey ?? process.env.DEPLOYSTACK_LLM_API_KEY;
     this._provider =
       config.provider ??
-      (process.env.DEPLOYSTACK_LLM_PROVIDER as LlmProvider | undefined) ??
+      (process.env.DEPLOYSTACK_LLM_PROVIDER as LlmSdkProvider | undefined) ??
       "anthropic";
     this._baseUrl =
       config.baseUrl ?? process.env.DEPLOYSTACK_LLM_BASE_URL;
@@ -121,6 +240,71 @@ export class LlmClient {
       default:
         return false;
     }
+  }
+
+  /**
+   * Lightweight health check — attempts a minimal LLM call to verify
+   * the provider is reachable and the API key is valid.
+   * Returns an LlmHealthStatus suitable for the /health endpoint.
+   */
+  async healthCheck(): Promise<LlmHealthStatus> {
+    const configured = this.isAvailable();
+    if (!configured) {
+      const status: LlmHealthStatus = {
+        configured: false,
+        healthy: false,
+        provider: this._provider,
+        lastChecked: new Date(),
+      };
+      this._lastHealthCheck = status;
+      return status;
+    }
+
+    try {
+      await this._ensureInitialized();
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const client = this._anthropicClient as any;
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 5000);
+
+      try {
+        await client.messages.create({
+          model: this._classificationModel,
+          max_tokens: 1,
+          system: "health check",
+          messages: [{ role: "user", content: "ping" }],
+          signal: controller.signal,
+        });
+
+        const status: LlmHealthStatus = {
+          configured: true,
+          healthy: true,
+          provider: this._provider,
+          lastChecked: new Date(),
+        };
+        this._lastHealthCheck = status;
+        return status;
+      } finally {
+        clearTimeout(timer);
+      }
+    } catch {
+      const status: LlmHealthStatus = {
+        configured: true,
+        healthy: false,
+        provider: this._provider,
+        lastChecked: new Date(),
+      };
+      this._lastHealthCheck = status;
+      return status;
+    }
+  }
+
+  /**
+   * Returns the last cached health check result, or null if never checked.
+   */
+  getLastHealthStatus(): LlmHealthStatus | null {
+    return this._lastHealthCheck;
   }
 
   /**

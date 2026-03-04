@@ -502,6 +502,9 @@ export class PersistentSettingsStore {
     if (partial.mcpServers !== undefined) {
       current.mcpServers = partial.mcpServers;
     }
+    if (partial.llm !== undefined) {
+      current.llm = partial.llm;
+    }
     this.stmts.upsert.run({ key: "app", value: JSON.stringify(current) });
     return structuredClone(current);
   }

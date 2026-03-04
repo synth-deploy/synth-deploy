@@ -211,6 +211,36 @@ export type ConflictPolicy = "strict" | "permissive";
 
 export type LlmEntityExposure = "names" | "none";
 
+// --- LLM Provider Configuration ---
+
+export type LlmProvider = "claude" | "openai" | "gemini" | "grok" | "deepseek" | "ollama" | "custom";
+
+export interface LlmFallbackConfig {
+  provider: LlmProvider;
+  apiKeyConfigured: boolean;
+  baseUrl?: string;
+  model: string;
+  timeoutMs: number;
+}
+
+export interface LlmProviderConfig {
+  provider: LlmProvider;
+  apiKeyConfigured: boolean;
+  baseUrl?: string;
+  reasoningModel: string;
+  classificationModel: string;
+  timeoutMs: number;
+  rateLimitPerMin: number;
+  fallbacks?: LlmFallbackConfig[];
+}
+
+export interface LlmHealthStatus {
+  configured: boolean;
+  healthy: boolean;
+  provider?: string;
+  lastChecked?: Date;
+}
+
 export interface AgentSettings {
   defaultHealthCheckRetries: number;
   defaultTimeoutMs: number;
@@ -220,6 +250,8 @@ export interface AgentSettings {
    *  "names" — send entity names only (IDs resolved locally)
    *  "none"  — omit entity lists entirely (regex-only resolution) */
   llmEntityExposure: LlmEntityExposure;
+  /** Envoy-level LLM overrides — merged on top of app-level llm config */
+  llmOverride?: Partial<LlmProviderConfig>;
 }
 
 export interface DeploymentDefaults {
@@ -253,6 +285,7 @@ export interface AppSettings {
   envoy: EnvoyEndpointConfig;
   coBranding?: CoBrandingConfig;
   mcpServers?: McpServerConfig[];
+  llm?: LlmProviderConfig;
 }
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {

@@ -34,6 +34,9 @@ export class SettingsStore {
     if (partial.mcpServers !== undefined) {
       this.settings.mcpServers = partial.mcpServers;
     }
+    if (partial.llm !== undefined) {
+      this.settings.llm = partial.llm;
+    }
     return structuredClone(this.settings);
   }
 }

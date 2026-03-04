@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { DecisionDebrief } from "../src/debrief.js";
 import { LlmClient, DEFAULT_TIMEOUT_MS, DEFAULT_RATE_LIMIT_PER_MINUTE, createOpenAICompatibleAdapter } from "../src/llm-client.js";
-import type { LlmCallParams, LlmProvider } from "../src/llm-client.js";
+import type { LlmCallParams, LlmSdkProvider } from "../src/llm-client.js";
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -594,7 +594,7 @@ describe("LlmClient — provider detection", () => {
   it("defaults to anthropic provider when no config or env var", () => {
     const debrief = new DecisionDebrief();
     const client = new LlmClient(debrief, "command");
-    const internal = client as unknown as { _provider: LlmProvider };
+    const internal = client as unknown as { _provider: LlmSdkProvider };
     expect(internal._provider).toBe("anthropic");
   });
 
@@ -602,7 +602,7 @@ describe("LlmClient — provider detection", () => {
     process.env.DEPLOYSTACK_LLM_PROVIDER = "bedrock";
     const debrief = new DecisionDebrief();
     const client = new LlmClient(debrief, "command");
-    const internal = client as unknown as { _provider: LlmProvider };
+    const internal = client as unknown as { _provider: LlmSdkProvider };
     expect(internal._provider).toBe("bedrock");
   });
 
@@ -610,7 +610,7 @@ describe("LlmClient — provider detection", () => {
     process.env.DEPLOYSTACK_LLM_PROVIDER = "bedrock";
     const debrief = new DecisionDebrief();
     const client = new LlmClient(debrief, "command", { provider: "vertex" });
-    const internal = client as unknown as { _provider: LlmProvider };
+    const internal = client as unknown as { _provider: LlmSdkProvider };
     expect(internal._provider).toBe("vertex");
   });
 
@@ -658,10 +658,10 @@ describe("LlmClient — provider detection", () => {
 
   it("sets all four provider types correctly via config", () => {
     const debrief = new DecisionDebrief();
-    const providers: LlmProvider[] = ["anthropic", "bedrock", "vertex", "openai-compatible"];
+    const providers: LlmSdkProvider[] = ["anthropic", "bedrock", "vertex", "openai-compatible"];
     for (const p of providers) {
       const client = new LlmClient(debrief, "command", { provider: p });
-      const internal = client as unknown as { _provider: LlmProvider };
+      const internal = client as unknown as { _provider: LlmSdkProvider };
       expect(internal._provider).toBe(p);
     }
   });
