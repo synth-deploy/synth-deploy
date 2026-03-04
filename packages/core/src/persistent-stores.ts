@@ -5,26 +5,17 @@ import type {
   PartitionId,
   Environment,
   EnvironmentId,
-  Operation,
-  OperationId,
-  Order,
-  OrderId,
   Deployment,
   DeploymentId,
-  DeploymentStep,
-  DeploymentStepType,
-  DeployConfig,
   AppSettings,
 } from "./types.js";
-import { DEFAULT_APP_SETTINGS, DEFAULT_DEPLOY_CONFIG } from "./types.js";
-import type { StepTypeDefinition } from "./step-types.js";
-import type { CreateOrderParams } from "./order-store.js";
+import { DEFAULT_APP_SETTINGS } from "./types.js";
 
 // ---------------------------------------------------------------------------
 // Schema version — bump when table definitions change
 // ---------------------------------------------------------------------------
 
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 
 // ---------------------------------------------------------------------------
 // Safe JSON parse — returns fallback on corruption instead of crashing
@@ -76,6 +67,7 @@ export function openEntityDatabase(dbPath: string): Database.Database {
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
       variables TEXT NOT NULL DEFAULT '{}',
+      constraints TEXT,
       created_at TEXT NOT NULL
     );
 
@@ -85,87 +77,35 @@ export function openEntityDatabase(dbPath: string): Database.Database {
       variables TEXT NOT NULL DEFAULT '{}'
     );
 
-    CREATE TABLE IF NOT EXISTS operations (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      deploy_config TEXT NOT NULL
-    );
-
-    CREATE TABLE IF NOT EXISTS operation_environments (
-      operation_id TEXT NOT NULL,
-      environment_id TEXT NOT NULL,
-      PRIMARY KEY (operation_id, environment_id)
-    );
-
-    CREATE TABLE IF NOT EXISTS deployment_steps (
-      id TEXT PRIMARY KEY,
-      operation_id TEXT NOT NULL,
-      name TEXT NOT NULL,
-      type TEXT NOT NULL,
-      command TEXT NOT NULL,
-      step_order INTEGER NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS idx_steps_operation ON deployment_steps(operation_id);
-
-    CREATE TABLE IF NOT EXISTS orders (
-      id TEXT PRIMARY KEY,
-      operation_id TEXT NOT NULL,
-      operation_name TEXT NOT NULL,
-      partition_id TEXT NOT NULL,
-      environment_id TEXT NOT NULL,
-      environment_name TEXT NOT NULL,
-      version TEXT NOT NULL,
-      steps TEXT NOT NULL,
-      deploy_config TEXT NOT NULL,
-      variables TEXT NOT NULL DEFAULT '{}',
-      created_at TEXT NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS idx_orders_operation ON orders(operation_id);
-    CREATE INDEX IF NOT EXISTS idx_orders_partition ON orders(partition_id);
-
     CREATE TABLE IF NOT EXISTS deployments (
       id TEXT PRIMARY KEY,
-      operation_id TEXT NOT NULL,
-      partition_id TEXT NOT NULL,
+      artifact_id TEXT NOT NULL,
+      artifact_version_id TEXT,
+      envoy_id TEXT,
       environment_id TEXT NOT NULL,
+      partition_id TEXT,
       version TEXT NOT NULL,
       status TEXT NOT NULL,
       variables TEXT NOT NULL DEFAULT '{}',
+      plan TEXT,
+      rollback_plan TEXT,
+      execution_record TEXT,
+      approved_by TEXT,
+      approved_at TEXT,
       debrief_entry_ids TEXT NOT NULL DEFAULT '[]',
-      order_id TEXT,
       created_at TEXT NOT NULL,
       completed_at TEXT,
       failure_reason TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_deployments_partition ON deployments(partition_id);
-    CREATE INDEX IF NOT EXISTS idx_deployments_operation ON deployments(operation_id);
+    CREATE INDEX IF NOT EXISTS idx_deployments_artifact ON deployments(artifact_id);
     CREATE INDEX IF NOT EXISTS idx_deployments_status ON deployments(status);
 
     CREATE TABLE IF NOT EXISTS settings (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
     );
-
-    CREATE TABLE IF NOT EXISTS step_types (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      category TEXT NOT NULL,
-      description TEXT NOT NULL,
-      parameters TEXT NOT NULL,
-      command_template TEXT NOT NULL,
-      source TEXT NOT NULL DEFAULT 'custom',
-      partition_id TEXT
-    );
-    CREATE INDEX IF NOT EXISTS idx_step_types_partition ON step_types(partition_id);
   `);
-
-  // Add step_type_id and step_type_config columns if they don't exist (migration)
-  try {
-    db.exec(`ALTER TABLE deployment_steps ADD COLUMN step_type_id TEXT`);
-  } catch { /* column already exists */ }
-  try {
-    db.exec(`ALTER TABLE deployment_steps ADD COLUMN step_type_config TEXT`);
-  } catch { /* column already exists */ }
 
   // --- Schema version validation ---
   db.exec(`CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL)`);
@@ -194,18 +134,20 @@ export class PersistentPartitionStore {
     list: Database.Statement;
     updateName: Database.Statement;
     updateVariables: Database.Statement;
+    updateConstraints: Database.Statement;
     deleteById: Database.Statement;
   };
 
   constructor(private db: Database.Database) {
     this.stmts = {
       insert: db.prepare(
-        `INSERT INTO partitions (id, name, variables, created_at) VALUES (@id, @name, @variables, @created_at)`,
+        `INSERT INTO partitions (id, name, variables, constraints, created_at) VALUES (@id, @name, @variables, @constraints, @created_at)`,
       ),
       getById: db.prepare(`SELECT * FROM partitions WHERE id = ?`),
       list: db.prepare(`SELECT * FROM partitions ORDER BY created_at ASC`),
       updateName: db.prepare(`UPDATE partitions SET name = @name WHERE id = @id`),
       updateVariables: db.prepare(`UPDATE partitions SET variables = @variables WHERE id = @id`),
+      updateConstraints: db.prepare(`UPDATE partitions SET constraints = @constraints WHERE id = @id`),
       deleteById: db.prepare(`DELETE FROM partitions WHERE id = ?`),
     };
   }
@@ -221,6 +163,7 @@ export class PersistentPartitionStore {
       id: partition.id,
       name: partition.name,
       variables: JSON.stringify(partition.variables),
+      constraints: null,
       created_at: partition.createdAt.toISOString(),
     });
     return partition;
@@ -244,12 +187,16 @@ export class PersistentPartitionStore {
     return { ...partition, variables: merged };
   }
 
-  update(id: PartitionId, updates: { name?: string }): Partition {
+  update(id: PartitionId, updates: { name?: string; constraints?: Record<string, unknown> }): Partition {
     const partition = this.get(id);
     if (!partition) throw new Error(`Partition not found: ${id}`);
     if (updates.name !== undefined) {
       this.stmts.updateName.run({ name: updates.name, id });
       partition.name = updates.name;
+    }
+    if (updates.constraints !== undefined) {
+      this.stmts.updateConstraints.run({ constraints: JSON.stringify(updates.constraints), id });
+      partition.constraints = updates.constraints;
     }
     return partition;
   }
@@ -264,16 +211,21 @@ interface PartitionRow {
   id: string;
   name: string;
   variables: string;
+  constraints: string | null;
   created_at: string;
 }
 
 function rowToPartition(row: PartitionRow): Partition {
-  return {
+  const partition: Partition = {
     id: row.id,
     name: row.name,
     variables: safeJsonParse(row.variables, {}, { table: "partitions", rowId: row.id, column: "variables" }),
     createdAt: new Date(row.created_at),
   };
+  if (row.constraints) {
+    partition.constraints = safeJsonParse(row.constraints, {}, { table: "partitions", rowId: row.id, column: "constraints" });
+  }
+  return partition;
 }
 
 // ---------------------------------------------------------------------------
@@ -362,374 +314,6 @@ function rowToEnvironment(row: EnvironmentRow): Environment {
 }
 
 // ---------------------------------------------------------------------------
-// PersistentOperationStore
-// ---------------------------------------------------------------------------
-
-export class PersistentOperationStore {
-  private stmts: {
-    insertOp: Database.Statement;
-    getOp: Database.Statement;
-    listOps: Database.Statement;
-    updateOpName: Database.Statement;
-    deleteOp: Database.Statement;
-    insertEnvLink: Database.Statement;
-    deleteEnvLink: Database.Statement;
-    getEnvLinks: Database.Statement;
-    deleteAllEnvLinks: Database.Statement;
-    insertStep: Database.Statement;
-    getSteps: Database.Statement;
-    updateStep: Database.Statement;
-    deleteStep: Database.Statement;
-    deleteAllSteps: Database.Statement;
-    updateDeployConfig: Database.Statement;
-  };
-
-  constructor(private db: Database.Database) {
-    this.stmts = {
-      insertOp: db.prepare(
-        `INSERT INTO operations (id, name, deploy_config) VALUES (@id, @name, @deploy_config)`,
-      ),
-      getOp: db.prepare(`SELECT * FROM operations WHERE id = ?`),
-      listOps: db.prepare(`SELECT * FROM operations ORDER BY name ASC`),
-      updateOpName: db.prepare(`UPDATE operations SET name = @name WHERE id = @id`),
-      deleteOp: db.prepare(`DELETE FROM operations WHERE id = ?`),
-      insertEnvLink: db.prepare(
-        `INSERT OR IGNORE INTO operation_environments (operation_id, environment_id) VALUES (@operation_id, @environment_id)`,
-      ),
-      deleteEnvLink: db.prepare(
-        `DELETE FROM operation_environments WHERE operation_id = @operation_id AND environment_id = @environment_id`,
-      ),
-      getEnvLinks: db.prepare(
-        `SELECT environment_id FROM operation_environments WHERE operation_id = ? ORDER BY rowid ASC`,
-      ),
-      deleteAllEnvLinks: db.prepare(
-        `DELETE FROM operation_environments WHERE operation_id = ?`,
-      ),
-      insertStep: db.prepare(
-        `INSERT INTO deployment_steps (id, operation_id, name, type, command, step_order, step_type_id, step_type_config)
-         VALUES (@id, @operation_id, @name, @type, @command, @step_order, @step_type_id, @step_type_config)`,
-      ),
-      getSteps: db.prepare(
-        `SELECT * FROM deployment_steps WHERE operation_id = ? ORDER BY step_order ASC`,
-      ),
-      updateStep: db.prepare(
-        `UPDATE deployment_steps SET name = @name, type = @type, command = @command, step_order = @step_order, step_type_id = @step_type_id, step_type_config = @step_type_config WHERE id = @id`,
-      ),
-      deleteStep: db.prepare(`DELETE FROM deployment_steps WHERE id = ?`),
-      deleteAllSteps: db.prepare(`DELETE FROM deployment_steps WHERE operation_id = ?`),
-      updateDeployConfig: db.prepare(
-        `UPDATE operations SET deploy_config = @deploy_config WHERE id = @id`,
-      ),
-    };
-  }
-
-  create(name: string, environmentIds: EnvironmentId[] = []): Operation {
-    const id = crypto.randomUUID();
-    const deployConfig = { ...DEFAULT_DEPLOY_CONFIG };
-
-    this.db.transaction(() => {
-      this.stmts.insertOp.run({
-        id,
-        name,
-        deploy_config: JSON.stringify(deployConfig),
-      });
-      for (const envId of environmentIds) {
-        this.stmts.insertEnvLink.run({ operation_id: id, environment_id: envId });
-      }
-    })();
-
-    return { id, name, environmentIds: [...environmentIds], steps: [], deployConfig };
-  }
-
-  get(id: OperationId): Operation | undefined {
-    const row = this.stmts.getOp.get(id) as OperationRow | undefined;
-    if (!row) return undefined;
-    return this.assembleOperation(row);
-  }
-
-  list(): Operation[] {
-    const rows = this.stmts.listOps.all() as OperationRow[];
-    return rows.map((r) => this.assembleOperation(r));
-  }
-
-  update(id: OperationId, updates: { name?: string }): Operation {
-    const op = this.get(id);
-    if (!op) throw new Error(`Operation not found: ${id}`);
-    if (updates.name !== undefined) {
-      this.stmts.updateOpName.run({ name: updates.name, id });
-      op.name = updates.name;
-    }
-    return op;
-  }
-
-  delete(id: OperationId): boolean {
-    const result = this.db.transaction(() => {
-      this.stmts.deleteAllEnvLinks.run(id);
-      this.stmts.deleteAllSteps.run(id);
-      return this.stmts.deleteOp.run(id);
-    })();
-    return result.changes > 0;
-  }
-
-  addEnvironment(id: OperationId, environmentId: EnvironmentId): Operation {
-    const op = this.get(id);
-    if (!op) throw new Error(`Operation not found: ${id}`);
-    this.stmts.insertEnvLink.run({ operation_id: id, environment_id: environmentId });
-    if (!op.environmentIds.includes(environmentId)) {
-      op.environmentIds.push(environmentId);
-    }
-    return op;
-  }
-
-  removeEnvironment(id: OperationId, environmentId: EnvironmentId): Operation {
-    const op = this.get(id);
-    if (!op) throw new Error(`Operation not found: ${id}`);
-    this.stmts.deleteEnvLink.run({ operation_id: id, environment_id: environmentId });
-    op.environmentIds = op.environmentIds.filter((eid) => eid !== environmentId);
-    return op;
-  }
-
-  addStep(id: OperationId, step: DeploymentStep): Operation {
-    const op = this.get(id);
-    if (!op) throw new Error(`Operation not found: ${id}`);
-    this.stmts.insertStep.run({
-      id: step.id,
-      operation_id: id,
-      name: step.name,
-      type: step.type,
-      command: step.command,
-      step_order: step.order,
-      step_type_id: step.stepTypeId ?? null,
-      step_type_config: step.stepTypeConfig ? JSON.stringify(step.stepTypeConfig) : null,
-    });
-    op.steps.push(step);
-    op.steps.sort((a, b) => a.order - b.order);
-    return op;
-  }
-
-  updateStep(
-    id: OperationId,
-    stepId: string,
-    updates: { name?: string; type?: DeploymentStepType; command?: string; order?: number; stepTypeId?: string; stepTypeConfig?: Record<string, unknown> },
-  ): Operation {
-    const op = this.get(id);
-    if (!op) throw new Error(`Operation not found: ${id}`);
-    const step = op.steps.find((s) => s.id === stepId);
-    if (!step) throw new Error(`Step not found: ${stepId}`);
-    const updated = {
-      id: stepId,
-      name: updates.name ?? step.name,
-      type: updates.type ?? step.type,
-      command: updates.command ?? step.command,
-      step_order: updates.order ?? step.order,
-      step_type_id: updates.stepTypeId !== undefined ? updates.stepTypeId : (step.stepTypeId ?? null),
-      step_type_config: updates.stepTypeConfig !== undefined
-        ? JSON.stringify(updates.stepTypeConfig)
-        : (step.stepTypeConfig ? JSON.stringify(step.stepTypeConfig) : null),
-    };
-    this.stmts.updateStep.run(updated);
-    return this.get(id)!;
-  }
-
-  removeStep(id: OperationId, stepId: string): Operation {
-    const op = this.get(id);
-    if (!op) throw new Error(`Operation not found: ${id}`);
-    this.stmts.deleteStep.run(stepId);
-    op.steps = op.steps.filter((s) => s.id !== stepId);
-    return op;
-  }
-
-  reorderSteps(id: OperationId, orderedStepIds: string[]): Operation {
-    const op = this.get(id);
-    if (!op) throw new Error(`Operation not found: ${id}`);
-
-    this.db.transaction(() => {
-      for (let i = 0; i < orderedStepIds.length; i++) {
-        const step = op.steps.find((s) => s.id === orderedStepIds[i]);
-        if (!step) throw new Error(`Step not found: ${orderedStepIds[i]}`);
-        this.stmts.updateStep.run({
-          id: step.id,
-          name: step.name,
-          type: step.type,
-          command: step.command,
-          step_order: i,
-          step_type_id: step.stepTypeId ?? null,
-          step_type_config: step.stepTypeConfig ? JSON.stringify(step.stepTypeConfig) : null,
-        });
-      }
-    })();
-
-    return this.get(id)!;
-  }
-
-  updateDeployConfig(id: OperationId, config: Partial<DeployConfig>): Operation {
-    const op = this.get(id);
-    if (!op) throw new Error(`Operation not found: ${id}`);
-    const merged = { ...op.deployConfig, ...config };
-    this.stmts.updateDeployConfig.run({ id, deploy_config: JSON.stringify(merged) });
-    op.deployConfig = merged;
-    return op;
-  }
-
-  private assembleOperation(row: OperationRow): Operation {
-    const envRows = this.stmts.getEnvLinks.all(row.id) as { environment_id: string }[];
-    const stepRows = this.stmts.getSteps.all(row.id) as StepRow[];
-    return {
-      id: row.id,
-      name: row.name,
-      environmentIds: envRows.map((r) => r.environment_id),
-      steps: stepRows.map(rowToStep),
-      deployConfig: safeJsonParse(row.deploy_config, { ...DEFAULT_DEPLOY_CONFIG }, { table: "operations", rowId: row.id, column: "deploy_config" }),
-    };
-  }
-}
-
-interface OperationRow {
-  id: string;
-  name: string;
-  deploy_config: string;
-}
-
-interface StepRow {
-  id: string;
-  operation_id: string;
-  name: string;
-  type: string;
-  command: string;
-  step_order: number;
-  step_type_id: string | null;
-  step_type_config: string | null;
-}
-
-function rowToStep(row: StepRow): DeploymentStep {
-  const step: DeploymentStep = {
-    id: row.id,
-    name: row.name,
-    type: row.type as DeploymentStepType,
-    command: row.command,
-    order: row.step_order,
-  };
-  if (row.step_type_id) step.stepTypeId = row.step_type_id;
-  if (row.step_type_config) {
-    step.stepTypeConfig = safeJsonParse(
-      row.step_type_config, {}, { table: "deployment_steps", rowId: row.id, column: "step_type_config" },
-    );
-  }
-  return step;
-}
-
-// ---------------------------------------------------------------------------
-// PersistentOrderStore
-// ---------------------------------------------------------------------------
-
-export class PersistentOrderStore {
-  private stmts: {
-    insert: Database.Statement;
-    getById: Database.Statement;
-    list: Database.Statement;
-    getByOperation: Database.Statement;
-    getByPartition: Database.Statement;
-  };
-
-  constructor(private db: Database.Database) {
-    this.stmts = {
-      insert: db.prepare(
-        `INSERT INTO orders (id, operation_id, operation_name, partition_id, environment_id, environment_name, version, steps, deploy_config, variables, created_at)
-         VALUES (@id, @operation_id, @operation_name, @partition_id, @environment_id, @environment_name, @version, @steps, @deploy_config, @variables, @created_at)`,
-      ),
-      getById: db.prepare(`SELECT * FROM orders WHERE id = ?`),
-      list: db.prepare(`SELECT * FROM orders ORDER BY created_at ASC`),
-      getByOperation: db.prepare(
-        `SELECT * FROM orders WHERE operation_id = ? ORDER BY created_at ASC`,
-      ),
-      getByPartition: db.prepare(
-        `SELECT * FROM orders WHERE partition_id = ? ORDER BY created_at ASC`,
-      ),
-    };
-  }
-
-  create(params: CreateOrderParams): Order {
-    const order: Order = {
-      id: crypto.randomUUID(),
-      operationId: params.operationId,
-      operationName: params.operationName,
-      partitionId: params.partitionId,
-      environmentId: params.environmentId,
-      environmentName: params.environmentName,
-      version: params.version,
-      steps: structuredClone(params.steps),
-      deployConfig: structuredClone(params.deployConfig),
-      variables: { ...params.variables },
-      createdAt: new Date(),
-    };
-    this.stmts.insert.run({
-      id: order.id,
-      operation_id: order.operationId,
-      operation_name: order.operationName,
-      partition_id: order.partitionId,
-      environment_id: order.environmentId,
-      environment_name: order.environmentName,
-      version: order.version,
-      steps: JSON.stringify(order.steps),
-      deploy_config: JSON.stringify(order.deployConfig),
-      variables: JSON.stringify(order.variables),
-      created_at: order.createdAt.toISOString(),
-    });
-    return structuredClone(order);
-  }
-
-  get(id: OrderId): Order | undefined {
-    const row = this.stmts.getById.get(id) as OrderRow | undefined;
-    return row ? rowToOrder(row) : undefined;
-  }
-
-  list(): Order[] {
-    const rows = this.stmts.list.all() as OrderRow[];
-    return rows.map(rowToOrder);
-  }
-
-  getByOperation(operationId: OperationId): Order[] {
-    const rows = this.stmts.getByOperation.all(operationId) as OrderRow[];
-    return rows.map(rowToOrder);
-  }
-
-  getByPartition(partitionId: PartitionId): Order[] {
-    const rows = this.stmts.getByPartition.all(partitionId) as OrderRow[];
-    return rows.map(rowToOrder);
-  }
-}
-
-interface OrderRow {
-  id: string;
-  operation_id: string;
-  operation_name: string;
-  partition_id: string;
-  environment_id: string;
-  environment_name: string;
-  version: string;
-  steps: string;
-  deploy_config: string;
-  variables: string;
-  created_at: string;
-}
-
-function rowToOrder(row: OrderRow): Order {
-  return {
-    id: row.id,
-    operationId: row.operation_id,
-    operationName: row.operation_name,
-    partitionId: row.partition_id,
-    environmentId: row.environment_id,
-    environmentName: row.environment_name,
-    version: row.version,
-    steps: safeJsonParse(row.steps, [], { table: "orders", rowId: row.id, column: "steps" }),
-    deployConfig: safeJsonParse(row.deploy_config, { ...DEFAULT_DEPLOY_CONFIG }, { table: "orders", rowId: row.id, column: "deploy_config" }),
-    variables: safeJsonParse(row.variables, {}, { table: "orders", rowId: row.id, column: "variables" }),
-    createdAt: new Date(row.created_at),
-  };
-}
-
-// ---------------------------------------------------------------------------
 // PersistentDeploymentStore
 // ---------------------------------------------------------------------------
 
@@ -738,17 +322,23 @@ export class PersistentDeploymentStore {
     upsert: Database.Statement;
     getById: Database.Statement;
     getByPartition: Database.Statement;
+    getByArtifact: Database.Statement;
     list: Database.Statement;
   };
 
   constructor(private db: Database.Database) {
     this.stmts = {
       upsert: db.prepare(
-        `INSERT INTO deployments (id, operation_id, partition_id, environment_id, version, status, variables, debrief_entry_ids, order_id, created_at, completed_at, failure_reason)
-         VALUES (@id, @operation_id, @partition_id, @environment_id, @version, @status, @variables, @debrief_entry_ids, @order_id, @created_at, @completed_at, @failure_reason)
+        `INSERT INTO deployments (id, artifact_id, artifact_version_id, envoy_id, environment_id, partition_id, version, status, variables, plan, rollback_plan, execution_record, approved_by, approved_at, debrief_entry_ids, created_at, completed_at, failure_reason)
+         VALUES (@id, @artifact_id, @artifact_version_id, @envoy_id, @environment_id, @partition_id, @version, @status, @variables, @plan, @rollback_plan, @execution_record, @approved_by, @approved_at, @debrief_entry_ids, @created_at, @completed_at, @failure_reason)
          ON CONFLICT(id) DO UPDATE SET
            status = excluded.status,
            variables = excluded.variables,
+           plan = excluded.plan,
+           rollback_plan = excluded.rollback_plan,
+           execution_record = excluded.execution_record,
+           approved_by = excluded.approved_by,
+           approved_at = excluded.approved_at,
            debrief_entry_ids = excluded.debrief_entry_ids,
            completed_at = excluded.completed_at,
            failure_reason = excluded.failure_reason`,
@@ -757,6 +347,9 @@ export class PersistentDeploymentStore {
       getByPartition: db.prepare(
         `SELECT * FROM deployments WHERE partition_id = ? ORDER BY created_at ASC`,
       ),
+      getByArtifact: db.prepare(
+        `SELECT * FROM deployments WHERE artifact_id = ? ORDER BY created_at ASC`,
+      ),
       list: db.prepare(`SELECT * FROM deployments ORDER BY created_at ASC`),
     };
   }
@@ -764,17 +357,23 @@ export class PersistentDeploymentStore {
   save(deployment: Deployment): void {
     this.stmts.upsert.run({
       id: deployment.id,
-      operation_id: deployment.operationId,
-      partition_id: deployment.partitionId,
+      artifact_id: deployment.artifactId,
+      artifact_version_id: deployment.artifactVersionId ?? null,
+      envoy_id: deployment.envoyId ?? null,
       environment_id: deployment.environmentId,
+      partition_id: deployment.partitionId ?? null,
       version: deployment.version,
       status: deployment.status,
       variables: JSON.stringify(deployment.variables),
+      plan: deployment.plan ? JSON.stringify(deployment.plan) : null,
+      rollback_plan: deployment.rollbackPlan ? JSON.stringify(deployment.rollbackPlan) : null,
+      execution_record: deployment.executionRecord ? JSON.stringify(deployment.executionRecord) : null,
+      approved_by: deployment.approvedBy ?? null,
+      approved_at: deployment.approvedAt?.toISOString() ?? null,
       debrief_entry_ids: JSON.stringify(deployment.debriefEntryIds),
-      order_id: deployment.orderId,
       created_at: deployment.createdAt.toISOString(),
       completed_at: deployment.completedAt?.toISOString() ?? null,
-      failure_reason: deployment.failureReason,
+      failure_reason: deployment.failureReason ?? null,
     });
   }
 
@@ -783,8 +382,13 @@ export class PersistentDeploymentStore {
     return row ? rowToDeployment(row) : undefined;
   }
 
-  getByPartition(partitionId: string): Deployment[] {
+  getByPartition(partitionId: PartitionId): Deployment[] {
     const rows = this.stmts.getByPartition.all(partitionId) as DeploymentRow[];
+    return rows.map(rowToDeployment);
+  }
+
+  getByArtifact(artifactId: string): Deployment[] {
+    const rows = this.stmts.getByArtifact.all(artifactId) as DeploymentRow[];
     return rows.map(rowToDeployment);
   }
 
@@ -796,123 +400,47 @@ export class PersistentDeploymentStore {
 
 interface DeploymentRow {
   id: string;
-  operation_id: string;
-  partition_id: string;
+  artifact_id: string;
+  artifact_version_id: string | null;
+  envoy_id: string | null;
   environment_id: string;
+  partition_id: string | null;
   version: string;
   status: string;
   variables: string;
+  plan: string | null;
+  rollback_plan: string | null;
+  execution_record: string | null;
+  approved_by: string | null;
+  approved_at: string | null;
   debrief_entry_ids: string;
-  order_id: string | null;
   created_at: string;
   completed_at: string | null;
   failure_reason: string | null;
 }
 
 function rowToDeployment(row: DeploymentRow): Deployment {
-  return {
+  const deployment: Deployment = {
     id: row.id,
-    operationId: row.operation_id,
-    partitionId: row.partition_id,
+    artifactId: row.artifact_id,
     environmentId: row.environment_id,
     version: row.version,
     status: row.status as Deployment["status"],
     variables: safeJsonParse(row.variables, {}, { table: "deployments", rowId: row.id, column: "variables" }),
     debriefEntryIds: safeJsonParse(row.debrief_entry_ids, [], { table: "deployments", rowId: row.id, column: "debrief_entry_ids" }),
-    orderId: row.order_id,
     createdAt: new Date(row.created_at),
-    completedAt: row.completed_at ? new Date(row.completed_at) : null,
-    failureReason: row.failure_reason,
   };
-}
-
-// ---------------------------------------------------------------------------
-// PersistentSettingsStore
-// ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
-// PersistentStepTypeStore
-// ---------------------------------------------------------------------------
-
-export class PersistentStepTypeStore {
-  private stmts: {
-    insert: Database.Statement;
-    getById: Database.Statement;
-    list: Database.Statement;
-    listByPartition: Database.Statement;
-    deleteById: Database.Statement;
-  };
-
-  constructor(private db: Database.Database) {
-    this.stmts = {
-      insert: db.prepare(
-        `INSERT INTO step_types (id, name, category, description, parameters, command_template, source, partition_id)
-         VALUES (@id, @name, @category, @description, @parameters, @command_template, @source, @partition_id)`,
-      ),
-      getById: db.prepare(`SELECT * FROM step_types WHERE id = ?`),
-      list: db.prepare(`SELECT * FROM step_types ORDER BY category, name ASC`),
-      listByPartition: db.prepare(
-        `SELECT * FROM step_types WHERE partition_id = ? OR partition_id IS NULL ORDER BY category, name ASC`,
-      ),
-      deleteById: db.prepare(`DELETE FROM step_types WHERE id = ?`),
-    };
-  }
-
-  create(stepType: StepTypeDefinition): StepTypeDefinition {
-    this.stmts.insert.run({
-      id: stepType.id,
-      name: stepType.name,
-      category: stepType.category,
-      description: stepType.description,
-      parameters: JSON.stringify(stepType.parameters),
-      command_template: stepType.commandTemplate,
-      source: stepType.source,
-      partition_id: stepType.partitionId ?? null,
-    });
-    return stepType;
-  }
-
-  get(id: string): StepTypeDefinition | undefined {
-    const row = this.stmts.getById.get(id) as StepTypeRow | undefined;
-    return row ? rowToStepType(row) : undefined;
-  }
-
-  list(partitionId?: string): StepTypeDefinition[] {
-    const rows = (partitionId
-      ? this.stmts.listByPartition.all(partitionId)
-      : this.stmts.list.all()) as StepTypeRow[];
-    return rows.map(rowToStepType);
-  }
-
-  delete(id: string): boolean {
-    const result = this.stmts.deleteById.run(id);
-    return result.changes > 0;
-  }
-}
-
-interface StepTypeRow {
-  id: string;
-  name: string;
-  category: string;
-  description: string;
-  parameters: string;
-  command_template: string;
-  source: string;
-  partition_id: string | null;
-}
-
-function rowToStepType(row: StepTypeRow): StepTypeDefinition {
-  const st: StepTypeDefinition = {
-    id: row.id,
-    name: row.name,
-    category: row.category as StepTypeDefinition["category"],
-    description: row.description,
-    parameters: safeJsonParse(row.parameters, [], { table: "step_types", rowId: row.id, column: "parameters" }),
-    commandTemplate: row.command_template,
-    source: row.source as StepTypeDefinition["source"],
-  };
-  if (row.partition_id) st.partitionId = row.partition_id;
-  return st;
+  if (row.artifact_version_id) deployment.artifactVersionId = row.artifact_version_id;
+  if (row.envoy_id) deployment.envoyId = row.envoy_id;
+  if (row.partition_id) deployment.partitionId = row.partition_id;
+  if (row.plan) deployment.plan = safeJsonParse(row.plan, undefined, { table: "deployments", rowId: row.id, column: "plan" });
+  if (row.rollback_plan) deployment.rollbackPlan = safeJsonParse(row.rollback_plan, undefined, { table: "deployments", rowId: row.id, column: "rollback_plan" });
+  if (row.execution_record) deployment.executionRecord = safeJsonParse(row.execution_record, undefined, { table: "deployments", rowId: row.id, column: "execution_record" });
+  if (row.approved_by) deployment.approvedBy = row.approved_by;
+  if (row.approved_at) deployment.approvedAt = new Date(row.approved_at);
+  if (row.completed_at) deployment.completedAt = new Date(row.completed_at);
+  if (row.failure_reason) deployment.failureReason = row.failure_reason;
+  return deployment;
 }
 
 // ---------------------------------------------------------------------------

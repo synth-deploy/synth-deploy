@@ -4,15 +4,19 @@ import { z } from "zod";
 
 export type PartitionId = string;
 export type DeploymentId = string;
-export type OperationId = string;
 export type EnvironmentId = string;
 export type DebriefEntryId = string;
-export type OrderId = string;
+export type EnvoyId = string;
+export type ArtifactId = string;
+export type ArtifactVersionId = string;
+export type SecurityBoundaryId = string;
 
 // --- Deployment ---
 
 export const DeploymentStatus = z.enum([
   "pending",
+  "planning",
+  "approved",
   "running",
   "succeeded",
   "failed",
@@ -21,27 +25,68 @@ export const DeploymentStatus = z.enum([
 export type DeploymentStatus = z.infer<typeof DeploymentStatus>;
 
 export const DeploymentTriggerSchema = z.object({
-  orderId: z.string(),
-  partitionId: z.string(),
+  artifactId: z.string(),
+  artifactVersionId: z.string().optional(),
   environmentId: z.string(),
+  partitionId: z.string().optional(),
   triggeredBy: z.enum(["user", "agent"]).default("user"),
   variables: z.record(z.string()).optional(),
 });
 export type DeploymentTrigger = z.infer<typeof DeploymentTriggerSchema>;
 
+// --- Deployment Plan & Execution ---
+
+export interface DeploymentPlan {
+  steps: PlannedStep[];
+  reasoning: string;
+  diffFromCurrent?: string;
+  diffFromPreviousPlan?: string;
+}
+
+export interface PlannedStep {
+  description: string;
+  action: string;
+  target: string;
+  reversible: boolean;
+  rollbackAction?: string;
+}
+
+export interface ExecutionRecord {
+  startedAt: Date;
+  completedAt?: Date;
+  steps: ExecutedStep[];
+}
+
+export interface ExecutedStep {
+  description: string;
+  status: "completed" | "failed" | "rolled_back";
+  startedAt: Date;
+  completedAt?: Date;
+  output?: string;
+  error?: string;
+}
+
+// --- Deployment (unified lifecycle) ---
+
 export interface Deployment {
   id: DeploymentId;
-  operationId: OperationId;
-  partitionId: PartitionId;
+  artifactId: ArtifactId;
+  artifactVersionId?: ArtifactVersionId;
+  envoyId?: EnvoyId;
   environmentId: EnvironmentId;
+  partitionId?: PartitionId;
   version: string;
   status: DeploymentStatus;
   variables: Record<string, string>;
+  plan?: DeploymentPlan;
+  rollbackPlan?: DeploymentPlan;
+  executionRecord?: ExecutionRecord;
+  approvedBy?: string;
+  approvedAt?: Date;
   debriefEntryIds: DebriefEntryId[];
-  orderId: OrderId | null;
   createdAt: Date;
-  completedAt: Date | null;
-  failureReason: string | null;
+  completedAt?: Date;
+  failureReason?: string;
 }
 
 // --- Debrief ---
@@ -62,7 +107,12 @@ export const DecisionType = z.enum([
   "environment-scan",
   "system",
   "llm-call",
-  "order-created",
+  "artifact-analysis",
+  "plan-generation",
+  "plan-approval",
+  "plan-rejection",
+  "rollback-execution",
+  "cross-system-context",
 ]);
 export type DecisionType = z.infer<typeof DecisionType>;
 
@@ -84,6 +134,7 @@ export interface Partition {
   id: PartitionId;
   name: string;
   variables: Record<string, string>;
+  constraints?: Record<string, unknown>;
   createdAt: Date;
 }
 
@@ -95,60 +146,63 @@ export interface Environment {
   variables: Record<string, string>;
 }
 
-// --- Deployment Steps & Configuration ---
+// --- Artifact ---
 
-export type DeploymentStepType = "pre-deploy" | "post-deploy" | "verification";
+export interface ArtifactAnalysis {
+  summary: string;
+  dependencies: string[];
+  configurationExpectations: Record<string, string>;
+  deploymentIntent?: string;
+  confidence: number;
+}
 
-export interface DeploymentStep {
-  id: string;
+export interface ArtifactAnnotation {
+  field: string;
+  correction: string;
+  annotatedBy: string;
+  annotatedAt: Date;
+}
+
+export interface LearningHistoryEntry {
+  timestamp: Date;
+  event: string;
+  details: string;
+}
+
+export interface Artifact {
+  id: ArtifactId;
   name: string;
-  type: DeploymentStepType;
-  command: string;
-  order: number;
-  /** ID of the step type used to create this step (if any) */
-  stepTypeId?: string;
-  /** Parameter values supplied when creating from a step type */
-  stepTypeConfig?: Record<string, unknown>;
-}
-
-export interface DeployConfig {
-  healthCheckEnabled: boolean;
-  healthCheckRetries: number;
-  timeoutMs: number;
-  verificationStrategy: "basic" | "full" | "none";
-}
-
-export const DEFAULT_DEPLOY_CONFIG: DeployConfig = {
-  healthCheckEnabled: true,
-  healthCheckRetries: 1,
-  timeoutMs: 30000,
-  verificationStrategy: "basic",
-};
-
-// --- Operation ---
-
-export interface Operation {
-  id: OperationId;
-  name: string;
-  environmentIds: EnvironmentId[];
-  steps: DeploymentStep[];
-  deployConfig: DeployConfig;
-}
-
-// --- Order (immutable deployment snapshot) ---
-
-export interface Order {
-  id: OrderId;
-  operationId: OperationId;
-  operationName: string;
-  partitionId: PartitionId;
-  environmentId: EnvironmentId;
-  environmentName: string;
-  version: string;
-  steps: DeploymentStep[];
-  deployConfig: DeployConfig;
-  variables: Record<string, string>;
+  type: string;
+  analysis: ArtifactAnalysis;
+  annotations: ArtifactAnnotation[];
+  learningHistory: LearningHistoryEntry[];
   createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface ArtifactVersion {
+  id: ArtifactVersionId;
+  artifactId: ArtifactId;
+  version: string;
+  source: string;
+  metadata: Record<string, string>;
+  createdAt: Date;
+}
+
+// --- Security Boundaries ---
+
+export type SecurityBoundaryType =
+  | "filesystem"
+  | "service"
+  | "network"
+  | "credential"
+  | "execution";
+
+export interface SecurityBoundary {
+  id: SecurityBoundaryId;
+  envoyId: EnvoyId;
+  boundaryType: SecurityBoundaryType;
+  config: Record<string, unknown>;
 }
 
 // --- Settings ---
@@ -169,7 +223,10 @@ export interface AgentSettings {
 }
 
 export interface DeploymentDefaults {
-  defaultDeployConfig: DeployConfig;
+  defaultHealthCheckEnabled: boolean;
+  defaultHealthCheckRetries: number;
+  defaultTimeoutMs: number;
+  defaultVerificationStrategy: "basic" | "full" | "none";
 }
 
 export interface EnvoyEndpointConfig {
@@ -208,7 +265,10 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     llmEntityExposure: "names",
   },
   deploymentDefaults: {
-    defaultDeployConfig: DEFAULT_DEPLOY_CONFIG,
+    defaultHealthCheckEnabled: true,
+    defaultHealthCheckRetries: 1,
+    defaultTimeoutMs: 30000,
+    defaultVerificationStrategy: "basic",
   },
   envoy: {
     url: "http://localhost:3001",

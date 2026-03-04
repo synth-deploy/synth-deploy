@@ -1,23 +1,31 @@
 export type {
   PartitionId,
   DeploymentId,
-  OperationId,
   EnvironmentId,
   DebriefEntryId,
-  OrderId,
+  EnvoyId,
+  ArtifactId,
+  ArtifactVersionId,
+  SecurityBoundaryId,
   DeploymentStatus,
   DeploymentTrigger,
+  DeploymentPlan,
+  PlannedStep,
+  ExecutionRecord,
+  ExecutedStep,
   Deployment,
   AgentType,
   DecisionType,
   DebriefEntry,
   Partition,
   Environment,
-  Operation,
-  Order,
-  DeploymentStepType,
-  DeploymentStep,
-  DeployConfig,
+  ArtifactAnalysis,
+  ArtifactAnnotation,
+  LearningHistoryEntry,
+  Artifact,
+  ArtifactVersion,
+  SecurityBoundaryType,
+  SecurityBoundary,
   ConflictPolicy,
   LlmEntityExposure,
   AgentSettings,
@@ -33,7 +41,6 @@ export {
   DeploymentStatus as DeploymentStatusEnum,
   AgentType as AgentTypeEnum,
   DecisionType as DecisionTypeEnum,
-  DEFAULT_DEPLOY_CONFIG,
   DEFAULT_APP_SETTINGS,
 } from "./types.js";
 export { DecisionDebrief } from "./debrief.js";
@@ -41,45 +48,23 @@ export type { DebriefWriter, DebriefReader, DebriefRecordParams } from "./debrie
 export { PersistentDecisionDebrief } from "./debrief-persistence.js";
 export { formatDebriefEntry, formatDebriefEntries } from "./debrief-formatter.js";
 export { PartitionStore } from "./partition.js";
-export { OperationStore } from "./operation-store.js";
 export { EnvironmentStore } from "./environment-store.js";
 export { SettingsStore } from "./settings-store.js";
-export { OrderStore } from "./order-store.js";
-export type { CreateOrderParams } from "./order-store.js";
 export type {
   IPartitionStore,
   IEnvironmentStore,
-  IOperationStore,
-  IOrderStore,
+  IArtifactStore,
+  ISecurityBoundaryStore,
   IDeploymentStore,
   ISettingsStore,
-  IStepTypeStore,
 } from "./store-interfaces.js";
 export {
   openEntityDatabase,
   PersistentPartitionStore,
   PersistentEnvironmentStore,
-  PersistentOperationStore,
-  PersistentOrderStore,
   PersistentDeploymentStore,
   PersistentSettingsStore,
-  PersistentStepTypeStore,
 } from "./persistent-stores.js";
-export type {
-  StepTypeParameterType,
-  StepTypeParameter,
-  StepTypeSource,
-  StepTypeCategory,
-  StepTypeDefinition,
-  StepTypeExport,
-} from "./step-types.js";
-export {
-  resolveCommandTemplate,
-  PREDEFINED_STEP_TYPES,
-  getPredefinedStepType,
-  listPredefinedStepTypes,
-  STEP_TYPE_CATEGORIES,
-} from "./step-types.js";
 export { PartitionContainer } from "./partition-container.js";
 export type {
   PrecedenceEntry,

@@ -190,9 +190,11 @@ export function buildPostmortemPrompt(
   lines.push(`Deployment ID: ${deployment.id}`);
   lines.push(`Status: ${deployment.status}`);
   lines.push(`Version: ${deployment.version}`);
-  lines.push(`Operation: ${deployment.operationId}`);
+  lines.push(`Artifact: ${deployment.artifactId}`);
   lines.push(`Environment: ${deployment.environmentId}`);
-  lines.push(`Partition: ${deployment.partitionId}`);
+  if (deployment.partitionId) {
+    lines.push(`Partition: ${deployment.partitionId}`);
+  }
   lines.push(`Started: ${deployment.createdAt.toISOString()}`);
   if (deployment.completedAt) {
     lines.push(`Completed: ${deployment.completedAt.toISOString()}`);
@@ -343,12 +345,12 @@ export async function generatePostmortemAsync(
 
 function buildSummary(entries: DebriefEntry[], deployment: Deployment): string {
   const planEntry = entries.find((e) => e.decisionType === "pipeline-plan");
-  const operation = (planEntry?.context?.operationId as string) ?? deployment.operationId;
+  const operation = (planEntry?.context?.artifactName as string) ?? deployment.artifactId;
   const version = (planEntry?.context?.version as string) ?? deployment.version;
   const environment =
     (planEntry?.context?.environmentName as string) ?? deployment.environmentId;
   const partition =
-    (planEntry?.context?.partitionName as string) ?? deployment.partitionId;
+    (planEntry?.context?.partitionName as string) ?? deployment.partitionId ?? "default";
 
   const statusLabel = deployment.status === "succeeded" ? "SUCCEEDED" : "FAILED";
 

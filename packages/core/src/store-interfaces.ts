@@ -8,26 +8,23 @@ import type {
   PartitionId,
   Environment,
   EnvironmentId,
-  Operation,
-  OperationId,
-  Order,
-  OrderId,
   Deployment,
   DeploymentId,
-  DeploymentStep,
-  DeploymentStepType,
-  DeployConfig,
   AppSettings,
+  Artifact,
+  ArtifactId,
+  ArtifactAnnotation,
+  ArtifactVersion,
+  SecurityBoundary,
+  EnvoyId,
 } from "./types.js";
-import type { StepTypeDefinition } from "./step-types.js";
-import type { CreateOrderParams } from "./order-store.js";
 
 export interface IPartitionStore {
   create(name: string, variables?: Record<string, string>): Partition;
   get(id: PartitionId): Partition | undefined;
   list(): Partition[];
   setVariables(id: PartitionId, variables: Record<string, string>): Partition;
-  update(id: PartitionId, updates: { name?: string }): Partition;
+  update(id: PartitionId, updates: { name?: string; constraints?: Record<string, unknown> }): Partition;
   delete(id: PartitionId): boolean;
 }
 
@@ -42,44 +39,28 @@ export interface IEnvironmentStore {
   delete(id: EnvironmentId): boolean;
 }
 
-export interface IOperationStore {
-  create(name: string, environmentIds?: EnvironmentId[]): Operation;
-  get(id: OperationId): Operation | undefined;
-  list(): Operation[];
-  update(id: OperationId, updates: { name?: string }): Operation;
-  delete(id: OperationId): boolean;
-  addEnvironment(id: OperationId, environmentId: EnvironmentId): Operation;
-  removeEnvironment(id: OperationId, environmentId: EnvironmentId): Operation;
-  addStep(id: OperationId, step: DeploymentStep): Operation;
-  updateStep(
-    id: OperationId,
-    stepId: string,
-    updates: { name?: string; type?: DeploymentStepType; command?: string; order?: number; stepTypeId?: string; stepTypeConfig?: Record<string, unknown> },
-  ): Operation;
-  removeStep(id: OperationId, stepId: string): Operation;
-  reorderSteps(id: OperationId, orderedStepIds: string[]): Operation;
-  updateDeployConfig(id: OperationId, config: Partial<DeployConfig>): Operation;
+export interface IArtifactStore {
+  create(artifact: Omit<Artifact, "id" | "createdAt" | "updatedAt">): Artifact;
+  get(id: ArtifactId): Artifact | undefined;
+  list(): Artifact[];
+  update(id: ArtifactId, updates: Partial<Artifact>): Artifact;
+  addAnnotation(id: ArtifactId, annotation: ArtifactAnnotation): Artifact;
+  addVersion(version: Omit<ArtifactVersion, "id" | "createdAt">): ArtifactVersion;
+  getVersions(artifactId: ArtifactId): ArtifactVersion[];
+  delete(id: ArtifactId): void;
 }
 
-export interface IStepTypeStore {
-  create(stepType: StepTypeDefinition): StepTypeDefinition;
-  get(id: string): StepTypeDefinition | undefined;
-  list(partitionId?: string): StepTypeDefinition[];
-  delete(id: string): boolean;
-}
-
-export interface IOrderStore {
-  create(params: CreateOrderParams): Order;
-  get(id: OrderId): Order | undefined;
-  list(): Order[];
-  getByOperation(operationId: OperationId): Order[];
-  getByPartition(partitionId: PartitionId): Order[];
+export interface ISecurityBoundaryStore {
+  set(envoyId: EnvoyId, boundaries: SecurityBoundary[]): void;
+  get(envoyId: EnvoyId): SecurityBoundary[];
+  delete(envoyId: EnvoyId): void;
 }
 
 export interface IDeploymentStore {
   save(deployment: Deployment): void;
   get(id: DeploymentId): Deployment | undefined;
-  getByPartition(partitionId: string): Deployment[];
+  getByPartition(partitionId: PartitionId): Deployment[];
+  getByArtifact(artifactId: string): Deployment[];
   list(): Deployment[];
 }
 
