@@ -7,8 +7,8 @@ import fastifyCors from "@fastify/cors";
 import rateLimit from "@fastify/rate-limit";
 import fastifyStatic from "@fastify/static";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { PersistentDecisionDebrief, openEntityDatabase, PersistentPartitionStore, PersistentOperationStore, PersistentEnvironmentStore, PersistentSettingsStore, PersistentDeploymentStore, PersistentOrderStore, PersistentStepTypeStore, LlmClient, DEFAULT_DEPLOY_CONFIG } from "@deploystack/core";
-import type { Deployment, DeploymentStep, DeployConfig } from "@deploystack/core";
+import { PersistentDecisionDebrief, openEntityDatabase, PersistentPartitionStore, PersistentOperationStore, PersistentEnvironmentStore, PersistentSettingsStore, PersistentDeploymentStore, PersistentOrderStore, PersistentStepTypeStore, PersistentArtifactStore, PersistentSecurityBoundaryStore, LlmClient, DEFAULT_DEPLOY_CONFIG } from "@deploystack/core";
+import type { Deployment, DeploymentStep, DeployConfig, Artifact, ArtifactVersion, SecurityBoundary } from "@deploystack/core";
 import { CommandAgent } from "./agent/command-agent.js";
 import { EnvoyHealthChecker } from "./agent/health-checker.js";
 import { McpClientManager } from "./agent/mcp-client-manager.js";
@@ -43,6 +43,8 @@ const settings = new PersistentSettingsStore(entityDb);
 const deployments = new PersistentDeploymentStore(entityDb);
 const orders = new PersistentOrderStore(entityDb);
 const stepTypeStore = new PersistentStepTypeStore(entityDb);
+const artifactStore = new PersistentArtifactStore(entityDb);
+const securityBoundaryStore = new PersistentSecurityBoundaryStore(entityDb);
 const envoyRegistry = new EnvoyRegistry();
 const envoyUrl = settings.get().envoy?.url;
 const healthChecker = envoyUrl ? new EnvoyHealthChecker(envoyUrl) : undefined;
@@ -218,13 +220,102 @@ if (process.env.DEPLOYSTACK_SEED_DEMO !== 'false' && partitions.list().length ==
     deployments.save(d);
   }
 
+  // --- Artifacts with analysis, versions, and annotations ---
+
+  const webAppArtifact = artifactStore.create({
+    name: "web-app",
+    type: "nodejs",
+    analysis: {
+      summary: "Node.js web application with Express backend and React frontend. Requires PostgreSQL and Redis.",
+      dependencies: ["postgresql", "redis", "node:20"],
+      configurationExpectations: { DB_HOST: "PostgreSQL hostname", REDIS_URL: "Redis connection string", APP_ENV: "Runtime environment" },
+      deploymentIntent: "Rolling deployment with zero-downtime via health check gating",
+      confidence: 0.92,
+    },
+    annotations: [
+      { field: "dependencies", correction: "Added redis dependency — missed in initial analysis", annotatedBy: "operator", annotatedAt: hoursAgo(48) },
+    ],
+    learningHistory: [
+      { timestamp: hoursAgo(96), event: "initial-analysis", details: "First artifact analysis completed from Dockerfile and package.json" },
+      { timestamp: hoursAgo(48), event: "annotation-applied", details: "Operator corrected missing redis dependency" },
+      { timestamp: hoursAgo(24), event: "reanalysis", details: "Re-analyzed after v2.4.1 deployment — confidence improved from 0.85 to 0.92" },
+    ],
+  });
+
+  const apiArtifact = artifactStore.create({
+    name: "api-service",
+    type: "docker",
+    analysis: {
+      summary: "Containerized REST API service. Stateless, scales horizontally. Requires connection to shared PostgreSQL.",
+      dependencies: ["postgresql", "docker-runtime"],
+      configurationExpectations: { API_URL: "Service endpoint URL", DB_HOST: "PostgreSQL hostname" },
+      deploymentIntent: "Blue-green deployment with endpoint health verification",
+      confidence: 0.88,
+    },
+    annotations: [],
+    learningHistory: [
+      { timestamp: hoursAgo(72), event: "initial-analysis", details: "Analyzed from Dockerfile and docker-compose.yml" },
+      { timestamp: hoursAgo(36), event: "failure-learning", details: "v1.11.0 failed due to port conflict — added pre-deploy cleanup recommendation" },
+    ],
+  });
+
+  const workerArtifact = artifactStore.create({
+    name: "worker-service",
+    type: "binary",
+    analysis: {
+      summary: "Compiled Go binary for background job processing. Reads from RabbitMQ, writes to PostgreSQL.",
+      dependencies: ["rabbitmq", "postgresql"],
+      configurationExpectations: { QUEUE_URL: "RabbitMQ connection string", DB_HOST: "PostgreSQL hostname" },
+      deploymentIntent: "Stop-deploy-start with queue depth verification",
+      confidence: 0.95,
+    },
+    annotations: [
+      { field: "deploymentIntent", correction: "Changed from rolling to stop-deploy-start — workers must fully drain before restart", annotatedBy: "operator", annotatedAt: hoursAgo(20) },
+    ],
+    learningHistory: [
+      { timestamp: hoursAgo(80), event: "initial-analysis", details: "Analyzed from Makefile and systemd unit file" },
+      { timestamp: hoursAgo(20), event: "annotation-applied", details: "Operator corrected deployment strategy to stop-deploy-start" },
+      { timestamp: hoursAgo(3), event: "successful-deployment", details: "v3.0.0 deployed successfully with corrected strategy" },
+    ],
+  });
+
+  // Artifact versions
+  artifactStore.addVersion({ artifactId: webAppArtifact.id, version: "2.3.0", source: "npm-registry", metadata: { commit: "abc1234", builtBy: "ci" } });
+  artifactStore.addVersion({ artifactId: webAppArtifact.id, version: "2.4.0", source: "npm-registry", metadata: { commit: "def5678", builtBy: "ci" } });
+  artifactStore.addVersion({ artifactId: webAppArtifact.id, version: "2.4.1", source: "npm-registry", metadata: { commit: "ghi9012", builtBy: "ci", hotfix: "true" } });
+  artifactStore.addVersion({ artifactId: webAppArtifact.id, version: "2.5.0-rc.1", source: "npm-registry", metadata: { commit: "jkl3456", builtBy: "ci", prerelease: "true" } });
+
+  artifactStore.addVersion({ artifactId: apiArtifact.id, version: "1.11.0", source: "docker-registry", metadata: { image: "api-service:1.11.0", digest: "sha256:a4f8e" } });
+  artifactStore.addVersion({ artifactId: apiArtifact.id, version: "1.12.0", source: "docker-registry", metadata: { image: "api-service:1.12.0", digest: "sha256:b5c9f" } });
+  artifactStore.addVersion({ artifactId: apiArtifact.id, version: "1.13.0-beta.2", source: "docker-registry", metadata: { image: "api-service:1.13.0-beta.2", digest: "sha256:c6d0a", prerelease: "true" } });
+
+  artifactStore.addVersion({ artifactId: workerArtifact.id, version: "2.9.0", source: "github-releases", metadata: { commit: "mno7890", binary: "worker-linux-amd64" } });
+  artifactStore.addVersion({ artifactId: workerArtifact.id, version: "3.0.0", source: "github-releases", metadata: { commit: "pqr1234", binary: "worker-linux-amd64", majorUpgrade: "true" } });
+
+  // --- Security boundaries for envoys ---
+
+  const envoyId = "envoy-prod-1";
+  securityBoundaryStore.set(envoyId, [
+    { id: crypto.randomUUID(), envoyId, boundaryType: "filesystem", config: { allowedPaths: ["/opt/deploystack", "/var/log/deploystack"], readOnly: ["/etc"], denied: ["/root", "/home"] } },
+    { id: crypto.randomUUID(), envoyId, boundaryType: "network", config: { allowedHosts: ["db.internal", "redis.internal", "registry.internal"], allowedPorts: [5432, 6379, 443], deniedCidrs: ["10.0.0.0/8"] } },
+    { id: crypto.randomUUID(), envoyId, boundaryType: "execution", config: { allowedCommands: ["docker", "npm", "systemctl", "curl"], deniedCommands: ["rm -rf", "dd", "mkfs"], maxTimeoutMs: 300000 } },
+    { id: crypto.randomUUID(), envoyId, boundaryType: "credential", config: { allowedSecretPaths: ["deploystack/*"], deniedSecretPaths: ["admin/*", "root/*"], rotationRequired: true } },
+  ]);
+
+  const stagingEnvoyId = "envoy-staging-1";
+  securityBoundaryStore.set(stagingEnvoyId, [
+    { id: crypto.randomUUID(), envoyId: stagingEnvoyId, boundaryType: "filesystem", config: { allowedPaths: ["/opt/deploystack", "/var/log", "/tmp"], readOnly: ["/etc"] } },
+    { id: crypto.randomUUID(), envoyId: stagingEnvoyId, boundaryType: "network", config: { allowedHosts: ["*"], allowedPorts: [5432, 6379, 443, 8080], deniedCidrs: [] } },
+    { id: crypto.randomUUID(), envoyId: stagingEnvoyId, boundaryType: "execution", config: { allowedCommands: ["docker", "npm", "systemctl", "curl", "node"], deniedCommands: ["rm -rf"], maxTimeoutMs: 600000 } },
+  ]);
+
   // --- Debrief entries (rich decision diary) ---
 
   debrief.record({
     partitionId: null, deploymentId: null, agent: "command", decisionType: "system",
     decision: "Command initialized with demo data",
-    reasoning: "Seeded 3 partitions, 3 environments, 3 operations, 5 orders, and 10 deployments.",
-    context: { partitions: 3, environments: 3, operations: 3, orders: 5, deployments: 10 },
+    reasoning: "Seeded 3 partitions, 3 environments, 3 operations, 5 orders, 10 deployments, 3 artifacts, and 2 envoy security boundary sets.",
+    context: { partitions: 3, environments: 3, operations: 3, orders: 5, deployments: 10, artifacts: 3, securityBoundaries: 2 },
   });
 
   // dep1 — web-app 2.3.0 succeeded
@@ -584,7 +675,7 @@ app.listen({ port: PORT, host: HOST }, (err) => {
     : "Auth:     disabled (set DEPLOYSTACK_API_KEY)         ";
 
   const seedStatus = process.env.DEPLOYSTACK_SEED_DEMO !== 'false'
-    ? "Seed: 3 partitions, 3 environments, 3 operations   \n║        5 orders, 10 deployments                     "
+    ? "Seed: 3 partitions, 3 envs, 3 ops, 3 artifacts     \n║        5 orders, 10 deployments, 2 boundaries       "
     : "Seed: disabled (DEPLOYSTACK_SEED_DEMO=false)        ";
 
   console.log(`

@@ -68,7 +68,11 @@ export {
   PersistentEnvironmentStore,
   PersistentDeploymentStore,
   PersistentSettingsStore,
+  PersistentArtifactStore,
+  PersistentSecurityBoundaryStore,
 } from "./persistent-stores.js";
+export { ArtifactStore } from "./artifact-store.js";
+export { SecurityBoundaryStore } from "./security-boundary-store.js";
 export { PartitionContainer } from "./partition-container.js";
 export type {
   PrecedenceEntry,
