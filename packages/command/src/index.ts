@@ -7,8 +7,8 @@ import fastifyCors from "@fastify/cors";
 import rateLimit from "@fastify/rate-limit";
 import fastifyStatic from "@fastify/static";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { PersistentDecisionDebrief, openEntityDatabase, PersistentPartitionStore, PersistentOperationStore, PersistentEnvironmentStore, PersistentSettingsStore, PersistentDeploymentStore, PersistentOrderStore, PersistentStepTypeStore, PersistentArtifactStore, PersistentSecurityBoundaryStore, PersistentTelemetryStore, PersistentUserStore, PersistentRoleStore, PersistentUserRoleStore, PersistentSessionStore, LlmClient, DEFAULT_DEPLOY_CONFIG } from "@deploystack/core";
-import type { Deployment, DeploymentStep, DeployConfig, Artifact, ArtifactVersion, SecurityBoundary, Permission, RoleId } from "@deploystack/core";
+import { PersistentDecisionDebrief, openEntityDatabase, PersistentPartitionStore, PersistentEnvironmentStore, PersistentSettingsStore, PersistentDeploymentStore, PersistentArtifactStore, PersistentSecurityBoundaryStore, PersistentTelemetryStore, PersistentUserStore, PersistentRoleStore, PersistentUserRoleStore, PersistentSessionStore, LlmClient } from "@deploystack/core";
+import type { Deployment, Artifact, ArtifactVersion, SecurityBoundary, Permission, RoleId } from "@deploystack/core";
 import { CommandAgent } from "./agent/command-agent.js";
 import { EnvoyHealthChecker } from "./agent/health-checker.js";
 import { McpClientManager } from "./agent/mcp-client-manager.js";
@@ -39,12 +39,9 @@ mkdirSync(DATA_DIR, { recursive: true });
 const debrief = new PersistentDecisionDebrief(path.join(DATA_DIR, "debrief.db"));
 const entityDb = openEntityDatabase(path.join(DATA_DIR, "deploystack.db"));
 const partitions = new PersistentPartitionStore(entityDb);
-const operations = new PersistentOperationStore(entityDb);
 const environments = new PersistentEnvironmentStore(entityDb);
 const settings = new PersistentSettingsStore(entityDb);
 const deployments = new PersistentDeploymentStore(entityDb);
-const orders = new PersistentOrderStore(entityDb);
-const stepTypeStore = new PersistentStepTypeStore(entityDb);
 const artifactStore = new PersistentArtifactStore(entityDb);
 const securityBoundaryStore = new PersistentSecurityBoundaryStore(entityDb);
 const telemetryStore = new PersistentTelemetryStore(entityDb);
@@ -116,7 +113,7 @@ if (roleStore.list().length === 0) {
 }
 const envoyUrl = settings.get().envoy?.url;
 const healthChecker = envoyUrl ? new EnvoyHealthChecker(envoyUrl) : undefined;
-const agent = new CommandAgent(debrief, deployments, orders, healthChecker, {}, settings);
+const agent = new CommandAgent(debrief, deployments, artifactStore, environments, partitions, healthChecker, {}, settings);
 const llm = new LlmClient(debrief, "command");
 
 // --- Connect to external MCP servers (if configured) ---
@@ -146,67 +143,6 @@ if (process.env.DEPLOYSTACK_SEED_DEMO !== 'false' && partitions.list().length ==
   const acmePartition = partitions.create("Acme Corp", { APP_ENV: "production", DB_HOST: "acme-db-1", REGION: "us-east-1" });
   const globexPartition = partitions.create("Globex Industries", { APP_ENV: "production", DB_HOST: "globex-db-1", REGION: "eu-west-1" });
   const initechPartition = partitions.create("Initech", { APP_ENV: "production", DB_HOST: "initech-db-1", REGION: "us-west-2" });
-
-  // Operations with steps
-  const webAppSteps: DeploymentStep[] = [
-    { id: crypto.randomUUID(), name: "Install dependencies", type: "pre-deploy", command: "npm ci --production", order: 1 },
-    { id: crypto.randomUUID(), name: "Run migrations", type: "pre-deploy", command: "npm run db:migrate", order: 2 },
-    { id: crypto.randomUUID(), name: "Health check", type: "verification", command: "curl -f ${APP_URL:-http://localhost:3000}/health", order: 3 },
-  ];
-  const apiSteps: DeploymentStep[] = [
-    { id: crypto.randomUUID(), name: "Pull image", type: "pre-deploy", command: "docker pull api-service:${VERSION}", order: 1 },
-    { id: crypto.randomUUID(), name: "Verify endpoint", type: "verification", command: "curl -f ${API_URL:-http://localhost:8080}/healthz", order: 2 },
-  ];
-  const workerSteps: DeploymentStep[] = [
-    { id: crypto.randomUUID(), name: "Stop workers", type: "pre-deploy", command: "systemctl stop worker", order: 1 },
-    { id: crypto.randomUUID(), name: "Deploy binary", type: "pre-deploy", command: "cp worker /usr/local/bin/worker", order: 2 },
-    { id: crypto.randomUUID(), name: "Start workers", type: "post-deploy", command: "systemctl start worker", order: 3 },
-    { id: crypto.randomUUID(), name: "Check queue depth", type: "verification", command: "worker-cli queue-depth --max 100", order: 4 },
-  ];
-
-  const webApp = operations.create("web-app", [prodEnv.id, stagingEnv.id, devEnv.id]);
-  const apiService = operations.create("api-service", [prodEnv.id, stagingEnv.id]);
-  const workerService = operations.create("worker-service", [prodEnv.id]);
-  for (const s of webAppSteps) operations.addStep(webApp.id, s);
-  for (const s of apiSteps) operations.addStep(apiService.id, s);
-  for (const s of workerSteps) operations.addStep(workerService.id, s);
-
-  // Deploy config variants
-  const standardConfig: DeployConfig = { ...DEFAULT_DEPLOY_CONFIG, healthCheckRetries: 2 };
-  const fullConfig: DeployConfig = { ...DEFAULT_DEPLOY_CONFIG, verificationStrategy: "full", healthCheckRetries: 3 };
-
-  // --- Orders ---
-
-  const order1 = orders.create({
-    operationId: webApp.id, operationName: "web-app",
-    partitionId: acmePartition.id, environmentId: prodEnv.id, environmentName: "production",
-    version: "2.4.1", steps: webAppSteps, deployConfig: standardConfig,
-    variables: { ...acmePartition.variables, ...prodEnv.variables },
-  });
-  const order2 = orders.create({
-    operationId: webApp.id, operationName: "web-app",
-    partitionId: globexPartition.id, environmentId: stagingEnv.id, environmentName: "staging",
-    version: "2.5.0-rc.1", steps: webAppSteps, deployConfig: standardConfig,
-    variables: { ...globexPartition.variables, ...stagingEnv.variables },
-  });
-  const order3 = orders.create({
-    operationId: apiService.id, operationName: "api-service",
-    partitionId: acmePartition.id, environmentId: prodEnv.id, environmentName: "production",
-    version: "1.12.0", steps: apiSteps, deployConfig: standardConfig,
-    variables: { ...acmePartition.variables, ...prodEnv.variables },
-  });
-  const order4 = orders.create({
-    operationId: workerService.id, operationName: "worker-service",
-    partitionId: initechPartition.id, environmentId: prodEnv.id, environmentName: "production",
-    version: "3.0.0", steps: workerSteps, deployConfig: fullConfig,
-    variables: { ...initechPartition.variables, ...prodEnv.variables },
-  });
-  const order5 = orders.create({
-    operationId: apiService.id, operationName: "api-service",
-    partitionId: globexPartition.id, environmentId: stagingEnv.id, environmentName: "staging",
-    version: "1.13.0-beta.2", steps: apiSteps, deployConfig: standardConfig,
-    variables: { ...globexPartition.variables, ...stagingEnv.variables },
-  });
 
   // --- Artifacts with analysis, versions, and annotations ---
 
@@ -382,8 +318,8 @@ if (process.env.DEPLOYSTACK_SEED_DEMO !== 'false' && partitions.list().length ==
   debrief.record({
     partitionId: null, deploymentId: null, agent: "command", decisionType: "system",
     decision: "Command initialized with demo data",
-    reasoning: "Seeded 3 partitions, 3 environments, 3 operations, 5 orders, 10 deployments, 3 artifacts, and 2 envoy security boundary sets.",
-    context: { partitions: 3, environments: 3, operations: 3, orders: 5, deployments: 10, artifacts: 3, securityBoundaries: 2 },
+    reasoning: "Seeded 3 partitions, 3 environments, 3 artifacts, 10 deployments, and 2 envoy security boundary sets.",
+    context: { partitions: 3, environments: 3, deployments: 10, artifacts: 3, securityBoundaries: 2 },
   });
 
   // dep1 — web-app 2.3.0 succeeded
@@ -559,7 +495,7 @@ if (process.env.DEPLOYSTACK_SEED_DEMO !== 'false' && partitions.list().length ==
 
 // --- Create MCP server ---
 
-const mcp = createMcpServer({ agent, debrief, partitions, environments, deployments, operations });
+const mcp = createMcpServer({ agent, debrief, partitions, environments, deployments, artifactStore });
 
 // --- Create Fastify HTTP server ---
 
@@ -605,9 +541,9 @@ registerDeploymentRoutes(app, deployments, debrief, partitions, environments, ar
 registerEnvoyReportRoutes(app, debrief, deployments);
 registerArtifactRoutes(app, artifactStore, telemetryStore);
 registerSecurityBoundaryRoutes(app, securityBoundaryStore, telemetryStore);
-registerPartitionRoutes(app, partitions, deployments, debrief, orders, telemetryStore);
-registerEnvironmentRoutes(app, environments, operations, telemetryStore);
-registerAgentRoutes(app, agent, partitions, environments, operations, deployments, debrief, settings, llm);
+registerPartitionRoutes(app, partitions, deployments, debrief, telemetryStore);
+registerEnvironmentRoutes(app, environments, deployments, telemetryStore);
+registerAgentRoutes(app, agent, partitions, environments, artifactStore, deployments, debrief, settings, llm);
 registerSettingsRoutes(app, settings, telemetryStore);
 registerTelemetryRoutes(app, telemetryStore);
 registerEnvoyRoutes(app, settings, envoyRegistry, telemetryStore);
@@ -745,7 +681,7 @@ app.listen({ port: PORT, host: HOST }, (err) => {
     : "Auth:     disabled                                   ";
 
   const seedStatus = process.env.DEPLOYSTACK_SEED_DEMO !== 'false'
-    ? "Seed: 3 partitions, 3 envs, 3 ops, 3 artifacts     \n║        5 orders, 10 deployments, 2 boundaries       "
+    ? "Seed: 3 partitions, 3 envs, 3 artifacts              \n║        10 deployments, 2 boundaries                  "
     : "Seed: disabled (DEPLOYSTACK_SEED_DEMO=false)        ";
 
   console.log(`

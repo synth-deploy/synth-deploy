@@ -71,7 +71,7 @@ export function registerResources(
       list: async () => ({
         resources: deployments.list().map((d) => ({
           uri: `deployment://${d.id}`,
-          name: `${d.operationId} v${d.version} → ${d.environmentId}`,
+          name: `${d.artifactId} v${d.version} → ${d.environmentId}`,
         })),
       }),
     }),

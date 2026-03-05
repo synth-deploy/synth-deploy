@@ -36,7 +36,7 @@ export function markStaleDeployments(
     );
 
     debrief.record({
-      partitionId: deployment.partitionId,
+      partitionId: deployment.partitionId ?? null,
       deploymentId: deployment.id,
       agent: "command",
       decisionType: "deployment-failure",
@@ -48,7 +48,7 @@ export function markStaleDeployments(
         `indefinite "running" status.`,
       context: {
         deploymentId: deployment.id,
-        partitionId: deployment.partitionId,
+        partitionId: deployment.partitionId ?? null,
         staleDurationMinutes: staleDurationMin,
         thresholdMinutes: Math.round(thresholdMs / 60_000),
       },

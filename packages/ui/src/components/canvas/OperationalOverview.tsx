@@ -377,9 +377,9 @@ export default function OperationalOverview() {
           <div className="v2-active-deploys-row">
             {activeDeployments.slice(0, 4).map((d) => {
               const opName =
-                operations.find((p) => p.id === d.operationId)?.name ?? d.operationId.slice(0, 8);
+                operations.find((p) => p.id === d.artifactId)?.name ?? d.artifactId.slice(0, 8);
               const partName =
-                partitions.find((t) => t.id === d.partitionId)?.name ?? d.partitionId.slice(0, 8);
+                partitions.find((t) => t.id === d.partitionId)?.name ?? (d.partitionId ?? "").slice(0, 8);
               return (
                 <div
                   key={d.id}

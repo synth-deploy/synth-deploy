@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import type { IPartitionStore, IEnvironmentStore, IOperationStore, ISettingsStore, DebriefWriter, DebriefReader, Operation, Partition, Environment } from "@deploystack/core";
+import type { IPartitionStore, IEnvironmentStore, IArtifactStore, ISettingsStore, DebriefWriter, DebriefReader, Artifact, Partition, Environment } from "@deploystack/core";
 import type { LlmClient } from "@deploystack/core";
 import type { CommandAgent, DeploymentStore } from "../agent/command-agent.js";
 import { QueryRequestSchema } from "./schemas.js";
@@ -274,7 +274,7 @@ export function registerAgentRoutes(
   agent: CommandAgent,
   partitions: IPartitionStore,
   environments: IEnvironmentStore,
-  operations: IOperationStore,
+  artifacts: IArtifactStore,
   deployments: DeploymentStore,
   debrief: DebriefWriter & DebriefReader,
   settings: ISettingsStore,
@@ -301,7 +301,7 @@ export function registerAgentRoutes(
 
     const query = parsed.data.query.trim();
     const lower = query.toLowerCase();
-    const allOperations = operations.list();
+    const allArtifacts = artifacts.list();
     const allPartitions = partitions.list();
     const allEnvironments = environments.list();
 
@@ -309,7 +309,7 @@ export function registerAgentRoutes(
     const queryEntityExposure = settings.get().agent.llmEntityExposure ?? "names";
     if (llm && llm.isAvailable()) {
       const llmAction = await classifyQueryWithLlm(
-        llm, query, allOperations, allPartitions, allEnvironments,
+        llm, query, allArtifacts, allPartitions, allEnvironments,
         deployments, debrief, queryEntityExposure !== "none",
       );
       if (llmAction) {
@@ -335,11 +335,11 @@ export function registerAgentRoutes(
       return { action: "create" as const, view: "partition-detail", params: { name }, title: `Create "${name}"` };
     }
 
-    // Create operation: "create operation api-service" → return create intent for UI confirmation
-    const createOperationMatch = query.match(/\bcreate\s+operation\s+(.+)/i);
-    if (createOperationMatch) {
-      const name = createOperationMatch[1].trim();
-      return { action: "create" as const, view: "operation-list", params: { name }, title: `Create "${name}"` };
+    // Create artifact: "create artifact api-service" or "create operation api-service" → return create intent for UI confirmation
+    const createArtifactMatch = query.match(/\bcreate\s+(?:artifact|operation)\s+(.+)/i);
+    if (createArtifactMatch) {
+      const name = createArtifactMatch[1].trim();
+      return { action: "create" as const, view: "artifact-list", params: { name }, title: `Create "${name}"` };
     }
 
     // Show specific partition
@@ -374,9 +374,9 @@ export function registerAgentRoutes(
       return { action: "navigate" as const, view: "settings", params: {}, title: "Settings" };
     }
 
-    // Operations list
-    if (/\b(operations|operation list|manage operations)\b/.test(lower)) {
-      return { action: "navigate" as const, view: "operation-list", params: {}, title: "Operations" };
+    // Artifacts list (legacy "operations" query also matches)
+    if (/\b(artifacts|artifact list|operations|operation list|manage artifacts)\b/.test(lower)) {
+      return { action: "navigate" as const, view: "artifact-list", params: {}, title: "Artifacts" };
     }
 
     // Debrief / decision diary
@@ -397,16 +397,16 @@ export function registerAgentRoutes(
       return { action: "navigate" as const, view: "order-detail", params: { id: orderIdMatch[1] }, title: "Order" };
     }
 
-    // Orders list
+    // Artifact deployments list
     if (/\b(orders|order list|all orders|manage orders)\b/.test(lower)) {
       const orderParams: Record<string, string> = {};
-      for (const p of allOperations) {
-        if (lower.includes(p.name.toLowerCase())) {
-          orderParams.operationId = p.id;
+      for (const a of allArtifacts) {
+        if (lower.includes(a.name.toLowerCase())) {
+          orderParams.artifactId = a.id;
           break;
         }
       }
-      return { action: "navigate" as const, view: "order-list", params: orderParams, title: "Orders" };
+      return { action: "navigate" as const, view: "deployment-list", params: orderParams, title: "Deployments" };
     }
 
     // Deployment history / recent deployments
@@ -479,7 +479,7 @@ Rules:
 async function classifyQueryWithLlm(
   llm: LlmClient,
   query: string,
-  allOperations: Operation[],
+  allArtifacts: Artifact[],
   allPartitions: Partition[],
   allEnvironments: Environment[],
   deploymentStore: DeploymentStore,
@@ -490,7 +490,7 @@ async function classifyQueryWithLlm(
 
   appendEntityNames(parts, "Known partitions", allPartitions, includeEntities);
   appendEntityNames(parts, "Known environments", allEnvironments, includeEntities);
-  appendEntityNames(parts, "Known operations", allOperations, includeEntities);
+  appendEntityNames(parts, "Known artifacts", allArtifacts, includeEntities);
 
   const llmResult = await llm.classify({
     prompt: parts.join("\n"),

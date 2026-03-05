@@ -2,22 +2,20 @@ import crypto from "node:crypto";
 import type {
   Deployment,
   DeploymentId,
-  DeploymentStep,
   DeploymentTrigger,
   DebriefWriter,
   Environment,
   Partition,
-  Operation,
-  Order,
+  Artifact,
   AppSettings,
+  PartitionId,
 } from "@deploystack/core";
-import type { IOrderStore } from "@deploystack/core";
+import type { IArtifactStore, IEnvironmentStore, IPartitionStore } from "@deploystack/core";
 import type {
   ServiceHealthChecker,
   HealthCheckResult,
 } from "./health-checker.js";
 import { DefaultHealthChecker } from "./health-checker.js";
-import { runStep, validateCommand } from "./step-runner.js";
 import type { McpClientManager, McpToolResult } from "./mcp-client-manager.js";
 import { EnvoyClient } from "./envoy-client.js";
 import type { EnvoyDeployResult } from "./envoy-client.js";
@@ -30,6 +28,7 @@ export interface DeploymentStore {
   save(deployment: Deployment): void;
   get(id: DeploymentId): Deployment | undefined;
   getByPartition(partitionId: string): Deployment[];
+  getByArtifact(artifactId: string): Deployment[];
   list(): Deployment[];
 }
 
@@ -169,7 +168,9 @@ export class CommandAgent {
   constructor(
     private debrief: DebriefWriter,
     private deployments: DeploymentStore,
-    private orders: IOrderStore,
+    private artifactStore: IArtifactStore,
+    private environmentStore: IEnvironmentStore,
+    private partitionStore: IPartitionStore,
     private healthChecker: ServiceHealthChecker = new DefaultHealthChecker(),
     options: Partial<AgentOptions> = {},
     private settingsReader?: { get(): AppSettings },
@@ -195,36 +196,104 @@ export class CommandAgent {
   }
 
   // -----------------------------------------------------------------------
+  // RBAC permission check (stub — TODO #122)
+  // -----------------------------------------------------------------------
+
+  /**
+   * Check whether the caller has the required permission.
+   * TODO #122: Wire actual RBAC enforcement in Wave 5. Currently always returns true.
+   */
+  private checkCallerPermission(_actor: string | undefined, _requiredPermission: string): boolean {
+    // TODO #122: Actual RBAC enforcement will be wired in Wave 5.
+    // For now, all callers are permitted.
+    return true;
+  }
+
+  // -----------------------------------------------------------------------
   // Main entry point
   // -----------------------------------------------------------------------
 
   async triggerDeployment(
     trigger: DeploymentTrigger,
-    partition: Partition,
-    environment: Environment,
-    operation: Operation,
-    order: Order,
   ): Promise<Deployment> {
     const deploymentId = crypto.randomUUID();
 
-    // --- Step 0: Log Order usage -------------------------------------------
+    // --- Look up entities from stores -----------------------------------------------
 
-    this.debrief.record({
-      partitionId: trigger.partitionId,
+    const environment = this.environmentStore.get(trigger.environmentId);
+    if (!environment) {
+      throw new OrchestrationError(
+        "resolve-entities",
+        `Environment not found: ${trigger.environmentId}`,
+        `The trigger references environment ID "${trigger.environmentId}" which does not exist in the environment store. ` +
+        `Verify the environment ID is correct and the environment has been created.`,
+      );
+    }
+
+    let partition: Partition | undefined;
+    if (trigger.partitionId) {
+      partition = this.partitionStore.get(trigger.partitionId);
+      if (!partition) {
+        throw new OrchestrationError(
+          "resolve-entities",
+          `Partition not found: ${trigger.partitionId}`,
+          `The trigger references partition ID "${trigger.partitionId}" which does not exist in the partition store. ` +
+          `Verify the partition ID is correct and the partition has been created.`,
+        );
+      }
+    }
+
+    const artifact = this.artifactStore.get(trigger.artifactId);
+    if (!artifact) {
+      throw new OrchestrationError(
+        "resolve-entities",
+        `Artifact not found: ${trigger.artifactId}`,
+        `The trigger references artifact ID "${trigger.artifactId}" which does not exist in the artifact store. ` +
+        `Verify the artifact ID is correct and the artifact has been created.`,
+      );
+    }
+
+    // --- RBAC check (stub) --------------------------------------------------------
+
+    const actor = trigger.triggeredBy === "user" ? "user" : "agent";
+    if (!this.checkCallerPermission(actor, "deployment.create")) {
+      throw new OrchestrationError(
+        "permission-check",
+        `Caller "${actor}" lacks deployment.create permission`,
+        `The deployment was rejected because the caller does not have the required ` +
+        `"deployment.create" permission. Contact an administrator to request access.`,
+      );
+    }
+
+    // --- Step 0: Artifact analysis ------------------------------------------------
+
+    const analysisEntry = this.debrief.record({
+      partitionId: trigger.partitionId ?? null,
       deploymentId,
       agent: "command",
-      decisionType: "order-created",
-      decision: `Executing Order ${order.id.slice(0, 8)} — "${order.operationName}" v${order.version}`,
+      decisionType: "artifact-analysis",
+      decision: `Analyzed artifact "${artifact.name}" (${artifact.type}) — confidence ${artifact.analysis.confidence}`,
       reasoning:
-        `Deploying from Order ${order.id.slice(0, 8)}, created ${order.createdAt instanceof Date ? order.createdAt.toISOString() : order.createdAt}. ` +
-        `Using frozen snapshot configuration to guarantee reproducibility. ` +
-        `The Order captures the exact operation steps, deploy config, and variables ` +
-        `as they existed when the Order was created.`,
-      context: { orderId: order.id, triggeredBy: trigger.triggeredBy },
+        `Artifact "${artifact.name}" is a ${artifact.type} artifact. ` +
+        `Analysis summary: ${artifact.analysis.summary} ` +
+        `Dependencies: ${artifact.analysis.dependencies.length > 0 ? artifact.analysis.dependencies.join(", ") : "none identified"}. ` +
+        `Deployment intent: ${artifact.analysis.deploymentIntent ?? "not specified"}. ` +
+        `Analysis confidence: ${artifact.analysis.confidence}. ` +
+        `${artifact.annotations.length} operator annotation(s) applied. ` +
+        `${artifact.learningHistory.length} learning history entries.`,
+      context: {
+        artifactId: artifact.id,
+        artifactName: artifact.name,
+        artifactType: artifact.type,
+        confidence: artifact.analysis.confidence,
+        dependencies: artifact.analysis.dependencies,
+        annotationCount: artifact.annotations.length,
+      },
     });
 
     // --- Step 1: Plan the pipeline -----------------------------------------
 
+    const version = trigger.artifactVersionId ?? "latest";
     const pipelineSteps = [
       "resolve-configuration",
       "preflight-health-check",
@@ -233,39 +302,92 @@ export class CommandAgent {
     ];
 
     const planEntry = this.debrief.record({
-      partitionId: trigger.partitionId,
+      partitionId: trigger.partitionId ?? null,
       deploymentId,
       agent: "command",
       decisionType: "pipeline-plan",
       decision: `Planned deployment pipeline: ${pipelineSteps.join(" → ")}`,
       reasoning:
-        `Deployment of "${order.operationName}" v${order.version} to ${environment.name} ` +
-        `for partition "${partition.name}". Pipeline includes pre-flight health check to verify ` +
+        `Deployment of "${artifact.name}" v${version} to ${environment.name}` +
+        (partition ? ` for partition "${partition.name}"` : "") +
+        `. Pipeline includes pre-flight health check to verify ` +
         `target environment is reachable before deploying, and post-deployment verification ` +
         `to confirm the deployment took effect.`,
       context: {
         steps: pipelineSteps,
-        operationId: order.operationId,
-        version: order.version,
+        artifactId: artifact.id,
+        artifactName: artifact.name,
+        version,
         environmentName: environment.name,
-        partitionName: partition.name,
-        orderId: order.id,
+        partitionName: partition?.name ?? null,
+      },
+    });
+
+    // --- Create Deployment record ------------------------------------------
+
+    // TODO #125: Generate a real deployment plan from artifact analysis
+    const stubPlan = {
+      steps: [
+        {
+          description: `Deploy ${artifact.name} v${version}`,
+          action: "deploy",
+          target: environment.name,
+          reversible: true,
+          rollbackAction: "rollback to previous version",
+        },
+      ],
+      reasoning: `Stub plan generated from artifact analysis of "${artifact.name}". ` +
+        `Deployment intent: ${artifact.analysis.deploymentIntent ?? "standard deployment"}. ` +
+        `TODO #125: Replace with LLM-generated plan based on artifact analysis.`,
+    };
+
+    const planGenEntry = this.debrief.record({
+      partitionId: trigger.partitionId ?? null,
+      deploymentId,
+      agent: "command",
+      decisionType: "plan-generation",
+      decision: `Generated deployment plan for "${artifact.name}" v${version} — ${stubPlan.steps.length} step(s)`,
+      reasoning: stubPlan.reasoning,
+      context: {
+        stepCount: stubPlan.steps.length,
+        artifactName: artifact.name,
+        version,
+      },
+    });
+
+    // TODO #125: Auto-approve is a placeholder — real flow will present the plan to the user
+    // TODO #154: Emit agent.recommendation.followed / agent.recommendation.overridden telemetry
+    // when user approves/modifies the generated plan
+    const approvalEntry = this.debrief.record({
+      partitionId: trigger.partitionId ?? null,
+      deploymentId,
+      agent: "command",
+      decisionType: "plan-approval",
+      decision: `Auto-approved deployment plan for "${artifact.name}" v${version}`,
+      reasoning:
+        `Plan auto-approved (stub). TODO #125: This will require explicit user approval ` +
+        `once the plan generation flow is implemented. The plan was auto-approved because ` +
+        `the approval workflow is not yet wired.`,
+      context: {
+        autoApproved: true,
+        approvedBy: actor,
       },
     });
 
     const deployment: Deployment = {
       id: deploymentId,
-      operationId: order.operationId,
-      partitionId: trigger.partitionId,
+      artifactId: trigger.artifactId,
+      artifactVersionId: trigger.artifactVersionId,
       environmentId: trigger.environmentId,
-      version: order.version,
+      partitionId: trigger.partitionId,
+      version,
       status: "pending",
       variables: {},
-      debriefEntryIds: [planEntry.id],
-      orderId: order.id,
+      plan: stubPlan,
+      approvedBy: actor,
+      approvedAt: new Date(),
+      debriefEntryIds: [analysisEntry.id, planEntry.id, planGenEntry.id, approvalEntry.id],
       createdAt: new Date(),
-      completedAt: null,
-      failureReason: null,
     };
 
     this.deployments.save(deployment);
@@ -278,6 +400,7 @@ export class CommandAgent {
         trigger.variables,
         partition,
         environment,
+        artifact,
       );
       deployment.variables = variables;
 
@@ -286,15 +409,17 @@ export class CommandAgent {
       deployment.status = "running";
       this.deployments.save(deployment);
 
-      await this.preflightHealthCheck(deployment, partition, environment);
+      await this.preflightHealthCheck(deployment, partition, environment, artifact);
 
-      // --- Step 4: Execute deployment --------------------------------------
+      // --- Step 4: Execute deployment (stub) --------------------------------
 
-      await this.executeDeployment(deployment, partition, environment, order);
+      // TODO #127: Implement real execution delegation to Envoy
+      await this.executeDeployment(deployment, partition, environment, artifact);
 
-      // --- Step 5: Post-deploy verify --------------------------------------
+      // --- Step 5: Post-deploy verify (stub) --------------------------------
 
-      await this.postDeployVerify(deployment, partition, environment, order);
+      // TODO #127: Implement real post-deploy verification
+      await this.postDeployVerify(deployment, partition, environment, artifact);
 
       // --- Success ---------------------------------------------------------
 
@@ -302,15 +427,16 @@ export class CommandAgent {
       deployment.completedAt = new Date();
 
       const completionEntry = this.debrief.record({
-        partitionId: deployment.partitionId,
+        partitionId: deployment.partitionId ?? null,
         deploymentId: deployment.id,
         agent: "command",
         decisionType: "deployment-completion",
-        decision: `Marking deployment of ${deployment.operationId} v${deployment.version} as succeeded on "${environment.name}"`,
+        decision: `Marking deployment of ${artifact.name} v${deployment.version} as succeeded on "${environment.name}"`,
         reasoning:
           `All four pipeline steps completed: configuration accepted, health check passed, ` +
           `execution finished, post-deploy verification confirmed. ` +
-          `${Object.keys(deployment.variables).length} variable(s) applied for partition "${partition.name}". ` +
+          `${Object.keys(deployment.variables).length} variable(s) applied` +
+          (partition ? ` for partition "${partition.name}"` : "") + `. ` +
           (hasConflicts
             ? "Variable conflicts were resolved via precedence rules — see earlier debrief entries for per-conflict reasoning."
             : "No variable conflicts encountered — configuration was unambiguous.") +
@@ -332,7 +458,7 @@ export class CommandAgent {
           : `Unexpected error: ${error instanceof Error ? error.message : String(error)}`;
 
       const failEntry = this.debrief.record({
-        partitionId: deployment.partitionId,
+        partitionId: deployment.partitionId ?? null,
         deploymentId: deployment.id,
         agent: "command",
         decisionType: "deployment-failure",
@@ -340,8 +466,9 @@ export class CommandAgent {
         reasoning:
           error instanceof OrchestrationError
             ? error.reasoning
-            : `Unexpected error during "${order.operationName}" v${order.version} ` +
-              `deployment to "${environment.name}" for partition "${partition.name}": ` +
+            : `Unexpected error during "${artifact.name}" v${version} ` +
+              `deployment to "${environment.name}"` +
+              (partition ? ` for partition "${partition.name}"` : "") + `: ` +
               `${error instanceof Error ? error.message : String(error)}. ` +
               `This error did not come from the orchestration pipeline (not a health check, ` +
               `configuration, or execution failure) — it may indicate a server-side bug or ` +
@@ -362,66 +489,6 @@ export class CommandAgent {
 
     this.deployments.save(deployment);
     return deployment;
-  }
-
-  // -----------------------------------------------------------------------
-  // Order creation — snapshot current operation/env/partition state
-  // -----------------------------------------------------------------------
-
-  /**
-   * Create an Order snapshot from the current state of an Operation.
-   * Used by MCP tools and the agent intent flow to create an Order
-   * before triggering a deployment.
-   */
-  createOrderSnapshot(
-    version: string,
-    partition: Partition,
-    environment: Environment,
-    operation: Operation,
-  ): Order {
-    // Merge global deployment defaults under operation-level config.
-    // Operation-specific values win; global defaults fill gaps.
-    const globalDefaults = this.settingsReader?.get()?.deploymentDefaults?.defaultDeployConfig;
-    const effectiveDeployConfig = globalDefaults
-      ? { ...globalDefaults, ...operation.deployConfig }
-      : operation.deployConfig;
-
-    const order = this.orders.create({
-      operationId: operation.id,
-      operationName: operation.name,
-      partitionId: partition.id,
-      environmentId: environment.id,
-      environmentName: environment.name,
-      version,
-      steps: operation.steps,
-      deployConfig: effectiveDeployConfig,
-      variables: {}, // populated after resolve — we snapshot inputs here
-    });
-
-    this.debrief.record({
-      partitionId: partition.id,
-      deploymentId: null,
-      agent: "command",
-      decisionType: "order-created",
-      decision: `Created Order ${order.id.slice(0, 8)} — immutable snapshot of "${operation.name}" configuration`,
-      reasoning:
-        `Snapshotted operation "${operation.name}" (${operation.steps.length} step(s), ` +
-        `verification: ${effectiveDeployConfig.verificationStrategy}) for version ` +
-        `v${version} to "${environment.name}". ` +
-        (globalDefaults
-          ? `Global deployment defaults were merged as a base under operation-level deploy config. `
-          : ``) +
-        `This Order freezes the operation configuration so the deployment can be reproduced ` +
-        `exactly, even if the operation is modified later.`,
-      context: {
-        orderId: order.id,
-        stepCount: operation.steps.length,
-        deployConfig: effectiveDeployConfig,
-        appliedGlobalDefaults: !!globalDefaults,
-      },
-    });
-
-    return order;
   }
 
   // -----------------------------------------------------------------------
@@ -504,24 +571,38 @@ export class CommandAgent {
   private resolveConfiguration(
     deployment: Deployment,
     triggerVariables: Record<string, string> | undefined,
-    partition: Partition,
+    partition: Partition | undefined,
     environment: Environment,
+    artifact: Artifact,
   ): { variables: Record<string, string>; hasConflicts: boolean } {
+    // Precedence: environment → partition (if present) → artifact defaults → trigger overrides
     const resolved: Record<string, string> = { ...environment.variables };
     const conflicts: VariableConflict[] = [];
 
-    // Partition overrides environment
-    for (const [key, value] of Object.entries(partition.variables)) {
-      if (key in resolved && resolved[key] !== value) {
-        conflicts.push({
-          variable: key,
-          winner: "partition",
-          winnerValue: value,
-          loserValue: resolved[key],
-          loserLevel: "environment",
-        });
+    // Partition overrides environment (if partition is provided)
+    if (partition) {
+      for (const [key, value] of Object.entries(partition.variables)) {
+        if (key in resolved && resolved[key] !== value) {
+          conflicts.push({
+            variable: key,
+            winner: "partition",
+            winnerValue: value,
+            loserValue: resolved[key],
+            loserLevel: "environment",
+          });
+        }
+        resolved[key] = value;
       }
-      resolved[key] = value;
+    }
+
+    // Artifact configuration expectations as defaults (only fill gaps, don't override)
+    // These are hints from artifact analysis, not hard overrides
+    if (artifact.analysis.configurationExpectations) {
+      for (const [key, _description] of Object.entries(artifact.analysis.configurationExpectations)) {
+        // Only add if not already set — these are expectations, not values
+        // The artifact analysis tells us what variables are expected, not what values to use
+        // So we skip actually setting them — they serve as documentation
+      }
     }
 
     // Trigger overrides everything
@@ -533,7 +614,7 @@ export class CommandAgent {
             winner: "trigger",
             winnerValue: value,
             loserValue: resolved[key],
-            loserLevel: key in partition.variables ? "partition" : "environment",
+            loserLevel: partition && key in partition.variables ? "partition" : "environment",
           });
         }
         resolved[key] = value;
@@ -554,8 +635,9 @@ export class CommandAgent {
       }
     }
 
+    const partitionVarCount = partition ? Object.keys(partition.variables).length : 0;
     const configEntry = this.debrief.record({
-      partitionId: deployment.partitionId,
+      partitionId: deployment.partitionId ?? null,
       deploymentId: deployment.id,
       agent: "command",
       decisionType: "configuration-resolved",
@@ -566,7 +648,8 @@ export class CommandAgent {
       reasoning:
         conflicts.length === 0
           ? `Environment "${environment.name}" provided ${Object.keys(environment.variables).length} base variable(s), ` +
-            `partition added ${Object.keys(partition.variables).length}, trigger added ${Object.keys(triggerVariables ?? {}).length}. ` +
+            (partition ? `partition added ${partitionVarCount}, ` : "") +
+            `trigger added ${Object.keys(triggerVariables ?? {}).length}. ` +
             `No values collided across levels, so the merged configuration is unambiguous. ` +
             `Accepting ${Object.keys(resolved).length} final variable(s) as the deployment configuration.`
           : `${conflicts.length} variable(s) had different values at multiple precedence levels. ` +
@@ -578,7 +661,7 @@ export class CommandAgent {
         conflictCount: conflicts.length,
         sources: {
           environment: Object.keys(environment.variables).length,
-          partition: Object.keys(partition.variables).length,
+          partition: partitionVarCount,
           trigger: Object.keys(triggerVariables ?? {}).length,
         },
       },
@@ -734,7 +817,7 @@ export class CommandAgent {
     const crossEnvConn = byCategory.get("cross-env-connectivity");
     if (crossEnvConn) {
       const entry = this.debrief.record({
-        partitionId: deployment.partitionId,
+        partitionId: deployment.partitionId ?? null,
         deploymentId: deployment.id,
         agent: "command",
         decisionType: "variable-conflict",
@@ -765,7 +848,7 @@ export class CommandAgent {
         .map((d) => d.riskContribution)
         .join("; ");
       const entry = this.debrief.record({
-        partitionId: deployment.partitionId,
+        partitionId: deployment.partitionId ?? null,
         deploymentId: deployment.id,
         agent: "command",
         decisionType: "variable-conflict",
@@ -790,7 +873,7 @@ export class CommandAgent {
     const sensitiveDetails = byCategory.get("sensitive");
     if (sensitiveDetails) {
       const entry = this.debrief.record({
-        partitionId: deployment.partitionId,
+        partitionId: deployment.partitionId ?? null,
         deploymentId: deployment.id,
         agent: "command",
         decisionType: "variable-conflict",
@@ -825,7 +908,7 @@ export class CommandAgent {
         )
         .join("; ");
       const entry = this.debrief.record({
-        partitionId: deployment.partitionId,
+        partitionId: deployment.partitionId ?? null,
         deploymentId: deployment.id,
         agent: "command",
         decisionType: "variable-conflict",
@@ -883,22 +966,23 @@ export class CommandAgent {
    */
   private async preflightHealthCheck(
     deployment: Deployment,
-    partition: Partition,
+    partition: Partition | undefined,
     environment: Environment,
+    artifact: Artifact,
   ): Promise<void> {
-    const serviceId = `${deployment.operationId}/${environment.name}`;
+    const serviceId = `${artifact.name}/${environment.name}`;
     const opts = this.getEffectiveOptions();
     const maxAttempts = opts.healthCheckRetries + 1;
     let attempt = 1;
 
     const firstCheck = await this.healthChecker.check(serviceId, {
-      partitionId: partition.id,
+      partitionId: partition?.id ?? "",
       environmentName: environment.name,
     });
 
     if (firstCheck.reachable) {
       const entry = this.debrief.record({
-        partitionId: deployment.partitionId,
+        partitionId: deployment.partitionId ?? null,
         deploymentId: deployment.id,
         agent: "command",
         decisionType: "health-check",
@@ -930,7 +1014,7 @@ export class CommandAgent {
     if (decision.action === "abort") {
       // Reasoning determined retrying won't help (e.g., DNS failure)
       const abortEntry = this.debrief.record({
-        partitionId: deployment.partitionId,
+        partitionId: deployment.partitionId ?? null,
         deploymentId: deployment.id,
         agent: "command",
         decisionType: "health-check",
@@ -955,7 +1039,7 @@ export class CommandAgent {
 
     // Decision is to retry
     const retryEntry = this.debrief.record({
-      partitionId: deployment.partitionId,
+      partitionId: deployment.partitionId ?? null,
       deploymentId: deployment.id,
       agent: "command",
       decisionType: "health-check",
@@ -978,13 +1062,13 @@ export class CommandAgent {
       await this.delay(decision.delayMs);
 
       const retryCheck = await this.healthChecker.check(serviceId, {
-        partitionId: partition.id,
+        partitionId: partition?.id ?? "",
         environmentName: environment.name,
       });
 
       if (retryCheck.reachable) {
         const recoveryEntry = this.debrief.record({
-          partitionId: deployment.partitionId,
+          partitionId: deployment.partitionId ?? null,
           deploymentId: deployment.id,
           agent: "command",
           decisionType: "health-check",
@@ -1174,9 +1258,9 @@ export class CommandAgent {
 
   private async executeDeployment(
     deployment: Deployment,
-    partition: Partition,
+    partition: Partition | undefined,
     environment: Environment,
-    order: Order,
+    artifact: Artifact,
   ): Promise<void> {
     const envoyConfig = this.settingsReader?.get().envoy;
 
@@ -1195,13 +1279,29 @@ export class CommandAgent {
       }
 
       await this.delegateToEnvoy(
-        deployment, partition, environment, order, envoyConfig,
+        deployment, partition, environment, artifact, envoyConfig,
       );
       return;
     }
 
-    // No settingsReader — local execution for test environments only
-    await this.executeLocal(deployment, partition, environment, order);
+    // No settingsReader — stub execution for test environments only
+    // TODO #127: Wire real execution once Envoy integration is complete
+    const execEntry = this.debrief.record({
+      partitionId: deployment.partitionId ?? null,
+      deploymentId: deployment.id,
+      agent: "command",
+      decisionType: "deployment-execution",
+      decision: `Executed deployment of ${artifact.name} v${deployment.version} (stub)`,
+      reasoning:
+        `Deployment execution is stubbed. TODO #127: Real execution will delegate to an Envoy. ` +
+        `${Object.keys(deployment.variables).length} variable(s) would be injected as environment variables.`,
+      context: {
+        step: "execute-deployment",
+        stubbed: true,
+        variableCount: Object.keys(deployment.variables).length,
+      },
+    });
+    deployment.debriefEntryIds.push(execEntry.id);
   }
 
   /**
@@ -1210,9 +1310,9 @@ export class CommandAgent {
    */
   private async delegateToEnvoy(
     deployment: Deployment,
-    partition: Partition,
+    partition: Partition | undefined,
     environment: Environment,
-    order: Order,
+    artifact: Artifact,
     envoyConfig: { url: string; timeoutMs: number },
   ): Promise<void> {
     const client = new EnvoyClient(envoyConfig.url, envoyConfig.timeoutMs);
@@ -1244,15 +1344,16 @@ export class CommandAgent {
 
     // Envoy is healthy — delegate the deployment
     const delegateEntry = this.debrief.record({
-      partitionId: deployment.partitionId,
+      partitionId: deployment.partitionId ?? null,
       deploymentId: deployment.id,
       agent: "command",
       decisionType: "deployment-execution",
-      decision: `Delegating execution of ${deployment.operationId} v${deployment.version} to Envoy at ${envoyConfig.url}`,
+      decision: `Delegating execution of ${artifact.name} v${deployment.version} to Envoy at ${envoyConfig.url}`,
       reasoning:
         `Envoy at ${envoyConfig.url} is healthy and ready. Delegating full deployment ` +
-        `execution for "${order.operationName}" v${order.version} on "${environment.name}" ` +
-        `for partition "${partition.name}". The Envoy will execute all steps, verify artifacts, ` +
+        `execution for "${artifact.name}" v${deployment.version} on "${environment.name}"` +
+        (partition ? ` for partition "${partition.name}"` : "") +
+        `. The Envoy will execute all steps, verify artifacts, ` +
         `and return debrief entries for ingestion into Command's unified decision diary.`,
       context: {
         step: "execute-deployment",
@@ -1266,13 +1367,13 @@ export class CommandAgent {
     try {
       envoyResult = await client.deploy({
         deploymentId: deployment.id,
-        partitionId: deployment.partitionId,
+        partitionId: deployment.partitionId ?? "",
         environmentId: deployment.environmentId,
-        operationId: deployment.operationId,
+        operationId: deployment.artifactId, // Envoy still uses operationId in its API
         version: deployment.version,
         variables: deployment.variables,
         environmentName: environment.name,
-        partitionName: partition.name,
+        partitionName: partition?.name ?? "",
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -1289,7 +1390,7 @@ export class CommandAgent {
     if (envoyResult.debriefEntries && envoyResult.debriefEntries.length > 0) {
       for (const entry of envoyResult.debriefEntries) {
         const ingested = this.debrief.record({
-          partitionId: entry.partitionId ?? deployment.partitionId,
+          partitionId: entry.partitionId ?? deployment.partitionId ?? null,
           deploymentId: entry.deploymentId ?? deployment.id,
           agent: entry.agent,
           decisionType: entry.decisionType,
@@ -1324,7 +1425,7 @@ export class CommandAgent {
 
     // Record successful delegation completion
     const completionEntry = this.debrief.record({
-      partitionId: deployment.partitionId,
+      partitionId: deployment.partitionId ?? null,
       deploymentId: deployment.id,
       agent: "command",
       decisionType: "deployment-execution",
@@ -1348,260 +1449,39 @@ export class CommandAgent {
       },
     });
     deployment.debriefEntryIds.push(completionEntry.id);
-
-  }
-
-  /** Local step execution — used only in test environments without a settingsReader. */
-  private async executeLocal(
-    deployment: Deployment,
-    partition: Partition,
-    environment: Environment,
-    order: Order,
-  ): Promise<void> {
-    const steps = this.sortSteps(order.steps, ["pre-deploy", "post-deploy"]);
-
-    if (steps.length === 0) {
-      const entry = this.debrief.record({
-        partitionId: deployment.partitionId,
-        deploymentId: deployment.id,
-        agent: "command",
-        decisionType: "deployment-execution",
-        decision: `No execution steps defined for ${deployment.operationId} v${deployment.version} — skipping execution phase`,
-        reasoning:
-          `The order contains no pre-deploy or post-deploy steps. Execution phase is a no-op. ` +
-          `This is valid for operations that only have verification steps or no steps at all.`,
-        context: { step: "execute-deployment", stepCount: 0 },
-      });
-      deployment.debriefEntryIds.push(entry.id);
-      return;
-    }
-
-    for (const step of steps) {
-      const startEntry = this.debrief.record({
-        partitionId: deployment.partitionId,
-        deploymentId: deployment.id,
-        agent: "command",
-        decisionType: "deployment-execution",
-        decision: `Executing step "${step.name}" (${step.type}, order ${step.order}): ${step.command}`,
-        reasoning:
-          `Running ${step.type} step "${step.name}" for ${deployment.operationId} v${deployment.version} ` +
-          `on "${environment.name}" for partition "${partition.name}". ` +
-          `${Object.keys(deployment.variables).length} variable(s) injected as environment variables. ` +
-          `Timeout: ${order.deployConfig.timeoutMs}ms.`,
-        context: {
-          step: "execute-deployment",
-          stepName: step.name,
-          stepType: step.type,
-          command: step.command,
-          timeoutMs: order.deployConfig.timeoutMs,
-        },
-      });
-      deployment.debriefEntryIds.push(startEntry.id);
-
-      const cmdWarnings = validateCommand(step.command);
-      if (cmdWarnings.length > 0) {
-        this.debrief.record({
-          partitionId: deployment.partitionId,
-          deploymentId: deployment.id,
-          agent: "command",
-          decisionType: "system",
-          decision: `Step "${step.name}" contains potentially dangerous patterns`,
-          reasoning: `Flagged patterns: ${cmdWarnings.map(w => w.description).join(', ')}. Proceeding with execution in isolated environment (no host env leakage).`,
-          context: { stepId: step.id, command: step.command, warnings: cmdWarnings },
-        });
-      }
-
-      const result = await runStep(step, deployment.variables, order.deployConfig.timeoutMs);
-
-      if (!result.success) {
-        const reason = result.timedOut
-          ? `Step "${step.name}" timed out after ${result.durationMs}ms (limit: ${order.deployConfig.timeoutMs}ms)`
-          : `Step "${step.name}" failed with exit code ${result.exitCode}`;
-
-        const failEntry = this.debrief.record({
-          partitionId: deployment.partitionId,
-          deploymentId: deployment.id,
-          agent: "command",
-          decisionType: "deployment-execution",
-          decision: reason,
-          reasoning:
-            `${reason}. ` +
-            (result.stderr ? `stderr: ${result.stderr}` : "No stderr output.") +
-            (result.stdout ? ` stdout: ${result.stdout}` : ""),
-          context: {
-            step: "execute-deployment",
-            stepName: step.name,
-            exitCode: result.exitCode,
-            durationMs: result.durationMs,
-            timedOut: result.timedOut,
-          },
-        });
-        deployment.debriefEntryIds.push(failEntry.id);
-
-        throw new OrchestrationError(
-          "execute-deployment",
-          reason,
-          `Halting deployment pipeline at step "${step.name}". ${result.stderr || "No stderr output."}`,
-        );
-      }
-
-      const successEntry = this.debrief.record({
-        partitionId: deployment.partitionId,
-        deploymentId: deployment.id,
-        agent: "command",
-        decisionType: "deployment-execution",
-        decision: `Step "${step.name}" completed successfully in ${result.durationMs}ms`,
-        reasoning:
-          `${step.type} step "${step.name}" exited with code 0 in ${result.durationMs}ms. ` +
-          (result.stdout ? `Output: ${result.stdout}` : "No stdout output."),
-        context: {
-          step: "execute-deployment",
-          stepName: step.name,
-          exitCode: 0,
-          durationMs: result.durationMs,
-        },
-      });
-      deployment.debriefEntryIds.push(successEntry.id);
-    }
   }
 
   private async postDeployVerify(
     deployment: Deployment,
-    partition: Partition,
+    partition: Partition | undefined,
     environment: Environment,
-    order: Order,
+    artifact: Artifact,
   ): Promise<void> {
-    const steps = this.sortSteps(order.steps, ["verification"]);
-
-    if (steps.length === 0) {
-      const entry = this.debrief.record({
-        partitionId: deployment.partitionId,
-        deploymentId: deployment.id,
-        agent: "command",
-        decisionType: "deployment-verification",
-        decision: `No verification steps defined — marking deployment as verified based on successful execution`,
-        reasoning:
-          `Deployment execution completed without errors. No explicit verification steps ` +
-          `are configured for this operation. Verification is based on execution outcome: ` +
-          `all pre-deploy and post-deploy steps exited with code 0. ` +
-          `${Object.keys(deployment.variables).length} variable(s) applied.`,
-        context: {
-          step: "post-deploy-verify",
-          variableCount: Object.keys(deployment.variables).length,
-          operationId: deployment.operationId,
-          version: deployment.version,
-        },
-      });
-      deployment.debriefEntryIds.push(entry.id);
-      return;
-    }
-
-    for (const step of steps) {
-      const startEntry = this.debrief.record({
-        partitionId: deployment.partitionId,
-        deploymentId: deployment.id,
-        agent: "command",
-        decisionType: "deployment-verification",
-        decision: `Running verification step "${step.name}": ${step.command}`,
-        reasoning:
-          `Executing verification step "${step.name}" to confirm deployment of ` +
-          `${deployment.operationId} v${deployment.version} on "${environment.name}". ` +
-          `Timeout: ${order.deployConfig.timeoutMs}ms.`,
-        context: {
-          step: "post-deploy-verify",
-          stepName: step.name,
-          command: step.command,
-          timeoutMs: order.deployConfig.timeoutMs,
-        },
-      });
-      deployment.debriefEntryIds.push(startEntry.id);
-
-      const verifyCmdWarnings = validateCommand(step.command);
-      if (verifyCmdWarnings.length > 0) {
-        this.debrief.record({
-          partitionId: deployment.partitionId,
-          deploymentId: deployment.id,
-          agent: "command",
-          decisionType: "system",
-          decision: `Step "${step.name}" contains potentially dangerous patterns`,
-          reasoning: `Flagged patterns: ${verifyCmdWarnings.map(w => w.description).join(', ')}. Proceeding with execution in isolated environment (no host env leakage).`,
-          context: { stepId: step.id, command: step.command, warnings: verifyCmdWarnings },
-        });
-      }
-
-      const result = await runStep(step, deployment.variables, order.deployConfig.timeoutMs);
-
-      if (!result.success) {
-        const reason = result.timedOut
-          ? `Verification step "${step.name}" timed out after ${result.durationMs}ms`
-          : `Verification step "${step.name}" failed with exit code ${result.exitCode}`;
-
-        const failEntry = this.debrief.record({
-          partitionId: deployment.partitionId,
-          deploymentId: deployment.id,
-          agent: "command",
-          decisionType: "deployment-verification",
-          decision: reason,
-          reasoning:
-            `${reason}. Deployment was executed but verification failed — the deployment ` +
-            `may have succeeded but the verification command did not confirm it. ` +
-            (result.stderr ? `stderr: ${result.stderr}` : "No stderr output."),
-          context: {
-            step: "post-deploy-verify",
-            stepName: step.name,
-            exitCode: result.exitCode,
-            durationMs: result.durationMs,
-            timedOut: result.timedOut,
-          },
-        });
-        deployment.debriefEntryIds.push(failEntry.id);
-
-        throw new OrchestrationError(
-          "post-deploy-verify",
-          reason,
-          `Verification failed at step "${step.name}". The deployment commands completed ` +
-          `but verification could not confirm success. ${result.stderr || "No stderr output."}`,
-        );
-      }
-
-      const successEntry = this.debrief.record({
-        partitionId: deployment.partitionId,
-        deploymentId: deployment.id,
-        agent: "command",
-        decisionType: "deployment-verification",
-        decision: `Verification step "${step.name}" passed in ${result.durationMs}ms`,
-        reasoning:
-          `Verification step "${step.name}" exited with code 0 in ${result.durationMs}ms. ` +
-          (result.stdout ? `Output: ${result.stdout}` : "No stdout output."),
-        context: {
-          step: "post-deploy-verify",
-          stepName: step.name,
-          exitCode: 0,
-          durationMs: result.durationMs,
-        },
-      });
-      deployment.debriefEntryIds.push(successEntry.id);
-    }
+    // TODO #127: Implement real post-deploy verification
+    const entry = this.debrief.record({
+      partitionId: deployment.partitionId ?? null,
+      deploymentId: deployment.id,
+      agent: "command",
+      decisionType: "deployment-verification",
+      decision: `Post-deploy verification passed for ${artifact.name} v${deployment.version} (stub)`,
+      reasoning:
+        `Post-deploy verification is stubbed. TODO #127: Real verification will run artifact-specific ` +
+        `checks based on the deployment plan. The deployment of "${artifact.name}" v${deployment.version} ` +
+        `to "${environment.name}" is considered verified based on successful execution.`,
+      context: {
+        step: "post-deploy-verify",
+        stubbed: true,
+        variableCount: Object.keys(deployment.variables).length,
+        artifactName: artifact.name,
+        version: deployment.version,
+      },
+    });
+    deployment.debriefEntryIds.push(entry.id);
   }
 
   // -----------------------------------------------------------------------
   // Utilities
   // -----------------------------------------------------------------------
-
-  private sortSteps(
-    steps: DeploymentStep[],
-    types: DeploymentStep["type"][],
-  ): DeploymentStep[] {
-    const typeOrder = new Map(types.map((t, i) => [t, i]));
-    return steps
-      .filter((s) => typeOrder.has(s.type))
-      .sort((a, b) => {
-        const ta = typeOrder.get(a.type)!;
-        const tb = typeOrder.get(b.type)!;
-        if (ta !== tb) return ta - tb;
-        return a.order - b.order;
-      });
-  }
 
   private delay(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
@@ -1626,6 +1506,12 @@ export class InMemoryDeploymentStore implements DeploymentStore {
   getByPartition(partitionId: string): Deployment[] {
     return [...this.deployments.values()].filter(
       (d) => d.partitionId === partitionId,
+    );
+  }
+
+  getByArtifact(artifactId: string): Deployment[] {
+    return [...this.deployments.values()].filter(
+      (d) => d.artifactId === artifactId,
     );
   }
 

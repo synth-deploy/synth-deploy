@@ -218,18 +218,50 @@ export interface Environment {
   variables: Record<string, string>;
 }
 
-export type DeploymentStatus = "pending" | "running" | "succeeded" | "failed" | "rolled_back";
+export type DeploymentStatus = "pending" | "planning" | "approved" | "running" | "succeeded" | "failed" | "rolled_back";
+
+export interface DeploymentPlan {
+  steps: Array<{
+    description: string;
+    action: string;
+    target: string;
+    reversible: boolean;
+    rollbackAction?: string;
+  }>;
+  reasoning: string;
+  diffFromCurrent?: string;
+  diffFromPreviousPlan?: string;
+}
+
+export interface ExecutionRecord {
+  startedAt: string;
+  completedAt?: string;
+  steps: Array<{
+    description: string;
+    status: "completed" | "failed" | "rolled_back";
+    startedAt: string;
+    completedAt?: string;
+    output?: string;
+    error?: string;
+  }>;
+}
 
 export interface Deployment {
   id: string;
-  operationId: string;
-  partitionId: string;
+  artifactId: string;
+  artifactVersionId?: string;
+  envoyId?: string;
+  partitionId?: string;
   environmentId: string;
   version: string;
   status: DeploymentStatus;
   variables: Record<string, string>;
+  plan?: DeploymentPlan;
+  rollbackPlan?: DeploymentPlan;
+  executionRecord?: ExecutionRecord;
+  approvedBy?: string;
+  approvedAt?: string;
   debriefEntryIds: string[];
-  orderId: string | null;
   createdAt: string;
   completedAt: string | null;
   failureReason: string | null;
@@ -253,8 +285,7 @@ export type DecisionType =
   | "plan-approval"
   | "plan-rejection"
   | "rollback-execution"
-  | "cross-system-context"
-  | "order-created";
+  | "cross-system-context";
 
 export type AgentType = "command" | "envoy";
 

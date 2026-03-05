@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import type { IPartitionStore, ITelemetryStore, DebriefReader, DebriefWriter, IOrderStore } from "@deploystack/core";
+import type { IPartitionStore, ITelemetryStore, DebriefReader, DebriefWriter } from "@deploystack/core";
 import { generateOperationHistory } from "@deploystack/core";
 import type { DeploymentStore } from "../agent/command-agent.js";
 import { CreatePartitionSchema, UpdatePartitionSchema, SetVariablesSchema } from "./schemas.js";
@@ -10,7 +10,6 @@ export function registerPartitionRoutes(
   partitions: IPartitionStore,
   deployments: DeploymentStore,
   debrief: DebriefReader & DebriefWriter,
-  orders: IOrderStore,
   telemetry: ITelemetryStore,
 ): void {
   // List all partitions
@@ -72,14 +71,12 @@ export function registerPartitionRoutes(
       }
 
       const linkedDeployments = deployments.getByPartition(id);
-      const linkedOrders = orders.getByPartition(id);
-      const hasLinks = linkedDeployments.length > 0 || linkedOrders.length > 0;
+      const hasLinks = linkedDeployments.length > 0;
 
       if (hasLinks && request.query.cascade !== "true") {
         return reply.status(409).send({
           error: "Partition has linked records",
           deployments: linkedDeployments.length,
-          orders: linkedOrders.length,
           hint: "Add ?cascade=true to force-delete with all linked records",
         });
       }
@@ -91,13 +88,12 @@ export function registerPartitionRoutes(
           deploymentId: null,
           agent: "command",
           decisionType: "system",
-          decision: `Cascade-deleted partition "${partition.name}" with ${linkedDeployments.length} deployments and ${linkedOrders.length} orders`,
+          decision: `Cascade-deleted partition "${partition.name}" with ${linkedDeployments.length} deployment(s)`,
           reasoning: "User requested cascade deletion via ?cascade=true query parameter",
           context: {
             partitionId: id,
             partitionName: partition.name,
             deploymentCount: linkedDeployments.length,
-            orderCount: linkedOrders.length,
           },
         });
       }

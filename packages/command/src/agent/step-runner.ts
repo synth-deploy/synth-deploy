@@ -1,5 +1,13 @@
 import { exec } from "node:child_process";
-import type { DeploymentStep } from "@deploystack/core";
+
+/** Legacy deployment step type — kept for backward compatibility with step-runner. */
+interface DeploymentStep {
+  id: string;
+  name: string;
+  type: string;
+  command: string;
+  order: number;
+}
 
 export interface StepResult {
   success: boolean;

@@ -1,12 +1,13 @@
 import type { FastifyInstance } from "fastify";
-import type { IEnvironmentStore, IOperationStore, ITelemetryStore } from "@deploystack/core";
+import type { IEnvironmentStore, IArtifactStore, ITelemetryStore } from "@deploystack/core";
 import { CreateEnvironmentSchema, UpdateEnvironmentSchema } from "./schemas.js";
 import { requirePermission } from "../middleware/permissions.js";
+import type { DeploymentStore } from "../agent/command-agent.js";
 
 export function registerEnvironmentRoutes(
   app: FastifyInstance,
   environments: IEnvironmentStore,
-  operations: IOperationStore,
+  deployments: DeploymentStore,
   telemetry: ITelemetryStore,
 ): void {
   // List all environments
@@ -77,16 +78,15 @@ export function registerEnvironmentRoutes(
         return reply.status(404).send({ error: "Environment not found" });
       }
 
-      // Check if any operations reference this environment
-      const linkedOperations = operations
+      // Check if any deployments reference this environment
+      const linkedDeployments = deployments
         .list()
-        .filter((p) => p.environmentIds.includes(envId))
-        .map((p) => ({ id: p.id, name: p.name }));
+        .filter((d) => d.environmentId === envId);
 
-      if (linkedOperations.length > 0) {
+      if (linkedDeployments.length > 0) {
         return reply.status(409).send({
-          error: `Environment is linked to ${linkedOperations.length} operation(s). Unlink before deleting.`,
-          linkedOperations,
+          error: `Environment has ${linkedDeployments.length} deployment(s). Cannot delete an environment with deployment history.`,
+          deploymentCount: linkedDeployments.length,
         });
       }
 
