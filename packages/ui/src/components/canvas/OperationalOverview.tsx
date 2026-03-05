@@ -8,16 +8,162 @@ import {
   getRecentDebrief,
   getDeploymentContext,
   getHealth,
+  getSystemState,
 } from "../../api.js";
 import type { Deployment, Partition, Environment, Operation, Order, DebriefEntry } from "../../types.js";
-import type { DeploymentContext } from "../../api.js";
+import type { DeploymentContext, SystemState, AlertSignal } from "../../api.js";
 import { useCanvas } from "../../context/CanvasContext.js";
 import { useSettings } from "../../context/SettingsContext.js";
 import SectionHeader from "../SectionHeader.js";
 import CommandEye from "../CommandEye.js";
 import DeploymentParticles from "../DeploymentParticles.js";
 
+// ---------------------------------------------------------------------------
+// Top-level state-driven router
+// ---------------------------------------------------------------------------
+
 export default function OperationalOverview() {
+  const [systemState, setSystemState] = useState<SystemState | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchState = () =>
+      getSystemState()
+        .then(setSystemState)
+        .catch(() => {});
+
+    fetchState().then(() => setLoading(false));
+
+    const interval = setInterval(fetchState, 30000);
+
+    const onFocus = () => fetchState();
+    window.addEventListener("focus", onFocus);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, []);
+
+  if (loading) return <div className="loading">Loading...</div>;
+  if (!systemState) return <div className="loading">Failed to load system state.</div>;
+
+  switch (systemState.state) {
+    case "empty":
+      return <EmptyState />;
+    case "alert":
+      return <AlertState signals={systemState.signals} stats={systemState.stats} />;
+    case "normal":
+      return <NormalState stats={systemState.stats} />;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// EmptyState — placeholder until guided onboarding (#137)
+// ---------------------------------------------------------------------------
+
+function EmptyState() {
+  return (
+    <div className="v2-dashboard">
+      <div className="v2-empty-state" style={{ textAlign: "center", padding: "60px 20px" }}>
+        <h2 style={{ color: "var(--agent-text)", fontSize: 20, marginBottom: 12 }}>
+          Welcome to DeployStack
+        </h2>
+        <p style={{ color: "var(--agent-text-muted)", fontSize: 14, maxWidth: 400, margin: "0 auto" }}>
+          No artifacts or envoys registered yet. Add an artifact to get started,
+          or register an envoy to begin deploying.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// AlertState — leads with actionable signals, then shows NormalState below
+// ---------------------------------------------------------------------------
+
+function AlertState({ signals, stats }: { signals: AlertSignal[]; stats: SystemState["stats"] }) {
+  const { pushPanel } = useCanvas();
+
+  return (
+    <div className="v2-dashboard">
+      {/* Alert banner */}
+      <div style={{
+        background: "rgba(220, 38, 38, 0.08)",
+        border: "1px solid rgba(220, 38, 38, 0.25)",
+        borderRadius: 8,
+        padding: "16px",
+        marginBottom: 16,
+      }}>
+        <div style={{ fontWeight: 600, fontSize: 14, color: "#dc2626", marginBottom: 8 }}>
+          Attention Required
+        </div>
+        <div style={{ fontSize: 13, color: "var(--agent-text-muted)" }}>
+          {signals.length} signal{signals.length !== 1 ? "s" : ""} need review
+        </div>
+      </div>
+
+      {/* Signal cards — each clickable for drill-in */}
+      {signals.map((signal, i) => {
+        const severityColor = signal.severity === "critical" ? "#dc2626" : "#f59e0b";
+        return (
+          <div
+            key={i}
+            onClick={() => {
+              if (signal.relatedEntity) {
+                const type = signal.relatedEntity.type;
+                if (type === "environment") {
+                  pushPanel({ type: "environment-detail", title: signal.relatedEntity.name, params: { id: signal.relatedEntity.id } });
+                } else if (type === "deployment") {
+                  pushPanel({ type: "deployment-detail", title: "Deployment", params: { id: signal.relatedEntity.id } });
+                } else if (type === "envoy") {
+                  pushPanel({ type: "envoy-registry", title: "Envoys", params: {} });
+                }
+              }
+            }}
+            style={{
+              display: "flex", alignItems: "center", gap: 12,
+              padding: "12px 16px", borderRadius: 8,
+              border: `1px solid ${severityColor}30`,
+              background: `${severityColor}08`,
+              cursor: signal.relatedEntity ? "pointer" : "default",
+              marginBottom: 8,
+            }}
+          >
+            <span style={{
+              width: 8, height: 8, borderRadius: "50%",
+              background: severityColor, flexShrink: 0,
+            }} />
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 600, fontSize: 13, color: "var(--agent-text)" }}>
+                {signal.title}
+              </div>
+              <div style={{ fontSize: 12, color: "var(--agent-text-muted)", marginTop: 2 }}>
+                {signal.detail}
+              </div>
+            </div>
+            {signal.relatedEntity && (
+              <span style={{ fontSize: 11, color: "var(--agent-text-muted)" }}>
+                {signal.relatedEntity.name} &rarr;
+              </span>
+            )}
+          </div>
+        );
+      })}
+
+      {/* Still show deployment authoring below signals */}
+      <div style={{ marginTop: 24 }}>
+        <NormalState stats={stats} />
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// NormalState — preserves all existing OperationalOverview functionality
+// ---------------------------------------------------------------------------
+
+function NormalState({ stats: _stats }: { stats: SystemState["stats"] }) {
   const { pushPanel } = useCanvas();
   const { settings } = useSettings();
 
