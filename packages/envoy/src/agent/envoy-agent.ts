@@ -1263,7 +1263,11 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
     };
 
     try {
-      parsed = JSON.parse(llmResult.text);
+      let text = llmResult.text.trim();
+      if (text.startsWith("```")) {
+        text = text.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "");
+      }
+      parsed = JSON.parse(text);
     } catch {
       recordEntry({
         partitionId: instruction.partition?.id ?? null,
@@ -1328,8 +1332,8 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
         llmAvailable: true,
         stepCount: plan.steps.length,
         rollbackStepCount: rollbackPlan.steps.length,
-        previousSuccessfulPlans: (await this.state.getSuccessfulPlans(instruction.artifact.type, instruction.environment.id)).length,
-        previousFailedPlans: (await this.state.getFailedPlans(instruction.artifact.type, instruction.environment.id)).length,
+        previousSuccessfulPlans: successfulPlans.length,
+        previousFailedPlans: failedPlans.length,
         hasDelta: !!parsed.delta,
       },
     });
@@ -1424,6 +1428,7 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
     deploymentId: string,
     plan: DeploymentPlan,
     rollbackPlan: DeploymentPlan,
+    artifactContext?: { artifactType: string; artifactName: string; environmentId: string },
   ): Promise<DeploymentResult> {
     await this.executorReady;
 
@@ -1575,7 +1580,7 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
       this.reportToServer(failResult);
 
       // Store the failed plan in knowledge store for future planning context
-      this.storePlanOutcome(deploymentId, plan, rollbackPlan, false, failureError, execDurationMs);
+      this.storePlanOutcome(deploymentId, plan, rollbackPlan, false, failureError, execDurationMs, artifactContext);
 
       return failResult;
     }
@@ -1625,7 +1630,7 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
     this.reportToServer(successResult);
 
     // Store the successful plan in knowledge store for future planning context
-    this.storePlanOutcome(deploymentId, plan, rollbackPlan, true, undefined, execDurationMs);
+    this.storePlanOutcome(deploymentId, plan, rollbackPlan, true, undefined, execDurationMs, artifactContext);
 
     return successResult;
   }
@@ -1641,14 +1646,15 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
     success: boolean,
     failureReason?: string,
     executionDurationMs?: number,
+    artifactContext?: { artifactType: string; artifactName: string; environmentId: string },
   ): void {
     try {
       this.state.storePlan({
         id: crypto.randomUUID(),
         deploymentId,
-        artifactType: "unknown",
-        artifactName: "unknown",
-        environmentId: "unknown",
+        artifactType: artifactContext?.artifactType ?? "unknown",
+        artifactName: artifactContext?.artifactName ?? "unknown",
+        environmentId: artifactContext?.environmentId ?? "unknown",
         plan,
         rollbackPlan,
         outcome: success ? "succeeded" : "failed",
