@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import type { ISettingsStore, ITelemetryStore, AppSettings, LlmProviderConfig } from "@deploystack/core";
 import { UpdateSettingsSchema } from "./schemas.js";
+import { requirePermission } from "../middleware/permissions.js";
 
 /**
  * Strips API key from LLM settings before returning to the frontend.
@@ -54,12 +55,12 @@ export function registerSettingsRoutes(
   telemetry: ITelemetryStore,
 ): void {
   // Get all settings
-  app.get("/api/settings", async () => {
+  app.get("/api/settings", { preHandler: [requirePermission("settings.manage")] }, async () => {
     return { settings: sanitizeLlmSettings(settings.get()) };
   });
 
   // Update settings (partial merge)
-  app.put("/api/settings", async (request, reply) => {
+  app.put("/api/settings", { preHandler: [requirePermission("settings.manage")] }, async (request, reply) => {
     const parsed = UpdateSettingsSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.status(400).send({ error: "Invalid input", details: parsed.error.format() });
@@ -72,7 +73,7 @@ export function registerSettingsRoutes(
     }
 
     const updated = settings.update(data as Partial<AppSettings>);
-    telemetry.record({ actor: "anonymous", action: "settings.updated", target: { type: "settings", id: "app" }, details: { fields: Object.keys(parsed.data) } });
+    telemetry.record({ actor: (request.user?.email) ?? "anonymous", action: "settings.updated", target: { type: "settings", id: "app" }, details: { fields: Object.keys(parsed.data) } });
     return { settings: sanitizeLlmSettings(updated) };
   });
 

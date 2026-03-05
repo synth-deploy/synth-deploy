@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import type { ISecurityBoundaryStore, ITelemetryStore } from "@deploystack/core";
 import { SetSecurityBoundariesSchema } from "./schemas.js";
+import { requirePermission } from "../middleware/permissions.js";
 
 export function registerSecurityBoundaryRoutes(
   app: FastifyInstance,
@@ -11,6 +12,7 @@ export function registerSecurityBoundaryRoutes(
   // Get boundaries for envoy
   app.get<{ Params: { envoyId: string } }>(
     "/api/envoys/:envoyId/security-boundaries",
+    { preHandler: [requirePermission("envoy.view")] },
     async (request) => {
       const boundaries = securityBoundaryStore.get(request.params.envoyId);
       return { boundaries };
@@ -20,6 +22,7 @@ export function registerSecurityBoundaryRoutes(
   // Set/replace boundaries for envoy
   app.put<{ Params: { envoyId: string } }>(
     "/api/envoys/:envoyId/security-boundaries",
+    { preHandler: [requirePermission("envoy.configure")] },
     async (request, reply) => {
       const parsed = SetSecurityBoundariesSchema.safeParse(request.body);
       if (!parsed.success) {
@@ -34,7 +37,7 @@ export function registerSecurityBoundaryRoutes(
       }));
 
       securityBoundaryStore.set(request.params.envoyId, boundaries);
-      telemetry.record({ actor: "anonymous", action: "security-boundary.updated", target: { type: "envoy", id: request.params.envoyId }, details: { boundaryCount: boundaries.length } });
+      telemetry.record({ actor: (request.user?.email) ?? "anonymous", action: "security-boundary.updated", target: { type: "envoy", id: request.params.envoyId }, details: { boundaryCount: boundaries.length } });
       return { boundaries };
     },
   );
@@ -42,6 +45,7 @@ export function registerSecurityBoundaryRoutes(
   // Remove all boundaries for envoy
   app.delete<{ Params: { envoyId: string } }>(
     "/api/envoys/:envoyId/security-boundaries",
+    { preHandler: [requirePermission("envoy.configure")] },
     async (request, reply) => {
       securityBoundaryStore.delete(request.params.envoyId);
       return reply.status(204).send();

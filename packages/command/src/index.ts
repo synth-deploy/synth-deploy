@@ -208,86 +208,6 @@ if (process.env.DEPLOYSTACK_SEED_DEMO !== 'false' && partitions.list().length ==
     variables: { ...globexPartition.variables, ...stagingEnv.variables },
   });
 
-  // --- Deployments (mix of statuses and ages) ---
-
-  const dep1: Deployment = {
-    id: crypto.randomUUID(), operationId: webApp.id, partitionId: acmePartition.id,
-    environmentId: prodEnv.id, version: "2.3.0", status: "succeeded",
-    variables: { ...acmePartition.variables, ...prodEnv.variables },
-    debriefEntryIds: [], orderId: null,
-    createdAt: hoursAgo(72), completedAt: hoursAgo(71.5), failureReason: null,
-  };
-  const dep2: Deployment = {
-    id: crypto.randomUUID(), operationId: webApp.id, partitionId: acmePartition.id,
-    environmentId: prodEnv.id, version: "2.4.0", status: "succeeded",
-    variables: { ...acmePartition.variables, ...prodEnv.variables },
-    debriefEntryIds: [], orderId: null,
-    createdAt: hoursAgo(48), completedAt: hoursAgo(47.8), failureReason: null,
-  };
-  const dep3: Deployment = {
-    id: crypto.randomUUID(), operationId: webApp.id, partitionId: acmePartition.id,
-    environmentId: prodEnv.id, version: "2.4.1", status: "succeeded",
-    variables: { ...acmePartition.variables, ...prodEnv.variables },
-    debriefEntryIds: [], orderId: order1.id,
-    createdAt: hoursAgo(24), completedAt: hoursAgo(23.7), failureReason: null,
-  };
-  const dep4: Deployment = {
-    id: crypto.randomUUID(), operationId: apiService.id, partitionId: acmePartition.id,
-    environmentId: prodEnv.id, version: "1.11.0", status: "failed",
-    variables: { ...acmePartition.variables, ...prodEnv.variables },
-    debriefEntryIds: [], orderId: null,
-    createdAt: hoursAgo(36), completedAt: hoursAgo(35.9),
-    failureReason: "Health check failed after 3 retries: connection refused on port 8080",
-  };
-  const dep5: Deployment = {
-    id: crypto.randomUUID(), operationId: apiService.id, partitionId: acmePartition.id,
-    environmentId: prodEnv.id, version: "1.12.0", status: "succeeded",
-    variables: { ...acmePartition.variables, ...prodEnv.variables },
-    debriefEntryIds: [], orderId: order3.id,
-    createdAt: hoursAgo(12), completedAt: hoursAgo(11.8), failureReason: null,
-  };
-  const dep6: Deployment = {
-    id: crypto.randomUUID(), operationId: webApp.id, partitionId: globexPartition.id,
-    environmentId: stagingEnv.id, version: "2.5.0-rc.1", status: "succeeded",
-    variables: { ...globexPartition.variables, ...stagingEnv.variables },
-    debriefEntryIds: [], orderId: order2.id,
-    createdAt: hoursAgo(6), completedAt: hoursAgo(5.8), failureReason: null,
-  };
-  const dep7: Deployment = {
-    id: crypto.randomUUID(), operationId: workerService.id, partitionId: initechPartition.id,
-    environmentId: prodEnv.id, version: "2.9.0", status: "failed",
-    variables: { ...initechPartition.variables, ...prodEnv.variables },
-    debriefEntryIds: [], orderId: null,
-    createdAt: hoursAgo(18), completedAt: hoursAgo(17.8),
-    failureReason: "Queue depth exceeded threshold (342 > 100) during verification",
-  };
-  const dep8: Deployment = {
-    id: crypto.randomUUID(), operationId: workerService.id, partitionId: initechPartition.id,
-    environmentId: prodEnv.id, version: "3.0.0", status: "succeeded",
-    variables: { ...initechPartition.variables, ...prodEnv.variables },
-    debriefEntryIds: [], orderId: order4.id,
-    createdAt: hoursAgo(3), completedAt: hoursAgo(2.7), failureReason: null,
-  };
-  const dep9: Deployment = {
-    id: crypto.randomUUID(), operationId: apiService.id, partitionId: globexPartition.id,
-    environmentId: stagingEnv.id, version: "1.13.0-beta.2", status: "running",
-    variables: { ...globexPartition.variables, ...stagingEnv.variables },
-    debriefEntryIds: [], orderId: order5.id,
-    createdAt: hoursAgo(0.5), completedAt: null, failureReason: null,
-  };
-  const dep10: Deployment = {
-    id: crypto.randomUUID(), operationId: webApp.id, partitionId: initechPartition.id,
-    environmentId: prodEnv.id, version: "2.4.1", status: "rolled_back",
-    variables: { ...initechPartition.variables, ...prodEnv.variables },
-    debriefEntryIds: [], orderId: null,
-    createdAt: hoursAgo(8), completedAt: hoursAgo(7.5),
-    failureReason: "Rolled back after post-deploy smoke test detected 502 errors on /api/v2/users",
-  };
-
-  for (const d of [dep1, dep2, dep3, dep4, dep5, dep6, dep7, dep8, dep9, dep10]) {
-    deployments.save(d);
-  }
-
   // --- Artifacts with analysis, versions, and annotations ---
 
   const webAppArtifact = artifactStore.create({
@@ -359,6 +279,86 @@ if (process.env.DEPLOYSTACK_SEED_DEMO !== 'false' && partitions.list().length ==
 
   artifactStore.addVersion({ artifactId: workerArtifact.id, version: "2.9.0", source: "github-releases", metadata: { commit: "mno7890", binary: "worker-linux-amd64" } });
   artifactStore.addVersion({ artifactId: workerArtifact.id, version: "3.0.0", source: "github-releases", metadata: { commit: "pqr1234", binary: "worker-linux-amd64", majorUpgrade: "true" } });
+
+  // --- Deployments (mix of statuses and ages) ---
+
+  const dep1: Deployment = {
+    id: crypto.randomUUID() as Deployment["id"], artifactId: webAppArtifact.id as Deployment["artifactId"], partitionId: acmePartition.id as Deployment["partitionId"],
+    environmentId: prodEnv.id as Deployment["environmentId"], version: "2.3.0", status: "succeeded",
+    variables: { ...acmePartition.variables, ...prodEnv.variables },
+    debriefEntryIds: [],
+    createdAt: hoursAgo(72), completedAt: hoursAgo(71.5), failureReason: undefined,
+  };
+  const dep2: Deployment = {
+    id: crypto.randomUUID() as Deployment["id"], artifactId: webAppArtifact.id as Deployment["artifactId"], partitionId: acmePartition.id as Deployment["partitionId"],
+    environmentId: prodEnv.id as Deployment["environmentId"], version: "2.4.0", status: "succeeded",
+    variables: { ...acmePartition.variables, ...prodEnv.variables },
+    debriefEntryIds: [],
+    createdAt: hoursAgo(48), completedAt: hoursAgo(47.8), failureReason: undefined,
+  };
+  const dep3: Deployment = {
+    id: crypto.randomUUID() as Deployment["id"], artifactId: webAppArtifact.id as Deployment["artifactId"], partitionId: acmePartition.id as Deployment["partitionId"],
+    environmentId: prodEnv.id as Deployment["environmentId"], version: "2.4.1", status: "succeeded",
+    variables: { ...acmePartition.variables, ...prodEnv.variables },
+    debriefEntryIds: [],
+    createdAt: hoursAgo(24), completedAt: hoursAgo(23.7), failureReason: undefined,
+  };
+  const dep4: Deployment = {
+    id: crypto.randomUUID() as Deployment["id"], artifactId: apiArtifact.id as Deployment["artifactId"], partitionId: acmePartition.id as Deployment["partitionId"],
+    environmentId: prodEnv.id as Deployment["environmentId"], version: "1.11.0", status: "failed",
+    variables: { ...acmePartition.variables, ...prodEnv.variables },
+    debriefEntryIds: [],
+    createdAt: hoursAgo(36), completedAt: hoursAgo(35.9),
+    failureReason: "Health check failed after 3 retries: connection refused on port 8080",
+  };
+  const dep5: Deployment = {
+    id: crypto.randomUUID() as Deployment["id"], artifactId: apiArtifact.id as Deployment["artifactId"], partitionId: acmePartition.id as Deployment["partitionId"],
+    environmentId: prodEnv.id as Deployment["environmentId"], version: "1.12.0", status: "succeeded",
+    variables: { ...acmePartition.variables, ...prodEnv.variables },
+    debriefEntryIds: [],
+    createdAt: hoursAgo(12), completedAt: hoursAgo(11.8), failureReason: undefined,
+  };
+  const dep6: Deployment = {
+    id: crypto.randomUUID() as Deployment["id"], artifactId: webAppArtifact.id as Deployment["artifactId"], partitionId: globexPartition.id as Deployment["partitionId"],
+    environmentId: stagingEnv.id as Deployment["environmentId"], version: "2.5.0-rc.1", status: "succeeded",
+    variables: { ...globexPartition.variables, ...stagingEnv.variables },
+    debriefEntryIds: [],
+    createdAt: hoursAgo(6), completedAt: hoursAgo(5.8), failureReason: undefined,
+  };
+  const dep7: Deployment = {
+    id: crypto.randomUUID() as Deployment["id"], artifactId: workerArtifact.id as Deployment["artifactId"], partitionId: initechPartition.id as Deployment["partitionId"],
+    environmentId: prodEnv.id as Deployment["environmentId"], version: "2.9.0", status: "failed",
+    variables: { ...initechPartition.variables, ...prodEnv.variables },
+    debriefEntryIds: [],
+    createdAt: hoursAgo(18), completedAt: hoursAgo(17.8),
+    failureReason: "Queue depth exceeded threshold (342 > 100) during verification",
+  };
+  const dep8: Deployment = {
+    id: crypto.randomUUID() as Deployment["id"], artifactId: workerArtifact.id as Deployment["artifactId"], partitionId: initechPartition.id as Deployment["partitionId"],
+    environmentId: prodEnv.id as Deployment["environmentId"], version: "3.0.0", status: "succeeded",
+    variables: { ...initechPartition.variables, ...prodEnv.variables },
+    debriefEntryIds: [],
+    createdAt: hoursAgo(3), completedAt: hoursAgo(2.7), failureReason: undefined,
+  };
+  const dep9: Deployment = {
+    id: crypto.randomUUID() as Deployment["id"], artifactId: apiArtifact.id as Deployment["artifactId"], partitionId: globexPartition.id as Deployment["partitionId"],
+    environmentId: stagingEnv.id as Deployment["environmentId"], version: "1.13.0-beta.2", status: "running",
+    variables: { ...globexPartition.variables, ...stagingEnv.variables },
+    debriefEntryIds: [],
+    createdAt: hoursAgo(0.5),
+  };
+  const dep10: Deployment = {
+    id: crypto.randomUUID() as Deployment["id"], artifactId: webAppArtifact.id as Deployment["artifactId"], partitionId: initechPartition.id as Deployment["partitionId"],
+    environmentId: prodEnv.id as Deployment["environmentId"], version: "2.4.1", status: "rolled_back",
+    variables: { ...initechPartition.variables, ...prodEnv.variables },
+    debriefEntryIds: [],
+    createdAt: hoursAgo(8), completedAt: hoursAgo(7.5),
+    failureReason: "Rolled back after post-deploy smoke test detected 502 errors on /api/v2/users",
+  };
+
+  for (const d of [dep1, dep2, dep3, dep4, dep5, dep6, dep7, dep8, dep9, dep10]) {
+    deployments.save(d);
+  }
 
   // --- Security boundaries for envoys ---
 
@@ -610,7 +610,7 @@ registerEnvironmentRoutes(app, environments, operations, telemetryStore);
 registerAgentRoutes(app, agent, partitions, environments, operations, deployments, debrief, settings, llm);
 registerSettingsRoutes(app, settings, telemetryStore);
 registerTelemetryRoutes(app, telemetryStore);
-registerEnvoyRoutes(app, settings, envoyRegistry);
+registerEnvoyRoutes(app, settings, envoyRegistry, telemetryStore);
 registerAuthRoutes(app, userStore, roleStore, userRoleStore, sessionStore, jwtSecret);
 registerUserRoutes(app, userStore, roleStore, userRoleStore);
 

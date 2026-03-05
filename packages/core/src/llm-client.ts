@@ -418,16 +418,16 @@ export class LlmClient {
         return { ok: false, fallback: true, reason: gating.notice!, gated: true };
       }
 
+      // Record gating decision for marginal/unverified before the call
+      if (gating.notice) {
+        this._recordGatingDebrief(params, task, model, gating);
+      }
+
       // Proceed with the LLM call, attaching notice if present
       const result = await this._call(params, model);
 
       if (result.ok && gating.notice) {
         return { ...result, notice: gating.notice };
-      }
-
-      // Record gating decision for marginal/unverified (but proceeding)
-      if (gating.notice) {
-        this._recordGatingDebrief(params, task, model, gating);
       }
 
       return result;

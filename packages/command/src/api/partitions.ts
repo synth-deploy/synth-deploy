@@ -3,6 +3,7 @@ import type { IPartitionStore, ITelemetryStore, DebriefReader, DebriefWriter, IO
 import { generateOperationHistory } from "@deploystack/core";
 import type { DeploymentStore } from "../agent/command-agent.js";
 import { CreatePartitionSchema, UpdatePartitionSchema, SetVariablesSchema } from "./schemas.js";
+import { requirePermission } from "../middleware/permissions.js";
 
 export function registerPartitionRoutes(
   app: FastifyInstance,
@@ -13,24 +14,24 @@ export function registerPartitionRoutes(
   telemetry: ITelemetryStore,
 ): void {
   // List all partitions
-  app.get("/api/partitions", async () => {
+  app.get("/api/partitions", { preHandler: [requirePermission("partition.view")] }, async () => {
     return { partitions: partitions.list() };
   });
 
   // Create a partition
-  app.post("/api/partitions", async (request, reply) => {
+  app.post("/api/partitions", { preHandler: [requirePermission("partition.create")] }, async (request, reply) => {
     const parsed = CreatePartitionSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.status(400).send({ error: "Invalid input", details: parsed.error.format() });
     }
 
     const partition = partitions.create(parsed.data.name.trim(), parsed.data.variables ?? {});
-    telemetry.record({ actor: "anonymous", action: "partition.created", target: { type: "partition", id: partition.id }, details: { name: parsed.data.name } });
+    telemetry.record({ actor: (request.user?.email) ?? "anonymous", action: "partition.created", target: { type: "partition", id: partition.id }, details: { name: parsed.data.name } });
     return reply.status(201).send({ partition });
   });
 
   // Get partition by ID
-  app.get<{ Params: { id: string } }>("/api/partitions/:id", async (request, reply) => {
+  app.get<{ Params: { id: string } }>("/api/partitions/:id", { preHandler: [requirePermission("partition.view")] }, async (request, reply) => {
     const partition = partitions.get(request.params.id);
     if (!partition) {
       return reply.status(404).send({ error: "Partition not found" });
@@ -39,7 +40,7 @@ export function registerPartitionRoutes(
   });
 
   // Update partition (name)
-  app.put<{ Params: { id: string } }>("/api/partitions/:id", async (request, reply) => {
+  app.put<{ Params: { id: string } }>("/api/partitions/:id", { preHandler: [requirePermission("partition.update")] }, async (request, reply) => {
     const parsed = UpdatePartitionSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.status(400).send({ error: "Invalid input", details: parsed.error.format() });
@@ -62,6 +63,7 @@ export function registerPartitionRoutes(
   // Delete partition
   app.delete<{ Params: { id: string }; Querystring: { cascade?: string } }>(
     "/api/partitions/:id",
+    { preHandler: [requirePermission("partition.delete")] },
     async (request, reply) => {
       const { id } = request.params;
       const partition = partitions.get(id);
@@ -108,6 +110,7 @@ export function registerPartitionRoutes(
   // Update partition variables
   app.put<{ Params: { id: string } }>(
     "/api/partitions/:id/variables",
+    { preHandler: [requirePermission("partition.update")] },
     async (request, reply) => {
       const parsed = SetVariablesSchema.safeParse(request.body);
       if (!parsed.success) {
@@ -116,7 +119,7 @@ export function registerPartitionRoutes(
 
       try {
         const partition = partitions.setVariables(request.params.id, parsed.data.variables);
-        telemetry.record({ actor: "anonymous", action: "partition.variables.updated", target: { type: "partition", id: request.params.id }, details: { variableCount: Object.keys(parsed.data.variables).length } });
+        telemetry.record({ actor: (request.user?.email) ?? "anonymous", action: "partition.variables.updated", target: { type: "partition", id: request.params.id }, details: { variableCount: Object.keys(parsed.data.variables).length } });
         return { partition };
       } catch (err) {
         if (err instanceof Error && err.message.toLowerCase().includes("not found")) {
@@ -131,6 +134,7 @@ export function registerPartitionRoutes(
   // Get partition deployment history / operation history
   app.get<{ Params: { id: string } }>(
     "/api/partitions/:id/history",
+    { preHandler: [requirePermission("partition.view")] },
     async (request, reply) => {
       const partition = partitions.get(request.params.id);
       if (!partition) {

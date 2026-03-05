@@ -211,6 +211,15 @@ export const UpdateSettingsSchema = z.object({
   llm: LlmProviderConfigSchema.optional(),
 });
 
+// --- Artifacts (update) ---
+
+export const UpdateArtifactSchema = z.object({
+  name: z.string().min(1).optional(),
+  type: z.string().min(1).optional(),
+  source: z.string().optional(),
+  metadata: z.record(z.string()).optional(),
+});
+
 // --- Deployments ---
 
 export const CreateDeploymentSchema = z.object({
@@ -299,13 +308,4 @@ export const CreateRoleSchema = z.object({
 export const UpdateRoleSchema = z.object({
   name: z.string().min(1).optional(),
   permissions: z.array(z.string().min(1)).optional(),
-});
-
-export const ApproveDeploymentSchema = z.object({
-  approvedBy: z.string().min(1),
-  modifications: z.string().optional(),
-});
-
-export const RejectDeploymentSchema = z.object({
-  reason: z.string().min(1),
 });

@@ -1,7 +1,9 @@
 import type { FastifyInstance } from "fastify";
 import type { IArtifactStore, ITelemetryStore } from "@deploystack/core";
+import { requirePermission } from "../middleware/permissions.js";
 import {
   CreateArtifactSchema,
+  UpdateArtifactSchema,
   AddAnnotationSchema,
   AddArtifactVersionSchema,
 } from "./schemas.js";
@@ -12,12 +14,12 @@ export function registerArtifactRoutes(
   telemetry: ITelemetryStore,
 ): void {
   // List all artifacts
-  app.get("/api/artifacts", async () => {
+  app.get("/api/artifacts", { preHandler: [requirePermission("artifact.view")] }, async () => {
     return { artifacts: artifactStore.list() };
   });
 
   // Create artifact
-  app.post("/api/artifacts", async (request, reply) => {
+  app.post("/api/artifacts", { preHandler: [requirePermission("artifact.create")] }, async (request, reply) => {
     const parsed = CreateArtifactSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.status(400).send({ error: parsed.error.message });
@@ -37,12 +39,12 @@ export function registerArtifactRoutes(
       learningHistory: [],
     });
 
-    telemetry.record({ actor: "anonymous", action: "artifact.created", target: { type: "artifact", id: artifact.id }, details: { name: parsed.data.name, type: parsed.data.type } });
+    telemetry.record({ actor: (request.user?.email) ?? "anonymous", action: "artifact.created", target: { type: "artifact", id: artifact.id }, details: { name: parsed.data.name, type: parsed.data.type } });
     return reply.status(201).send({ artifact });
   });
 
   // Get artifact by ID (with analysis, annotations, learning history)
-  app.get<{ Params: { id: string } }>("/api/artifacts/:id", async (request, reply) => {
+  app.get<{ Params: { id: string } }>("/api/artifacts/:id", { preHandler: [requirePermission("artifact.view")] }, async (request, reply) => {
     const artifact = artifactStore.get(request.params.id);
     if (!artifact) {
       return reply.status(404).send({ error: "Artifact not found" });
@@ -54,14 +56,19 @@ export function registerArtifactRoutes(
   });
 
   // Update artifact metadata
-  app.put<{ Params: { id: string } }>("/api/artifacts/:id", async (request, reply) => {
+  app.put<{ Params: { id: string } }>("/api/artifacts/:id", { preHandler: [requirePermission("artifact.update")] }, async (request, reply) => {
+    const parsed = UpdateArtifactSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: parsed.error.message });
+    }
+
     const artifact = artifactStore.get(request.params.id);
     if (!artifact) {
       return reply.status(404).send({ error: "Artifact not found" });
     }
 
     try {
-      const updated = artifactStore.update(request.params.id, request.body as Record<string, unknown>);
+      const updated = artifactStore.update(request.params.id, parsed.data as Record<string, unknown>);
       return { artifact: updated };
     } catch (err) {
       if (err instanceof Error && err.message.toLowerCase().includes("not found")) {
@@ -73,7 +80,7 @@ export function registerArtifactRoutes(
   });
 
   // Delete artifact
-  app.delete<{ Params: { id: string } }>("/api/artifacts/:id", async (request, reply) => {
+  app.delete<{ Params: { id: string } }>("/api/artifacts/:id", { preHandler: [requirePermission("artifact.delete")] }, async (request, reply) => {
     const artifact = artifactStore.get(request.params.id);
     if (!artifact) {
       return reply.status(404).send({ error: "Artifact not found" });
@@ -86,6 +93,7 @@ export function registerArtifactRoutes(
   // Add user annotation/correction
   app.post<{ Params: { id: string } }>(
     "/api/artifacts/:id/annotations",
+    { preHandler: [requirePermission("artifact.annotate")] },
     async (request, reply) => {
       const artifact = artifactStore.get(request.params.id);
       if (!artifact) {
@@ -104,7 +112,7 @@ export function registerArtifactRoutes(
         annotatedAt: new Date(),
       });
 
-      telemetry.record({ actor: "anonymous", action: "artifact.annotated", target: { type: "artifact", id: request.params.id }, details: { field: parsed.data.field } });
+      telemetry.record({ actor: (request.user?.email) ?? "anonymous", action: "artifact.annotated", target: { type: "artifact", id: request.params.id }, details: { field: parsed.data.field } });
       return reply.status(201).send({ artifact: updated });
     },
   );
@@ -112,6 +120,7 @@ export function registerArtifactRoutes(
   // List versions for artifact
   app.get<{ Params: { id: string } }>(
     "/api/artifacts/:id/versions",
+    { preHandler: [requirePermission("artifact.view")] },
     async (request, reply) => {
       const artifact = artifactStore.get(request.params.id);
       if (!artifact) {
@@ -126,6 +135,7 @@ export function registerArtifactRoutes(
   // Add new version
   app.post<{ Params: { id: string } }>(
     "/api/artifacts/:id/versions",
+    { preHandler: [requirePermission("artifact.create")] },
     async (request, reply) => {
       const artifact = artifactStore.get(request.params.id);
       if (!artifact) {
@@ -151,6 +161,7 @@ export function registerArtifactRoutes(
   // Get specific version
   app.get<{ Params: { id: string; versionId: string } }>(
     "/api/artifacts/:id/versions/:versionId",
+    { preHandler: [requirePermission("artifact.view")] },
     async (request, reply) => {
       const artifact = artifactStore.get(request.params.id);
       if (!artifact) {

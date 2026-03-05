@@ -1,14 +1,16 @@
 import type { FastifyInstance } from "fastify";
-import type { ISettingsStore } from "@deploystack/core";
+import type { ISettingsStore, ITelemetryStore } from "@deploystack/core";
 import type { EnvoyRegistry } from "../agent/envoy-registry.js";
+import { requirePermission } from "../middleware/permissions.js";
 
 export function registerEnvoyRoutes(
   app: FastifyInstance,
   settings: ISettingsStore,
   registry: EnvoyRegistry,
+  telemetry: ITelemetryStore,
 ): void {
   // List all registered Envoys with live health probing
-  app.get("/api/envoys", async () => {
+  app.get("/api/envoys", { preHandler: [requirePermission("envoy.view")] }, async () => {
     const entries = await registry.probeAll();
 
     // Also include the legacy settings-based default envoy if no registry entries
@@ -40,7 +42,7 @@ export function registerEnvoyRoutes(
   });
 
   // Register a new Envoy
-  app.post("/api/envoys", async (request, reply) => {
+  app.post("/api/envoys", { preHandler: [requirePermission("envoy.register")] }, async (request, reply) => {
     const body = request.body as {
       name: string;
       url: string;
@@ -60,6 +62,8 @@ export function registerEnvoyRoutes(
     // Probe health immediately after registration
     const entry = await registry.probe(registration.id);
 
+    telemetry.record({ actor: (request.user?.email) ?? "anonymous", action: "envoy.registered", target: { type: "envoy", id: registration.id }, details: { name: body.name, url: body.url } });
+
     return reply.status(201).send({
       envoy: {
         id: registration.id,
@@ -74,7 +78,7 @@ export function registerEnvoyRoutes(
   });
 
   // Get a specific Envoy's health
-  app.get("/api/envoys/:id/health", async (request, reply) => {
+  app.get("/api/envoys/:id/health", { preHandler: [requirePermission("envoy.view")] }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const entry = await registry.probe(id);
 
@@ -98,7 +102,7 @@ export function registerEnvoyRoutes(
   });
 
   // Update an Envoy's configuration
-  app.put("/api/envoys/:id", async (request, reply) => {
+  app.put("/api/envoys/:id", { preHandler: [requirePermission("envoy.configure")] }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const body = request.body as {
       name?: string;
@@ -122,7 +126,7 @@ export function registerEnvoyRoutes(
   });
 
   // Deregister an Envoy
-  app.delete("/api/envoys/:id", async (request, reply) => {
+  app.delete("/api/envoys/:id", { preHandler: [requirePermission("envoy.configure")] }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const removed = registry.deregister(id);
 
@@ -134,7 +138,7 @@ export function registerEnvoyRoutes(
   });
 
   // Rotate an Envoy's token
-  app.post("/api/envoys/:id/rotate-token", async (request, reply) => {
+  app.post("/api/envoys/:id/rotate-token", { preHandler: [requirePermission("envoy.configure")] }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const newToken = registry.rotateToken(id);
 

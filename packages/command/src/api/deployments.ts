@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { generatePostmortem } from "@deploystack/core";
 import type { IPartitionStore, IEnvironmentStore, IArtifactStore, ISettingsStore, IDeploymentStore, ITelemetryStore, DebriefWriter, DebriefReader } from "@deploystack/core";
+import { requirePermission } from "../middleware/permissions.js";
 import {
   CreateDeploymentSchema,
   ApproveDeploymentSchema,
@@ -24,7 +25,7 @@ export function registerDeploymentRoutes(
   telemetry: ITelemetryStore,
 ): void {
   // Create a deployment (plan phase)
-  app.post("/api/deployments", async (request, reply) => {
+  app.post("/api/deployments", { preHandler: [requirePermission("deployment.create")] }, async (request, reply) => {
     const parsed = CreateDeploymentSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.status(400).send({ error: parsed.error.message });
@@ -70,13 +71,13 @@ export function registerDeploymentRoutes(
     };
 
     deployments.save(deployment);
-    telemetry.record({ actor: "anonymous", action: "deployment.created", target: { type: "deployment", id: deployment.id }, details: { artifactId, environmentId, partitionId } });
+    telemetry.record({ actor: (request.user?.email) ?? "anonymous", action: "deployment.created", target: { type: "deployment", id: deployment.id }, details: { artifactId, environmentId, partitionId } });
 
     return reply.status(201).send({ deployment });
   });
 
   // Get deployment by ID
-  app.get<{ Params: { id: string } }>("/api/deployments/:id", async (request, reply) => {
+  app.get<{ Params: { id: string } }>("/api/deployments/:id", { preHandler: [requirePermission("deployment.view")] }, async (request, reply) => {
     const deployment = deployments.get(request.params.id);
     if (!deployment) {
       return reply.status(404).send({ error: "Deployment not found" });
@@ -89,7 +90,7 @@ export function registerDeploymentRoutes(
   });
 
   // List deployments (optionally filtered by partition or artifact)
-  app.get("/api/deployments", async (request) => {
+  app.get("/api/deployments", { preHandler: [requirePermission("deployment.view")] }, async (request) => {
     const qParsed = DeploymentListQuerySchema.safeParse(request.query);
     const { partitionId, artifactId } = qParsed.success ? qParsed.data : {};
 
@@ -108,6 +109,7 @@ export function registerDeploymentRoutes(
   // Approve a deployment plan
   app.post<{ Params: { id: string } }>(
     "/api/deployments/:id/approve",
+    { preHandler: [requirePermission("deployment.approve")] },
     async (request, reply) => {
       const deployment = deployments.get(request.params.id);
       if (!deployment) {
@@ -119,19 +121,32 @@ export function registerDeploymentRoutes(
         return reply.status(400).send({ error: parsed.error.message });
       }
 
+      if (deployment.status !== "pending") {
+        return reply.status(409).send({ error: `Cannot approve deployment in "${deployment.status}" status` });
+      }
+
+      // Transition deployment status
+      deployment.approvedBy = parsed.data.approvedBy;
+      deployment.approvedAt = new Date();
+      deployment.status = "approved" as typeof deployment.status;
+      deployments.save(deployment);
+
+      const actor = (request.user?.email) ?? parsed.data.approvedBy;
+
       // Record approval in debrief
       debrief.record({
         partitionId: deployment.partitionId ?? null,
         deploymentId: deployment.id,
         agent: "command",
         decisionType: "system",
-        decision: `Deployment approved by ${parsed.data.approvedBy}`,
+        decision: `Deployment approved by ${actor}`,
         reasoning: parsed.data.modifications
           ? `Approved with modifications: ${parsed.data.modifications}`
           : "Approved without modifications",
-        context: { approvedBy: parsed.data.approvedBy },
+        context: { approvedBy: actor },
+        actor: request.user?.email,
       });
-      telemetry.record({ actor: parsed.data.approvedBy, action: "deployment.approved", target: { type: "deployment", id: deployment.id }, details: { modifications: parsed.data.modifications } });
+      telemetry.record({ actor, action: "deployment.approved", target: { type: "deployment", id: deployment.id }, details: { modifications: parsed.data.modifications } });
 
       return { deployment, approved: true };
     },
@@ -140,6 +155,7 @@ export function registerDeploymentRoutes(
   // Reject a deployment plan
   app.post<{ Params: { id: string } }>(
     "/api/deployments/:id/reject",
+    { preHandler: [requirePermission("deployment.reject")] },
     async (request, reply) => {
       const deployment = deployments.get(request.params.id);
       if (!deployment) {
@@ -151,6 +167,16 @@ export function registerDeploymentRoutes(
         return reply.status(400).send({ error: parsed.error.message });
       }
 
+      if (deployment.status !== "pending") {
+        return reply.status(409).send({ error: `Cannot reject deployment in "${deployment.status}" status` });
+      }
+
+      // Transition deployment status
+      deployment.status = "rejected" as typeof deployment.status;
+      deployments.save(deployment);
+
+      const actor = (request.user?.email) ?? "anonymous";
+
       // Record rejection in debrief
       debrief.record({
         partitionId: deployment.partitionId ?? null,
@@ -160,8 +186,9 @@ export function registerDeploymentRoutes(
         decision: "Deployment plan rejected",
         reasoning: parsed.data.reason,
         context: { reason: parsed.data.reason },
+        actor: request.user?.email,
       });
-      telemetry.record({ actor: "anonymous", action: "deployment.rejected", target: { type: "deployment", id: deployment.id }, details: { reason: parsed.data.reason } });
+      telemetry.record({ actor, action: "deployment.rejected", target: { type: "deployment", id: deployment.id }, details: { reason: parsed.data.reason } });
 
       return { deployment, rejected: true };
     },
@@ -170,6 +197,7 @@ export function registerDeploymentRoutes(
   // Get deployment postmortem
   app.get<{ Params: { id: string } }>(
     "/api/deployments/:id/postmortem",
+    { preHandler: [requirePermission("deployment.view")] },
     async (request, reply) => {
       const deployment = deployments.get(request.params.id);
       if (!deployment) {
@@ -183,7 +211,7 @@ export function registerDeploymentRoutes(
   );
 
   // Get recent debrief entries (supports filtering by partition and decision type)
-  app.get("/api/debrief", async (request) => {
+  app.get("/api/debrief", { preHandler: [requirePermission("deployment.view")] }, async (request) => {
     const qParsed = DebriefQuerySchema.safeParse(request.query);
     const { limit, partitionId, decisionType } = qParsed.success ? qParsed.data : {};
 
