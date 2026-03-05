@@ -42,6 +42,8 @@ export interface DiagnosticReport {
   evidence: DiagnosticEvidence[];
   /** What a traditional deployment agent would have reported for this failure */
   traditionalComparison: string;
+  /** Capability gating notice — present when the model is marginal, unverified, or gated */
+  notice?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -474,7 +476,7 @@ export class DiagnosticInvestigator {
       partitionId: instruction.partitionId,
       deploymentId: instruction.deploymentId,
       maxTokens: 2048,
-    });
+    }, "diagnosticSynthesis");
 
     if (!llmResult.ok) {
       return baseReport;
@@ -490,6 +492,8 @@ export class DiagnosticInvestigator {
         recommendation: parsed.recommendation ?? baseReport.recommendation,
         evidence: baseReport.evidence, // always deterministic
         traditionalComparison: parsed.traditionalComparison ?? baseReport.traditionalComparison,
+        // Attach capability gating notice if present
+        ...(llmResult.ok && llmResult.notice ? { notice: llmResult.notice } : {}),
       };
     } catch {
       // LLM returned unparseable response — fall back to baseline

@@ -264,6 +264,26 @@ export interface TaskModelMeta {
   reasoningDepth: string;
 }
 
+// --- Capability Gating ---
+
+export type CapabilityLevel = "verified" | "marginal" | "insufficient" | "unverified";
+
+export interface TaskCapabilityResult {
+  task: TaskModelTask;
+  model: string;
+  level: CapabilityLevel;
+  verifiedAt: Date;
+  details?: string;
+}
+
+export interface TaskGatingResult {
+  proceed: boolean;
+  level: CapabilityLevel;
+  notice: string | null;
+  model?: string;
+  task?: TaskModelTask;
+}
+
 export const TASK_MODEL_META: Record<TaskModelTask, TaskModelMeta> = {
   logClassification: {
     label: "Log pattern classification",

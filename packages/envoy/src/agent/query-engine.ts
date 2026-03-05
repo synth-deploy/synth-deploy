@@ -34,6 +34,8 @@ export interface QueryResult {
   confident: boolean;
   /** If not confident, what's missing */
   escalationHint: string | null;
+  /** Capability gating notice — present when the model is marginal, unverified, or gated */
+  notice?: string;
 }
 
 export interface QueryEvidence {
@@ -235,10 +237,10 @@ export class QueryEngine {
         systemPrompt,
         promptSummary: `Query answering: "${question.slice(0, 80)}"`,
         maxTokens: 1024,
-      });
+      }, "queryAnswering");
 
       if (!llmResult.ok) {
-        // LLM declined or failed — fall back silently.
+        // LLM declined, failed, or gated — fall back to deterministic.
         return deterministicResult;
       }
 
@@ -248,6 +250,8 @@ export class QueryEngine {
         ...deterministicResult,
         answer: llmResult.text,
         confident: true,
+        // Attach capability gating notice if present (marginal/unverified)
+        ...(llmResult.notice ? { notice: llmResult.notice } : {}),
       };
     } catch {
       // Any unexpected error — fall back to deterministic.

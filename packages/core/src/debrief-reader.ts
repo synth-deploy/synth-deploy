@@ -291,7 +291,10 @@ export async function generatePostmortemAsync(
   entries: DebriefEntry[],
   deployment: Deployment,
   llm?: LlmClient,
-): Promise<{ llmPostmortem: LlmPostmortem; heuristicFallback: false } | { heuristicReport: PostmortemReport; heuristicFallback: true }> {
+): Promise<
+  | { llmPostmortem: LlmPostmortem; heuristicFallback: false; notice?: string }
+  | { heuristicReport: PostmortemReport; heuristicFallback: true; gatedReason?: string }
+> {
   // No LLM provided — deterministic fallback
   if (!llm) {
     return {
@@ -303,7 +306,7 @@ export async function generatePostmortemAsync(
   // Build prompt deterministically from debrief entries
   const prompt = buildPostmortemPrompt(entries, deployment);
 
-  // Call LLM for synthesis
+  // Call LLM for synthesis, with postmortemGeneration task for capability gating
   let result: LlmResult;
   try {
     result = await llm.reason({
@@ -313,7 +316,7 @@ export async function generatePostmortemAsync(
       partitionId: deployment.partitionId,
       deploymentId: deployment.id,
       maxTokens: 4096,
-    });
+    }, "postmortemGeneration");
   } catch {
     // Unexpected error — fall back to heuristic
     return {
@@ -322,11 +325,13 @@ export async function generatePostmortemAsync(
     };
   }
 
-  // LLM unavailable or call failed — deterministic fallback
+  // LLM unavailable, call failed, or gated — deterministic fallback
   if (!result.ok) {
     return {
       heuristicReport: generatePostmortem(entries, deployment),
       heuristicFallback: true,
+      // When gated, explain why LLM analysis was unavailable
+      ...(result.gated ? { gatedReason: result.reason } : {}),
     };
   }
 
@@ -340,7 +345,12 @@ export async function generatePostmortemAsync(
     };
   }
 
-  return { llmPostmortem, heuristicFallback: false };
+  return {
+    llmPostmortem,
+    heuristicFallback: false,
+    // Attach capability gating notice if present (marginal/unverified)
+    ...(result.notice ? { notice: result.notice } : {}),
+  };
 }
 
 function buildSummary(entries: DebriefEntry[], deployment: Deployment): string {
