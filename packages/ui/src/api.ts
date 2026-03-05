@@ -388,6 +388,31 @@ export async function verifyTaskModel(
   return data.result;
 }
 
+// --- System State ---
+
+export interface AlertSignal {
+  type: "envoy-health" | "deployment-failure" | "drift";
+  severity: "warning" | "critical";
+  title: string;
+  detail: string;
+  relatedEntity?: { type: string; id: string; name: string };
+}
+
+export interface SystemState {
+  state: "empty" | "normal" | "alert";
+  signals: AlertSignal[];
+  stats: {
+    artifacts: number;
+    envoys: number;
+    deployments: { total: number; active: number; failed24h: number };
+    environments: number;
+  };
+}
+
+export async function getSystemState(): Promise<SystemState> {
+  return fetchJson("/api/system/state");
+}
+
 // --- Agent Mode ---
 
 export interface ContextSignal {

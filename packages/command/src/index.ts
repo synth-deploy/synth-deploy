@@ -25,6 +25,7 @@ import { registerSettingsRoutes } from "./api/settings.js";
 import { registerTelemetryRoutes } from "./api/telemetry.js";
 import { registerEnvoyRoutes } from "./api/envoys.js";
 import { EnvoyRegistry } from "./agent/envoy-registry.js";
+import { registerSystemRoutes } from "./api/system.js";
 import { registerAuthMiddleware } from "./middleware/auth.js";
 import { registerAuthRoutes } from "./api/auth.js";
 import { registerUserRoutes } from "./api/users.js";
@@ -611,6 +612,7 @@ registerAgentRoutes(app, agent, partitions, environments, operations, deployment
 registerSettingsRoutes(app, settings, telemetryStore);
 registerTelemetryRoutes(app, telemetryStore);
 registerEnvoyRoutes(app, settings, envoyRegistry, telemetryStore);
+registerSystemRoutes(app, deployments, artifactStore, environments, partitions, envoyRegistry);
 registerAuthRoutes(app, userStore, roleStore, userRoleStore, sessionStore, jwtSecret);
 registerUserRoutes(app, userStore, roleStore, userRoleStore);
 
