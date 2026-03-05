@@ -16,6 +16,8 @@ import type {
 import { requirePermission } from "../middleware/permissions.js";
 import { generateTokens } from "../middleware/auth.js";
 import { OidcAdapter } from "../auth/idp/oidc.js";
+import { SamlAdapter } from "../auth/idp/saml.js";
+import type { SamlConfig } from "../auth/idp/saml.js";
 import { applyRoleMappings } from "../auth/idp/role-mapping.js";
 import {
   CreateIdpProviderSchema,
@@ -64,8 +66,11 @@ export function registerIdpRoutes(
   userRoleStore: IUserRoleStore,
   sessionStore: ISessionStore,
   jwtSecret: Uint8Array,
+  options?: { hasDedicatedEncryptionKey?: boolean },
 ): void {
+  const hasDedicatedEncryptionKey = options?.hasDedicatedEncryptionKey ?? false;
   const oidcAdapter = new OidcAdapter();
+  const samlAdapter = new SamlAdapter();
 
   // ─── IdP Provider CRUD (admin only) ───────────────────────────────
 
@@ -77,6 +82,12 @@ export function registerIdpRoutes(
 
   // POST /api/idp/providers — create new IdP
   app.post("/api/idp/providers", { preHandler: [requirePermission("settings.manage")] }, async (request, reply) => {
+    if (!hasDedicatedEncryptionKey) {
+      return reply.status(503).send({
+        error: "Encryption key not configured. Set DEPLOYSTACK_ENCRYPTION_KEY environment variable before configuring identity providers.",
+      });
+    }
+
     const parsed = CreateIdpProviderSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.status(400).send({ error: "Validation failed", details: parsed.error.flatten() });
@@ -100,6 +111,12 @@ export function registerIdpRoutes(
 
   // PUT /api/idp/providers/:id — update IdP config
   app.put<{ Params: { id: string } }>("/api/idp/providers/:id", { preHandler: [requirePermission("settings.manage")] }, async (request, reply) => {
+    if (!hasDedicatedEncryptionKey) {
+      return reply.status(503).send({
+        error: "Encryption key not configured. Set DEPLOYSTACK_ENCRYPTION_KEY environment variable before configuring identity providers.",
+      });
+    }
+
     const parsed = UpdateIdpProviderSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.status(400).send({ error: "Validation failed", details: parsed.error.flatten() });
@@ -148,6 +165,11 @@ export function registerIdpRoutes(
 
     if (provider.type === "oidc") {
       const result = await oidcAdapter.validateConfig(provider.config);
+      return { success: result.valid, error: result.error };
+    }
+
+    if (provider.type === "saml") {
+      const result = await samlAdapter.validateConfig(provider.config);
       return { success: result.valid, error: result.error };
     }
 
@@ -339,6 +361,200 @@ export function registerIdpRoutes(
       return reply.redirect(uiRedirect);
     },
   );
+
+  // ─── SAML Auth Routes (exempt from auth middleware) ─────────────────
+
+  // GET /api/auth/saml/:providerId/authorize — generate AuthnRequest, redirect to IdP
+  app.get<{ Params: { providerId: string } }>("/api/auth/saml/:providerId/authorize", async (request, reply) => {
+    const provider = idpProviderStore.getById(request.params.providerId);
+    if (!provider || !provider.enabled) {
+      return reply.status(404).send({ error: "Identity provider not found or disabled" });
+    }
+    if (provider.type !== "saml") {
+      return reply.status(400).send({ error: "Provider is not a SAML provider" });
+    }
+
+    const config = provider.config as unknown as SamlConfig;
+
+    // Build the ACS callback URL based on the current request
+    const proto = (request.headers["x-forwarded-proto"] as string) ?? "http";
+    const host = request.headers["x-forwarded-host"] ?? request.headers.host ?? "localhost:3000";
+    const callbackUrl = `${proto}://${host}/api/auth/callback/saml/${provider.id}`;
+
+    // Ensure config has the correct callbackUrl for this request
+    const effectiveConfig: SamlConfig = {
+      ...config,
+      callbackUrl,
+      groupsAttribute: config.groupsAttribute || "memberOf",
+      signatureAlgorithm: config.signatureAlgorithm || "sha256",
+    };
+
+    // Generate state for relay
+    const state = crypto.randomUUID();
+    pendingStates.set(state, { providerId: provider.id, createdAt: Date.now() });
+
+    try {
+      const authUrl = await samlAdapter.getAuthorizationUrl(effectiveConfig, state);
+      return reply.redirect(authUrl);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown SAML error";
+      return reply.status(500).send({ error: `Failed to generate SAML AuthnRequest: ${message}` });
+    }
+  });
+
+  // POST /api/auth/callback/saml/:providerId — handle SAML Response (ACS endpoint)
+  app.post<{ Params: { providerId: string } }>(
+    "/api/auth/callback/saml/:providerId",
+    async (request, reply) => {
+      const body = request.body as Record<string, string> | undefined;
+      const samlResponse = body?.SAMLResponse;
+      const relayState = body?.RelayState;
+
+      if (!samlResponse) {
+        return reply.status(400).send({ error: "Missing SAMLResponse in request body" });
+      }
+
+      // Validate relay state if present
+      if (relayState) {
+        const pendingState = pendingStates.get(relayState);
+        if (!pendingState || pendingState.providerId !== request.params.providerId) {
+          return reply.status(400).send({ error: "Invalid or expired relay state" });
+        }
+        pendingStates.delete(relayState);
+
+        if (Date.now() - pendingState.createdAt > STATE_TTL_MS) {
+          return reply.status(400).send({ error: "Relay state expired" });
+        }
+      }
+
+      const provider = idpProviderStore.getById(request.params.providerId);
+      if (!provider || !provider.enabled) {
+        return reply.status(404).send({ error: "Identity provider not found or disabled" });
+      }
+
+      const config = provider.config as unknown as SamlConfig;
+      const proto = (request.headers["x-forwarded-proto"] as string) ?? "http";
+      const host = request.headers["x-forwarded-host"] ?? request.headers.host ?? "localhost:3000";
+      const callbackUrl = `${proto}://${host}/api/auth/callback/saml/${provider.id}`;
+
+      const effectiveConfig: SamlConfig = {
+        ...config,
+        callbackUrl,
+        groupsAttribute: config.groupsAttribute || "memberOf",
+        signatureAlgorithm: config.signatureAlgorithm || "sha256",
+      };
+
+      // Validate SAML Response and extract user
+      let idpUser;
+      try {
+        idpUser = await samlAdapter.authenticate({ samlResponse, config: effectiveConfig });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Unknown SAML error";
+        return reply.status(500).send({ error: `SAML authentication failed: ${message}` });
+      }
+
+      if (!idpUser.email) {
+        return reply.status(400).send({ error: "SAML provider did not return an email address" });
+      }
+
+      // Provision or update user (same pattern as OIDC)
+      let user = userStore.getByExternalId(idpUser.externalId, "saml");
+      if (!user) {
+        user = userStore.getByEmail(idpUser.email);
+        if (user && user.authSource === "local") {
+          // Link existing local user to SAML
+          user = userStore.update(user.id, {
+            externalId: idpUser.externalId,
+            authSource: "saml",
+            name: idpUser.displayName || user.name,
+            updatedAt: new Date(),
+          });
+        } else if (!user) {
+          // Create new user
+          const userId = crypto.randomUUID() as UserId;
+          const now = new Date();
+          user = userStore.create({
+            id: userId,
+            email: idpUser.email,
+            name: idpUser.displayName || idpUser.email,
+            passwordHash: await bcrypt.hash(crypto.randomUUID(), 10), // random password — user authenticates via SAML
+            authSource: "saml",
+            externalId: idpUser.externalId,
+            createdAt: now,
+            updatedAt: now,
+          });
+        }
+      } else {
+        // Update existing SAML user
+        user = userStore.update(user.id, {
+          email: idpUser.email,
+          name: idpUser.displayName || user.name,
+          updatedAt: new Date(),
+        });
+      }
+
+      // Apply role mappings
+      const mappingRules = roleMappingStore.listByProvider(provider.id);
+      const mappedRoleNames = applyRoleMappings(idpUser, mappingRules);
+      if (mappedRoleNames.length > 0) {
+        const roleIds: RoleId[] = [];
+        for (const roleName of mappedRoleNames) {
+          const role = roleStore.getByName(roleName);
+          if (role) roleIds.push(role.id);
+        }
+        if (roleIds.length > 0) {
+          userRoleStore.setRoles(user.id, roleIds, user.id);
+        }
+      }
+
+      // Create session and generate tokens
+      const tokens = await generateTokens(user.id, jwtSecret);
+      sessionStore.create({
+        id: crypto.randomUUID(),
+        userId: user.id,
+        token: tokens.token,
+        refreshToken: tokens.refreshToken,
+        expiresAt: tokens.expiresAt,
+        createdAt: new Date(),
+      });
+
+      // Redirect to UI with token
+      const uiRedirect = `/?saml_token=${encodeURIComponent(tokens.token)}&saml_refresh=${encodeURIComponent(tokens.refreshToken)}`;
+      return reply.redirect(uiRedirect);
+    },
+  );
+
+  // GET /api/auth/saml/:providerId/metadata — return SP metadata XML
+  app.get<{ Params: { providerId: string } }>("/api/auth/saml/:providerId/metadata", async (request, reply) => {
+    const provider = idpProviderStore.getById(request.params.providerId);
+    if (!provider) {
+      return reply.status(404).send({ error: "Identity provider not found" });
+    }
+    if (provider.type !== "saml") {
+      return reply.status(400).send({ error: "Provider is not a SAML provider" });
+    }
+
+    const config = provider.config as unknown as SamlConfig;
+    const proto = (request.headers["x-forwarded-proto"] as string) ?? "http";
+    const host = request.headers["x-forwarded-host"] ?? request.headers.host ?? "localhost:3000";
+    const callbackUrl = `${proto}://${host}/api/auth/callback/saml/${provider.id}`;
+
+    const effectiveConfig: SamlConfig = {
+      ...config,
+      callbackUrl,
+      groupsAttribute: config.groupsAttribute || "memberOf",
+      signatureAlgorithm: config.signatureAlgorithm || "sha256",
+    };
+
+    try {
+      const metadata = samlAdapter.generateMetadata(effectiveConfig);
+      reply.type("application/xml");
+      return reply.send(metadata);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      return reply.status(500).send({ error: `Failed to generate SP metadata: ${message}` });
+    }
+  });
 
   // ─── Public: list enabled providers (for login page) ──────────────
 

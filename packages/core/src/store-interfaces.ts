@@ -144,6 +144,8 @@ export interface IIdpProviderStore {
   list(): IdpProvider[];
   update(id: string, updates: Partial<Pick<IdpProvider, "name" | "enabled" | "config" | "updatedAt">>): IdpProvider;
   delete(id: string): void;
+  /** Returns true if an encryption key was provided for at-rest secret encryption. */
+  hasEncryptionKey(): boolean;
 }
 
 export interface IRoleMappingStore {

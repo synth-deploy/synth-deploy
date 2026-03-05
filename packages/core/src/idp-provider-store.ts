@@ -37,4 +37,9 @@ export class IdpProviderStore implements IIdpProviderStore {
   delete(id: string): void {
     this.providers.delete(id);
   }
+
+  /** In-memory store has no at-rest encryption — always returns false. */
+  hasEncryptionKey(): boolean {
+    return false;
+  }
 }

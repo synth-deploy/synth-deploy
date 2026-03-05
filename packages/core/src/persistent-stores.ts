@@ -1637,6 +1637,11 @@ export class PersistentIdpProviderStore {
   delete(id: string): void {
     this.stmts.deleteById.run(id);
   }
+
+  /** Returns true if an encryption key was provided for at-rest secret encryption. */
+  hasEncryptionKey(): boolean {
+    return this.encryptionKey !== undefined;
+  }
 }
 
 // ---------------------------------------------------------------------------

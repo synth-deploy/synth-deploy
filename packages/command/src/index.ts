@@ -53,9 +53,21 @@ const userStore = new PersistentUserStore(entityDb);
 const roleStore = new PersistentRoleStore(entityDb);
 const userRoleStore = new PersistentUserRoleStore(entityDb, roleStore);
 const sessionStore = new PersistentSessionStore(entityDb);
-const idpEncryptionSecret = process.env.DEPLOYSTACK_JWT_SECRET ?? process.env.DEPLOYSTACK_ENCRYPTION_KEY ?? "deploystack-default-key";
+const hasDedicatedEncryptionKey = !!process.env.DEPLOYSTACK_ENCRYPTION_KEY;
+const idpEncryptionSecret = process.env.DEPLOYSTACK_ENCRYPTION_KEY ?? process.env.DEPLOYSTACK_JWT_SECRET;
 const idpProviderStore = new PersistentIdpProviderStore(entityDb, idpEncryptionSecret);
 const roleMappingStore = new PersistentRoleMappingStore(entityDb);
+
+// Warn if IdP providers exist but no dedicated encryption key is configured
+if (!hasDedicatedEncryptionKey && idpProviderStore.list().length > 0) {
+  console.warn(
+    "[DeployStack] WARNING: DEPLOYSTACK_ENCRYPTION_KEY is not set. " +
+    "IdP client secrets are encrypted with DEPLOYSTACK_JWT_SECRET, which means a single compromised key " +
+    "exposes both session tokens and at-rest IdP credentials. " +
+    "Set DEPLOYSTACK_ENCRYPTION_KEY to a dedicated secret for IdP encryption.",
+  );
+}
+
 const envoyRegistry = new EnvoyRegistry();
 
 // --- JWT secret ---
@@ -559,7 +571,7 @@ registerEnvoyRoutes(app, settings, envoyRegistry, telemetryStore);
 registerSystemRoutes(app, deployments, artifactStore, environments, partitions, envoyRegistry);
 registerAuthRoutes(app, userStore, roleStore, userRoleStore, sessionStore, jwtSecret);
 registerUserRoutes(app, userStore, roleStore, userRoleStore);
-registerIdpRoutes(app, idpProviderStore, roleMappingStore, userStore, roleStore, userRoleStore, sessionStore, jwtSecret);
+registerIdpRoutes(app, idpProviderStore, roleMappingStore, userStore, roleStore, userRoleStore, sessionStore, jwtSecret, { hasDedicatedEncryptionKey });
 
 // --- Serve UI static files if built ---
 
