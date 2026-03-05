@@ -5,9 +5,10 @@ import {
   listEnvironments,
   listEnvoys,
   createDeployment,
+  recordPreFlightResponse,
 } from "../../api.js";
 import type { Artifact, Partition, Environment } from "../../types.js";
-import type { EnvoyRegistryEntry } from "../../api.js";
+import type { EnvoyRegistryEntry, PreFlightContext } from "../../api.js";
 import { useSettings } from "../../context/SettingsContext.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
 import { useCanvas } from "../../context/CanvasContext.js";
@@ -37,6 +38,7 @@ export default function DeploymentAuthoringPanel({ title, preselectedArtifactId 
   const [selectedEnvironmentId, setSelectedEnvironmentId] = useState<string>("");
   const [selectedPartitionId, setSelectedPartitionId] = useState<string>("");
   const [version, setVersion] = useState<string>("");
+  const [preFlightRec, setPreFlightRec] = useState<PreFlightContext["recommendation"] | null>(null);
 
   useEffect(() => {
     Promise.all([
@@ -60,6 +62,17 @@ export default function DeploymentAuthoringPanel({ title, preselectedArtifactId 
     setError(null);
 
     try {
+      // Record user's pre-flight decision (fire-and-forget)
+      if (preFlightRec) {
+        recordPreFlightResponse({
+          artifactId: selectedArtifactId,
+          environmentId: selectedEnvironmentId,
+          partitionId: selectedPartitionId || undefined,
+          action: "proceeded",
+          recommendedAction: preFlightRec.action,
+        }).catch(() => {});
+      }
+
       const result = await createDeployment({
         artifactId: selectedArtifactId,
         environmentId: environmentsEnabled ? selectedEnvironmentId : undefined,
@@ -119,6 +132,28 @@ export default function DeploymentAuthoringPanel({ title, preselectedArtifactId 
               <div style={{ fontSize: 12, color: "var(--agent-text-muted)", marginTop: 4, padding: "4px 8px", background: "rgba(255,255,255,0.03)", borderRadius: 4 }}>
                 {selectedArtifact.analysis.summary}
               </div>
+            )}
+            {selectedArtifact && (
+              <button
+                onClick={() =>
+                  pushPanel({
+                    type: "artifact-detail",
+                    title: selectedArtifact.name,
+                    params: { artifactId: selectedArtifact.id },
+                  })
+                }
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: "var(--agent-accent)",
+                  cursor: "pointer",
+                  fontSize: 11,
+                  padding: "4px 0",
+                  marginTop: 2,
+                }}
+              >
+                View artifact details &rarr;
+              </button>
             )}
           </div>
 
@@ -190,6 +225,7 @@ export default function DeploymentAuthoringPanel({ title, preselectedArtifactId 
               environmentId={selectedEnvironmentId}
               partitionId={selectedPartitionId || undefined}
               version={version || undefined}
+              onLoaded={(rec) => setPreFlightRec(rec)}
             />
           )}
 

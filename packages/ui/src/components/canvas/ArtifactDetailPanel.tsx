@@ -5,8 +5,9 @@ import {
   listArtifactVersions,
   addArtifactVersion,
   listDeployments,
+  listEnvironments,
 } from "../../api.js";
-import type { Artifact, ArtifactVersion, Deployment } from "../../types.js";
+import type { Artifact, ArtifactVersion, Deployment, Environment } from "../../types.js";
 import { useCanvas } from "../../context/CanvasContext.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
 import SectionHeader from "../SectionHeader.js";
@@ -43,6 +44,7 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
   const [artifact, setArtifact] = useState<Artifact | null>(null);
   const [versions, setVersions] = useState<ArtifactVersion[]>([]);
   const [deployments, setDeployments] = useState<Deployment[]>([]);
+  const [envNameMap, setEnvNameMap] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabKey>("analysis");
 
@@ -64,11 +66,15 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
       getArtifact(artifactId),
       listArtifactVersions(artifactId).catch(() => []),
       listDeployments({ artifactId }).catch(() => []),
+      listEnvironments().catch(() => []),
     ])
-      .then(([artData, vers, deps]) => {
+      .then(([artData, vers, deps, envs]) => {
         setArtifact(artData.artifact);
         setVersions(artData.versions ?? vers);
         setDeployments(deps);
+        const map: Record<string, string> = {};
+        for (const e of envs) map[e.id] = e.name;
+        setEnvNameMap(map);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -672,7 +678,7 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
                     <div className={`v2-deploy-dot v2-deploy-${d.status}`} />
                     <div className="v2-deploy-info">
                       <span className="v2-deploy-version">{d.version}</span>
-                      <span className="v2-deploy-env">{d.environmentId}</span>
+                      <span className="v2-deploy-env">{envNameMap[d.environmentId] ?? d.environmentId}</span>
                     </div>
                     <span className="v2-deploy-time">
                       {new Date(d.createdAt).toLocaleString()}

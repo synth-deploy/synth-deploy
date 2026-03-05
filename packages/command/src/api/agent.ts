@@ -621,8 +621,17 @@ Be directional: say what you recommend, not "here are some data points." Use fir
             // JSON parse failed — use deterministic fallback
           }
         }
-      } catch {
-        // LLM call failed — use deterministic fallback
+      } catch (llmError) {
+        // LLM call failed or timed out — record to debrief and use deterministic fallback
+        debrief.record({
+          partitionId: partitionId ?? null,
+          deploymentId: null,
+          agent: "command",
+          decisionType: "pre-flight-llm-failure",
+          decision: "Pre-flight LLM recommendation failed",
+          reasoning: llmError instanceof Error ? llmError.message : String(llmError),
+          context: { artifactId, environmentId, partitionId: partitionId ?? null },
+        });
       }
     }
 
@@ -692,6 +701,39 @@ Be directional: say what you recommend, not "here are some data points." Use fir
     }
 
     return result;
+  });
+
+  // -------------------------------------------------------------------------
+  // Pre-flight user response — records what the user did after seeing context
+  // -------------------------------------------------------------------------
+
+  const PreFlightResponseSchema = z.object({
+    artifactId: z.string().min(1),
+    environmentId: z.string().min(1),
+    partitionId: z.string().optional(),
+    action: z.enum(["proceeded", "waited", "canceled"]),
+    recommendedAction: z.enum(["proceed", "wait", "investigate"]),
+  });
+
+  app.post("/api/agent/pre-flight/response", async (request, reply) => {
+    const parsed = PreFlightResponseSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: "Invalid input", details: parsed.error.format() });
+    }
+
+    const { artifactId, environmentId, partitionId, action, recommendedAction } = parsed.data;
+
+    debrief.record({
+      partitionId: partitionId ?? null,
+      deploymentId: null,
+      agent: "command",
+      decisionType: "cross-system-context",
+      decision: `User ${action} after pre-flight recommendation to ${recommendedAction}`,
+      reasoning: `System recommended "${recommendedAction}", user chose to "${action}".`,
+      context: { artifactId, environmentId, partitionId: partitionId ?? null, recommendedAction, userAction: action },
+    });
+
+    return { ok: true };
   });
 }
 

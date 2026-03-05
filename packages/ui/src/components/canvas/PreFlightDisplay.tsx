@@ -7,6 +7,7 @@ interface Props {
   environmentId: string;
   partitionId?: string;
   version?: string;
+  onLoaded?: (recommendation: PreFlightContext["recommendation"]) => void;
 }
 
 const SEVERITY_COLORS = {
@@ -21,7 +22,7 @@ const STATUS_COLORS = {
   unreachable: { bg: "rgba(218, 54, 51, 0.12)", text: "#f85149", label: "Unreachable" },
 } as const;
 
-export default function PreFlightDisplay({ artifactId, environmentId, partitionId, version }: Props) {
+export default function PreFlightDisplay({ artifactId, environmentId, partitionId, version, onLoaded }: Props) {
   const [context, setContext] = useState<PreFlightContext | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -41,6 +42,7 @@ export default function PreFlightDisplay({ artifactId, environmentId, partitionI
       .then((ctx) => {
         setContext(ctx);
         setLoading(false);
+        onLoaded?.(ctx.recommendation);
       })
       .catch((e) => {
         setError(e instanceof Error ? e.message : String(e));

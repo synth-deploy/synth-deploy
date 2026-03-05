@@ -432,6 +432,19 @@ export async function getPreFlightContext(params: {
   });
 }
 
+export async function recordPreFlightResponse(params: {
+  artifactId: string;
+  environmentId: string;
+  partitionId?: string;
+  action: "proceeded" | "waited" | "canceled";
+  recommendedAction: "proceed" | "wait" | "investigate";
+}): Promise<void> {
+  await fetchJson("/api/agent/pre-flight/response", {
+    method: "POST",
+    body: JSON.stringify(params),
+  });
+}
+
 // --- Canvas Query ---
 
 export interface CanvasQueryResult {
