@@ -10,7 +10,7 @@ import type {
   PlannedStep,
   SecurityBoundary,
 } from "@deploystack/core";
-import type { EnvoyKnowledgeStore } from "../state/knowledge-store.js";
+import type { EnvoyKnowledgeStore, LocalDeploymentRecord } from "../state/knowledge-store.js";
 import { EnvironmentScanner } from "./environment-scanner.js";
 import type { CommandReporter } from "./command-reporter.js";
 import { DiagnosticInvestigator } from "./diagnostic-investigator.js";
@@ -27,7 +27,6 @@ import {
   ContainerHandler,
   VerifyHandler,
 } from "../execution/index.js";
-import type { PlanExecutionResult, ProgressCallback } from "../execution/index.js";
 
 // ---------------------------------------------------------------------------
 // Types — lifecycle state and deployment instruction/result
@@ -104,9 +103,9 @@ interface VerificationResult {
 }
 
 /**
- * Result of executing workspace artifacts (equivalent to old DeploymentExecutor).
+ * Result of executing workspace artifacts or deployment operations.
  */
-interface WorkspaceExecutionResult {
+export interface ExecutionResult {
   success: boolean;
   workspacePath: string;
   artifacts: string[];
@@ -854,7 +853,7 @@ export class EnvoyAgent {
   private writeWorkspaceArtifacts(
     instruction: DeploymentInstruction,
     localRecord: LocalDeploymentRecord,
-  ): WorkspaceExecutionResult {
+  ): ExecutionResult {
     const start = Date.now();
     const workspacePath = localRecord.workspacePath;
 
@@ -989,6 +988,49 @@ export class EnvoyAgent {
 
     const passed = checks.every((c) => c.passed);
     return { passed, checks };
+  }
+
+  /**
+   * Remove old deployment workspaces beyond retention limits.
+   * Keeps the most recent `maxCount` workspaces and removes any older than `maxAgeMs`.
+   * Returns the number of workspaces removed.
+   */
+  cleanupOldWorkspaces(maxAgeMs: number, maxCount: number): number {
+    const deploymentsDir = path.join(this.baseDir, "deployments");
+    if (!fs.existsSync(deploymentsDir)) return 0;
+
+    let entries: { name: string; mtimeMs: number }[];
+    try {
+      entries = fs.readdirSync(deploymentsDir, { withFileTypes: true })
+        .filter((d) => d.isDirectory())
+        .map((d) => {
+          const stat = fs.statSync(path.join(deploymentsDir, d.name));
+          return { name: d.name, mtimeMs: stat.mtimeMs };
+        })
+        .sort((a, b) => b.mtimeMs - a.mtimeMs); // newest first
+    } catch {
+      return 0;
+    }
+
+    const now = Date.now();
+    let removed = 0;
+
+    for (let i = 0; i < entries.length; i++) {
+      const entry = entries[i];
+      const tooOld = now - entry.mtimeMs > maxAgeMs;
+      const beyondMax = i >= maxCount;
+
+      if (tooOld || beyondMax) {
+        try {
+          fs.rmSync(path.join(deploymentsDir, entry.name), { recursive: true, force: true });
+          removed++;
+        } catch {
+          // Workspace may be in use — skip
+        }
+      }
+    }
+
+    return removed;
   }
 
   /**

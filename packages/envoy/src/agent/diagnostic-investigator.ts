@@ -2,8 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { LlmClient, LlmResult } from "@deploystack/core";
 import type { EnvoyKnowledgeStore } from "../state/knowledge-store.js";
-import type { DeploymentInstruction } from "./envoy-agent.js";
-import type { ExecutionResult } from "./deployment-executor.js";
+import type { DeploymentInstruction, ExecutionResult } from "./envoy-agent.js";
 
 // ---------------------------------------------------------------------------
 // Types — the diagnostic output

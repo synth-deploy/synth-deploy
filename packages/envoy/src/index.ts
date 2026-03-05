@@ -3,7 +3,6 @@ import path from "node:path";
 import fs from "node:fs";
 import { DecisionDebrief, LlmClient } from "@deploystack/core";
 import { EnvoyAgent } from "./agent/envoy-agent.js";
-import { DeploymentExecutor } from "./agent/deployment-executor.js";
 import { EnvironmentScanner } from "./agent/environment-scanner.js";
 import { QueryEngine } from "./agent/query-engine.js";
 import { PersistentEnvoyKnowledgeStore } from "./state/persistent-knowledge-store.js";
@@ -173,12 +172,11 @@ const queryEngine = new QueryEngine(debrief, state, scanner, llm);
 const app = createEnvoyServer(agent, state, queryEngine);
 
 // Periodic workspace cleanup (every 10 minutes): keep last 50 or 30 days
-const workspaceExecutor = new DeploymentExecutor(BASE_DIR);
 const WORKSPACE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 const WORKSPACE_MAX_COUNT = 50;
 
 const workspaceCleanupInterval = setInterval(() => {
-  const removed = workspaceExecutor.cleanupOldWorkspaces(WORKSPACE_MAX_AGE_MS, WORKSPACE_MAX_COUNT);
+  const removed = agent.cleanupOldWorkspaces(WORKSPACE_MAX_AGE_MS, WORKSPACE_MAX_COUNT);
   if (removed > 0) {
     app.log.info(`Cleaned up ${removed} old deployment workspace(s)`);
   }
@@ -225,14 +223,8 @@ export { EnvoyAgent } from "./agent/envoy-agent.js";
 export type {
   DeploymentInstruction,
   DeploymentResult,
-} from "./agent/envoy-agent.js";
-export { DeploymentExecutor } from "./agent/deployment-executor.js";
-export type {
-  DeploymentManifest,
   ExecutionResult,
-  VerificationResult,
-  VerificationCheck,
-} from "./agent/deployment-executor.js";
+} from "./agent/envoy-agent.js";
 export { EnvironmentScanner } from "./agent/environment-scanner.js";
 export type { EnvironmentScanResult } from "./agent/environment-scanner.js";
 export { LocalStateStore } from "./state/local-state.js";

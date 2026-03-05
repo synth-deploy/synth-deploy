@@ -3,10 +3,8 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { DecisionDebrief } from "@deploystack/core";
-import type { DebriefEntry } from "@deploystack/core";
 import { EnvoyAgent } from "../src/agent/envoy-agent.js";
 import type { DeploymentInstruction } from "../src/agent/envoy-agent.js";
-import { DeploymentExecutor } from "../src/agent/deployment-executor.js";
 import { EnvironmentScanner } from "../src/agent/environment-scanner.js";
 import { LocalStateStore } from "../src/state/local-state.js";
 import { createEnvoyServer } from "../src/server.js";
@@ -138,118 +136,7 @@ describe("LocalStateStore", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Test Suite 2: Deployment Executor
-// ---------------------------------------------------------------------------
-
-describe("DeploymentExecutor", () => {
-  let baseDir: string;
-  let executor: DeploymentExecutor;
-
-  beforeEach(() => {
-    baseDir = makeTmpDir();
-    fs.mkdirSync(path.join(baseDir, "deployments"), { recursive: true });
-    executor = new DeploymentExecutor(baseDir);
-  });
-
-  afterEach(() => {
-    cleanDir(baseDir);
-  });
-
-  it("creates deployment workspace with all artifacts", async () => {
-    const result = await executor.execute({
-      deploymentId: "test-deploy",
-      operationId: "web-app",
-      partitionId: "partition-1",
-      environmentId: "env-prod",
-      version: "2.0.0",
-      variables: { APP_ENV: "production", DB_HOST: "db-1" },
-      receivedAt: new Date().toISOString(),
-    });
-
-    expect(result.success).toBe(true);
-    expect(result.artifacts).toContain("manifest.json");
-    expect(result.artifacts).toContain("variables.env");
-    expect(result.artifacts).toContain("VERSION");
-    expect(result.artifacts).toContain("STATUS");
-    expect(result.durationMs).toBeGreaterThanOrEqual(0);
-
-    // Verify files exist
-    expect(fs.existsSync(path.join(result.workspacePath, "manifest.json"))).toBe(true);
-    expect(fs.existsSync(path.join(result.workspacePath, "VERSION"))).toBe(true);
-
-    // Verify content
-    const version = fs.readFileSync(
-      path.join(result.workspacePath, "VERSION"),
-      "utf-8",
-    );
-    expect(version).toBe("web-app@2.0.0");
-
-    const manifest = JSON.parse(
-      fs.readFileSync(
-        path.join(result.workspacePath, "manifest.json"),
-        "utf-8",
-      ),
-    );
-    expect(manifest.version).toBe("2.0.0");
-    expect(manifest.variables.APP_ENV).toBe("production");
-  });
-
-  it("verification passes for correct deployment", async () => {
-    const execResult = await executor.execute({
-      deploymentId: "test-deploy",
-      operationId: "web-app",
-      partitionId: "partition-1",
-      environmentId: "env-prod",
-      version: "2.0.0",
-      variables: { APP_ENV: "production" },
-      receivedAt: new Date().toISOString(),
-    });
-
-    const verification = executor.verify(
-      execResult.workspacePath,
-      "2.0.0",
-      "web-app",
-    );
-
-    expect(verification.passed).toBe(true);
-    expect(verification.checks.every((c) => c.passed)).toBe(true);
-    expect(verification.checks.length).toBeGreaterThanOrEqual(4);
-  });
-
-  it("verification fails for missing workspace", () => {
-    const verification = executor.verify("/nonexistent/path", "1.0", "app");
-    expect(verification.passed).toBe(false);
-    expect(verification.checks[0].name).toBe("workspace-exists");
-    expect(verification.checks[0].passed).toBe(false);
-  });
-
-  it("verification detects wrong version", async () => {
-    const execResult = await executor.execute({
-      deploymentId: "test-deploy",
-      operationId: "web-app",
-      partitionId: "partition-1",
-      environmentId: "env-prod",
-      version: "2.0.0",
-      variables: {},
-      receivedAt: new Date().toISOString(),
-    });
-
-    const verification = executor.verify(
-      execResult.workspacePath,
-      "3.0.0", // wrong version
-      "web-app",
-    );
-
-    expect(verification.passed).toBe(false);
-    const versionCheck = verification.checks.find(
-      (c) => c.name === "version-correct",
-    );
-    expect(versionCheck!.passed).toBe(false);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Test Suite 3: Environment Scanner
+// Test Suite 2: Environment Scanner
 // ---------------------------------------------------------------------------
 
 describe("EnvironmentScanner", () => {

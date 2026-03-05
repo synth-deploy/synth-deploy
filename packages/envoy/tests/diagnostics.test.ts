@@ -10,7 +10,6 @@ import type {
 } from "../src/agent/envoy-agent.js";
 import { DiagnosticInvestigator } from "../src/agent/diagnostic-investigator.js";
 import type { DiagnosticReport } from "../src/agent/diagnostic-investigator.js";
-import { DeploymentExecutor } from "../src/agent/deployment-executor.js";
 import { LocalStateStore } from "../src/state/local-state.js";
 
 // ---------------------------------------------------------------------------
