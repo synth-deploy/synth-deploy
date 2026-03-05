@@ -3,14 +3,13 @@ import {
   listDeployments,
   listPartitions,
   listEnvironments,
-  listOperations,
-  listOrders,
+  listArtifacts,
   getRecentDebrief,
   getDeploymentContext,
   getHealth,
   getSystemState,
 } from "../../api.js";
-import type { Deployment, Partition, Environment, Operation, Order, DebriefEntry } from "../../types.js";
+import type { Deployment, Partition, Environment, Artifact, DebriefEntry } from "../../types.js";
 import type { DeploymentContext, SystemState, AlertSignal } from "../../api.js";
 import { useCanvas } from "../../context/CanvasContext.js";
 import { useSettings } from "../../context/SettingsContext.js";
@@ -160,7 +159,7 @@ function AlertState({ signals, stats }: { signals: AlertSignal[]; stats: SystemS
 }
 
 // ---------------------------------------------------------------------------
-// NormalState — preserves all existing OperationalOverview functionality
+// NormalState — artifact-centric dashboard
 // ---------------------------------------------------------------------------
 
 function NormalState({ stats: _stats }: { stats: SystemState["stats"] }) {
@@ -170,20 +169,13 @@ function NormalState({ stats: _stats }: { stats: SystemState["stats"] }) {
   const [deployments, setDeployments] = useState<Deployment[]>([]);
   const [partitions, setPartitions] = useState<Partition[]>([]);
   const [environments, setEnvironments] = useState<Environment[]>([]);
-  const [operations, setOperations] = useState<Operation[]>([]);
-  const [orders, setOrders] = useState<Order[]>([]);
+  const [artifacts, setArtifacts] = useState<Artifact[]>([]);
   const [debriefEntries, setDebriefEntries] = useState<DebriefEntry[]>([]);
   const [agentContext, setAgentContext] = useState<DeploymentContext | null>(null);
   const [commandStatus, setCommandStatus] = useState<string>("observing");
   const [signalsExpanded, setSignalsExpanded] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [pulse, setPulse] = useState(0);
   const [tick, setTick] = useState(0);
-
-  useEffect(() => {
-    const id = setInterval(() => setPulse((p) => p + 1), 80);
-    return () => clearInterval(id);
-  }, []);
 
   useEffect(() => {
     const id = setInterval(() => setTick((t) => t + 1), 100);
@@ -195,18 +187,16 @@ function NormalState({ stats: _stats }: { stats: SystemState["stats"] }) {
       listDeployments(),
       listPartitions(),
       listEnvironments(),
-      listOperations(),
-      listOrders(),
+      listArtifacts(),
       getRecentDebrief({ limit: 10 }),
       getDeploymentContext().catch(() => null),
       getHealth().catch(() => null),
     ])
-      .then(([d, t, e, p, o, db, ctx, health]) => {
+      .then(([d, parts, envs, arts, db, ctx, health]) => {
         setDeployments(d);
-        setPartitions(t);
-        setEnvironments(e);
-        setOperations(p);
-        setOrders(o);
+        setPartitions(parts);
+        setEnvironments(envs);
+        setArtifacts(arts);
         setDebriefEntries(db);
         setAgentContext(ctx);
         if (health) setCommandStatus("observing");
@@ -277,7 +267,7 @@ function NormalState({ stats: _stats }: { stats: SystemState["stats"] }) {
               </div>
             </div>
             <div className="v2-command-subtitle">
-              Monitoring {partitions.length} Partitions &middot; {environments.length} Environments &middot; {orders.length} Orders pending
+              Monitoring {artifacts.length} Artifacts &middot; {environments.length} Environments &middot; {partitions.length} Partitions
             </div>
             <div className="v2-command-stats">
               <div className="v2-command-stat">
@@ -385,131 +375,44 @@ function NormalState({ stats: _stats }: { stats: SystemState["stats"] }) {
         </>
       )}
 
-      {/* Operations section */}
+      {/* Artifacts section */}
       <SectionHeader
         color="#6b7280"
         shape="square"
-        label="Operations"
-        subtitle="blueprints, static until ordered"
+        label="Artifacts"
+        subtitle="what you're deploying"
+        count={artifacts.length}
         onClick={() =>
-          pushPanel({ type: "operation-list", title: "Operations", params: {} })
+          pushPanel({ type: "deployment-authoring", title: "Deploy", params: {} })
         }
       />
       <div className="v2-operations-grid">
-        {operations.map((op) => (
+        {artifacts.map((art) => (
           <div
-            key={op.id}
+            key={art.id}
             className="v2-operation-card"
             onClick={() =>
               pushPanel({
-                type: "operation-list",
-                title: "Operations",
-                params: {},
+                type: "deployment-authoring",
+                title: "Deploy",
+                params: { artifactId: art.id },
               })
             }
           >
             <div className="v2-operation-card-grid-bg" />
             <div className="v2-operation-card-inner">
-              <div className="v2-operation-id">{op.id.slice(0, 8)}</div>
-              <div className="v2-operation-name">{op.name}</div>
+              <div className="v2-operation-id">{art.type}</div>
+              <div className="v2-operation-name">{art.name}</div>
               <div className="v2-operation-meta">
-                {op.steps.length} steps &middot; {op.environmentIds.length} env{op.environmentIds.length !== 1 ? "s" : ""}
-              </div>
-              <div className="v2-operation-steps">
-                {Array.from({ length: Math.min(op.steps.length, 10) }).map((_, i) => (
-                  <div key={i} className="v2-operation-step-bar" />
-                ))}
+                {art.analysis.summary
+                  ? art.analysis.summary.slice(0, 60) + (art.analysis.summary.length > 60 ? "..." : "")
+                  : "Pending analysis"}
               </div>
             </div>
           </div>
         ))}
-        {operations.length === 0 && (
-          <div className="v2-empty-hint">No operations yet. Use the Command Channel to create one.</div>
-        )}
-      </div>
-
-      {/* Orders section */}
-      <SectionHeader
-        color="#f59e0b"
-        shape="square"
-        label="Orders"
-        subtitle="versioned snapshots, stacked and ready"
-        onClick={() =>
-          pushPanel({ type: "order-list", title: "Orders", params: {} })
-        }
-      />
-      <div className="v2-orders-list">
-        {orders.map((order, i) => {
-          const opName =
-            operations.find((p) => p.id === order.operationId)?.name ?? order.operationName;
-          const partName =
-            partitions.find((t) => t.id === order.partitionId)?.name ?? order.partitionId.slice(0, 8);
-          const envName =
-            environments.find((e) => e.id === order.environmentId)?.name ?? order.environmentName;
-          return (
-            <div
-              key={order.id}
-              className="v2-order-row"
-              onClick={() =>
-                pushPanel({
-                  type: "order-detail",
-                  title: `Order ${order.id.slice(0, 8)}`,
-                  params: { id: order.id },
-                })
-              }
-              style={{
-                borderColor: "rgba(245,158,11,0.15)",
-                background: "rgba(245,158,11,0.04)",
-                transform: `translateY(${Math.sin(pulse * 0.05 + i * 0.8) * 1}px)`,
-              }}
-            >
-              <div className="v2-order-stack-icon">
-                <div className="v2-order-stack-line" />
-                <div className="v2-order-stack-line" style={{ opacity: 0.6 }} />
-                <div className="v2-order-stack-line" style={{ opacity: 0.3 }} />
-              </div>
-              <div className="v2-order-info">
-                <div className="v2-order-title">
-                  <span className="v2-order-op-name">{opName}</span>
-                  <span className="v2-order-version">v{order.version}</span>
-                </div>
-                <div className="v2-order-target">
-                  {partName} &rarr; {envName} &middot;{" "}
-                  {new Date(order.createdAt).toLocaleString()}
-                </div>
-              </div>
-              <button
-                className="v2-order-deploy-btn"
-                style={{
-                  background: "rgba(99,225,190,0.12)",
-                  border: "1px solid rgba(99,225,190,0.3)",
-                  color: "#63e1be",
-                  fontSize: 11,
-                  fontWeight: 600,
-                  padding: "3px 10px",
-                  borderRadius: 4,
-                  cursor: "pointer",
-                  whiteSpace: "nowrap",
-                }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  pushPanel({
-                    type: "deployment-authoring",
-                    title: "Deploy Order",
-                    params: { orderId: order.id },
-                  });
-                }}
-              >
-                DEPLOY
-              </button>
-              <div className="v2-order-status-pill">
-                <span>QUEUED</span>
-              </div>
-            </div>
-          );
-        })}
-        {orders.length === 0 && (
-          <div className="v2-empty-hint">No orders pending.</div>
+        {artifacts.length === 0 && (
+          <div className="v2-empty-hint">No artifacts yet. Use the Command Channel to add one.</div>
         )}
       </div>
 
@@ -517,15 +420,15 @@ function NormalState({ stats: _stats }: { stats: SystemState["stats"] }) {
       {activeDeployments.length > 0 && (
         <div className="v2-deployment-particles-section">
           <span className="v2-particles-label">
-            Deployments &mdash; routing Orders to Envoys
+            Deployments &mdash; routing Artifacts to Envoys
           </span>
           <DeploymentParticles />
           <div className="v2-active-deploys-row">
             {activeDeployments.slice(0, 4).map((d) => {
-              const opName =
-                operations.find((p) => p.id === d.artifactId)?.name ?? d.artifactId.slice(0, 8);
-              const partName =
-                partitions.find((t) => t.id === d.partitionId)?.name ?? (d.partitionId ?? "").slice(0, 8);
+              const artName =
+                artifacts.find((a) => a.id === d.artifactId)?.name ?? d.artifactId.slice(0, 8);
+              const envName =
+                environments.find((e) => e.id === d.environmentId)?.name ?? d.environmentId.slice(0, 8);
               return (
                 <div
                   key={d.id}
@@ -538,7 +441,7 @@ function NormalState({ stats: _stats }: { stats: SystemState["stats"] }) {
                     })
                   }
                 >
-                  {d.version} &rarr; {partName} ({opName})
+                  {artName} v{d.version} &rarr; {envName}
                 </div>
               );
             })}
@@ -561,9 +464,8 @@ function NormalState({ stats: _stats }: { stats: SystemState["stats"] }) {
       />
       <div className="v2-partitions-grid">
         {partitions.map((p) => {
-          const orderCount = orders.filter((o) => o.partitionId === p.id).length;
-          // Treat partitions with no variables, no orders, and old dates as dormant
-          const isDormant = Object.keys(p.variables).length === 0 && orderCount === 0;
+          const deployCount = deployments.filter((d) => d.partitionId === p.id).length;
+          const isDormant = Object.keys(p.variables).length === 0 && deployCount === 0;
           return (
             <div
               key={p.id}
@@ -598,7 +500,7 @@ function NormalState({ stats: _stats }: { stats: SystemState["stats"] }) {
               <div className="v2-partition-meta">
                 {isDormant
                   ? "Dormant"
-                  : `${orderCount} order${orderCount !== 1 ? "s" : ""} pending`}
+                  : `${deployCount} deployment${deployCount !== 1 ? "s" : ""}`}
               </div>
             </div>
           );
@@ -625,7 +527,7 @@ function NormalState({ stats: _stats }: { stats: SystemState["stats"] }) {
           );
           const statusCfg = isExecuting
             ? { color: "#63e1be", bg: "rgba(99,225,190,0.04)", border: "rgba(99,225,190,0.2)", label: "EXECUTING" }
-            : { color: "#6b7280", bg: "rgba(15,20,30,0.4)", border: "rgba(107,114,128,0.12)", label: "AWAITING ORDERS" };
+            : { color: "#6b7280", bg: "rgba(15,20,30,0.4)", border: "rgba(107,114,128,0.12)", label: "READY" };
           return (
             <div
               key={envSummary.id}
@@ -745,7 +647,7 @@ function NormalState({ stats: _stats }: { stats: SystemState["stats"] }) {
         )}
       </div>
 
-      {deployments.length === 0 && partitions.length === 0 && operations.length === 0 && (
+      {deployments.length === 0 && partitions.length === 0 && artifacts.length === 0 && (
         <div className="v2-empty-state">
           <p>No data yet. Use the Command Channel below to get started.</p>
         </div>

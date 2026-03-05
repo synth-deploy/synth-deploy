@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback } from "react";
 import { getSettings, updateSettings, getCommandInfo, getLlmHealth, verifyTaskModel } from "../api.js";
 import type { AppSettings, CommandInfo, ConflictPolicy, LlmProvider, LlmProviderConfig, LlmFallbackConfig, TaskModelTask, TaskModelConfig, CapabilityVerificationResult } from "../types.js";
 import { TASK_MODEL_META } from "../types.js";
-import DeployConfigEditor from "../components/DeployConfigEditor.js";
 import { useSettings } from "../context/SettingsContext.js";
 
 const LLM_PROVIDERS: { value: LlmProvider; label: string }[] = [
@@ -57,6 +56,7 @@ export default function Settings() {
   const [agentSaved, setAgentSaved] = useState(false);
   const [envoySaved, setEnvoySaved] = useState(false);
   const [llmSaved, setLlmSaved] = useState(false);
+  const [deployDefaultsSaved, setDeployDefaultsSaved] = useState(false);
   const [llmHealth, setLlmHealth] = useState<{ configured: boolean; healthy: boolean; provider: string | null; lastChecked: string } | null>(null);
   const [llmHealthLoading, setLlmHealthLoading] = useState(false);
 
@@ -95,12 +95,14 @@ export default function Settings() {
     setTimeout(() => setAgentSaved(false), 2000);
   }
 
-  async function handleSaveDefaultDeployConfig(config: AppSettings["deploymentDefaults"]["defaultDeployConfig"]) {
+  async function handleSaveDeploymentDefaults() {
     if (!settings) return;
     const updated = await updateSettings({
-      deploymentDefaults: { ...settings.deploymentDefaults, defaultDeployConfig: config },
+      deploymentDefaults: settings.deploymentDefaults,
     });
     setSettings(updated);
+    setDeployDefaultsSaved(true);
+    setTimeout(() => setDeployDefaultsSaved(false), 2000);
   }
 
   async function handleToggleEnvironments() {
@@ -823,10 +825,85 @@ export default function Settings() {
           <div className="card-header">
             <h3>Default Deployment Configuration</h3>
           </div>
-          <DeployConfigEditor
-            config={settings.deploymentDefaults.defaultDeployConfig}
-            onSave={handleSaveDefaultDeployConfig}
-          />
+          <div className="form-group">
+            <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+              <input
+                type="checkbox"
+                checked={settings.deploymentDefaults.defaultHealthCheckEnabled}
+                onChange={(e) =>
+                  setSettings({
+                    ...settings,
+                    deploymentDefaults: {
+                      ...settings.deploymentDefaults,
+                      defaultHealthCheckEnabled: e.target.checked,
+                    },
+                  })
+                }
+              />
+              Enable Health Checks
+            </label>
+          </div>
+          <div className="form-group">
+            <label>Health Check Retries</label>
+            <input
+              type="number"
+              min={0}
+              max={10}
+              value={settings.deploymentDefaults.defaultHealthCheckRetries}
+              onChange={(e) =>
+                setSettings({
+                  ...settings,
+                  deploymentDefaults: {
+                    ...settings.deploymentDefaults,
+                    defaultHealthCheckRetries: Number(e.target.value),
+                  },
+                })
+              }
+              style={{ maxWidth: 300 }}
+            />
+          </div>
+          <div className="form-group">
+            <label>Timeout (ms)</label>
+            <input
+              type="number"
+              min={1000}
+              step={1000}
+              value={settings.deploymentDefaults.defaultTimeoutMs}
+              onChange={(e) =>
+                setSettings({
+                  ...settings,
+                  deploymentDefaults: {
+                    ...settings.deploymentDefaults,
+                    defaultTimeoutMs: Number(e.target.value),
+                  },
+                })
+              }
+              style={{ maxWidth: 300 }}
+            />
+          </div>
+          <div className="form-group">
+            <label>Verification Strategy</label>
+            <select
+              value={settings.deploymentDefaults.defaultVerificationStrategy}
+              onChange={(e) =>
+                setSettings({
+                  ...settings,
+                  deploymentDefaults: {
+                    ...settings.deploymentDefaults,
+                    defaultVerificationStrategy: e.target.value as "basic" | "full" | "none",
+                  },
+                })
+              }
+              style={{ maxWidth: 300 }}
+            >
+              <option value="basic">Basic</option>
+              <option value="full">Full</option>
+              <option value="none">None</option>
+            </select>
+          </div>
+          <button className="btn btn-primary" onClick={handleSaveDeploymentDefaults}>
+            {deployDefaultsSaved ? "Saved" : "Save Deployment Defaults"}
+          </button>
         </div>
       </div>
 

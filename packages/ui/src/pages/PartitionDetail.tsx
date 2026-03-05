@@ -6,11 +6,10 @@ import {
   updatePartition,
   deletePartition,
   listDeployments,
-  getPartitionHistory,
   listEnvironments,
-  listOperations,
+  listArtifacts,
 } from "../api.js";
-import type { Partition, Deployment, OperationHistory, Environment, Operation } from "../types.js";
+import type { Partition, Deployment, Environment, Artifact } from "../types.js";
 import VariableEditor from "../components/VariableEditor.js";
 import DeploymentTable from "../components/DeploymentTable.js";
 import InlineEdit from "../components/InlineEdit.js";
@@ -22,8 +21,7 @@ export default function PartitionDetail() {
   const [partition, setPartition] = useState<Partition | null>(null);
   const [deployments, setDeployments] = useState<Deployment[]>([]);
   const [environments, setEnvironments] = useState<Environment[]>([]);
-  const [operations, setOperations] = useState<Operation[]>([]);
-  const [history, setHistory] = useState<OperationHistory | null>(null);
+  const [artifacts, setArtifacts] = useState<Artifact[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -32,16 +30,14 @@ export default function PartitionDetail() {
     if (!id) return;
     Promise.all([
       getPartition(id),
-      listDeployments(id),
-      getPartitionHistory(id),
+      listDeployments({ partitionId: id }),
       listEnvironments(),
-      listOperations(),
-    ]).then(([t, d, h, e, p]) => {
+      listArtifacts(),
+    ]).then(([t, d, e, a]) => {
       setPartition(t);
       setDeployments(d);
-      setHistory(h);
       setEnvironments(e);
-      setOperations(p);
+      setArtifacts(a);
       setLoading(false);
     }).catch((e) => {
       setError(e.message);
@@ -75,6 +71,11 @@ export default function PartitionDetail() {
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
   );
 
+  const succeeded = deployments.filter((d) => d.status === "succeeded").length;
+  const successRate = deployments.length > 0
+    ? `${Math.round((succeeded / deployments.length) * 100)}%`
+    : "\u2014";
+
   return (
     <div>
       <div className="breadcrumb">
@@ -92,6 +93,36 @@ export default function PartitionDetail() {
         </div>
       </div>
 
+      {deployments.length > 0 && (
+        <div className="section">
+          <div className="card">
+            <div className="card-header">
+              <h3>Overview</h3>
+            </div>
+            <div className="summary-grid" style={{ marginBottom: 0 }}>
+              <div className="summary-card">
+                <div className="label">Total Deployments</div>
+                <div className="value">{deployments.length}</div>
+              </div>
+              <div className="summary-card">
+                <div className="label">Success Rate</div>
+                <div className="value">{successRate}</div>
+              </div>
+              <div className="summary-card">
+                <div className="label">Environments</div>
+                <div className="value">
+                  {new Set(deployments.map((d) => d.environmentId)).size}
+                </div>
+              </div>
+              <div className="summary-card">
+                <div className="label">Variables</div>
+                <div className="value">{Object.keys(partition.variables).length}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="section">
         <div className="card">
           <div className="card-header">
@@ -101,39 +132,11 @@ export default function PartitionDetail() {
         </div>
       </div>
 
-      {history && history.overview.totalDeployments > 0 && (
-        <div className="section">
-          <div className="card">
-            <div className="card-header">
-              <h3>History Overview</h3>
-            </div>
-            <div className="summary-grid" style={{ marginBottom: 0 }}>
-              <div className="summary-card">
-                <div className="label">Total</div>
-                <div className="value">{history.overview.totalDeployments}</div>
-              </div>
-              <div className="summary-card">
-                <div className="label">Success Rate</div>
-                <div className="value">{history.overview.successRate}</div>
-              </div>
-              <div className="summary-card">
-                <div className="label">Environments</div>
-                <div className="value">{history.overview.environments.length}</div>
-              </div>
-              <div className="summary-card">
-                <div className="label">Versions</div>
-                <div className="value">{history.overview.versions.length}</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       <div className="card">
         <div className="card-header">
           <h3>Deployment History</h3>
         </div>
-        <DeploymentTable deployments={sorted} environments={environments} operations={operations} />
+        <DeploymentTable deployments={sorted} environments={environments} artifacts={artifacts} />
       </div>
 
       {showDeleteConfirm && (

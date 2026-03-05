@@ -7,10 +7,7 @@ import EnvironmentDetailPanel from "./canvas/EnvironmentDetailPanel.js";
 import DeploymentDetailPanel from "./canvas/DeploymentDetailPanel.js";
 import DeploymentListPanel from "./canvas/DeploymentListPanel.js";
 import DeploymentAuthoringPanel from "./canvas/DeploymentAuthoringPanel.js";
-import OperationListPanel from "./canvas/OperationListPanel.js";
 import PartitionListPanel from "./canvas/PartitionListPanel.js";
-import OrderListPanel from "./canvas/OrderListPanel.js";
-import OrderDetailPanel from "./canvas/OrderDetailPanel.js";
 import DebriefPanel from "./canvas/DebriefPanel.js";
 import SignalDetailPanel from "./canvas/SignalDetailPanel.js";
 import EnvoyRegistryPanel from "./canvas/EnvoyRegistryPanel.js";
@@ -84,34 +81,12 @@ export default function AgentCanvas() {
           <DeploymentAuthoringPanel
             key={panel.id}
             title={panel.title}
-            preselectedOrderId={params.orderId}
+            preselectedArtifactId={params.artifactId}
           />
         );
-
-      case "operation-list":
-        return <OperationListPanel key={panel.id} title={panel.title} />;
 
       case "partition-list":
         return <PartitionListPanel key={panel.id} title={panel.title} />;
-
-      case "order-list":
-        return (
-          <OrderListPanel
-            key={panel.id}
-            title={panel.title}
-            filterOperationId={params.operationId}
-            filterPartitionId={params.partitionId}
-          />
-        );
-
-      case "order-detail":
-        return (
-          <OrderDetailPanel
-            key={panel.id}
-            orderId={params.id}
-            title={panel.title}
-          />
-        );
 
       case "debrief":
         return (

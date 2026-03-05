@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { listPartitions, listOrders, listEnvironments, listDeployments, createPartition } from "../../api.js";
-import type { Partition, Order, Environment, Deployment } from "../../types.js";
+import { listPartitions, listEnvironments, listDeployments, createPartition } from "../../api.js";
+import type { Partition, Environment, Deployment } from "../../types.js";
 import { useCanvas } from "../../context/CanvasContext.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
 
@@ -12,7 +12,6 @@ export default function PartitionListPanel({ title }: Props) {
   const { pushPanel } = useCanvas();
 
   const [partitions, setPartitions] = useState<Partition[]>([]);
-  const [orders, setOrders] = useState<Order[]>([]);
   const [environments, setEnvironments] = useState<Environment[]>([]);
   const [deployments, setDeployments] = useState<Deployment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -37,10 +36,9 @@ export default function PartitionListPanel({ title }: Props) {
   };
 
   useEffect(() => {
-    Promise.all([listPartitions(), listOrders(), listEnvironments(), listDeployments()])
-      .then(([t, o, e, d]) => {
+    Promise.all([listPartitions(), listEnvironments(), listDeployments()])
+      .then(([t, e, d]) => {
         setPartitions(t);
-        setOrders(o);
         setEnvironments(e);
         setDeployments(d);
         setLoading(false);
@@ -85,13 +83,13 @@ export default function PartitionListPanel({ title }: Props) {
 
         <div className="v2-entity-list-items">
           {partitions.map((p) => {
-            const orderCount = orders.filter((o) => o.partitionId === p.id).length;
             const varCount = Object.keys(p.variables).length;
             const deploys = deployments.filter((d) => d.partitionId === p.id);
+            const deployCount = deploys.length;
             const lastDeploy = deploys.length > 0
               ? [...deploys].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0]
               : null;
-            const isDormant = varCount === 0 && orderCount === 0;
+            const isDormant = varCount === 0 && deployCount === 0;
             return (
               <div
                 key={p.id}
@@ -125,8 +123,8 @@ export default function PartitionListPanel({ title }: Props) {
                     <span className="v2-stat-label">Variables</span>
                   </div>
                   <div className="v2-stat-col">
-                    <span className={`v2-stat-value ${isDormant ? "v2-stat-dormant" : ""}`}>{orderCount}</span>
-                    <span className="v2-stat-label">Orders</span>
+                    <span className={`v2-stat-value ${isDormant ? "v2-stat-dormant" : ""}`}>{deployCount}</span>
+                    <span className="v2-stat-label">Deploys</span>
                   </div>
                   <div className="v2-stat-col">
                     <span className={`v2-stat-value ${isDormant ? "v2-stat-dormant" : ""}`}>

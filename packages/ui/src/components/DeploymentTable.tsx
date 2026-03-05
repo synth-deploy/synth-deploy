@@ -1,13 +1,12 @@
-import { Link } from "react-router";
-import type { Deployment, Environment, Operation } from "../types.js";
+import type { Deployment, Environment, Artifact } from "../types.js";
 import StatusBadge from "./StatusBadge.js";
 import EnvBadge from "./EnvBadge.js";
 
 interface Props {
   deployments: Deployment[];
   environments?: Environment[];
-  operations?: Operation[];
-  showOperation?: boolean;
+  artifacts?: Artifact[];
+  showArtifact?: boolean;
 }
 
 function formatTime(iso: string): string {
@@ -21,15 +20,15 @@ function formatTime(iso: string): string {
 }
 
 function formatDuration(created: string, completed: string | null): string {
-  if (!completed) return "—";
+  if (!completed) return "\u2014";
   const ms = new Date(completed).getTime() - new Date(created).getTime();
   if (ms < 1000) return `${ms}ms`;
   return `${(ms / 1000).toFixed(1)}s`;
 }
 
-export default function DeploymentTable({ deployments, environments = [], operations = [], showOperation = true }: Props) {
+export default function DeploymentTable({ deployments, environments = [], artifacts = [], showArtifact = true }: Props) {
   const envMap = new Map(environments.map((e) => [e.id, e]));
-  const operationMap = new Map(operations.map((p) => [p.id, p]));
+  const artifactMap = new Map(artifacts.map((a) => [a.id, a]));
 
   if (deployments.length === 0) {
     return (
@@ -46,7 +45,7 @@ export default function DeploymentTable({ deployments, environments = [], operat
           <tr>
             <th>Status</th>
             <th>Version</th>
-            {showOperation && <th>Operation</th>}
+            {showArtifact && <th>Artifact</th>}
             <th>Environment</th>
             <th>Time</th>
             <th>Duration</th>
@@ -58,20 +57,12 @@ export default function DeploymentTable({ deployments, environments = [], operat
             return (
               <tr key={d.id}>
                 <td>
-                  <Link to={`/deployments/${d.id}`}>
-                    <StatusBadge status={d.status} />
-                  </Link>
+                  <StatusBadge status={d.status} />
                 </td>
-                <td>
-                  <Link to={`/deployments/${d.id}`} className="mono">
-                    {d.version}
-                  </Link>
-                </td>
-                {showOperation && (
+                <td className="mono">{d.version}</td>
+                {showArtifact && (
                   <td>
-                    <Link to={`/operations/${d.operationId}`}>
-                      {operationMap.get(d.operationId)?.name ?? d.operationId.slice(0, 8)}
-                    </Link>
+                    {artifactMap.get(d.artifactId)?.name ?? d.artifactId.slice(0, 8)}
                   </td>
                 )}
                 <td>

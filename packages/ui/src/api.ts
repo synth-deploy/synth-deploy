@@ -1,21 +1,15 @@
 import type {
-  Operation,
   Partition,
   Environment,
   Deployment,
   DebriefEntry,
   PostmortemReport,
-  OperationHistory,
-  DeploymentStep,
-  DeploymentStepType,
-  DeployConfig,
+  Artifact,
+  ArtifactVersion,
+  SecurityBoundary,
   AppSettings,
   CommandInfo,
-  Order,
-  StepTypeDefinition,
 } from "./types.js";
-
-export type { OperationHistory };
 
 const BASE = "";
 
@@ -83,103 +77,84 @@ export async function authStatus(): Promise<{ needsSetup: boolean }> {
   return fetchJson("/api/auth/status");
 }
 
-// --- Operations ---
+// --- Artifacts ---
 
-export async function listOperations(): Promise<Operation[]> {
-  const data = await fetchJson<{ operations: Operation[] }>("/api/operations");
-  return data.operations;
+export async function listArtifacts(): Promise<Artifact[]> {
+  const data = await fetchJson<{ artifacts: Artifact[] }>("/api/artifacts");
+  return data.artifacts;
 }
 
-export async function getOperation(id: string): Promise<{ operation: Operation; environments: Environment[] }> {
-  return fetchJson(`/api/operations/${id}`);
+export async function getArtifact(id: string): Promise<{ artifact: Artifact; versions: ArtifactVersion[] }> {
+  return fetchJson(`/api/artifacts/${id}`);
 }
 
-export async function createOperation(name: string, environmentIds: string[]): Promise<Operation> {
-  const data = await fetchJson<{ operation: Operation }>("/api/operations", {
+export async function createArtifact(params: { name: string; type: string }): Promise<Artifact> {
+  const data = await fetchJson<{ artifact: Artifact }>("/api/artifacts", {
     method: "POST",
-    body: JSON.stringify({ name, environmentIds }),
+    body: JSON.stringify(params),
   });
-  return data.operation;
+  return data.artifact;
 }
 
-export async function updateOperation(id: string, updates: { name?: string }): Promise<Operation> {
-  const data = await fetchJson<{ operation: Operation }>(`/api/operations/${id}`, {
+export async function updateArtifact(id: string, updates: { name?: string; type?: string }): Promise<Artifact> {
+  const data = await fetchJson<{ artifact: Artifact }>(`/api/artifacts/${id}`, {
     method: "PUT",
     body: JSON.stringify(updates),
   });
-  return data.operation;
+  return data.artifact;
 }
 
-export async function deleteOperation(id: string): Promise<void> {
-  await fetchJson(`/api/operations/${id}`, { method: "DELETE" });
+export async function deleteArtifact(id: string): Promise<void> {
+  await fetchJson(`/api/artifacts/${id}`, { method: "DELETE" });
 }
 
-export async function addOperationEnvironment(operationId: string, environmentId: string): Promise<Operation> {
-  const data = await fetchJson<{ operation: Operation }>(`/api/operations/${operationId}/environments`, {
+export async function addArtifactAnnotation(
+  id: string,
+  annotation: { field: string; correction: string },
+): Promise<Artifact> {
+  const data = await fetchJson<{ artifact: Artifact }>(`/api/artifacts/${id}/annotations`, {
     method: "POST",
-    body: JSON.stringify({ environmentId }),
+    body: JSON.stringify(annotation),
   });
-  return data.operation;
+  return data.artifact;
 }
 
-export async function removeOperationEnvironment(operationId: string, environmentId: string): Promise<Operation> {
-  const data = await fetchJson<{ operation: Operation }>(`/api/operations/${operationId}/environments/${environmentId}`, {
-    method: "DELETE",
-  });
-  return data.operation;
+export async function listArtifactVersions(id: string): Promise<ArtifactVersion[]> {
+  const data = await fetchJson<{ versions: ArtifactVersion[] }>(`/api/artifacts/${id}/versions`);
+  return data.versions;
 }
 
-export async function listOperationSteps(operationId: string): Promise<DeploymentStep[]> {
-  const data = await fetchJson<{ steps: DeploymentStep[] }>(`/api/operations/${operationId}/steps`);
-  return data.steps;
-}
-
-export async function createOperationStep(
-  operationId: string,
-  step: { name: string; type: DeploymentStepType; command?: string; order?: number; stepTypeId?: string; stepTypeConfig?: Record<string, unknown> },
-): Promise<DeploymentStep> {
-  const data = await fetchJson<{ step: DeploymentStep }>(`/api/operations/${operationId}/steps`, {
+export async function addArtifactVersion(
+  id: string,
+  version: { version: string; source: string; metadata?: Record<string, string> },
+): Promise<ArtifactVersion> {
+  const data = await fetchJson<{ version: ArtifactVersion }>(`/api/artifacts/${id}/versions`, {
     method: "POST",
-    body: JSON.stringify(step),
+    body: JSON.stringify(version),
   });
-  return data.step;
+  return data.version;
 }
 
-export async function updateOperationStep(
-  operationId: string,
-  stepId: string,
-  updates: Partial<{ name: string; type: DeploymentStepType; command: string; order: number }>,
-): Promise<DeploymentStep> {
-  const data = await fetchJson<{ step: DeploymentStep }>(`/api/operations/${operationId}/steps/${stepId}`, {
+// --- Security Boundaries ---
+
+export async function getSecurityBoundaries(envoyId: string): Promise<SecurityBoundary[]> {
+  const data = await fetchJson<{ boundaries: SecurityBoundary[] }>(`/api/envoys/${envoyId}/security-boundaries`);
+  return data.boundaries;
+}
+
+export async function setSecurityBoundaries(
+  envoyId: string,
+  boundaries: Array<{ boundaryType: string; config: Record<string, unknown> }>,
+): Promise<SecurityBoundary[]> {
+  const data = await fetchJson<{ boundaries: SecurityBoundary[] }>(`/api/envoys/${envoyId}/security-boundaries`, {
     method: "PUT",
-    body: JSON.stringify(updates),
+    body: JSON.stringify({ boundaries }),
   });
-  return data.step;
+  return data.boundaries;
 }
 
-export async function deleteOperationStep(operationId: string, stepId: string): Promise<void> {
-  await fetchJson(`/api/operations/${operationId}/steps/${stepId}`, { method: "DELETE" });
-}
-
-export async function reorderOperationSteps(operationId: string, stepIds: string[]): Promise<DeploymentStep[]> {
-  const data = await fetchJson<{ steps: DeploymentStep[] }>(`/api/operations/${operationId}/steps/reorder`, {
-    method: "POST",
-    body: JSON.stringify({ stepIds }),
-  });
-  return data.steps;
-}
-
-export async function getOperationDeployConfig(operationId: string): Promise<DeployConfig> {
-  const data = await fetchJson<{ deployConfig: DeployConfig }>(`/api/operations/${operationId}/deploy-config`);
-  return data.deployConfig;
-}
-
-export async function updateOperationDeployConfig(operationId: string, config: Partial<DeployConfig>): Promise<DeployConfig> {
-  const data = await fetchJson<{ deployConfig: DeployConfig }>(`/api/operations/${operationId}/deploy-config`, {
-    method: "PUT",
-    body: JSON.stringify(config),
-  });
-  return data.deployConfig;
+export async function deleteSecurityBoundaries(envoyId: string): Promise<void> {
+  await fetchJson(`/api/envoys/${envoyId}/security-boundaries`, { method: "DELETE" });
 }
 
 // --- Partitions ---
@@ -259,14 +234,13 @@ export async function deleteEnvironment(id: string): Promise<void> {
 
 // --- Deployments ---
 
-export async function listDeployments(partitionId?: string): Promise<Deployment[]> {
-  const url = partitionId ? `/api/deployments?partitionId=${partitionId}` : "/api/deployments";
+export async function listDeployments(filters?: { partitionId?: string; artifactId?: string }): Promise<Deployment[]> {
+  const params = new URLSearchParams();
+  if (filters?.partitionId) params.set("partitionId", filters.partitionId);
+  if (filters?.artifactId) params.set("artifactId", filters.artifactId);
+  const qs = params.toString();
+  const url = qs ? `/api/deployments?${qs}` : "/api/deployments";
   const data = await fetchJson<{ deployments: Deployment[] }>(url);
-  return data.deployments;
-}
-
-export async function listOperationDeployments(operationId: string): Promise<Deployment[]> {
-  const data = await fetchJson<{ deployments: Deployment[] }>(`/api/operations/${operationId}/deployments`);
   return data.deployments;
 }
 
@@ -274,16 +248,35 @@ export async function getDeployment(id: string): Promise<{ deployment: Deploymen
   return fetchJson(`/api/deployments/${id}`);
 }
 
-export async function triggerDeployment(trigger: {
-  orderId: string;
-  partitionId: string;
+export async function createDeployment(trigger: {
+  artifactId: string;
   environmentId: string;
-  triggeredBy?: "user" | "agent";
-  variables?: Record<string, string>;
-}): Promise<{ deployment: Deployment; debrief: DebriefEntry[] }> {
+  partitionId?: string;
+  version?: string;
+}): Promise<{ deployment: Deployment }> {
   return fetchJson("/api/deployments", {
     method: "POST",
     body: JSON.stringify(trigger),
+  });
+}
+
+export async function approveDeployment(
+  id: string,
+  data: { approvedBy: string; modifications?: string },
+): Promise<{ deployment: Deployment; approved: boolean }> {
+  return fetchJson(`/api/deployments/${id}/approve`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function rejectDeployment(
+  id: string,
+  data: { reason: string },
+): Promise<{ deployment: Deployment; rejected: boolean }> {
+  return fetchJson(`/api/deployments/${id}/reject`, {
+    method: "POST",
+    body: JSON.stringify(data),
   });
 }
 
@@ -307,47 +300,6 @@ export async function getRecentDebrief(filters?: {
 export async function getPostmortem(deploymentId: string): Promise<PostmortemReport> {
   const data = await fetchJson<{ postmortem: PostmortemReport }>(`/api/deployments/${deploymentId}/postmortem`);
   return data.postmortem;
-}
-
-export async function getPartitionHistory(partitionId: string): Promise<OperationHistory> {
-  const data = await fetchJson<{ history: OperationHistory }>(`/api/partitions/${partitionId}/history`);
-  return data.history;
-}
-
-// --- Orders ---
-
-export async function listOrders(filters?: {
-  operationId?: string;
-  partitionId?: string;
-}): Promise<Order[]> {
-  const params = new URLSearchParams();
-  if (filters?.operationId) params.set("operationId", filters.operationId);
-  if (filters?.partitionId) params.set("partitionId", filters.partitionId);
-  const qs = params.toString();
-  const url = qs ? `/api/orders?${qs}` : "/api/orders";
-  const data = await fetchJson<{ orders: Order[] }>(url);
-  return data.orders;
-}
-
-export async function getOrder(id: string): Promise<{ order: Order; deployments: Deployment[] }> {
-  return fetchJson(`/api/orders/${id}`);
-}
-
-export async function createOrder(params: {
-  operationId: string;
-  partitionId: string;
-  environmentId: string;
-  version: string;
-}): Promise<Order> {
-  const data = await fetchJson<{ order: Order }>("/api/orders", {
-    method: "POST",
-    body: JSON.stringify(params),
-  });
-  return data.order;
-}
-
-export async function executeOrder(id: string): Promise<{ deployment: Deployment; debrief: DebriefEntry[] }> {
-  return fetchJson(`/api/orders/${id}/execute`, { method: "POST" });
 }
 
 // --- Health ---
@@ -508,48 +460,4 @@ export async function listEnvoys(): Promise<EnvoyRegistryEntry[]> {
 export async function getEnvoyHealth(id: string): Promise<EnvoyRegistryEntry> {
   const data = await fetchJson<{ envoy: EnvoyRegistryEntry }>(`/api/envoys/${id}/health`);
   return data.envoy;
-}
-
-// --- Step Types ---
-
-export async function listStepTypes(partitionId?: string): Promise<StepTypeDefinition[]> {
-  const url = partitionId ? `/api/step-types?partitionId=${partitionId}` : "/api/step-types";
-  const data = await fetchJson<{ stepTypes: StepTypeDefinition[] }>(url);
-  return data.stepTypes;
-}
-
-export async function getStepType(id: string): Promise<StepTypeDefinition> {
-  const data = await fetchJson<{ stepType: StepTypeDefinition }>(`/api/step-types/${id}`);
-  return data.stepType;
-}
-
-export async function createStepType(stepType: {
-  name: string;
-  category: StepTypeDefinition["category"];
-  description: string;
-  parameters: StepTypeDefinition["parameters"];
-  commandTemplate: string;
-  partitionId?: string;
-}): Promise<StepTypeDefinition> {
-  const data = await fetchJson<{ stepType: StepTypeDefinition }>("/api/step-types", {
-    method: "POST",
-    body: JSON.stringify(stepType),
-  });
-  return data.stepType;
-}
-
-export async function deleteStepType(id: string): Promise<void> {
-  await fetchJson(`/api/step-types/${id}`, { method: "DELETE" });
-}
-
-export async function exportStepType(id: string): Promise<unknown> {
-  return fetchJson(`/api/step-types/${id}/export`);
-}
-
-export async function importStepType(data: unknown): Promise<StepTypeDefinition> {
-  const result = await fetchJson<{ stepType: StepTypeDefinition }>("/api/step-types/import", {
-    method: "POST",
-    body: JSON.stringify(data),
-  });
-  return result.stepType;
 }

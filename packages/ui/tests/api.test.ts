@@ -1,24 +1,20 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
-  listOperations,
-  getOperation,
-  createOperation,
-  deleteOperation,
+  listArtifacts,
+  getArtifact,
+  createArtifact,
+  deleteArtifact,
   listPartitions,
   getPartition,
   createPartition,
   listDeployments,
   getDeployment,
-  triggerDeployment,
+  createDeployment,
   getRecentDebrief,
   getHealth,
   listEnvironments,
   getSettings,
   updateSettings,
-  listOrders,
-  getOrder,
-  createOrder,
-  executeOrder,
 } from "../src/api";
 
 // ---------------------------------------------------------------------------
@@ -65,52 +61,52 @@ afterEach(() => {
 });
 
 // ---------------------------------------------------------------------------
-// Successful fetch — Operations
+// Successful fetch — Artifacts
 // ---------------------------------------------------------------------------
 
-describe("API client — operations", () => {
-  it("listOperations fetches and unwraps the operations array", async () => {
-    const ops = [{ id: "op-1", name: "web-app" }];
-    mockFetchResponse({ operations: ops });
+describe("API client — artifacts", () => {
+  it("listArtifacts fetches and unwraps the artifacts array", async () => {
+    const arts = [{ id: "art-1", name: "web-app" }];
+    mockFetchResponse({ artifacts: arts });
 
-    const result = await listOperations();
-    expect(result).toEqual(ops);
+    const result = await listArtifacts();
+    expect(result).toEqual(arts);
     expect(fetchMock).toHaveBeenCalledWith(
-      "/api/operations",
+      "/api/artifacts",
       expect.objectContaining({ headers: expect.objectContaining({ "Content-Type": "application/json" }) }),
     );
   });
 
-  it("getOperation fetches a single operation with environments", async () => {
-    const data = { operation: { id: "op-1" }, environments: [{ id: "env-1" }] };
+  it("getArtifact fetches a single artifact with versions", async () => {
+    const data = { artifact: { id: "art-1" }, versions: [{ id: "v-1" }] };
     mockFetchResponse(data);
 
-    const result = await getOperation("op-1");
+    const result = await getArtifact("art-1");
     expect(result).toEqual(data);
     expect(fetchMock).toHaveBeenCalledWith(
-      "/api/operations/op-1",
+      "/api/artifacts/art-1",
       expect.anything(),
     );
   });
 
-  it("createOperation sends POST with name and environmentIds", async () => {
-    mockFetchResponse({ operation: { id: "op-new", name: "new-app" } });
+  it("createArtifact sends POST with name and type", async () => {
+    mockFetchResponse({ artifact: { id: "art-new", name: "new-app" } });
 
-    const result = await createOperation("new-app", ["env-1"]);
-    expect(result).toEqual({ id: "op-new", name: "new-app" });
+    const result = await createArtifact({ name: "new-app", type: "docker" });
+    expect(result).toEqual({ id: "art-new", name: "new-app" });
 
     const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toBe("/api/operations");
+    expect(url).toBe("/api/artifacts");
     expect(init.method).toBe("POST");
-    expect(JSON.parse(init.body)).toEqual({ name: "new-app", environmentIds: ["env-1"] });
+    expect(JSON.parse(init.body)).toEqual({ name: "new-app", type: "docker" });
   });
 
-  it("deleteOperation sends DELETE", async () => {
+  it("deleteArtifact sends DELETE", async () => {
     mockFetchResponse({});
 
-    await deleteOperation("op-1");
+    await deleteArtifact("art-1");
     const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toBe("/api/operations/op-1");
+    expect(url).toBe("/api/artifacts/art-1");
     expect(init.method).toBe("DELETE");
   });
 });
@@ -168,9 +164,19 @@ describe("API client — deployments", () => {
   it("listDeployments filters by partitionId", async () => {
     mockFetchResponse({ deployments: [] });
 
-    await listDeployments("p-1");
+    await listDeployments({ partitionId: "p-1" });
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/deployments?partitionId=p-1",
+      expect.anything(),
+    );
+  });
+
+  it("listDeployments filters by artifactId", async () => {
+    mockFetchResponse({ deployments: [] });
+
+    await listDeployments({ artifactId: "art-1" });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/deployments?artifactId=art-1",
       expect.anything(),
     );
   });
@@ -183,20 +189,20 @@ describe("API client — deployments", () => {
     expect(result).toEqual(data);
   });
 
-  it("triggerDeployment sends POST with trigger params", async () => {
-    const trigger = {
-      orderId: "ord-1",
-      partitionId: "p-1",
+  it("createDeployment sends POST with deployment params", async () => {
+    const params = {
+      artifactId: "art-1",
       environmentId: "env-1",
-      triggeredBy: "user" as const,
+      partitionId: "p-1",
+      version: "2.0.0",
     };
-    mockFetchResponse({ deployment: { id: "d-new" }, debrief: [] });
+    mockFetchResponse({ deployment: { id: "d-new" } });
 
-    await triggerDeployment(trigger);
+    await createDeployment(params);
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe("/api/deployments");
     expect(init.method).toBe("POST");
-    expect(JSON.parse(init.body)).toEqual(trigger);
+    expect(JSON.parse(init.body)).toEqual(params);
   });
 });
 
@@ -277,60 +283,6 @@ describe("API client — settings", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Successful fetch — Orders
-// ---------------------------------------------------------------------------
-
-describe("API client — orders", () => {
-  it("listOrders fetches without filters", async () => {
-    mockFetchResponse({ orders: [{ id: "ord-1" }] });
-
-    const result = await listOrders();
-    expect(result).toEqual([{ id: "ord-1" }]);
-    expect(fetchMock).toHaveBeenCalledWith("/api/orders", expect.anything());
-  });
-
-  it("listOrders appends filter params", async () => {
-    mockFetchResponse({ orders: [] });
-
-    await listOrders({ operationId: "op-1", partitionId: "p-1" });
-    const url = fetchMock.mock.calls[0][0] as string;
-    expect(url).toContain("operationId=op-1");
-    expect(url).toContain("partitionId=p-1");
-  });
-
-  it("getOrder fetches order with deployments", async () => {
-    const data = { order: { id: "ord-1" }, deployments: [] };
-    mockFetchResponse(data);
-
-    const result = await getOrder("ord-1");
-    expect(result).toEqual(data);
-  });
-
-  it("createOrder sends POST with order params", async () => {
-    mockFetchResponse({ order: { id: "ord-new" } });
-
-    const params = {
-      operationId: "op-1",
-      partitionId: "p-1",
-      environmentId: "env-1",
-      version: "2.0.0",
-    };
-    await createOrder(params);
-    const [, init] = fetchMock.mock.calls[0];
-    expect(JSON.parse(init.body)).toEqual(params);
-  });
-
-  it("executeOrder sends POST to execute endpoint", async () => {
-    mockFetchResponse({ deployment: { id: "d-1" }, debrief: [] });
-
-    await executeOrder("ord-1");
-    const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toBe("/api/orders/ord-1/execute");
-    expect(init.method).toBe("POST");
-  });
-});
-
-// ---------------------------------------------------------------------------
 // Network error handling
 // ---------------------------------------------------------------------------
 
@@ -338,7 +290,7 @@ describe("API client — network errors", () => {
   it("propagates network errors (fetch rejects)", async () => {
     mockNetworkError("Failed to fetch");
 
-    await expect(listOperations()).rejects.toThrow("Failed to fetch");
+    await expect(listArtifacts()).rejects.toThrow("Failed to fetch");
   });
 
   it("propagates TypeError for DNS resolution failures", async () => {
@@ -368,7 +320,7 @@ describe("API client — HTTP error status codes", () => {
   it("throws with status code when response body has no error field", async () => {
     mockFetchError({}, 500);
 
-    await expect(listOperations()).rejects.toThrow("Request failed: 500");
+    await expect(listArtifacts()).rejects.toThrow("Request failed: 500");
   });
 
   it("throws for 401 Unauthorized", async () => {
@@ -384,9 +336,9 @@ describe("API client — HTTP error status codes", () => {
   });
 
   it("throws for 422 Unprocessable Entity", async () => {
-    mockFetchError({ error: "Invalid operation name" }, 422);
+    mockFetchError({ error: "Invalid artifact name" }, 422);
 
-    await expect(createOperation("", [])).rejects.toThrow("Invalid operation name");
+    await expect(createArtifact({ name: "", type: "" })).rejects.toThrow("Invalid artifact name");
   });
 
   it("throws for 503 Service Unavailable", async () => {
@@ -402,16 +354,12 @@ describe("API client — HTTP error status codes", () => {
 
 describe("API client — malformed JSON", () => {
   it("throws when successful response has invalid JSON body", async () => {
-    // fetchJson calls res.json() on success path too — if the body isn't valid JSON,
-    // the promise from res.json() rejects and the error propagates
     mockMalformedJson(200);
 
-    await expect(listOperations()).rejects.toThrow();
+    await expect(listArtifacts()).rejects.toThrow();
   });
 
   it("falls back to generic error when error response body is not valid JSON", async () => {
-    // When an error response (non-ok) has a body that can't be parsed as JSON,
-    // fetchJson catches the JSON parse error and falls back to status code
     fetchMock.mockResolvedValueOnce({
       ok: false,
       status: 502,
@@ -428,19 +376,17 @@ describe("API client — malformed JSON", () => {
 
 describe("API client — request headers", () => {
   it("always sends Content-Type: application/json", async () => {
-    mockFetchResponse({ operations: [] });
+    mockFetchResponse({ artifacts: [] });
 
-    await listOperations();
+    await listArtifacts();
     const [, init] = fetchMock.mock.calls[0];
     expect(init.headers["Content-Type"]).toBe("application/json");
   });
 
   it("preserves custom headers from RequestInit", async () => {
-    // This tests the internal fetchJson behavior — since all public methods go
-    // through fetchJson, we verify one method passes the right shape
-    mockFetchResponse({ operations: [] });
+    mockFetchResponse({ artifacts: [] });
 
-    await listOperations();
+    await listArtifacts();
     const [, init] = fetchMock.mock.calls[0];
     expect(init.headers).toBeDefined();
   });

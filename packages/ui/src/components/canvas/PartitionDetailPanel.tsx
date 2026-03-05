@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
-import { getPartition, getPartitionHistory, listDeployments, listEnvironments, listOrders, getRecentDebrief } from "../../api.js";
-import type { Partition, Deployment, Environment, Order, DebriefEntry } from "../../types.js";
-import type { OperationHistory } from "../../api.js";
+import { getPartition, listDeployments, listEnvironments, getRecentDebrief } from "../../api.js";
+import type { Partition, Deployment, Environment, DebriefEntry } from "../../types.js";
 import { useCanvas } from "../../context/CanvasContext.js";
 import SectionHeader from "../SectionHeader.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
@@ -15,10 +14,8 @@ export default function PartitionDetailPanel({ partitionId, title }: Props) {
   const { pushPanel } = useCanvas();
 
   const [partition, setPartition] = useState<Partition | null>(null);
-  const [history, setHistory] = useState<OperationHistory | null>(null);
   const [deployments, setDeployments] = useState<Deployment[]>([]);
   const [environments, setEnvironments] = useState<Environment[]>([]);
-  const [orders, setOrders] = useState<Order[]>([]);
   const [debriefEntries, setDebriefEntries] = useState<DebriefEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"overview" | "variables" | "history">("overview");
@@ -26,17 +23,13 @@ export default function PartitionDetailPanel({ partitionId, title }: Props) {
   useEffect(() => {
     Promise.all([
       getPartition(partitionId),
-      getPartitionHistory(partitionId).catch(() => null),
-      listDeployments(partitionId),
+      listDeployments({ partitionId }),
       listEnvironments(),
-      listOrders({ partitionId }).catch(() => []),
       getRecentDebrief({ partitionId, limit: 10 }).catch(() => []),
-    ]).then(([p, h, d, e, o, db]) => {
+    ]).then(([p, d, e, db]) => {
       setPartition(p);
-      setHistory(h);
       setDeployments(d);
       setEnvironments(e);
-      setOrders(o);
       setDebriefEntries(db);
       setLoading(false);
     }).catch(() => setLoading(false));
@@ -49,6 +42,10 @@ export default function PartitionDetailPanel({ partitionId, title }: Props) {
   const sortedDeploys = [...deployments].sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
   );
+  const succeededCount = deployments.filter((d) => d.status === "succeeded").length;
+  const successRate = deployments.length > 0
+    ? `${Math.round((succeededCount / deployments.length) * 100)}%`
+    : "\u2014";
 
   return (
     <CanvasPanelHost title={title}>
@@ -94,19 +91,11 @@ export default function PartitionDetailPanel({ partitionId, title }: Props) {
                 <span className="v2-stat-label">Variables</span>
               </div>
               <div className="v2-stat-col">
-                <span className="v2-stat-value">{orders.length}</span>
-                <span className="v2-stat-label">Pending Orders</span>
-              </div>
-              <div className="v2-stat-col">
-                <span className="v2-stat-value">
-                  {history?.overview.totalDeployments ?? deployments.length}
-                </span>
+                <span className="v2-stat-value">{deployments.length}</span>
                 <span className="v2-stat-label">Deployments</span>
               </div>
               <div className="v2-stat-col">
-                <span className="v2-stat-value">
-                  {history?.overview.successRate ?? "\u2014"}
-                </span>
+                <span className="v2-stat-value">{successRate}</span>
                 <span className="v2-stat-label">Success Rate</span>
               </div>
             </div>
@@ -129,73 +118,38 @@ export default function PartitionDetailPanel({ partitionId, title }: Props) {
         {activeTab === "overview" && (
           <div className="v2-detail-columns">
             <div className="v2-detail-main">
-              {/* Scoped Orders */}
-              <SectionHeader color="#f59e0b" shape="square" label="Pending Orders" subtitle={`for ${partition.name}`} />
+              {/* Recent deployments */}
+              <SectionHeader color="#34d399" shape="circle" label="Recent Deployments" subtitle={`for ${partition.name}`} />
               <div className="v2-scoped-list">
-                {orders.length > 0 ? orders.map((order) => (
-                  <div
-                    key={order.id}
-                    className="v2-order-row"
-                    onClick={() => pushPanel({
-                      type: "order-detail",
-                      title: `Order ${order.id.slice(0, 8)}`,
-                      params: { id: order.id },
-                    })}
-                    style={{
-                      borderColor: "rgba(245,158,11,0.15)",
-                      background: "rgba(245,158,11,0.04)",
-                    }}
-                  >
-                    <div className="v2-order-info">
-                      <div className="v2-order-title">
-                        <span className="v2-order-op-name">{order.operationName}</span>
-                        <span className="v2-order-version">v{order.version}</span>
+                {sortedDeploys.slice(0, 10).map((d) => {
+                  const envName = environments.find((e) => e.id === d.environmentId)?.name ?? d.environmentId;
+                  return (
+                    <div
+                      key={d.id}
+                      className="v2-deploy-row"
+                      onClick={() => pushPanel({
+                        type: "deployment-detail",
+                        title: `Deployment ${d.version}`,
+                        params: { id: d.id },
+                      })}
+                    >
+                      <div className={`v2-deploy-dot v2-deploy-${d.status}`} />
+                      <div className="v2-deploy-info">
+                        <span className="v2-deploy-version">{d.version}</span>
+                        <span className="v2-deploy-env">{envName}</span>
                       </div>
-                      <div className="v2-order-target">
-                        {order.environmentName} &middot; {new Date(order.createdAt).toLocaleString()}
+                      <span className="v2-deploy-time">
+                        {new Date(d.createdAt).toLocaleString()}
+                      </span>
+                      <div className={`v2-deploy-status-pill v2-pill-${d.status}`}>
+                        {d.status}
                       </div>
                     </div>
-                    <div className="v2-order-status-pill"><span>QUEUED</span></div>
-                  </div>
-                )) : (
-                  <div className="v2-empty-hint">No pending Orders</div>
+                  );
+                })}
+                {sortedDeploys.length === 0 && (
+                  <div className="v2-empty-hint">No deployments for this partition</div>
                 )}
-              </div>
-
-              {/* Recent deployments */}
-              <div style={{ marginTop: 24 }}>
-                <SectionHeader color="#34d399" shape="circle" label="Recent Deployments" />
-                <div className="v2-scoped-list">
-                  {sortedDeploys.slice(0, 10).map((d) => {
-                    const envName = environments.find((e) => e.id === d.environmentId)?.name ?? d.environmentId;
-                    return (
-                      <div
-                        key={d.id}
-                        className="v2-deploy-row"
-                        onClick={() => pushPanel({
-                          type: "deployment-detail",
-                          title: `Deployment ${d.version}`,
-                          params: { id: d.id },
-                        })}
-                      >
-                        <div className={`v2-deploy-dot v2-deploy-${d.status}`} />
-                        <div className="v2-deploy-info">
-                          <span className="v2-deploy-version">{d.version}</span>
-                          <span className="v2-deploy-env">{envName}</span>
-                        </div>
-                        <span className="v2-deploy-time">
-                          {new Date(d.createdAt).toLocaleString()}
-                        </span>
-                        <div className={`v2-deploy-status-pill v2-pill-${d.status}`}>
-                          {d.status}
-                        </div>
-                      </div>
-                    );
-                  })}
-                  {sortedDeploys.length === 0 && (
-                    <div className="v2-empty-hint">No deployments for this partition</div>
-                  )}
-                </div>
               </div>
             </div>
 

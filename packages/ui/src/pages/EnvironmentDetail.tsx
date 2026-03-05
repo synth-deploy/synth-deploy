@@ -4,9 +4,9 @@ import {
   getEnvironment,
   updateEnvironment,
   deleteEnvironment,
-  listOperations,
+  listDeployments,
 } from "../api.js";
-import type { Environment, Operation } from "../types.js";
+import type { Environment, Deployment } from "../types.js";
 import VariableEditor from "../components/VariableEditor.js";
 import InlineEdit from "../components/InlineEdit.js";
 import ConfirmDialog from "../components/ConfirmDialog.js";
@@ -15,17 +15,17 @@ export default function EnvironmentDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [env, setEnv] = useState<Environment | null>(null);
-  const [linkedOperations, setLinkedOperations] = useState<Operation[]>([]);
+  const [deployments, setDeployments] = useState<Deployment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   useEffect(() => {
     if (!id) return;
-    Promise.all([getEnvironment(id), listOperations()])
-      .then(([environment, operations]) => {
+    Promise.all([getEnvironment(id), listDeployments()])
+      .then(([environment, allDeployments]) => {
         setEnv(environment);
-        setLinkedOperations(operations.filter((p) => p.environmentIds.includes(id)));
+        setDeployments(allDeployments.filter((d) => d.environmentId === id));
         setLoading(false);
       })
       .catch((e) => {
@@ -61,6 +61,8 @@ export default function EnvironmentDetail() {
   if (error && !env) return <div className="error-msg">{error}</div>;
   if (!env) return <div className="error-msg">Environment not found</div>;
 
+  const hasDeployments = deployments.length > 0;
+
   return (
     <div>
       <div className="breadcrumb">
@@ -86,34 +88,34 @@ export default function EnvironmentDetail() {
 
       <div className="card">
         <div className="card-header">
-          <h3>Linked Operations</h3>
+          <h3>Deployment History</h3>
         </div>
-        {linkedOperations.length > 0 ? (
+        {hasDeployments ? (
           <div className="table-wrapper">
             <table>
               <thead>
                 <tr>
-                  <th>Operation</th>
-                  <th>ID</th>
+                  <th>Version</th>
+                  <th>Status</th>
+                  <th>Time</th>
                 </tr>
               </thead>
               <tbody>
-                {linkedOperations.map((p) => (
-                  <tr key={p.id}>
-                    <td>
-                      <Link to={`/operations/${p.id}`} style={{ fontWeight: 500 }}>
-                        {p.name}
-                      </Link>
-                    </td>
-                    <td className="mono text-muted">{p.id.slice(0, 8)}</td>
-                  </tr>
-                ))}
+                {deployments
+                  .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                  .map((d) => (
+                    <tr key={d.id}>
+                      <td className="mono">{d.version}</td>
+                      <td><span className={`badge badge-${d.status}`}>{d.status}</span></td>
+                      <td className="text-muted">{new Date(d.createdAt).toLocaleString()}</td>
+                    </tr>
+                  ))}
               </tbody>
             </table>
           </div>
         ) : (
           <p className="text-muted" style={{ padding: "12px 0", fontSize: 13 }}>
-            Not linked to any operations.
+            No deployments for this environment.
           </p>
         )}
       </div>
@@ -122,13 +124,13 @@ export default function EnvironmentDetail() {
         <ConfirmDialog
           title="Delete Environment"
           message={
-            linkedOperations.length > 0
-              ? `This environment is linked to ${linkedOperations.length} operation(s). Unlink it from all operations before deleting.`
+            hasDeployments
+              ? `This environment has ${deployments.length} deployment(s). Are you sure you want to delete "${env.name}"?`
               : `Are you sure you want to delete "${env.name}"? This cannot be undone.`
           }
-          onConfirm={linkedOperations.length > 0 ? () => setShowDeleteConfirm(false) : handleDelete}
+          onConfirm={handleDelete}
           onCancel={() => setShowDeleteConfirm(false)}
-          confirmLabel={linkedOperations.length > 0 ? "OK" : "Delete"}
+          confirmLabel="Delete"
         />
       )}
     </div>

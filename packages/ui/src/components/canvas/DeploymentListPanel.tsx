@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { listDeployments, listEnvironments, listOperations, listPartitions } from "../../api.js";
-import type { Deployment, Environment, Operation, Partition } from "../../types.js";
+import { listDeployments, listEnvironments, listArtifacts, listPartitions } from "../../api.js";
+import type { Deployment, Environment, Artifact, Partition } from "../../types.js";
 import { useCanvas } from "../../context/CanvasContext.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
 
@@ -15,24 +15,24 @@ export default function DeploymentListPanel({ title, filterStatus, filterPartiti
 
   const [deployments, setDeployments] = useState<Deployment[]>([]);
   const [environments, setEnvironments] = useState<Environment[]>([]);
-  const [operations, setOperations] = useState<Operation[]>([]);
+  const [artifacts, setArtifacts] = useState<Artifact[]>([]);
   const [partitions, setPartitions] = useState<Partition[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     Promise.all([
-      listDeployments(filterPartitionId),
+      listDeployments(filterPartitionId ? { partitionId: filterPartitionId } : undefined),
       listEnvironments(),
-      listOperations(),
+      listArtifacts(),
       listPartitions(),
-    ]).then(([d, e, p, t]) => {
+    ]).then(([d, e, a, t]) => {
       let filtered = d;
       if (filterStatus) {
         filtered = filtered.filter((dep) => dep.status === filterStatus);
       }
       setDeployments(filtered);
       setEnvironments(e);
-      setOperations(p);
+      setArtifacts(a);
       setPartitions(t);
       setLoading(false);
     }).catch(() => setLoading(false));
@@ -81,10 +81,12 @@ export default function DeploymentListPanel({ title, filterStatus, filterPartiti
                 <span className={`badge badge-${d.status}`}>{d.status}</span>
                 <span className="canvas-activity-version">{d.version}</span>
                 <span className="canvas-activity-operation">
-                  {operations.find((p) => p.id === d.operationId)?.name ?? d.operationId}
+                  {artifacts.find((a) => a.id === d.artifactId)?.name ?? d.artifactId.slice(0, 8)}
                 </span>
                 <span className="canvas-activity-partition">
-                  {partitions.find((t) => t.id === d.partitionId)?.name ?? d.partitionId}
+                  {d.partitionId
+                    ? (partitions.find((t) => t.id === d.partitionId)?.name ?? d.partitionId.slice(0, 8))
+                    : "\u2014"}
                 </span>
                 <span className="canvas-activity-env">
                   {environments.find((e) => e.id === d.environmentId)?.name ?? d.environmentId}

@@ -23,16 +23,16 @@ describe("EntityTag", () => {
     expect(tag).toHaveStyle({ color: ENTITY_COLORS.Partition.color });
   });
 
-  it("applies correct styling for Operation type", () => {
-    render(<EntityTag type="Operation" label="deploy-v3" />);
+  it("applies correct styling for Artifact type", () => {
+    render(<EntityTag type="Artifact" label="web-app" />);
     const tag = document.querySelector(".entity-tag") as HTMLElement;
-    expect(tag).toHaveStyle({ color: ENTITY_COLORS.Operation.color });
+    expect(tag).toHaveStyle({ color: ENTITY_COLORS.Artifact.color });
   });
 
-  it("applies correct styling for Order type", () => {
-    render(<EntityTag type="Order" label="order-42" />);
+  it("applies correct styling for Deployment type", () => {
+    render(<EntityTag type="Deployment" label="deploy-v3" />);
     const tag = document.querySelector(".entity-tag") as HTMLElement;
-    expect(tag).toHaveStyle({ color: ENTITY_COLORS.Order.color });
+    expect(tag).toHaveStyle({ color: ENTITY_COLORS.Deployment.color });
   });
 
   it("applies correct styling for Debrief type", () => {
@@ -48,7 +48,7 @@ describe("EntityTag", () => {
   });
 
   it("renders each entity type with its unique styling", () => {
-    const types: EntityType[] = ["Envoy", "Partition", "Operation", "Order", "Debrief", "Command"];
+    const types: EntityType[] = ["Envoy", "Partition", "Artifact", "Deployment", "Debrief", "Command"];
     for (const type of types) {
       const { unmount } = render(<EntityTag type={type} label="x" />);
       const tag = document.querySelector(".entity-tag") as HTMLElement;

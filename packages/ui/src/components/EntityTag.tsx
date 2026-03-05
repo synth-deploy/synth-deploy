@@ -1,10 +1,10 @@
-export type EntityType = "Envoy" | "Partition" | "Operation" | "Order" | "Debrief" | "Command";
+export type EntityType = "Envoy" | "Partition" | "Artifact" | "Deployment" | "Debrief" | "Command";
 
 const ENTITY_COLORS: Record<EntityType, { color: string; bg: string; border: string }> = {
   Envoy: { color: "#34d399", bg: "rgba(52, 211, 153, 0.1)", border: "rgba(52, 211, 153, 0.2)" },
   Partition: { color: "#818cf8", bg: "rgba(129, 140, 248, 0.1)", border: "rgba(129, 140, 248, 0.2)" },
-  Operation: { color: "#6b7280", bg: "rgba(107, 114, 128, 0.1)", border: "rgba(107, 114, 128, 0.2)" },
-  Order: { color: "#f59e0b", bg: "rgba(245, 158, 11, 0.1)", border: "rgba(245, 158, 11, 0.2)" },
+  Artifact: { color: "#6b7280", bg: "rgba(107, 114, 128, 0.1)", border: "rgba(107, 114, 128, 0.2)" },
+  Deployment: { color: "#f59e0b", bg: "rgba(245, 158, 11, 0.1)", border: "rgba(245, 158, 11, 0.2)" },
   Debrief: { color: "#e879f9", bg: "rgba(232, 121, 249, 0.1)", border: "rgba(232, 121, 249, 0.2)" },
   Command: { color: "#63e1be", bg: "rgba(99, 225, 190, 0.1)", border: "rgba(99, 225, 190, 0.2)" },
 };

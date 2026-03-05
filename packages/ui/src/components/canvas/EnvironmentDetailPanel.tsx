@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { getEnvironment, listDeployments, listOperations } from "../../api.js";
-import type { Environment, Deployment, Operation } from "../../types.js";
+import { getEnvironment, listDeployments, listArtifacts } from "../../api.js";
+import type { Environment, Deployment, Artifact } from "../../types.js";
 import { useCanvas } from "../../context/CanvasContext.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
 
@@ -14,18 +14,18 @@ export default function EnvironmentDetailPanel({ environmentId, title }: Props) 
 
   const [environment, setEnvironment] = useState<Environment | null>(null);
   const [deployments, setDeployments] = useState<Deployment[]>([]);
-  const [operations, setOperations] = useState<Operation[]>([]);
+  const [artifacts, setArtifacts] = useState<Artifact[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     Promise.all([
       getEnvironment(environmentId),
       listDeployments(),
-      listOperations(),
-    ]).then(([e, d, p]) => {
+      listArtifacts(),
+    ]).then(([e, d, a]) => {
       setEnvironment(e);
       setDeployments(d.filter((dep) => dep.environmentId === environmentId));
-      setOperations(p);
+      setArtifacts(a);
       setLoading(false);
     }).catch(() => setLoading(false));
   }, [environmentId]);
@@ -92,7 +92,7 @@ export default function EnvironmentDetailPanel({ environmentId, title }: Props) 
                   <span className={`badge badge-${d.status}`}>{d.status}</span>
                   <span className="canvas-activity-version">{d.version}</span>
                   <span className="canvas-activity-operation">
-                    {operations.find((p) => p.id === d.operationId)?.name ?? d.operationId}
+                    {artifacts.find((a) => a.id === d.artifactId)?.name ?? d.artifactId.slice(0, 8)}
                   </span>
                   <span className="canvas-activity-time">
                     {new Date(d.createdAt).toLocaleString()}

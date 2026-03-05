@@ -1,80 +1,6 @@
 // Frontend type definitions mirroring @deploystack/core types.
 // Dates come as ISO strings from the API.
 
-export type DeploymentStepType = "pre-deploy" | "post-deploy" | "verification";
-
-export interface DeploymentStep {
-  id: string;
-  name: string;
-  type: DeploymentStepType;
-  command: string;
-  order: number;
-  stepTypeId?: string;
-  stepTypeConfig?: Record<string, unknown>;
-}
-
-export type StepTypeParameterType = "string" | "number" | "boolean" | "select";
-
-export interface StepTypeParameter {
-  name: string;
-  label: string;
-  type: StepTypeParameterType;
-  required: boolean;
-  default?: string | number | boolean;
-  options?: string[];
-  description?: string;
-  validation?: {
-    pattern?: string;
-    min?: number;
-    max?: number;
-  };
-}
-
-export type StepTypeSource = "predefined" | "custom" | "community";
-
-export type StepTypeCategory =
-  | "General"
-  | "File & Artifact"
-  | "Service"
-  | "Verification"
-  | "Database"
-  | "Container"
-  | "Networking & Traffic"
-  | "Cloud & Infrastructure"
-  | "Configuration & Secrets"
-  | "Monitoring & Observability"
-  | "Rollback & Recovery"
-  | "Git & Versioning"
-  | "Security & Compliance"
-  | "Package & Artifact Management"
-  | "SSH & Remote Execution";
-
-export interface StepTypeDefinition {
-  id: string;
-  name: string;
-  category: StepTypeCategory;
-  description: string;
-  parameters: StepTypeParameter[];
-  commandTemplate: string;
-  source: StepTypeSource;
-  partitionId?: string;
-}
-
-export interface DeployConfig {
-  healthCheckEnabled: boolean;
-  healthCheckRetries: number;
-  timeoutMs: number;
-  verificationStrategy: "basic" | "full" | "none";
-}
-
-export interface Operation {
-  id: string;
-  name: string;
-  environmentIds: string[];
-  steps: DeploymentStep[];
-  deployConfig: DeployConfig;
-}
-
 export type ConflictPolicy = "strict" | "permissive";
 
 export type TaskModelTask =
@@ -131,16 +57,22 @@ export interface CapabilityVerificationResult {
   explanation: string;
 }
 
+export type LlmEntityExposure = "names" | "none";
+
 export interface AgentSettings {
   defaultHealthCheckRetries: number;
   defaultTimeoutMs: number;
   conflictPolicy: ConflictPolicy;
   defaultVerificationStrategy: "basic" | "full" | "none";
+  llmEntityExposure?: LlmEntityExposure;
   taskModels?: TaskModelConfig;
 }
 
 export interface DeploymentDefaults {
-  defaultDeployConfig: DeployConfig;
+  defaultHealthCheckEnabled: boolean;
+  defaultHealthCheckRetries: number;
+  defaultTimeoutMs: number;
+  defaultVerificationStrategy: "basic" | "full" | "none";
 }
 
 export interface EnvoyEndpointConfig {
@@ -205,6 +137,8 @@ export interface CommandInfo {
   startedAt: string;
 }
 
+// --- Partition ---
+
 export interface Partition {
   id: string;
   name: string;
@@ -212,38 +146,105 @@ export interface Partition {
   createdAt: string;
 }
 
+// --- Environment ---
+
 export interface Environment {
   id: string;
   name: string;
   variables: Record<string, string>;
 }
 
+// --- Artifact ---
+
+export interface ArtifactAnalysis {
+  summary: string;
+  dependencies: string[];
+  configurationExpectations: Record<string, string>;
+  deploymentIntent?: string;
+  confidence: number;
+}
+
+export interface ArtifactAnnotation {
+  field: string;
+  correction: string;
+  annotatedBy: string;
+  annotatedAt: string;
+}
+
+export interface LearningHistoryEntry {
+  timestamp: string;
+  event: string;
+  details: string;
+}
+
+export interface Artifact {
+  id: string;
+  name: string;
+  type: string;
+  analysis: ArtifactAnalysis;
+  annotations: ArtifactAnnotation[];
+  learningHistory: LearningHistoryEntry[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ArtifactVersion {
+  id: string;
+  artifactId: string;
+  version: string;
+  source: string;
+  metadata: Record<string, string>;
+  createdAt: string;
+}
+
+// --- Security Boundaries ---
+
+export type SecurityBoundaryType =
+  | "filesystem"
+  | "service"
+  | "network"
+  | "credential"
+  | "execution";
+
+export interface SecurityBoundary {
+  id: string;
+  envoyId: string;
+  boundaryType: SecurityBoundaryType;
+  config: Record<string, unknown>;
+}
+
+// --- Deployment ---
+
 export type DeploymentStatus = "pending" | "planning" | "approved" | "running" | "succeeded" | "failed" | "rolled_back";
 
 export interface DeploymentPlan {
-  steps: Array<{
-    description: string;
-    action: string;
-    target: string;
-    reversible: boolean;
-    rollbackAction?: string;
-  }>;
+  steps: PlannedStep[];
   reasoning: string;
   diffFromCurrent?: string;
   diffFromPreviousPlan?: string;
 }
 
+export interface PlannedStep {
+  description: string;
+  action: string;
+  target: string;
+  reversible: boolean;
+  rollbackAction?: string;
+}
+
 export interface ExecutionRecord {
   startedAt: string;
   completedAt?: string;
-  steps: Array<{
-    description: string;
-    status: "completed" | "failed" | "rolled_back";
-    startedAt: string;
-    completedAt?: string;
-    output?: string;
-    error?: string;
-  }>;
+  steps: ExecutedStep[];
+}
+
+export interface ExecutedStep {
+  description: string;
+  status: "completed" | "failed" | "rolled_back";
+  startedAt: string;
+  completedAt?: string;
+  output?: string;
+  error?: string;
 }
 
 export interface Deployment {
@@ -266,6 +267,8 @@ export interface Deployment {
   completedAt: string | null;
   failureReason: string | null;
 }
+
+// --- Debrief ---
 
 export type DecisionType =
   | "pipeline-plan"
@@ -302,19 +305,7 @@ export interface DebriefEntry {
   actor?: string;
 }
 
-export interface Order {
-  id: string;
-  operationId: string;
-  operationName: string;
-  partitionId: string;
-  environmentId: string;
-  environmentName: string;
-  version: string;
-  steps: DeploymentStep[];
-  deployConfig: DeployConfig;
-  variables: Record<string, string>;
-  createdAt: string;
-}
+// --- Postmortem ---
 
 export interface PostmortemReport {
   summary: string;
@@ -340,26 +331,5 @@ export interface PostmortemReport {
     suggestedFix: string;
   } | null;
   outcome: string;
-  formatted: string;
-}
-
-export interface OperationHistory {
-  overview: {
-    totalDeployments: number;
-    succeeded: number;
-    failed: number;
-    successRate: string;
-    environments: string[];
-    versions: string[];
-  };
-  deployments: Array<{
-    deploymentId: string;
-    version: string;
-    environment: string;
-    outcome: "succeeded" | "failed";
-    durationMs: number | null;
-    conflictCount: number;
-    keyDecision: string;
-  }>;
   formatted: string;
 }

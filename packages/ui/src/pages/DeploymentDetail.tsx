@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router";
-import { getDeployment, getPostmortem, listEnvironments, listPartitions } from "../api.js";
-import type { Deployment, DebriefEntry, PostmortemReport, Environment, Partition } from "../types.js";
+import { getDeployment, getPostmortem, listEnvironments, listPartitions, listArtifacts } from "../api.js";
+import type { Deployment, DebriefEntry, PostmortemReport, Environment, Partition, Artifact } from "../types.js";
 import StatusBadge from "../components/StatusBadge.js";
 import EnvBadge from "../components/EnvBadge.js";
 import DebriefTimeline from "../components/DebriefTimeline.js";
@@ -14,6 +14,7 @@ export default function DeploymentDetail() {
   const [postmortem, setPostmortem] = useState<PostmortemReport | null>(null);
   const [environments, setEnvironments] = useState<Environment[]>([]);
   const [partitions, setPartitions] = useState<Partition[]>([]);
+  const [artifacts, setArtifacts] = useState<Artifact[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -21,15 +22,17 @@ export default function DeploymentDetail() {
     if (!id) return;
     Promise.all([
       getDeployment(id),
-      getPostmortem(id),
+      getPostmortem(id).catch(() => null),
       listEnvironments(),
       listPartitions(),
-    ]).then(([data, pm, envs, ts]) => {
+      listArtifacts(),
+    ]).then(([data, pm, envs, ts, arts]) => {
       setDeployment(data.deployment);
       setDebrief(data.debrief);
       setPostmortem(pm);
       setEnvironments(envs);
       setPartitions(ts);
+      setArtifacts(arts);
       setLoading(false);
     }).catch((e) => {
       setError(e.message);
@@ -42,7 +45,8 @@ export default function DeploymentDetail() {
   if (!deployment) return <div className="error-msg">Deployment not found</div>;
 
   const env = environments.find((e) => e.id === deployment.environmentId);
-  const partition = partitions.find((t) => t.id === deployment.partitionId);
+  const partition = deployment.partitionId ? partitions.find((t) => t.id === deployment.partitionId) : null;
+  const artifact = artifacts.find((a) => a.id === deployment.artifactId);
 
   const durationMs = deployment.completedAt
     ? new Date(deployment.completedAt).getTime() - new Date(deployment.createdAt).getTime()
@@ -64,29 +68,23 @@ export default function DeploymentDetail() {
           </div>
           <div className="deploy-header-meta">
             <div className="meta-item">
-              <span className="meta-label">Operation</span>
-              <Link to={`/operations/${deployment.operationId}`} className="meta-value">
-                {deployment.operationId.slice(0, 8)}
-              </Link>
+              <span className="meta-label">Artifact</span>
+              <span className="meta-value">{artifact?.name ?? deployment.artifactId.slice(0, 8)}</span>
             </div>
-            <div className="meta-item">
-              <span className="meta-label">Partition</span>
-              {partition ? (
+            {partition && (
+              <div className="meta-item">
+                <span className="meta-label">Partition</span>
                 <Link to={`/partitions/${partition.id}`} className="meta-value">{partition.name}</Link>
-              ) : (
-                <span className="meta-value">{deployment.partitionId.slice(0, 8)}</span>
-              )}
-            </div>
+              </div>
+            )}
             <div className="meta-item">
               <span className="meta-label">Environment</span>
               {env ? <EnvBadge name={env.name} /> : <span className="meta-value">{deployment.environmentId.slice(0, 8)}</span>}
             </div>
-            {deployment.orderId && (
+            {deployment.approvedBy && (
               <div className="meta-item">
-                <span className="meta-label">Order</span>
-                <Link to={`/orders/${deployment.orderId}`} className="meta-value mono">
-                  {deployment.orderId.slice(0, 8)}
-                </Link>
+                <span className="meta-label">Approved By</span>
+                <span className="meta-value">{deployment.approvedBy}</span>
               </div>
             )}
             <div className="meta-item">
