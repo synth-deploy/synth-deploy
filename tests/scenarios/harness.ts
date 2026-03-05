@@ -13,9 +13,9 @@ import type { FastifyInstance } from "fastify";
 import {
   DecisionDebrief,
   PartitionStore,
-  OperationStore,
+  ArtifactStore,
   EnvironmentStore,
-  OrderStore,
+  TelemetryStore,
   SettingsStore,
 } from "@deploystack/core";
 
@@ -24,12 +24,12 @@ import {
   InMemoryDeploymentStore,
 } from "@deploystack/command/agent/command-agent.js";
 import { registerDeploymentRoutes } from "@deploystack/command/api/deployments.js";
-import { registerOperationRoutes } from "@deploystack/command/api/operations.js";
 import { registerPartitionRoutes } from "@deploystack/command/api/partitions.js";
 import { registerEnvironmentRoutes } from "@deploystack/command/api/environments.js";
-import { registerOrderRoutes } from "@deploystack/command/api/orders.js";
 import { registerSettingsRoutes } from "@deploystack/command/api/settings.js";
 import { registerEnvoyReportRoutes } from "@deploystack/command/api/envoy-reports.js";
+import { registerArtifactRoutes } from "@deploystack/command/api/artifacts.js";
+import { registerHealthRoutes } from "@deploystack/command/api/health.js";
 
 import { EnvoyAgent } from "@deploystack/envoy/agent/envoy-agent.js";
 import { LocalStateStore } from "@deploystack/envoy/state/local-state.js";
@@ -44,10 +44,10 @@ export interface CommandContext {
   baseUrl: string;
   diary: DecisionDebrief;
   partitions: PartitionStore;
-  operations: OperationStore;
+  artifactStore: ArtifactStore;
   environments: EnvironmentStore;
   deployments: InMemoryDeploymentStore;
-  orders: OrderStore;
+  telemetry: TelemetryStore;
   settings: SettingsStore;
   agent: CommandAgent;
 }
@@ -88,6 +88,25 @@ function getPort(app: FastifyInstance): number {
   const addr = app.server.address();
   if (addr && typeof addr === "object") return addr.port;
   throw new Error("Server not listening on a port");
+}
+
+/** Mock auth — inject a test user with all permissions on every request. */
+function addMockAuth(app: FastifyInstance) {
+  app.addHook("onRequest", async (request) => {
+    (request as any).user = {
+      id: "test-user-id" as any,
+      email: "test@example.com",
+      name: "Test User",
+      permissions: [
+        "deployment.create", "deployment.approve", "deployment.reject", "deployment.view", "deployment.rollback",
+        "artifact.create", "artifact.update", "artifact.annotate", "artifact.delete", "artifact.view",
+        "environment.create", "environment.update", "environment.delete", "environment.view",
+        "partition.create", "partition.update", "partition.delete", "partition.view",
+        "envoy.register", "envoy.configure", "envoy.view",
+        "settings.manage", "users.manage", "roles.manage",
+      ],
+    };
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -139,53 +158,30 @@ export async function createEnvironment(
   return (res.body.environment as Record<string, unknown>).id as string;
 }
 
-export async function createOperation(
+export async function createArtifact(
   baseUrl: string,
   name: string,
 ): Promise<string> {
-  const res = await http(baseUrl, "POST", "/api/operations", { name });
-  if (res.status !== 201) throw new Error(`Failed to create operation: ${JSON.stringify(res.body)}`);
-  return (res.body.operation as Record<string, unknown>).id as string;
-}
-
-export async function linkEnvironment(
-  baseUrl: string,
-  operationId: string,
-  environmentId: string,
-): Promise<void> {
-  const res = await http(baseUrl, "POST", `/api/operations/${operationId}/environments`, { environmentId });
-  if (res.status !== 200 && res.status !== 201) {
-    throw new Error(`Failed to link environment: ${JSON.stringify(res.body)}`);
-  }
+  const res = await http(baseUrl, "POST", "/api/artifacts", { name, type: "generic" });
+  if (res.status !== 201) throw new Error(`Failed to create artifact: ${JSON.stringify(res.body)}`);
+  return (res.body.artifact as Record<string, unknown>).id as string;
 }
 
 export async function deploy(
   baseUrl: string,
   params: {
-    operationId: string;
+    artifactId: string;
     partitionId: string;
     environmentId: string;
     version: string;
     variables?: Record<string, string>;
   },
 ): Promise<{ status: number; body: Record<string, unknown> }> {
-  // Create an order first
-  const orderRes = await http(baseUrl, "POST", "/api/orders", {
-    operationId: params.operationId,
-    partitionId: params.partitionId,
-    environmentId: params.environmentId,
-    version: params.version,
-  });
-  if (orderRes.status !== 201) {
-    throw new Error(`Failed to create order: ${JSON.stringify(orderRes.body)}`);
-  }
-  const orderId = (orderRes.body.order as Record<string, unknown>).id as string;
-
   return http(baseUrl, "POST", "/api/deployments", {
-    orderId,
-    partitionId: params.partitionId,
+    artifactId: params.artifactId,
     environmentId: params.environmentId,
-    triggeredBy: "user",
+    partitionId: params.partitionId,
+    version: params.version,
     ...(params.variables ? { variables: params.variables } : {}),
   });
 }
@@ -197,30 +193,30 @@ export async function deploy(
 export async function createCommandServer(): Promise<CommandContext> {
   const diary = new DecisionDebrief();
   const partitions = new PartitionStore();
-  const operations = new OperationStore();
+  const artifactStore = new ArtifactStore();
   const environments = new EnvironmentStore();
   const deployments = new InMemoryDeploymentStore();
-  const orders = new OrderStore();
+  const telemetry = new TelemetryStore();
   const settings = new SettingsStore();
-  // No settingsReader on CommandAgent — uses local execution path for tests
-  const agent = new CommandAgent(diary, deployments, orders, undefined, {
+  const agent = new CommandAgent(diary, deployments, artifactStore, environments, partitions, undefined, {
     healthCheckBackoffMs: 1,
     executionDelayMs: 1,
   });
 
   const app = Fastify({ logger: false });
-  registerDeploymentRoutes(app, agent, partitions, environments, deployments, diary, operations, orders, settings);
-  registerOperationRoutes(app, operations, environments);
-  registerPartitionRoutes(app, partitions, deployments, diary, orders);
-  registerEnvironmentRoutes(app, environments, operations);
-  registerOrderRoutes(app, orders, agent, partitions, environments, operations, deployments, diary, settings);
-  registerSettingsRoutes(app, settings);
-  registerEnvoyReportRoutes(app, diary);
+  addMockAuth(app);
+  registerDeploymentRoutes(app, deployments, diary, partitions, environments, artifactStore, settings, telemetry);
+  registerPartitionRoutes(app, partitions, deployments, diary, telemetry);
+  registerEnvironmentRoutes(app, environments, deployments, telemetry);
+  registerSettingsRoutes(app, settings, telemetry);
+  registerEnvoyReportRoutes(app, diary, deployments);
+  registerArtifactRoutes(app, artifactStore, telemetry);
+  registerHealthRoutes(app);
 
   await app.listen({ port: 0, host: "127.0.0.1" });
   const baseUrl = `http://127.0.0.1:${getPort(app)}`;
 
-  return { app, baseUrl, diary, partitions, operations, environments, deployments, orders, settings, agent };
+  return { app, baseUrl, diary, partitions, artifactStore, environments, deployments, telemetry, settings, agent };
 }
 
 export async function createEnvoyServer_(): Promise<EnvoyContext> {
