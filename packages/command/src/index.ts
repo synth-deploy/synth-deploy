@@ -16,15 +16,14 @@ import { createMcpServer } from "./mcp/server.js";
 import { registerDeploymentRoutes } from "./api/deployments.js";
 import { registerHealthRoutes } from "./api/health.js";
 import { registerEnvoyReportRoutes } from "./api/envoy-reports.js";
-import { registerOperationRoutes } from "./api/operations.js";
+import { registerArtifactRoutes } from "./api/artifacts.js";
+import { registerSecurityBoundaryRoutes } from "./api/security-boundaries.js";
 import { registerPartitionRoutes } from "./api/partitions.js";
 import { registerEnvironmentRoutes } from "./api/environments.js";
 import { registerAgentRoutes } from "./api/agent.js";
 import { registerSettingsRoutes } from "./api/settings.js";
-import { registerOrderRoutes } from "./api/orders.js";
 import { registerEnvoyRoutes } from "./api/envoys.js";
 import { EnvoyRegistry } from "./agent/envoy-registry.js";
-import { registerStepTypeRoutes } from "./api/step-types.js";
 import { registerAuthMiddleware } from "./middleware/auth.js";
 import { startStaleDeploymentScanner } from "./agent/stale-deployment-detector.js";
 import { startRetentionScanner } from "./agent/debrief-retention.js";
@@ -533,15 +532,14 @@ registerHealthRoutes(app, {
   mcpServers: settings.get().mcpServers,
   llmClient: llm,
 });
-registerDeploymentRoutes(app, agent, partitions, environments, deployments, debrief, operations, orders, settings);
+registerDeploymentRoutes(app, deployments, debrief, partitions, environments, artifactStore, settings);
 registerEnvoyReportRoutes(app, debrief, deployments);
-registerOperationRoutes(app, operations, environments, stepTypeStore);
-registerStepTypeRoutes(app, stepTypeStore);
+registerArtifactRoutes(app, artifactStore);
+registerSecurityBoundaryRoutes(app, securityBoundaryStore);
 registerPartitionRoutes(app, partitions, deployments, debrief, orders);
 registerEnvironmentRoutes(app, environments, operations);
 registerAgentRoutes(app, agent, partitions, environments, operations, deployments, debrief, settings, llm);
 registerSettingsRoutes(app, settings);
-registerOrderRoutes(app, orders, agent, partitions, environments, operations, deployments, debrief, settings);
 registerEnvoyRoutes(app, settings, envoyRegistry);
 
 // --- Serve UI static files if built ---

@@ -22,92 +22,33 @@ export const SetVariablesSchema = z.object({
     }),
 });
 
-// --- Operations ---
+// --- Artifacts ---
 
-export const CreateOperationSchema = z.object({
+export const CreateArtifactSchema = z.object({
   name: z.string().min(1),
-  environmentIds: z.array(z.string()).optional(),
+  type: z.string().min(1),
+  source: z.string().optional(),
+  metadata: z.record(z.string()).optional(),
 });
 
-export const UpdateOperationSchema = z.object({
-  name: z.string().min(1).optional(),
+export const AddAnnotationSchema = z.object({
+  field: z.string().min(1),
+  correction: z.string().min(1),
 });
 
-export const AddEnvironmentSchema = z.object({
-  environmentId: z.string().min(1),
+export const AddArtifactVersionSchema = z.object({
+  version: z.string().min(1),
+  source: z.string(),
+  metadata: z.record(z.string()).optional(),
 });
 
-const DeploymentStepTypeSchema = z.enum(["pre-deploy", "post-deploy", "verification"]);
+// --- Security Boundaries ---
 
-export const CreateStepSchema = z.object({
-  name: z.string().min(1),
-  type: DeploymentStepTypeSchema,
-  command: z.string().min(1).optional(),
-  order: z.number().int().nonnegative().optional(),
-  stepTypeId: z.string().optional(),
-  stepTypeConfig: z.record(z.unknown()).optional(),
-}).refine(
-  (data) => data.command || data.stepTypeId,
-  { message: "Either command or stepTypeId must be provided" },
-);
-
-export const UpdateStepSchema = z.object({
-  name: z.string().min(1).optional(),
-  type: DeploymentStepTypeSchema.optional(),
-  command: z.string().min(1).optional(),
-  order: z.number().int().nonnegative().optional(),
-  stepTypeId: z.string().optional(),
-  stepTypeConfig: z.record(z.unknown()).optional(),
-});
-
-// --- Step Types ---
-
-const StepTypeParameterSchema = z.object({
-  name: z.string().min(1),
-  label: z.string().min(1),
-  type: z.enum(["string", "number", "boolean", "select"]),
-  required: z.boolean(),
-  default: z.union([z.string(), z.number(), z.boolean()]).optional(),
-  options: z.array(z.string()).optional(),
-  description: z.string().optional(),
-  validation: z.object({
-    pattern: z.string().optional(),
-    min: z.number().optional(),
-    max: z.number().optional(),
-  }).optional(),
-});
-
-export const CreateStepTypeSchema = z.object({
-  name: z.string().min(1),
-  category: z.enum(["General", "File & Artifact", "Service", "Verification", "Database", "Container", "Networking & Traffic", "Cloud & Infrastructure", "Configuration & Secrets", "Monitoring & Observability", "Rollback & Recovery", "Git & Versioning", "Security & Compliance", "Package & Artifact Management", "SSH & Remote Execution"]),
-  description: z.string().min(1),
-  parameters: z.array(StepTypeParameterSchema),
-  commandTemplate: z.string().min(1),
-  partitionId: z.string().optional(),
-});
-
-export const ImportStepTypeSchema = z.object({
-  formatVersion: z.literal(1),
-  stepType: z.object({
-    id: z.string().min(1),
-    name: z.string().min(1),
-    category: z.enum(["General", "File & Artifact", "Service", "Verification", "Database", "Container", "Networking & Traffic", "Cloud & Infrastructure", "Configuration & Secrets", "Monitoring & Observability", "Rollback & Recovery", "Git & Versioning", "Security & Compliance", "Package & Artifact Management", "SSH & Remote Execution"]),
-    description: z.string().min(1),
-    parameters: z.array(StepTypeParameterSchema),
-    commandTemplate: z.string().min(1),
-  }),
-  partitionId: z.string().optional(),
-});
-
-export const ReorderStepsSchema = z.object({
-  stepIds: z.array(z.string().min(1)).min(1),
-});
-
-export const UpdateDeployConfigSchema = z.object({
-  healthCheckEnabled: z.boolean().optional(),
-  healthCheckRetries: z.number().int().nonnegative().optional(),
-  timeoutMs: z.number().int().positive().optional(),
-  verificationStrategy: z.enum(["basic", "full", "none"]).optional(),
+export const SetSecurityBoundariesSchema = z.object({
+  boundaries: z.array(z.object({
+    boundaryType: z.enum(["filesystem", "service", "network", "credential", "execution"]),
+    config: z.record(z.unknown()),
+  })),
 });
 
 // --- Environments ---
@@ -249,9 +190,6 @@ export const UpdateSettingsSchema = z.object({
     llmOverride: LlmProviderConfigSchema.partial().optional(),
     taskModels: TaskModelConfigSchema.optional(),
   }).optional(),
-  deploymentDefaults: z.object({
-    defaultDeployConfig: UpdateDeployConfigSchema.optional(),
-  }).optional(),
   envoy: z.object({
     url: z.string().url().refine(isSsrfSafeUrl, {
       message: "URL must not point to private/internal IP ranges (SSRF prevention)",
@@ -273,24 +211,27 @@ export const UpdateSettingsSchema = z.object({
   llm: LlmProviderConfigSchema.optional(),
 });
 
-// --- Orders ---
-
-export const CreateOrderSchema = z.object({
-  operationId: z.string().min(1),
-  partitionId: z.string().min(1),
-  environmentId: z.string().optional(),
-  version: z.string().min(1),
-});
-
-export const OrderListQuerySchema = z.object({
-  operationId: z.string().optional(),
-  partitionId: z.string().optional(),
-});
-
 // --- Deployments ---
+
+export const CreateDeploymentSchema = z.object({
+  artifactId: z.string().min(1),
+  environmentId: z.string().min(1),
+  partitionId: z.string().optional(),
+  version: z.string().optional(),
+});
+
+export const ApproveDeploymentSchema = z.object({
+  approvedBy: z.string().min(1),
+  modifications: z.string().optional(),
+});
+
+export const RejectDeploymentSchema = z.object({
+  reason: z.string().min(1),
+});
 
 export const DeploymentListQuerySchema = z.object({
   partitionId: z.string().optional(),
+  artifactId: z.string().optional(),
 });
 
 export const DebriefQuerySchema = z.object({

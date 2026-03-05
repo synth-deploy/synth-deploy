@@ -1,0 +1,166 @@
+import type { FastifyInstance } from "fastify";
+import type { IArtifactStore } from "@deploystack/core";
+import {
+  CreateArtifactSchema,
+  AddAnnotationSchema,
+  AddArtifactVersionSchema,
+} from "./schemas.js";
+
+export function registerArtifactRoutes(
+  app: FastifyInstance,
+  artifactStore: IArtifactStore,
+): void {
+  // List all artifacts
+  app.get("/api/artifacts", async () => {
+    return { artifacts: artifactStore.list() };
+  });
+
+  // Create artifact
+  app.post("/api/artifacts", async (request, reply) => {
+    const parsed = CreateArtifactSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: parsed.error.message });
+    }
+
+    const artifact = artifactStore.create({
+      name: parsed.data.name,
+      type: parsed.data.type,
+      analysis: {
+        summary: "",
+        dependencies: [],
+        configurationExpectations: {},
+        deploymentIntent: "",
+        confidence: 0,
+      },
+      annotations: [],
+      learningHistory: [],
+    });
+
+    return reply.status(201).send({ artifact });
+  });
+
+  // Get artifact by ID (with analysis, annotations, learning history)
+  app.get<{ Params: { id: string } }>("/api/artifacts/:id", async (request, reply) => {
+    const artifact = artifactStore.get(request.params.id);
+    if (!artifact) {
+      return reply.status(404).send({ error: "Artifact not found" });
+    }
+
+    const versions = artifactStore.getVersions(artifact.id);
+
+    return { artifact, versions };
+  });
+
+  // Update artifact metadata
+  app.put<{ Params: { id: string } }>("/api/artifacts/:id", async (request, reply) => {
+    const artifact = artifactStore.get(request.params.id);
+    if (!artifact) {
+      return reply.status(404).send({ error: "Artifact not found" });
+    }
+
+    try {
+      const updated = artifactStore.update(request.params.id, request.body as Record<string, unknown>);
+      return { artifact: updated };
+    } catch (err) {
+      if (err instanceof Error && err.message.toLowerCase().includes("not found")) {
+        return reply.status(404).send({ error: "Artifact not found" });
+      }
+      app.log.error(err, "Failed to update artifact");
+      return reply.status(500).send({ error: "Internal server error" });
+    }
+  });
+
+  // Delete artifact
+  app.delete<{ Params: { id: string } }>("/api/artifacts/:id", async (request, reply) => {
+    const artifact = artifactStore.get(request.params.id);
+    if (!artifact) {
+      return reply.status(404).send({ error: "Artifact not found" });
+    }
+
+    artifactStore.delete(request.params.id);
+    return reply.status(204).send();
+  });
+
+  // Add user annotation/correction
+  app.post<{ Params: { id: string } }>(
+    "/api/artifacts/:id/annotations",
+    async (request, reply) => {
+      const artifact = artifactStore.get(request.params.id);
+      if (!artifact) {
+        return reply.status(404).send({ error: "Artifact not found" });
+      }
+
+      const parsed = AddAnnotationSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.status(400).send({ error: parsed.error.message });
+      }
+
+      const updated = artifactStore.addAnnotation(request.params.id, {
+        field: parsed.data.field,
+        correction: parsed.data.correction,
+        annotatedBy: "operator",
+        annotatedAt: new Date(),
+      });
+
+      return reply.status(201).send({ artifact: updated });
+    },
+  );
+
+  // List versions for artifact
+  app.get<{ Params: { id: string } }>(
+    "/api/artifacts/:id/versions",
+    async (request, reply) => {
+      const artifact = artifactStore.get(request.params.id);
+      if (!artifact) {
+        return reply.status(404).send({ error: "Artifact not found" });
+      }
+
+      const versions = artifactStore.getVersions(request.params.id);
+      return { versions };
+    },
+  );
+
+  // Add new version
+  app.post<{ Params: { id: string } }>(
+    "/api/artifacts/:id/versions",
+    async (request, reply) => {
+      const artifact = artifactStore.get(request.params.id);
+      if (!artifact) {
+        return reply.status(404).send({ error: "Artifact not found" });
+      }
+
+      const parsed = AddArtifactVersionSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.status(400).send({ error: parsed.error.message });
+      }
+
+      const version = artifactStore.addVersion({
+        artifactId: request.params.id,
+        version: parsed.data.version,
+        source: parsed.data.source,
+        metadata: parsed.data.metadata ?? {},
+      });
+
+      return reply.status(201).send({ version });
+    },
+  );
+
+  // Get specific version
+  app.get<{ Params: { id: string; versionId: string } }>(
+    "/api/artifacts/:id/versions/:versionId",
+    async (request, reply) => {
+      const artifact = artifactStore.get(request.params.id);
+      if (!artifact) {
+        return reply.status(404).send({ error: "Artifact not found" });
+      }
+
+      const versions = artifactStore.getVersions(request.params.id);
+      const version = versions.find((v) => v.id === request.params.versionId);
+      if (!version) {
+        return reply.status(404).send({ error: "Version not found" });
+      }
+
+      return { version };
+    },
+  );
+}

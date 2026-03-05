@@ -1,72 +1,76 @@
 import type { FastifyInstance } from "fastify";
-import { DeploymentTriggerSchema, generatePostmortem } from "@deploystack/core";
-import type { IPartitionStore, IEnvironmentStore, IOperationStore, IOrderStore, ISettingsStore, DebriefWriter, DebriefReader } from "@deploystack/core";
-import type { CommandAgent, DeploymentStore } from "../agent/command-agent.js";
-import { DeploymentListQuerySchema, DebriefQuerySchema } from "./schemas.js";
+import { generatePostmortem } from "@deploystack/core";
+import type { IPartitionStore, IEnvironmentStore, IArtifactStore, ISettingsStore, IDeploymentStore, DebriefWriter, DebriefReader } from "@deploystack/core";
+import {
+  CreateDeploymentSchema,
+  ApproveDeploymentSchema,
+  RejectDeploymentSchema,
+  DeploymentListQuerySchema,
+  DebriefQuerySchema,
+} from "./schemas.js";
 
 /**
  * REST API routes for deployments. These are the traditional (non-MCP) interface
- * for the web UI and integrations. They call the same CommandAgent as MCP tools.
+ * for the web UI and integrations.
  */
 export function registerDeploymentRoutes(
   app: FastifyInstance,
-  agent: CommandAgent,
+  deployments: IDeploymentStore,
+  debrief: DebriefWriter & DebriefReader,
   partitions: IPartitionStore,
   environments: IEnvironmentStore,
-  deployments: DeploymentStore,
-  debrief: DebriefWriter & DebriefReader,
-  operations: IOperationStore,
-  orders: IOrderStore,
+  artifactStore: IArtifactStore,
   settings: ISettingsStore,
 ): void {
-  // Trigger a deployment from an Order
+  // Create a deployment (plan phase)
   app.post("/api/deployments", async (request, reply) => {
-    const parsed = DeploymentTriggerSchema.safeParse(request.body);
+    const parsed = CreateDeploymentSchema.safeParse(request.body);
     if (!parsed.success) {
-      return reply.status(400).send({
-        error: "Invalid deployment trigger",
-        details: parsed.error.issues,
-      });
+      return reply.status(400).send({ error: parsed.error.message });
     }
 
-    const trigger = parsed.data;
+    const { artifactId, environmentId, partitionId, version } = parsed.data;
 
-    // Look up the Order — this is now the authoritative source
-    const order = orders.get(trigger.orderId);
-    if (!order) {
-      return reply.status(404).send({ error: `Order not found: ${trigger.orderId}` });
+    // Validate artifact exists
+    const artifact = artifactStore.get(artifactId);
+    if (!artifact) {
+      return reply.status(404).send({ error: `Artifact not found: ${artifactId}` });
     }
 
-    const partition = partitions.get(trigger.partitionId);
-    if (!partition) {
-      return reply.status(404).send({ error: `Partition not found: ${trigger.partitionId}` });
+    // Validate environment exists
+    const environment = environments.get(environmentId);
+    if (!environment) {
+      return reply.status(404).send({ error: `Environment not found: ${environmentId}` });
     }
 
-    // Resolve environment from the Order
-    const envEnabled = settings.get().environmentsEnabled;
-    let environment: { id: string; name: string; variables: Record<string, string> };
-    if (envEnabled && trigger.environmentId) {
-      const env = environments.get(trigger.environmentId);
-      if (!env) {
-        return reply.status(404).send({ error: `Environment not found: ${trigger.environmentId}` });
+    // Validate partition if provided
+    if (partitionId) {
+      const partition = partitions.get(partitionId);
+      if (!partition) {
+        return reply.status(404).send({ error: `Partition not found: ${partitionId}` });
       }
-      environment = env;
-    } else {
-      environment = { id: "", name: "(none)", variables: {} };
     }
 
-    // Look up the Operation (needed by the agent for pipeline context)
-    const operation = operations.get(order.operationId);
-    if (!operation) {
-      return reply.status(404).send({ error: `Operation not found: ${order.operationId}` });
-    }
+    // Resolve variables
+    const envVars = environment.variables;
+    const partitionVars = partitionId ? (partitions.get(partitionId)?.variables ?? {}) : {};
+    const resolved: Record<string, string> = { ...partitionVars, ...envVars };
 
-    const deployment = await agent.triggerDeployment(trigger, partition, environment, operation, order);
+    const deployment = {
+      id: crypto.randomUUID(),
+      artifactId,
+      environmentId,
+      partitionId,
+      version: version ?? "",
+      status: "pending" as const,
+      variables: resolved,
+      debriefEntryIds: [] as string[],
+      createdAt: new Date(),
+    };
 
-    return reply.status(201).send({
-      deployment,
-      debrief: debrief.getByDeployment(deployment.id),
-    });
+    deployments.save(deployment);
+
+    return reply.status(201).send({ deployment });
   });
 
   // Get deployment by ID
@@ -82,22 +86,82 @@ export function registerDeploymentRoutes(
     };
   });
 
-  // List deployments (optionally filtered by partition)
+  // List deployments (optionally filtered by partition or artifact)
   app.get("/api/deployments", async (request) => {
     const qParsed = DeploymentListQuerySchema.safeParse(request.query);
-    const { partitionId } = qParsed.success ? qParsed.data : {};
-    const list = partitionId ? deployments.getByPartition(partitionId) : deployments.list();
+    const { partitionId, artifactId } = qParsed.success ? qParsed.data : {};
+
+    let list;
+    if (partitionId) {
+      list = deployments.getByPartition(partitionId);
+    } else if (artifactId) {
+      list = deployments.getByArtifact(artifactId);
+    } else {
+      list = deployments.list();
+    }
 
     return { deployments: list };
   });
 
-  // List deployments filtered by operation
-  app.get("/api/operations/:operationId/deployments", async (request) => {
-    const { operationId } = request.params as { operationId: string };
-    const all = deployments.list();
-    const filtered = all.filter((d) => d.operationId === operationId);
-    return { deployments: filtered };
-  });
+  // Approve a deployment plan
+  app.post<{ Params: { id: string } }>(
+    "/api/deployments/:id/approve",
+    async (request, reply) => {
+      const deployment = deployments.get(request.params.id);
+      if (!deployment) {
+        return reply.status(404).send({ error: "Deployment not found" });
+      }
+
+      const parsed = ApproveDeploymentSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.status(400).send({ error: parsed.error.message });
+      }
+
+      // Record approval in debrief
+      debrief.record({
+        partitionId: deployment.partitionId ?? null,
+        deploymentId: deployment.id,
+        agent: "command",
+        decisionType: "system",
+        decision: `Deployment approved by ${parsed.data.approvedBy}`,
+        reasoning: parsed.data.modifications
+          ? `Approved with modifications: ${parsed.data.modifications}`
+          : "Approved without modifications",
+        context: { approvedBy: parsed.data.approvedBy },
+      });
+
+      return { deployment, approved: true };
+    },
+  );
+
+  // Reject a deployment plan
+  app.post<{ Params: { id: string } }>(
+    "/api/deployments/:id/reject",
+    async (request, reply) => {
+      const deployment = deployments.get(request.params.id);
+      if (!deployment) {
+        return reply.status(404).send({ error: "Deployment not found" });
+      }
+
+      const parsed = RejectDeploymentSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.status(400).send({ error: parsed.error.message });
+      }
+
+      // Record rejection in debrief
+      debrief.record({
+        partitionId: deployment.partitionId ?? null,
+        deploymentId: deployment.id,
+        agent: "command",
+        decisionType: "system",
+        decision: "Deployment plan rejected",
+        reasoning: parsed.data.reason,
+        context: { reason: parsed.data.reason },
+      });
+
+      return { deployment, rejected: true };
+    },
+  );
 
   // Get deployment postmortem
   app.get<{ Params: { id: string } }>(
