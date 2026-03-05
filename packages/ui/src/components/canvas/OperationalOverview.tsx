@@ -4,13 +4,16 @@ import {
   listPartitions,
   listEnvironments,
   listArtifacts,
+  listEnvoys,
+  createArtifact,
+  createDeployment,
   getRecentDebrief,
   getDeploymentContext,
   getHealth,
   getSystemState,
 } from "../../api.js";
 import type { Deployment, Partition, Environment, Artifact, DebriefEntry } from "../../types.js";
-import type { DeploymentContext, SystemState, AlertSignal } from "../../api.js";
+import type { DeploymentContext, SystemState, AlertSignal, EnvoyRegistryEntry } from "../../api.js";
 import { useCanvas } from "../../context/CanvasContext.js";
 import { useSettings } from "../../context/SettingsContext.js";
 import SectionHeader from "../SectionHeader.js";
@@ -58,20 +61,330 @@ export default function OperationalOverview() {
 }
 
 // ---------------------------------------------------------------------------
-// EmptyState — placeholder until guided onboarding (#137)
+// EmptyState — guided first-deployment onboarding (#137)
 // ---------------------------------------------------------------------------
 
 function EmptyState() {
+  const { pushPanel } = useCanvas();
+  const { settings } = useSettings();
+  const environmentsEnabled = settings?.environmentsEnabled ?? true;
+
+  const [step, setStep] = useState<1 | 2 | 3>(1);
+
+  // Step 1 state
+  const [artifactName, setArtifactName] = useState("");
+  const [artifactType, setArtifactType] = useState("docker");
+  const [createdArtifact, setCreatedArtifact] = useState<Artifact | null>(null);
+  const [step1Submitting, setStep1Submitting] = useState(false);
+  const [step1Error, setStep1Error] = useState<string | null>(null);
+
+  // Step 2 state
+  const [envoys, setEnvoys] = useState<EnvoyRegistryEntry[]>([]);
+  const [connectedEnvoy, setConnectedEnvoy] = useState<EnvoyRegistryEntry | null>(null);
+
+  // Step 3 state
+  const [environments, setEnvironments] = useState<Environment[]>([]);
+  const [selectedEnvId, setSelectedEnvId] = useState("");
+  const [version, setVersion] = useState("");
+  const [step3Submitting, setStep3Submitting] = useState(false);
+  const [step3Error, setStep3Error] = useState<string | null>(null);
+  const [deploymentId, setDeploymentId] = useState<string | null>(null);
+
+  // Poll for envoy connection in step 2
+  useEffect(() => {
+    if (step !== 2) return;
+
+    const poll = () =>
+      listEnvoys()
+        .then((list) => {
+          setEnvoys(list);
+          const healthy = list.find((e) => e.health === "OK");
+          if (healthy) {
+            setConnectedEnvoy(healthy);
+            setStep(3);
+          }
+        })
+        .catch(() => {});
+
+    poll();
+    const interval = setInterval(poll, 3000);
+    return () => clearInterval(interval);
+  }, [step]);
+
+  // Load environments when reaching step 3
+  useEffect(() => {
+    if (step !== 3) return;
+    listEnvironments().then(setEnvironments).catch(() => {});
+  }, [step]);
+
+  async function handleCreateArtifact() {
+    if (!artifactName.trim()) {
+      setStep1Error("Artifact name is required");
+      return;
+    }
+    setStep1Submitting(true);
+    setStep1Error(null);
+    try {
+      const artifact = await createArtifact({ name: artifactName.trim(), type: artifactType });
+      setCreatedArtifact(artifact);
+      setStep(2);
+    } catch (e: unknown) {
+      setStep1Error(e instanceof Error ? e.message : String(e));
+    } finally {
+      setStep1Submitting(false);
+    }
+  }
+
+  async function handleDeploy() {
+    if (!createdArtifact) return;
+    if (environmentsEnabled && !selectedEnvId) {
+      setStep3Error("Select an environment");
+      return;
+    }
+    setStep3Submitting(true);
+    setStep3Error(null);
+    try {
+      const result = await createDeployment({
+        artifactId: createdArtifact.id,
+        environmentId: selectedEnvId,
+        version: version.trim() || "1.0.0",
+      });
+      setDeploymentId(result.deployment.id);
+    } catch (e: unknown) {
+      setStep3Error(e instanceof Error ? e.message : String(e));
+    } finally {
+      setStep3Submitting(false);
+    }
+  }
+
+  const stepStyle = (s: number): React.CSSProperties => ({
+    border: "1px solid var(--agent-border)",
+    borderRadius: 10,
+    padding: 20,
+    marginBottom: 12,
+    background: step > s ? "rgba(52, 211, 153, 0.04)" : step === s ? "var(--agent-card-bg)" : "rgba(107, 114, 128, 0.04)",
+    opacity: step < s ? 0.5 : 1,
+    transition: "all 0.2s",
+  });
+
+  const stepHeaderStyle: React.CSSProperties = {
+    display: "flex", alignItems: "center", gap: 10, marginBottom: 12,
+  };
+
+  const stepNumberStyle = (s: number): React.CSSProperties => ({
+    width: 28, height: 28, borderRadius: "50%",
+    display: "flex", alignItems: "center", justifyContent: "center",
+    fontSize: 13, fontWeight: 700,
+    background: step > s ? "#34d399" : step === s ? "rgba(99, 225, 190, 0.2)" : "rgba(107, 114, 128, 0.15)",
+    color: step > s ? "#0f1420" : step === s ? "#63e1be" : "#6b7280",
+  });
+
   return (
     <div className="v2-dashboard">
-      <div className="v2-empty-state" style={{ textAlign: "center", padding: "60px 20px" }}>
-        <h2 style={{ color: "var(--agent-text)", fontSize: 20, marginBottom: 12 }}>
+      <div style={{ textAlign: "center", padding: "32px 20px 24px" }}>
+        <CommandEye />
+        <h2 style={{ color: "var(--agent-text)", fontSize: 22, fontWeight: 700, marginTop: 16, marginBottom: 8 }}>
           Welcome to DeployStack
         </h2>
-        <p style={{ color: "var(--agent-text-muted)", fontSize: 14, maxWidth: 400, margin: "0 auto" }}>
-          No artifacts or envoys registered yet. Add an artifact to get started,
-          or register an envoy to begin deploying.
+        <p style={{ color: "var(--agent-text-muted)", fontSize: 14, maxWidth: 460, margin: "0 auto" }}>
+          Let&rsquo;s set up your first intelligent deployment. Three steps &mdash; then you&rsquo;re operational.
         </p>
+      </div>
+
+      {/* Step 1: Artifact */}
+      <div style={stepStyle(1)}>
+        <div style={stepHeaderStyle}>
+          <div style={stepNumberStyle(1)}>
+            {step > 1 ? "\u2713" : "1"}
+          </div>
+          <div>
+            <div style={{ fontWeight: 600, fontSize: 15, color: "var(--agent-text)" }}>
+              What are you deploying?
+            </div>
+            <div style={{ fontSize: 12, color: "var(--agent-text-muted)" }}>
+              An artifact is what you&rsquo;re deploying &mdash; a container image, package, binary, or config bundle. DeployStack will analyze it.
+            </div>
+          </div>
+        </div>
+
+        {step === 1 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10, maxWidth: 400 }}>
+            <input
+              placeholder="Artifact name (e.g. my-web-app)"
+              value={artifactName}
+              onChange={(e) => setArtifactName(e.target.value)}
+              style={{ fontSize: 13, padding: "8px 12px", borderRadius: 6, border: "1px solid var(--agent-border)", background: "var(--agent-bg)", color: "var(--agent-text)" }}
+            />
+            <select
+              value={artifactType}
+              onChange={(e) => setArtifactType(e.target.value)}
+              style={{ fontSize: 13, padding: "8px 12px", borderRadius: 6, border: "1px solid var(--agent-border)", background: "var(--agent-bg)", color: "var(--agent-text)" }}
+            >
+              <option value="docker">Docker Image</option>
+              <option value="binary">Binary / Executable</option>
+              <option value="package">Package (npm, pip, etc.)</option>
+              <option value="config">Configuration Bundle</option>
+              <option value="other">Other</option>
+            </select>
+            {step1Error && <div style={{ color: "#dc2626", fontSize: 12 }}>{step1Error}</div>}
+            <button
+              className="btn btn-primary"
+              onClick={handleCreateArtifact}
+              disabled={step1Submitting}
+              style={{ alignSelf: "flex-start" }}
+            >
+              {step1Submitting ? "Creating..." : "Create Artifact"}
+            </button>
+          </div>
+        )}
+
+        {step > 1 && createdArtifact && (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#34d399" }}>
+            <span style={{ fontWeight: 600 }}>{createdArtifact.name}</span>
+            <span style={{ color: "var(--agent-text-muted)" }}>({createdArtifact.type})</span>
+          </div>
+        )}
+      </div>
+
+      {/* Step 2: Envoy */}
+      <div style={stepStyle(2)}>
+        <div style={stepHeaderStyle}>
+          <div style={stepNumberStyle(2)}>
+            {step > 2 ? "\u2713" : "2"}
+          </div>
+          <div>
+            <div style={{ fontWeight: 600, fontSize: 15, color: "var(--agent-text)" }}>
+              Where are you deploying to?
+            </div>
+            <div style={{ fontSize: 12, color: "var(--agent-text-muted)" }}>
+              An envoy runs on your target machine. It scans the system, produces deployment plans, and executes them.
+            </div>
+          </div>
+        </div>
+
+        {step === 2 && (
+          <div style={{ maxWidth: 500 }}>
+            <div style={{
+              background: "rgba(99, 225, 190, 0.05)", border: "1px solid rgba(99, 225, 190, 0.15)",
+              borderRadius: 8, padding: 16, marginBottom: 12, fontSize: 13,
+            }}>
+              <div style={{ fontWeight: 600, color: "var(--agent-text)", marginBottom: 8 }}>
+                Register an Envoy
+              </div>
+              <div style={{ color: "var(--agent-text-muted)", lineHeight: 1.5 }}>
+                Install and start an envoy on your target machine. It will connect back to this DeployStack instance automatically.
+              </div>
+              <div style={{ marginTop: 12, fontFamily: "var(--font-mono)", fontSize: 12, color: "#63e1be", background: "rgba(0,0,0,0.3)", padding: "8px 12px", borderRadius: 6, wordBreak: "break-all" }}>
+                npx @deploystack/envoy --command-url {window.location.origin}
+              </div>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--agent-text-muted)" }}>
+              <span className="v2-envoy-spinner" style={{ width: 14, height: 14, border: "2px solid rgba(99,225,190,0.2)", borderTopColor: "#63e1be", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
+              Waiting for envoy connection...
+              {envoys.length > 0 && (
+                <span style={{ color: "#f59e0b" }}>
+                  ({envoys.length} envoy{envoys.length !== 1 ? "s" : ""} found, none healthy yet)
+                </span>
+              )}
+            </div>
+            <button
+              className="btn btn-secondary"
+              onClick={() => {
+                setConnectedEnvoy(null);
+                setStep(3);
+              }}
+              style={{ marginTop: 12, fontSize: 12 }}
+            >
+              Skip &mdash; I&rsquo;ll connect an envoy later
+            </button>
+          </div>
+        )}
+
+        {step > 2 && connectedEnvoy && (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#34d399" }}>
+            <span style={{ fontWeight: 600 }}>{connectedEnvoy.hostname ?? connectedEnvoy.id.slice(0, 8)}</span>
+            <span style={{ color: "var(--agent-text-muted)" }}>({connectedEnvoy.url})</span>
+            <span className="v2-command-status-badge" style={{ fontSize: 10 }}>OK</span>
+          </div>
+        )}
+        {step > 2 && !connectedEnvoy && (
+          <div style={{ fontSize: 13, color: "var(--agent-text-muted)", fontStyle: "italic" }}>
+            Skipped &mdash; no envoy connected
+          </div>
+        )}
+      </div>
+
+      {/* Step 3: Deploy */}
+      <div style={stepStyle(3)}>
+        <div style={stepHeaderStyle}>
+          <div style={stepNumberStyle(3)}>
+            {deploymentId ? "\u2713" : "3"}
+          </div>
+          <div>
+            <div style={{ fontWeight: 600, fontSize: 15, color: "var(--agent-text)" }}>
+              {deploymentId ? "Deployment created!" : "Ready for your first intelligent deployment"}
+            </div>
+            <div style={{ fontSize: 12, color: "var(--agent-text-muted)" }}>
+              {deploymentId
+                ? "Your first deployment is underway. View the plan, watch execution, and review the debrief."
+                : "Deploy your artifact. DeployStack will analyze it, generate a plan, and execute it."}
+            </div>
+          </div>
+        </div>
+
+        {step === 3 && !deploymentId && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10, maxWidth: 400 }}>
+            {createdArtifact && (
+              <div style={{ fontSize: 13, color: "var(--agent-text)" }}>
+                <strong>Artifact:</strong> {createdArtifact.name} ({createdArtifact.type})
+              </div>
+            )}
+
+            {environmentsEnabled && (
+              <select
+                value={selectedEnvId}
+                onChange={(e) => setSelectedEnvId(e.target.value)}
+                style={{ fontSize: 13, padding: "8px 12px", borderRadius: 6, border: "1px solid var(--agent-border)", background: "var(--agent-bg)", color: "var(--agent-text)" }}
+              >
+                <option value="">Select Environment</option>
+                {environments.map((e) => (
+                  <option key={e.id} value={e.id}>{e.name}</option>
+                ))}
+              </select>
+            )}
+
+            <input
+              placeholder="Version (e.g. 1.0.0)"
+              value={version}
+              onChange={(e) => setVersion(e.target.value)}
+              style={{ fontSize: 13, padding: "8px 12px", borderRadius: 6, border: "1px solid var(--agent-border)", background: "var(--agent-bg)", color: "var(--agent-text)" }}
+            />
+
+            {step3Error && <div style={{ color: "#dc2626", fontSize: 12 }}>{step3Error}</div>}
+            <button
+              className="btn btn-primary"
+              onClick={handleDeploy}
+              disabled={step3Submitting || !createdArtifact}
+              style={{ alignSelf: "flex-start" }}
+            >
+              {step3Submitting ? "Deploying..." : "Deploy"}
+            </button>
+          </div>
+        )}
+
+        {deploymentId && (
+          <button
+            className="btn btn-primary"
+            onClick={() => pushPanel({
+              type: "deployment-detail",
+              title: "First Deployment",
+              params: { id: deploymentId },
+            })}
+            style={{ marginTop: 8 }}
+          >
+            View Deployment
+          </button>
+        )}
       </div>
     </div>
   );
