@@ -395,6 +395,43 @@ export async function getDeploymentContext(): Promise<DeploymentContext> {
   return fetchJson("/api/agent/context");
 }
 
+// --- Pre-flight Context ---
+
+export interface PreFlightContext {
+  targetHealth: {
+    status: "healthy" | "degraded" | "unreachable";
+    details: string;
+  };
+  recentHistory: {
+    lastDeployment?: {
+      status: string;
+      completedAt: string;
+      version: string;
+    };
+    recentFailures: number;
+    deploymentsToday: number;
+  };
+  crossSystemContext: string[];
+  recommendation: {
+    action: "proceed" | "wait" | "investigate";
+    reasoning: string;
+    confidence: number;
+  };
+  llmAvailable: boolean;
+}
+
+export async function getPreFlightContext(params: {
+  artifactId: string;
+  environmentId: string;
+  partitionId?: string;
+  version?: string;
+}): Promise<PreFlightContext> {
+  return fetchJson("/api/agent/pre-flight", {
+    method: "POST",
+    body: JSON.stringify(params),
+  });
+}
+
 // --- Canvas Query ---
 
 export interface CanvasQueryResult {

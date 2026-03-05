@@ -1,7 +1,8 @@
 import type { FastifyInstance } from "fastify";
-import type { IPartitionStore, IEnvironmentStore, IArtifactStore, ISettingsStore, DebriefWriter, DebriefReader, Artifact, Partition, Environment } from "@deploystack/core";
+import type { IPartitionStore, IEnvironmentStore, IArtifactStore, ISettingsStore, ITelemetryStore, DebriefWriter, DebriefReader, Artifact, Partition, Environment } from "@deploystack/core";
 import type { LlmClient } from "@deploystack/core";
 import type { CommandAgent, DeploymentStore } from "../agent/command-agent.js";
+import type { EnvoyRegistry } from "../agent/envoy-registry.js";
 import { QueryRequestSchema } from "./schemas.js";
 
 // ---------------------------------------------------------------------------
@@ -279,6 +280,8 @@ export function registerAgentRoutes(
   debrief: DebriefWriter & DebriefReader,
   settings: ISettingsStore,
   llm?: LlmClient,
+  envoyRegistry?: EnvoyRegistry,
+  telemetry?: ITelemetryStore,
 ): void {
   /**
    * Get deployment context — signals, trends, health, drift.
@@ -434,6 +437,285 @@ export function registerAgentRoutes(
     // Fallback: navigate to overview
     return { action: "navigate" as const, view: "overview", params: {}, title: "Overview" };
   });
+
+  // -------------------------------------------------------------------------
+  // Pre-flight context — deterministic data + LLM editorialization
+  // -------------------------------------------------------------------------
+
+  app.post("/api/agent/pre-flight", async (request, reply) => {
+    const body = request.body as {
+      artifactId?: string;
+      environmentId?: string;
+      partitionId?: string;
+      version?: string;
+    };
+
+    if (!body.artifactId || !body.environmentId) {
+      return reply.status(400).send({ error: "artifactId and environmentId are required" });
+    }
+
+    const { artifactId, environmentId, partitionId, version } = body;
+
+    // --- 1. Target health: check envoy health for the environment ---
+    let targetHealth: PreFlightContext["targetHealth"] = {
+      status: "healthy",
+      details: "No envoys registered — health check not applicable",
+    };
+
+    if (envoyRegistry) {
+      const envName = environments.get(environmentId)?.name ?? environmentId;
+      const envoy = envoyRegistry.findForEnvironment(envName);
+      if (envoy) {
+        const healthStatus = envoy.lastHealthStatus;
+        if (healthStatus === "healthy") {
+          targetHealth = { status: "healthy", details: `Envoy "${envoy.name}" is healthy` };
+        } else if (healthStatus === "degraded") {
+          targetHealth = { status: "degraded", details: `Envoy "${envoy.name}" is degraded` };
+        } else if (healthStatus === "unreachable") {
+          targetHealth = { status: "unreachable", details: `Envoy "${envoy.name}" is unreachable` };
+        } else {
+          targetHealth = { status: "healthy", details: `Envoy "${envoy.name}" registered, health not yet checked` };
+        }
+      }
+    }
+
+    // --- 2. Recent history ---
+    const now = new Date();
+    const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+    const latestToEnv = deployments.findLatestByEnvironment(environmentId);
+    const deploymentsToday = deployments.countByEnvironment(environmentId, twentyFourHoursAgo);
+    const recentArtifactDeploys = deployments.findRecentByArtifact(artifactId, sevenDaysAgo);
+    const recentFailures = recentArtifactDeploys.filter((d) => d.status === "failed").length;
+
+    const recentHistory: PreFlightContext["recentHistory"] = {
+      lastDeployment: latestToEnv
+        ? {
+            status: latestToEnv.status,
+            completedAt: (latestToEnv.completedAt ?? latestToEnv.createdAt).toISOString(),
+            version: latestToEnv.version,
+          }
+        : undefined,
+      recentFailures,
+      deploymentsToday,
+    };
+
+    // --- 3. Cross-system context queries ---
+    const crossSystemContext: string[] = [];
+
+    // Check if this version was rolled back anywhere
+    if (version) {
+      const rolledBack = deployments.findByArtifactVersion(artifactId, version, "rolled_back");
+      if (rolledBack.length > 0) {
+        const envNames = rolledBack.map((d) => environments.get(d.environmentId)?.name ?? d.environmentId);
+        crossSystemContext.push(
+          `This version (${version}) was rolled back from ${envNames.join(", ")} previously`,
+        );
+      }
+
+      const failed = deployments.findByArtifactVersion(artifactId, version, "failed");
+      if (failed.length > 0) {
+        const envNames = failed.map((d) => environments.get(d.environmentId)?.name ?? d.environmentId);
+        crossSystemContext.push(
+          `This version (${version}) failed deployment to ${envNames.join(", ")}`,
+        );
+      }
+    }
+
+    // Check recent failure patterns for this artifact
+    if (recentFailures > 2) {
+      crossSystemContext.push(
+        `${recentFailures} failed deployments for this artifact in the last 7 days — investigate before proceeding`,
+      );
+    }
+
+    // Check if the last deployment to this environment failed
+    if (latestToEnv && latestToEnv.status === "failed") {
+      crossSystemContext.push(
+        `The last deployment to this environment failed (${latestToEnv.failureReason ?? "unknown reason"})`,
+      );
+    }
+
+    // Check deployment volume
+    if (deploymentsToday >= 5) {
+      crossSystemContext.push(
+        `High deployment volume: ${deploymentsToday} deployments to this environment in the last 24 hours`,
+      );
+    }
+
+    // --- 4. LLM recommendation ---
+    let recommendation: PreFlightContext["recommendation"] = {
+      action: "proceed",
+      reasoning: "Agent recommendation unavailable — review the context above and decide.",
+      confidence: 0,
+    };
+    let llmAvailable = false;
+
+    if (llm && llm.isAvailable()) {
+      const artifactName = artifacts.get(artifactId)?.name ?? artifactId;
+      const envName = environments.get(environmentId)?.name ?? environmentId;
+      const partitionName = partitionId ? (partitions.get(partitionId)?.name ?? partitionId) : null;
+
+      const promptParts = [
+        `You are an intelligent deployment advisor. Analyze the following pre-flight context and provide a directional recommendation.`,
+        `\nArtifact: ${artifactName}`,
+        `Target environment: ${envName}`,
+        partitionName ? `Partition: ${partitionName}` : null,
+        version ? `Version: ${version}` : null,
+        `\nTarget health: ${targetHealth.status} — ${targetHealth.details}`,
+        `\nRecent history:`,
+        `  Deployments to this environment in last 24h: ${deploymentsToday}`,
+        `  Recent failures for this artifact (7d): ${recentFailures}`,
+        latestToEnv
+          ? `  Last deployment to this env: ${latestToEnv.status} (${latestToEnv.version}, ${formatAgo(latestToEnv.completedAt ?? latestToEnv.createdAt)})`
+          : `  No previous deployments to this environment`,
+        crossSystemContext.length > 0
+          ? `\nCross-system observations:\n${crossSystemContext.map((c) => `  - ${c}`).join("\n")}`
+          : `\nNo cross-system concerns detected.`,
+      ].filter(Boolean);
+
+      const systemPrompt = `You are a deployment advisor for DeployStack. Given pre-flight context, you MUST respond with ONLY a JSON object (no markdown, no explanation) with this schema:
+{
+  "action": "proceed" | "wait" | "investigate",
+  "reasoning": "<1-2 sentences, directional — 'I recommend proceeding' / 'I'd wait' / 'Investigate first' style>",
+  "confidence": <0-1 number>
+}
+
+Be directional: say what you recommend, not "here are some data points." Use first person. Be specific.`;
+
+      try {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 15000);
+
+        const llmResult = await llm.reason({
+          prompt: promptParts.join("\n"),
+          systemPrompt,
+          promptSummary: `Pre-flight recommendation for ${artifactName} → ${envName}`,
+          partitionId: partitionId ?? null,
+          maxTokens: 512,
+        });
+
+        clearTimeout(timer);
+
+        if (llmResult.ok) {
+          try {
+            let text = llmResult.text.trim();
+            if (text.startsWith("```")) {
+              text = text.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "");
+            }
+            const parsed = JSON.parse(text);
+            if (parsed.action && parsed.reasoning && typeof parsed.confidence === "number") {
+              recommendation = {
+                action: parsed.action,
+                reasoning: parsed.reasoning,
+                confidence: Math.max(0, Math.min(1, parsed.confidence)),
+              };
+              llmAvailable = true;
+            }
+          } catch {
+            // JSON parse failed — use deterministic fallback
+          }
+        }
+      } catch {
+        // LLM call failed — use deterministic fallback
+      }
+    }
+
+    // --- 5. Deterministic fallback recommendation if LLM was unavailable ---
+    if (!llmAvailable) {
+      if (targetHealth.status === "unreachable") {
+        recommendation = {
+          action: "investigate",
+          reasoning: "The target envoy is unreachable. Investigate infrastructure health before deploying.",
+          confidence: 0,
+        };
+      } else if (recentFailures > 2 || (latestToEnv && latestToEnv.status === "failed")) {
+        recommendation = {
+          action: "investigate",
+          reasoning: "Recent failures detected. Review the failure history before proceeding.",
+          confidence: 0,
+        };
+      } else if (targetHealth.status === "degraded") {
+        recommendation = {
+          action: "wait",
+          reasoning: "The target envoy is degraded. Consider waiting for it to stabilize.",
+          confidence: 0,
+        };
+      }
+    }
+
+    const result: PreFlightContext = {
+      targetHealth,
+      recentHistory,
+      crossSystemContext,
+      recommendation,
+      llmAvailable,
+    };
+
+    // --- 6. Debrief + telemetry ---
+    debrief.record({
+      partitionId: partitionId ?? null,
+      deploymentId: null,
+      agent: "command",
+      decisionType: "cross-system-context",
+      decision: `Pre-flight context generated: ${recommendation.action} (confidence: ${recommendation.confidence})`,
+      reasoning: recommendation.reasoning,
+      context: {
+        artifactId,
+        environmentId,
+        partitionId: partitionId ?? null,
+        version: version ?? null,
+        targetHealth: targetHealth.status,
+        recentFailures,
+        deploymentsToday,
+        crossSystemSignals: crossSystemContext.length,
+        llmAvailable,
+      },
+    });
+
+    if (telemetry) {
+      telemetry.record({
+        actor: "agent",
+        action: "agent.pre-flight.generated",
+        target: { type: "deployment", id: `${artifactId}:${environmentId}` },
+        details: {
+          recommendation: recommendation.action,
+          confidence: recommendation.confidence,
+          llmAvailable,
+        },
+      });
+    }
+
+    return result;
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Pre-flight context types
+// ---------------------------------------------------------------------------
+
+export interface PreFlightContext {
+  targetHealth: {
+    status: "healthy" | "degraded" | "unreachable";
+    details: string;
+  };
+  recentHistory: {
+    lastDeployment?: {
+      status: string;
+      completedAt: string;
+      version: string;
+    };
+    recentFailures: number;
+    deploymentsToday: number;
+  };
+  crossSystemContext: string[];
+  recommendation: {
+    action: "proceed" | "wait" | "investigate";
+    reasoning: string;
+    confidence: number;
+  };
+  llmAvailable: boolean;
 }
 
 // ---------------------------------------------------------------------------

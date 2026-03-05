@@ -30,6 +30,10 @@ export interface DeploymentStore {
   getByPartition(partitionId: string): Deployment[];
   getByArtifact(artifactId: string): Deployment[];
   list(): Deployment[];
+  countByEnvironment(envId: string, since: Date): number;
+  findByArtifactVersion(artifactId: string, version: string, status?: string): Deployment[];
+  findRecentByArtifact(artifactId: string, since: Date, status?: string): Deployment[];
+  findLatestByEnvironment(envId: string): Deployment | undefined;
 }
 
 export interface AgentOptions {
@@ -1517,5 +1521,37 @@ export class InMemoryDeploymentStore implements DeploymentStore {
 
   list(): Deployment[] {
     return [...this.deployments.values()];
+  }
+
+  countByEnvironment(envId: string, since: Date): number {
+    return [...this.deployments.values()].filter(
+      (d) => d.environmentId === envId && new Date(d.createdAt).getTime() >= since.getTime(),
+    ).length;
+  }
+
+  findByArtifactVersion(artifactId: string, version: string, status?: string): Deployment[] {
+    return [...this.deployments.values()].filter(
+      (d) =>
+        d.artifactId === artifactId &&
+        d.version === version &&
+        (!status || d.status === status),
+    );
+  }
+
+  findRecentByArtifact(artifactId: string, since: Date, status?: string): Deployment[] {
+    return [...this.deployments.values()]
+      .filter(
+        (d) =>
+          d.artifactId === artifactId &&
+          new Date(d.createdAt).getTime() >= since.getTime() &&
+          (!status || d.status === status),
+      )
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }
+
+  findLatestByEnvironment(envId: string): Deployment | undefined {
+    return [...this.deployments.values()]
+      .filter((d) => d.environmentId === envId)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
   }
 }

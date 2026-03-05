@@ -420,6 +420,12 @@ export class PersistentDeploymentStore {
     getByPartition: Database.Statement;
     getByArtifact: Database.Statement;
     list: Database.Statement;
+    countByEnv: Database.Statement;
+    findByArtifactVersion: Database.Statement;
+    findByArtifactVersionStatus: Database.Statement;
+    findRecentByArtifact: Database.Statement;
+    findRecentByArtifactStatus: Database.Statement;
+    findLatestByEnv: Database.Statement;
   };
 
   constructor(private db: Database.Database) {
@@ -447,6 +453,24 @@ export class PersistentDeploymentStore {
         `SELECT * FROM deployments WHERE artifact_id = ? ORDER BY created_at ASC`,
       ),
       list: db.prepare(`SELECT * FROM deployments ORDER BY created_at ASC`),
+      countByEnv: db.prepare(
+        `SELECT COUNT(*) as cnt FROM deployments WHERE environment_id = ? AND created_at >= ?`,
+      ),
+      findByArtifactVersion: db.prepare(
+        `SELECT * FROM deployments WHERE artifact_id = ? AND version = ? ORDER BY created_at DESC`,
+      ),
+      findByArtifactVersionStatus: db.prepare(
+        `SELECT * FROM deployments WHERE artifact_id = ? AND version = ? AND status = ? ORDER BY created_at DESC`,
+      ),
+      findRecentByArtifact: db.prepare(
+        `SELECT * FROM deployments WHERE artifact_id = ? AND created_at >= ? ORDER BY created_at DESC`,
+      ),
+      findRecentByArtifactStatus: db.prepare(
+        `SELECT * FROM deployments WHERE artifact_id = ? AND created_at >= ? AND status = ? ORDER BY created_at DESC`,
+      ),
+      findLatestByEnv: db.prepare(
+        `SELECT * FROM deployments WHERE environment_id = ? ORDER BY created_at DESC LIMIT 1`,
+      ),
     };
   }
 
@@ -491,6 +515,30 @@ export class PersistentDeploymentStore {
   list(): Deployment[] {
     const rows = this.stmts.list.all() as DeploymentRow[];
     return rows.map(rowToDeployment);
+  }
+
+  countByEnvironment(envId: string, since: Date): number {
+    const row = this.stmts.countByEnv.get(envId, since.toISOString()) as { cnt: number };
+    return row.cnt;
+  }
+
+  findByArtifactVersion(artifactId: string, version: string, status?: string): Deployment[] {
+    const rows = status
+      ? (this.stmts.findByArtifactVersionStatus.all(artifactId, version, status) as DeploymentRow[])
+      : (this.stmts.findByArtifactVersion.all(artifactId, version) as DeploymentRow[]);
+    return rows.map(rowToDeployment);
+  }
+
+  findRecentByArtifact(artifactId: string, since: Date, status?: string): Deployment[] {
+    const rows = status
+      ? (this.stmts.findRecentByArtifactStatus.all(artifactId, since.toISOString(), status) as DeploymentRow[])
+      : (this.stmts.findRecentByArtifact.all(artifactId, since.toISOString()) as DeploymentRow[]);
+    return rows.map(rowToDeployment);
+  }
+
+  findLatestByEnvironment(envId: string): Deployment | undefined {
+    const row = this.stmts.findLatestByEnv.get(envId) as DeploymentRow | undefined;
+    return row ? rowToDeployment(row) : undefined;
   }
 }
 

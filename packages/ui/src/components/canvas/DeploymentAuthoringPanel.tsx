@@ -12,6 +12,7 @@ import { useSettings } from "../../context/SettingsContext.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
 import { useCanvas } from "../../context/CanvasContext.js";
 import EnvBadge from "../EnvBadge.js";
+import PreFlightDisplay from "./PreFlightDisplay.js";
 
 interface Props {
   title: string;
@@ -181,6 +182,16 @@ export default function DeploymentAuthoringPanel({ title, preselectedArtifactId 
               style={{ fontSize: 13, padding: "6px 8px", width: "100%" }}
             />
           </div>
+
+          {/* Pre-flight context — auto-fetched when artifact + environment selected */}
+          {selectedArtifactId && (!environmentsEnabled || selectedEnvironmentId) && (
+            <PreFlightDisplay
+              artifactId={selectedArtifactId}
+              environmentId={selectedEnvironmentId}
+              partitionId={selectedPartitionId || undefined}
+              version={version || undefined}
+            />
+          )}
 
           {/* Summary + deploy */}
           {selectedArtifactId && (!environmentsEnabled || selectedEnvironmentId) && (

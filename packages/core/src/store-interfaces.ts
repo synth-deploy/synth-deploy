@@ -71,6 +71,10 @@ export interface IDeploymentStore {
   getByPartition(partitionId: PartitionId): Deployment[];
   getByArtifact(artifactId: string): Deployment[];
   list(): Deployment[];
+  countByEnvironment(envId: EnvironmentId, since: Date): number;
+  findByArtifactVersion(artifactId: string, version: string, status?: string): Deployment[];
+  findRecentByArtifact(artifactId: string, since: Date, status?: string): Deployment[];
+  findLatestByEnvironment(envId: EnvironmentId): Deployment | undefined;
 }
 
 export interface ISettingsStore {
