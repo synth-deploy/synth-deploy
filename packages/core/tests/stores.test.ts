@@ -44,13 +44,15 @@ describe("SettingsStore", () => {
   });
 
   it("merges deploymentDefaults without overwriting other fields", () => {
-    const newConfig = { healthCheckRetries: 5 };
     store.update({
-      deploymentDefaults: { defaultDeployConfig: newConfig as any },
+      deploymentDefaults: { defaultHealthCheckRetries: 5 },
     });
     const settings = store.get();
-    // The defaultDeployConfig gets shallow-merged at the deploymentDefaults level
-    expect(settings.deploymentDefaults.defaultDeployConfig).toEqual(newConfig);
+    expect(settings.deploymentDefaults.defaultHealthCheckRetries).toBe(5);
+    // Other defaults remain intact
+    expect(settings.deploymentDefaults.defaultHealthCheckEnabled).toBe(
+      DEFAULT_APP_SETTINGS.deploymentDefaults.defaultHealthCheckEnabled,
+    );
   });
 
   it("merges envoy settings", () => {

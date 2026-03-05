@@ -7,6 +7,7 @@ interface Props {
   environments?: Environment[];
   artifacts?: Artifact[];
   showArtifact?: boolean;
+  onClickDeployment?: (id: string) => void;
 }
 
 function formatTime(iso: string): string {
@@ -26,7 +27,7 @@ function formatDuration(created: string, completed: string | null): string {
   return `${(ms / 1000).toFixed(1)}s`;
 }
 
-export default function DeploymentTable({ deployments, environments = [], artifacts = [], showArtifact = true }: Props) {
+export default function DeploymentTable({ deployments, environments = [], artifacts = [], showArtifact = true, onClickDeployment }: Props) {
   const envMap = new Map(environments.map((e) => [e.id, e]));
   const artifactMap = new Map(artifacts.map((a) => [a.id, a]));
 
@@ -55,7 +56,7 @@ export default function DeploymentTable({ deployments, environments = [], artifa
           {deployments.map((d) => {
             const env = envMap.get(d.environmentId);
             return (
-              <tr key={d.id}>
+              <tr key={d.id} onClick={onClickDeployment ? () => onClickDeployment(d.id) : undefined} style={onClickDeployment ? { cursor: "pointer" } : undefined}>
                 <td>
                   <StatusBadge status={d.status} />
                 </td>

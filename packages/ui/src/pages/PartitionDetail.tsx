@@ -136,7 +136,7 @@ export default function PartitionDetail() {
         <div className="card-header">
           <h3>Deployment History</h3>
         </div>
-        <DeploymentTable deployments={sorted} environments={environments} artifacts={artifacts} />
+        <DeploymentTable deployments={sorted} environments={environments} artifacts={artifacts} onClickDeployment={(id) => navigate(`/deployments/${id}`)} />
       </div>
 
       {showDeleteConfirm && (
