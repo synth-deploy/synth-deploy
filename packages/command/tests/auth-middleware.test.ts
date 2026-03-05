@@ -1,49 +1,106 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
-import { registerAuthMiddleware } from "../src/middleware/auth.js";
+import { SignJWT } from "jose";
+import {
+  UserStore,
+  RoleStore,
+  UserRoleStore,
+  SessionStore,
+} from "@deploystack/core";
+import type { UserId, RoleId } from "@deploystack/core";
+import { registerAuthMiddleware, generateTokens } from "../src/middleware/auth.js";
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+const JWT_SECRET = new TextEncoder().encode("test-secret");
+const TEST_USER_ID = "user-1" as UserId;
+const TEST_ROLE_ID = "role-admin" as RoleId;
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-const TEST_API_KEY = "sk-test-secret-key-12345";
+function createStores() {
+  const userStore = new UserStore();
+  const roleStore = new RoleStore();
+  const userRoleStore = new UserRoleStore(roleStore);
+  const sessionStore = new SessionStore();
+  return { userStore, roleStore, userRoleStore, sessionStore };
+}
 
-/** Build a minimal Fastify app with auth middleware and a dummy route. */
-async function buildApp(): Promise<FastifyInstance> {
+function seedTestUser(stores: ReturnType<typeof createStores>) {
+  stores.userStore.create({
+    id: TEST_USER_ID,
+    email: "test@example.com",
+    name: "Test User",
+    passwordHash: "hashed",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+
+  stores.roleStore.create({
+    id: TEST_ROLE_ID,
+    name: "admin",
+    permissions: ["deployment.view"],
+    isBuiltIn: true,
+    createdAt: new Date(),
+  });
+
+  stores.userRoleStore.assign(TEST_USER_ID, TEST_ROLE_ID, TEST_USER_ID);
+}
+
+async function buildApp(): Promise<{
+  app: FastifyInstance;
+  stores: ReturnType<typeof createStores>;
+  token: string;
+}> {
+  const stores = createStores();
+  seedTestUser(stores);
+
   const app = Fastify({ logger: false });
-  registerAuthMiddleware(app);
+  registerAuthMiddleware(app, stores.userStore, stores.userRoleStore, stores.sessionStore, JWT_SECRET);
 
-  // Health endpoint — should always be public
+  // Health endpoint — exempt from auth
   app.get("/health", async () => ({ status: "ok" }));
 
   // Protected endpoint
   app.get("/api/partitions", async () => ({ partitions: [] }));
 
   await app.ready();
-  return app;
+
+  // Generate a valid token and persist the session
+  const { token, refreshToken, expiresAt } = await generateTokens(TEST_USER_ID, JWT_SECRET);
+  stores.sessionStore.create({
+    id: "session-1",
+    userId: TEST_USER_ID,
+    token,
+    refreshToken,
+    expiresAt,
+    createdAt: new Date(),
+  });
+
+  return { app, stores, token };
 }
 
 // ---------------------------------------------------------------------------
-// Tests — auth ENABLED (DEPLOYSTACK_API_KEY is set)
+// Tests — auth middleware (JWT-based, always enabled)
 // ---------------------------------------------------------------------------
 
 describe("auth middleware — enabled", () => {
   let app: FastifyInstance;
-  const originalEnv = process.env.DEPLOYSTACK_API_KEY;
+  let token: string;
 
   beforeEach(async () => {
-    process.env.DEPLOYSTACK_API_KEY = TEST_API_KEY;
-    app = await buildApp();
+    const built = await buildApp();
+    app = built.app;
+    token = built.token;
   });
 
   afterEach(async () => {
     await app.close();
-    if (originalEnv === undefined) {
-      delete process.env.DEPLOYSTACK_API_KEY;
-    } else {
-      process.env.DEPLOYSTACK_API_KEY = originalEnv;
-    }
   });
 
   it("returns 401 when Authorization header is missing", async () => {
@@ -53,36 +110,36 @@ describe("auth middleware — enabled", () => {
     });
 
     expect(res.statusCode).toBe(401);
-    expect(JSON.parse(res.payload)).toEqual({ error: "Unauthorized" });
+    expect(JSON.parse(res.payload)).toEqual({ error: "Authentication required" });
   });
 
   it("returns 401 when Authorization header is malformed (no Bearer prefix)", async () => {
     const res = await app.inject({
       method: "GET",
       url: "/api/partitions",
-      headers: { authorization: `Basic ${TEST_API_KEY}` },
+      headers: { authorization: "Basic some-credentials" },
     });
 
     expect(res.statusCode).toBe(401);
-    expect(JSON.parse(res.payload)).toEqual({ error: "Unauthorized" });
+    expect(JSON.parse(res.payload)).toEqual({ error: "Authentication required" });
   });
 
-  it("returns 401 when Bearer token is wrong", async () => {
+  it("returns 401 when Bearer token is invalid", async () => {
     const res = await app.inject({
       method: "GET",
       url: "/api/partitions",
-      headers: { authorization: "Bearer wrong-key" },
+      headers: { authorization: "Bearer not-a-valid-jwt" },
     });
 
     expect(res.statusCode).toBe(401);
-    expect(JSON.parse(res.payload)).toEqual({ error: "Unauthorized" });
+    expect(JSON.parse(res.payload)).toEqual({ error: "Invalid token" });
   });
 
-  it("passes request through with correct Bearer token", async () => {
+  it("passes request through with a valid JWT token", async () => {
     const res = await app.inject({
       method: "GET",
       url: "/api/partitions",
-      headers: { authorization: `Bearer ${TEST_API_KEY}` },
+      headers: { authorization: `Bearer ${token}` },
     });
 
     expect(res.statusCode).toBe(200);
@@ -112,71 +169,21 @@ describe("auth middleware — enabled", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Tests — auth DISABLED (no DEPLOYSTACK_API_KEY set)
-// ---------------------------------------------------------------------------
-
-describe("auth middleware — disabled (no API key set)", () => {
-  let app: FastifyInstance;
-  const originalEnv = process.env.DEPLOYSTACK_API_KEY;
-
-  beforeEach(async () => {
-    delete process.env.DEPLOYSTACK_API_KEY;
-    app = await buildApp();
-  });
-
-  afterEach(async () => {
-    await app.close();
-    if (originalEnv !== undefined) {
-      process.env.DEPLOYSTACK_API_KEY = originalEnv;
-    }
-  });
-
-  it("allows requests without any authorization header", async () => {
-    const res = await app.inject({
-      method: "GET",
-      url: "/api/partitions",
-    });
-
-    expect(res.statusCode).toBe(200);
-    expect(JSON.parse(res.payload)).toEqual({ partitions: [] });
-  });
-
-  it("returns enabled: false from registerAuthMiddleware", async () => {
-    const testApp = Fastify({ logger: false });
-    const result = registerAuthMiddleware(testApp);
-    expect(result.enabled).toBe(false);
-    await testApp.close();
-  });
-});
-
-// ---------------------------------------------------------------------------
 // Tests — registerAuthMiddleware return value
 // ---------------------------------------------------------------------------
 
 describe("registerAuthMiddleware return value", () => {
-  const originalEnv = process.env.DEPLOYSTACK_API_KEY;
-
-  afterEach(() => {
-    if (originalEnv === undefined) {
-      delete process.env.DEPLOYSTACK_API_KEY;
-    } else {
-      process.env.DEPLOYSTACK_API_KEY = originalEnv;
-    }
-  });
-
-  it("returns { enabled: true } when API key is set", () => {
-    process.env.DEPLOYSTACK_API_KEY = TEST_API_KEY;
+  it("always returns { enabled: true }", () => {
+    const stores = createStores();
     const app = Fastify({ logger: false });
-    const result = registerAuthMiddleware(app);
+    const result = registerAuthMiddleware(
+      app,
+      stores.userStore,
+      stores.userRoleStore,
+      stores.sessionStore,
+      JWT_SECRET,
+    );
     expect(result.enabled).toBe(true);
-    app.close();
-  });
-
-  it("returns { enabled: false } when API key is not set", () => {
-    delete process.env.DEPLOYSTACK_API_KEY;
-    const app = Fastify({ logger: false });
-    const result = registerAuthMiddleware(app);
-    expect(result.enabled).toBe(false);
     app.close();
   });
 });

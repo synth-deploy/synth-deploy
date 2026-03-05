@@ -6,15 +6,12 @@ import crypto from "node:crypto";
 import {
   openEntityDatabase,
   PersistentPartitionStore,
-  PersistentOperationStore,
   PersistentEnvironmentStore,
   PersistentSettingsStore,
   PersistentDeploymentStore,
-  PersistentOrderStore,
 } from "../src/persistent-stores.js";
-import { DEFAULT_DEPLOY_CONFIG, DEFAULT_APP_SETTINGS } from "../src/types.js";
-import type { Deployment, DeploymentStep } from "../src/types.js";
-import type { CreateOrderParams } from "../src/order-store.js";
+import { DEFAULT_APP_SETTINGS } from "../src/types.js";
+import type { Deployment } from "../src/types.js";
 import type Database from "better-sqlite3";
 
 // ---------------------------------------------------------------------------
@@ -25,46 +22,17 @@ function tmpDbPath(): string {
   return path.join(os.tmpdir(), "test-" + crypto.randomUUID() + ".db");
 }
 
-function makeStep(overrides: Partial<DeploymentStep> = {}): DeploymentStep {
-  return {
-    id: crypto.randomUUID(),
-    name: "build",
-    type: "pre-deploy",
-    command: "npm run build",
-    order: 0,
-    ...overrides,
-  };
-}
-
-function makeOrderParams(overrides: Partial<CreateOrderParams> = {}): CreateOrderParams {
-  return {
-    operationId: crypto.randomUUID(),
-    operationName: "web-app",
-    partitionId: crypto.randomUUID(),
-    environmentId: crypto.randomUUID(),
-    environmentName: "production",
-    version: "1.0.0",
-    steps: [makeStep()],
-    deployConfig: { ...DEFAULT_DEPLOY_CONFIG },
-    variables: { APP_ENV: "production" },
-    ...overrides,
-  };
-}
-
 function makeDeployment(overrides: Partial<Deployment> = {}): Deployment {
   return {
     id: crypto.randomUUID(),
-    operationId: crypto.randomUUID(),
+    artifactId: crypto.randomUUID(),
     partitionId: crypto.randomUUID(),
     environmentId: crypto.randomUUID(),
     version: "1.0.0",
     status: "pending",
     variables: {},
     debriefEntryIds: [],
-    orderId: null,
     createdAt: new Date(),
-    completedAt: null,
-    failureReason: null,
     ...overrides,
   };
 }
@@ -222,208 +190,6 @@ describe("PersistentEnvironmentStore", () => {
 });
 
 // ---------------------------------------------------------------------------
-// PersistentOperationStore
-// ---------------------------------------------------------------------------
-
-describe("PersistentOperationStore", () => {
-  let dbPath: string;
-  let db: Database.Database;
-  let store: PersistentOperationStore;
-
-  beforeAll(() => {
-    dbPath = tmpDbPath();
-    db = openEntityDatabase(dbPath);
-    store = new PersistentOperationStore(db);
-  });
-
-  afterAll(() => {
-    db.close();
-    try { fs.unlinkSync(dbPath); } catch { /* ignore */ }
-  });
-
-  it("creates an operation with defaults", () => {
-    const op = store.create("web-app");
-    expect(op.id).toBeDefined();
-    expect(op.name).toBe("web-app");
-    expect(op.environmentIds).toEqual([]);
-    expect(op.steps).toEqual([]);
-    expect(op.deployConfig).toEqual(DEFAULT_DEPLOY_CONFIG);
-  });
-
-  it("creates with environment IDs", () => {
-    const envStore = new PersistentEnvironmentStore(db);
-    const env = envStore.create("prod");
-    const op = store.create("app-with-env", [env.id]);
-    expect(op.environmentIds).toEqual([env.id]);
-  });
-
-  it("gets by id", () => {
-    const created = store.create("get-test");
-    const fetched = store.get(created.id);
-    expect(fetched).toBeDefined();
-    expect(fetched!.name).toBe("get-test");
-  });
-
-  it("returns undefined for nonexistent id", () => {
-    expect(store.get("nonexistent")).toBeUndefined();
-  });
-
-  it("lists all operations", () => {
-    const before = store.list().length;
-    store.create("list-a");
-    store.create("list-b");
-    expect(store.list().length).toBe(before + 2);
-  });
-
-  it("updates operation name", () => {
-    const op = store.create("old-name");
-    const updated = store.update(op.id, { name: "new-name" });
-    expect(updated.name).toBe("new-name");
-    expect(store.get(op.id)!.name).toBe("new-name");
-  });
-
-  it("deletes an operation and its links and steps", () => {
-    const op = store.create("delete-me");
-    store.addStep(op.id, makeStep());
-    expect(store.delete(op.id)).toBe(true);
-    expect(store.get(op.id)).toBeUndefined();
-  });
-
-  it("adds and removes environment links", () => {
-    const op = store.create("env-link-test");
-    store.addEnvironment(op.id, "env-1");
-    expect(store.get(op.id)!.environmentIds).toEqual(["env-1"]);
-
-    store.removeEnvironment(op.id, "env-1");
-    expect(store.get(op.id)!.environmentIds).toEqual([]);
-  });
-
-  it("addStep inserts and sorts by order", () => {
-    const op = store.create("step-test");
-    store.addStep(op.id, makeStep({ order: 2, name: "second" }));
-    store.addStep(op.id, makeStep({ order: 1, name: "first" }));
-    const steps = store.get(op.id)!.steps;
-    expect(steps).toHaveLength(2);
-    expect(steps[0].name).toBe("first");
-    expect(steps[1].name).toBe("second");
-  });
-
-  it("updateStep modifies step fields", () => {
-    const op = store.create("update-step-test");
-    const step = makeStep({ name: "build" });
-    store.addStep(op.id, step);
-    const updated = store.updateStep(op.id, step.id, { name: "compile", command: "tsc" });
-    expect(updated.steps[0].name).toBe("compile");
-    expect(updated.steps[0].command).toBe("tsc");
-  });
-
-  it("removeStep removes a step", () => {
-    const op = store.create("remove-step-test");
-    const step = makeStep();
-    store.addStep(op.id, step);
-    store.removeStep(op.id, step.id);
-    expect(store.get(op.id)!.steps).toHaveLength(0);
-  });
-
-  it("reorderSteps assigns new order values", () => {
-    const op = store.create("reorder-test");
-    const s1 = makeStep({ order: 0, name: "first" });
-    const s2 = makeStep({ order: 1, name: "second" });
-    store.addStep(op.id, s1);
-    store.addStep(op.id, s2);
-    store.reorderSteps(op.id, [s2.id, s1.id]);
-    const steps = store.get(op.id)!.steps;
-    expect(steps[0].name).toBe("second");
-    expect(steps[1].name).toBe("first");
-  });
-
-  it("updateDeployConfig merges partial config", () => {
-    const op = store.create("config-test");
-    store.updateDeployConfig(op.id, { healthCheckRetries: 5 });
-    const config = store.get(op.id)!.deployConfig;
-    expect(config.healthCheckRetries).toBe(5);
-    expect(config.healthCheckEnabled).toBe(DEFAULT_DEPLOY_CONFIG.healthCheckEnabled);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// PersistentOrderStore
-// ---------------------------------------------------------------------------
-
-describe("PersistentOrderStore", () => {
-  let dbPath: string;
-  let db: Database.Database;
-  let store: PersistentOrderStore;
-
-  beforeAll(() => {
-    dbPath = tmpDbPath();
-    db = openEntityDatabase(dbPath);
-    store = new PersistentOrderStore(db);
-  });
-
-  afterAll(() => {
-    db.close();
-    try { fs.unlinkSync(dbPath); } catch { /* ignore */ }
-  });
-
-  it("creates an order with unique id and timestamp", () => {
-    const before = new Date();
-    const order = store.create(makeOrderParams());
-    expect(order.id).toBeDefined();
-    expect(order.createdAt).toBeInstanceOf(Date);
-    expect(order.createdAt.getTime()).toBeGreaterThanOrEqual(before.getTime());
-  });
-
-  it("gets by id", () => {
-    const order = store.create(makeOrderParams());
-    const fetched = store.get(order.id);
-    expect(fetched).toBeDefined();
-    expect(fetched!.operationName).toBe("web-app");
-    expect(fetched!.createdAt).toBeInstanceOf(Date);
-  });
-
-  it("returns undefined for nonexistent id", () => {
-    expect(store.get("nonexistent")).toBeUndefined();
-  });
-
-  it("lists all orders", () => {
-    const before = store.list().length;
-    store.create(makeOrderParams());
-    store.create(makeOrderParams({ version: "2.0.0" }));
-    expect(store.list().length).toBe(before + 2);
-  });
-
-  it("getByOperation filters correctly", () => {
-    const opId = crypto.randomUUID();
-    store.create(makeOrderParams({ operationId: opId }));
-    store.create(makeOrderParams({ operationId: opId }));
-    expect(store.getByOperation(opId)).toHaveLength(2);
-  });
-
-  it("getByPartition filters correctly", () => {
-    const partId = crypto.randomUUID();
-    store.create(makeOrderParams({ partitionId: partId }));
-    expect(store.getByPartition(partId)).toHaveLength(1);
-  });
-
-  it("stores and retrieves steps as JSON", () => {
-    const steps = [makeStep({ name: "build" }), makeStep({ name: "test", order: 1 })];
-    const order = store.create(makeOrderParams({ steps }));
-    const fetched = store.get(order.id)!;
-    expect(fetched.steps).toHaveLength(2);
-    expect(fetched.steps[0].name).toBe("build");
-    expect(fetched.steps[1].name).toBe("test");
-  });
-
-  it("stores and retrieves variables", () => {
-    const variables = { APP_ENV: "prod", DB_HOST: "db-1" };
-    const order = store.create(makeOrderParams({ variables }));
-    const fetched = store.get(order.id)!;
-    expect(fetched.variables).toEqual(variables);
-  });
-});
-
-// ---------------------------------------------------------------------------
 // PersistentDeploymentStore
 // ---------------------------------------------------------------------------
 
@@ -482,16 +248,16 @@ describe("PersistentDeploymentStore", () => {
     expect(store.list().length).toBe(before + 1);
   });
 
-  it("stores failure reason and orderId", () => {
+  it("stores failure reason and artifactVersionId", () => {
     const d = makeDeployment({
       status: "failed",
       failureReason: "disk full",
-      orderId: "order-1",
+      artifactVersionId: "ver-1",
     });
     store.save(d);
     const fetched = store.get(d.id)!;
     expect(fetched.failureReason).toBe("disk full");
-    expect(fetched.orderId).toBe("order-1");
+    expect(fetched.artifactVersionId).toBe("ver-1");
   });
 
   it("stores and retrieves debrief entry IDs", () => {
@@ -593,24 +359,5 @@ describe("Partition isolation", () => {
     // No cross-contamination
     expect(aDeployments.every((d) => d.partitionId === partA)).toBe(true);
     expect(bDeployments.every((d) => d.partitionId === partB)).toBe(true);
-  });
-
-  it("orders in different partitions are fully isolated", () => {
-    const orderStore = new PersistentOrderStore(db);
-    const partA = crypto.randomUUID();
-    const partB = crypto.randomUUID();
-
-    orderStore.create(makeOrderParams({ partitionId: partA }));
-    orderStore.create(makeOrderParams({ partitionId: partB }));
-    orderStore.create(makeOrderParams({ partitionId: partB }));
-
-    const aOrders = orderStore.getByPartition(partA);
-    const bOrders = orderStore.getByPartition(partB);
-
-    expect(aOrders).toHaveLength(1);
-    expect(bOrders).toHaveLength(2);
-
-    expect(aOrders.every((o) => o.partitionId === partA)).toBe(true);
-    expect(bOrders.every((o) => o.partitionId === partB)).toBe(true);
   });
 });

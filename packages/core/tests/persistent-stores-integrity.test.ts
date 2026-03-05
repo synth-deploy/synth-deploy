@@ -9,10 +9,9 @@ import {
   PersistentPartitionStore,
   PersistentEnvironmentStore,
   PersistentDeploymentStore,
-  PersistentOrderStore,
   PersistentSettingsStore,
 } from "../src/persistent-stores.js";
-import { DEFAULT_APP_SETTINGS, DEFAULT_DEPLOY_CONFIG } from "../src/types.js";
+import { DEFAULT_APP_SETTINGS } from "../src/types.js";
 import type { Deployment } from "../src/types.js";
 import type Database from "better-sqlite3";
 
@@ -97,12 +96,12 @@ describe("Database integrity check on open", () => {
   it("creates schema_version table with correct version", () => {
     const db = openEntityDatabase(dbPath);
     const row = db.prepare("SELECT version FROM schema_version LIMIT 1").get() as { version: number };
-    expect(row.version).toBe(1);
+    expect(row.version).toBe(4);
     db.close();
   });
 
   it("warns on schema version mismatch without crashing", () => {
-    // First open creates version 1
+    // First open creates version 4
     const db1 = openEntityDatabase(dbPath);
     // Manually bump the stored version to simulate a future schema
     db1.prepare("UPDATE schema_version SET version = 999").run();
@@ -182,11 +181,11 @@ describe("Corrupted JSON recovery", () => {
     const id = crypto.randomUUID();
 
     db.prepare(
-      `INSERT INTO deployments (id, operation_id, partition_id, environment_id, version, status, variables, debrief_entry_ids, order_id, created_at, completed_at, failure_reason)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO deployments (id, artifact_id, environment_id, partition_id, version, status, variables, debrief_entry_ids, created_at, completed_at, failure_reason)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
-      id, "op-1", "part-1", "env-1", "1.0.0", "pending",
-      "CORRUPT_VARS", "CORRUPT_IDS", null,
+      id, "art-1", "env-1", "part-1", "1.0.0", "pending",
+      "CORRUPT_VARS", "CORRUPT_IDS",
       new Date().toISOString(), null, null,
     );
 
@@ -197,31 +196,6 @@ describe("Corrupted JSON recovery", () => {
     expect(deployment!.variables).toEqual({});
     expect(deployment!.debriefEntryIds).toEqual([]);
     expect(deployment!.version).toBe("1.0.0");
-    expect(warnSpy).toHaveBeenCalled();
-    warnSpy.mockRestore();
-  });
-
-  it("order with corrupted JSON columns returns fallback values instead of crashing", () => {
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const id = crypto.randomUUID();
-
-    db.prepare(
-      `INSERT INTO orders (id, operation_id, operation_name, partition_id, environment_id, environment_name, version, steps, deploy_config, variables, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(
-      id, "op-1", "my-op", "part-1", "env-1", "production", "1.0.0",
-      "BAD_STEPS", "BAD_CONFIG", "BAD_VARS",
-      new Date().toISOString(),
-    );
-
-    const store = new PersistentOrderStore(db);
-    const order = store.get(id);
-
-    expect(order).toBeDefined();
-    expect(order!.steps).toEqual([]);
-    expect(order!.deployConfig).toEqual(DEFAULT_DEPLOY_CONFIG);
-    expect(order!.variables).toEqual({});
-    expect(order!.operationName).toBe("my-op");
     expect(warnSpy).toHaveBeenCalled();
     warnSpy.mockRestore();
   });
@@ -306,17 +280,16 @@ describe("Normal operation unaffected by integrity checks", () => {
     const store = new PersistentDeploymentStore(db);
     const d: Deployment = {
       id: crypto.randomUUID(),
-      operationId: crypto.randomUUID(),
+      artifactId: crypto.randomUUID(),
       partitionId: crypto.randomUUID(),
       environmentId: crypto.randomUUID(),
       version: "2.0.0",
       status: "succeeded",
       variables: { APP_ENV: "production" },
       debriefEntryIds: ["entry-1", "entry-2"],
-      orderId: "order-1",
       createdAt: new Date(),
       completedAt: new Date(),
-      failureReason: null,
+      failureReason: "none",
     };
     store.save(d);
     const fetched = store.get(d.id)!;
