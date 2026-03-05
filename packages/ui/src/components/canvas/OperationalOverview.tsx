@@ -478,17 +478,27 @@ function AlertState({ signals, stats }: { signals: AlertSignal[]; stats: SystemS
 function NormalState({ stats: _stats }: { stats: SystemState["stats"] }) {
   const { pushPanel } = useCanvas();
   const { settings } = useSettings();
+  const environmentsEnabled = settings?.environmentsEnabled ?? true;
 
   const [deployments, setDeployments] = useState<Deployment[]>([]);
   const [partitions, setPartitions] = useState<Partition[]>([]);
   const [environments, setEnvironments] = useState<Environment[]>([]);
   const [artifacts, setArtifacts] = useState<Artifact[]>([]);
+  const [envoys, setEnvoys] = useState<EnvoyRegistryEntry[]>([]);
   const [debriefEntries, setDebriefEntries] = useState<DebriefEntry[]>([]);
   const [agentContext, setAgentContext] = useState<DeploymentContext | null>(null);
   const [commandStatus, setCommandStatus] = useState<string>("observing");
   const [signalsExpanded, setSignalsExpanded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [tick, setTick] = useState(0);
+
+  // Inline deployment authoring state
+  const [deployArtifactId, setDeployArtifactId] = useState("");
+  const [deployEnvId, setDeployEnvId] = useState("");
+  const [deployPartitionId, setDeployPartitionId] = useState("");
+  const [deployVersion, setDeployVersion] = useState("");
+  const [deploying, setDeploying] = useState(false);
+  const [deployError, setDeployError] = useState<string | null>(null);
 
   useEffect(() => {
     const id = setInterval(() => setTick((t) => t + 1), 100);
@@ -501,15 +511,17 @@ function NormalState({ stats: _stats }: { stats: SystemState["stats"] }) {
       listPartitions(),
       listEnvironments(),
       listArtifacts(),
+      listEnvoys().catch(() => []),
       getRecentDebrief({ limit: 10 }),
       getDeploymentContext().catch(() => null),
       getHealth().catch(() => null),
     ])
-      .then(([d, parts, envs, arts, db, ctx, health]) => {
+      .then(([d, parts, envs, arts, envoyList, db, ctx, health]) => {
         setDeployments(d);
         setPartitions(parts);
         setEnvironments(envs);
         setArtifacts(arts);
+        setEnvoys(envoyList);
         setDebriefEntries(db);
         setAgentContext(ctx);
         if (health) setCommandStatus("observing");
@@ -517,6 +529,30 @@ function NormalState({ stats: _stats }: { stats: SystemState["stats"] }) {
       })
       .catch(() => setLoading(false));
   }, []);
+
+  async function handleInlineDeploy() {
+    if (!deployArtifactId || (environmentsEnabled && !deployEnvId)) return;
+    setDeploying(true);
+    setDeployError(null);
+    try {
+      const result = await createDeployment({
+        artifactId: deployArtifactId,
+        environmentId: deployEnvId,
+        partitionId: deployPartitionId || undefined,
+        version: deployVersion.trim() || undefined,
+      });
+      pushPanel({
+        type: "deployment-detail",
+        title: `Deployment ${result.deployment.version || result.deployment.id.slice(0, 8)}`,
+        params: { id: result.deployment.id },
+      });
+    } catch (e: unknown) {
+      setDeployError(e instanceof Error ? e.message : String(e));
+      setDeploying(false);
+    }
+  }
+
+  const healthyEnvoyCount = envoys.filter((e) => e.health === "OK").length;
 
   if (loading) return <div className="loading">Loading...</div>;
 
@@ -688,6 +724,174 @@ function NormalState({ stats: _stats }: { stats: SystemState["stats"] }) {
         </>
       )}
 
+      {/* Inline Deployment Authoring — front and center */}
+      <div style={{
+        border: "1px solid rgba(99, 225, 190, 0.2)",
+        borderRadius: 10,
+        padding: 20,
+        background: "rgba(99, 225, 190, 0.03)",
+        marginBottom: 16,
+      }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 15, color: "var(--agent-text)" }}>Deploy</div>
+            <div style={{ fontSize: 12, color: "var(--agent-text-muted)" }}>
+              Select what and where &mdash; DeployStack handles the rest
+            </div>
+          </div>
+          <button
+            className="btn btn-secondary"
+            onClick={() => pushPanel({ type: "deployment-authoring", title: "Deploy", params: {} })}
+            style={{ fontSize: 11 }}
+          >
+            Full View
+          </button>
+        </div>
+
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
+          {/* Artifact */}
+          <div style={{ flex: "1 1 180px", minWidth: 0 }}>
+            <label style={{ fontSize: 11, fontWeight: 600, color: "var(--agent-text-muted)", display: "block", marginBottom: 3 }}>
+              Artifact
+            </label>
+            <select
+              value={deployArtifactId}
+              onChange={(e) => setDeployArtifactId(e.target.value)}
+              style={{ width: "100%", fontSize: 13, padding: "6px 8px", borderRadius: 6, border: "1px solid var(--agent-border)", background: "var(--agent-bg)", color: "var(--agent-text)" }}
+            >
+              <option value="">Select...</option>
+              {artifacts.map((art) => (
+                <option key={art.id} value={art.id}>
+                  {art.name} ({art.type})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Environment */}
+          {environmentsEnabled && (
+            <div style={{ flex: "1 1 160px", minWidth: 0 }}>
+              <label style={{ fontSize: 11, fontWeight: 600, color: "var(--agent-text-muted)", display: "block", marginBottom: 3 }}>
+                Environment
+              </label>
+              <select
+                value={deployEnvId}
+                onChange={(e) => setDeployEnvId(e.target.value)}
+                style={{ width: "100%", fontSize: 13, padding: "6px 8px", borderRadius: 6, border: "1px solid var(--agent-border)", background: "var(--agent-bg)", color: "var(--agent-text)" }}
+              >
+                <option value="">Select...</option>
+                {environments.map((env) => (
+                  <option key={env.id} value={env.id}>{env.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Partition (optional) */}
+          {partitions.length > 0 && (
+            <div style={{ flex: "1 1 140px", minWidth: 0 }}>
+              <label style={{ fontSize: 11, fontWeight: 600, color: "var(--agent-text-muted)", display: "block", marginBottom: 3 }}>
+                Partition
+              </label>
+              <select
+                value={deployPartitionId}
+                onChange={(e) => setDeployPartitionId(e.target.value)}
+                style={{ width: "100%", fontSize: 13, padding: "6px 8px", borderRadius: 6, border: "1px solid var(--agent-border)", background: "var(--agent-bg)", color: "var(--agent-text)" }}
+              >
+                <option value="">None</option>
+                {partitions.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Version */}
+          <div style={{ flex: "0 1 110px", minWidth: 0 }}>
+            <label style={{ fontSize: 11, fontWeight: 600, color: "var(--agent-text-muted)", display: "block", marginBottom: 3 }}>
+              Version
+            </label>
+            <input
+              placeholder="1.0.0"
+              value={deployVersion}
+              onChange={(e) => setDeployVersion(e.target.value)}
+              style={{ width: "100%", fontSize: 13, padding: "6px 8px", borderRadius: 6, border: "1px solid var(--agent-border)", background: "var(--agent-bg)", color: "var(--agent-text)" }}
+            />
+          </div>
+
+          {/* Deploy button */}
+          <button
+            className="btn btn-primary"
+            onClick={handleInlineDeploy}
+            disabled={deploying || !deployArtifactId || (environmentsEnabled && !deployEnvId)}
+            style={{ flexShrink: 0, whiteSpace: "nowrap" }}
+          >
+            {deploying ? "Deploying..." : "Deploy"}
+          </button>
+        </div>
+
+        {/* Selected artifact analysis preview */}
+        {deployArtifactId && (() => {
+          const art = artifacts.find((a) => a.id === deployArtifactId);
+          return art?.analysis.summary ? (
+            <div style={{ fontSize: 12, color: "var(--agent-text-muted)", marginTop: 8, padding: "6px 10px", background: "rgba(255,255,255,0.03)", borderRadius: 6, borderLeft: "2px solid rgba(99,225,190,0.3)" }}>
+              {art.analysis.summary}
+            </div>
+          ) : null;
+        })()}
+
+        {deployError && <div style={{ color: "#dc2626", fontSize: 12, marginTop: 8 }}>{deployError}</div>}
+      </div>
+
+      {/* Recent Deployments */}
+      {deployments.length > 0 && (() => {
+        const recentDeploys = [...deployments]
+          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+          .slice(0, 8);
+        return (
+          <>
+            <SectionHeader
+              color="#f59e0b"
+              shape="square"
+              label="Recent Deployments"
+              subtitle="latest activity"
+              count={deployments.length}
+              onClick={() => pushPanel({ type: "deployment-list", title: "Deployments", params: {} })}
+            />
+            <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 16 }}>
+              {recentDeploys.map((d) => {
+                const artName = artifacts.find((a) => a.id === d.artifactId)?.name ?? d.artifactId.slice(0, 8);
+                const envName = environments.find((e) => e.id === d.environmentId)?.name ?? d.environmentId.slice(0, 8);
+                return (
+                  <div
+                    key={d.id}
+                    onClick={() => pushPanel({
+                      type: "deployment-detail",
+                      title: `Deployment ${d.version}`,
+                      params: { id: d.id },
+                    })}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 10,
+                      padding: "8px 12px", borderRadius: 6,
+                      border: "1px solid var(--agent-border)", background: "var(--agent-card-bg)",
+                      cursor: "pointer", fontSize: 13,
+                    }}
+                  >
+                    <span className={`badge badge-${d.status}`} style={{ fontSize: 10 }}>{d.status}</span>
+                    <span style={{ fontWeight: 500, color: "var(--agent-text)" }}>{artName}</span>
+                    <span style={{ color: "var(--agent-text-muted)" }}>v{d.version}</span>
+                    <span style={{ color: "var(--agent-text-muted)", fontSize: 11 }}>&rarr; {envName}</span>
+                    <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--agent-text-muted)" }}>
+                      {new Date(d.createdAt).toLocaleString()}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        );
+      })()}
+
       {/* Artifacts section */}
       <SectionHeader
         color="#6b7280"
@@ -828,7 +1032,7 @@ function NormalState({ stats: _stats }: { stats: SystemState["stats"] }) {
         color="#34d399"
         shape="circle"
         label="Envoys"
-        subtitle="on the ground, executing and reporting"
+        subtitle={`${healthyEnvoyCount} healthy / ${envoys.length} total`}
         onClick={() =>
           pushPanel({ type: "envoy-registry", title: "Envoys", params: {} })
         }

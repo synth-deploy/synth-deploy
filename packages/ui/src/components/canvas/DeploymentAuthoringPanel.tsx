@@ -3,9 +3,11 @@ import {
   listArtifacts,
   listPartitions,
   listEnvironments,
+  listEnvoys,
   createDeployment,
 } from "../../api.js";
 import type { Artifact, Partition, Environment } from "../../types.js";
+import type { EnvoyRegistryEntry } from "../../api.js";
 import { useSettings } from "../../context/SettingsContext.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
 import { useCanvas } from "../../context/CanvasContext.js";
@@ -24,6 +26,7 @@ export default function DeploymentAuthoringPanel({ title, preselectedArtifactId 
   const [artifacts, setArtifacts] = useState<Artifact[]>([]);
   const [partitions, setPartitions] = useState<Partition[]>([]);
   const [environments, setEnvironments] = useState<Environment[]>([]);
+  const [envoys, setEnvoys] = useState<EnvoyRegistryEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -35,14 +38,18 @@ export default function DeploymentAuthoringPanel({ title, preselectedArtifactId 
   const [version, setVersion] = useState<string>("");
 
   useEffect(() => {
-    Promise.all([listArtifacts(), listPartitions(), listEnvironments()]).then(
-      ([arts, parts, envs]) => {
-        setArtifacts(arts);
-        setPartitions(parts);
-        setEnvironments(envs);
-        setLoading(false);
-      },
-    );
+    Promise.all([
+      listArtifacts(),
+      listPartitions(),
+      listEnvironments(),
+      listEnvoys().catch(() => []),
+    ]).then(([arts, parts, envs, envoyList]) => {
+      setArtifacts(arts);
+      setPartitions(parts);
+      setEnvironments(envs);
+      setEnvoys(envoyList);
+      setLoading(false);
+    });
   }, []);
 
   async function handleDeploy() {
@@ -131,6 +138,11 @@ export default function DeploymentAuthoringPanel({ title, preselectedArtifactId 
                   </option>
                 ))}
               </select>
+              {envoys.length > 0 && (
+                <div style={{ fontSize: 11, color: "var(--agent-text-muted)", marginTop: 4 }}>
+                  {envoys.filter((e) => e.health === "OK").length} / {envoys.length} envoy{envoys.length !== 1 ? "s" : ""} healthy
+                </div>
+              )}
             </div>
           )}
 
