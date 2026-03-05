@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import type {
   DebriefWriter,
   DebriefEntry,
@@ -5,15 +7,28 @@ import type {
   PartitionId,
   EnvironmentId,
   LlmClient,
+  PlannedStep,
+  SecurityBoundary,
 } from "@deploystack/core";
 import { LocalStateStore } from "../state/local-state.js";
 import type { LocalDeploymentRecord } from "../state/local-state.js";
 import { EnvironmentScanner } from "./environment-scanner.js";
-import { DeploymentExecutor } from "./deployment-executor.js";
-import type { VerificationResult } from "./deployment-executor.js";
 import type { CommandReporter } from "./command-reporter.js";
 import { DiagnosticInvestigator } from "./diagnostic-investigator.js";
 import type { DiagnosticReport } from "./diagnostic-investigator.js";
+import {
+  DefaultOperationExecutor,
+  DefaultOperationRegistry,
+  BoundaryValidator,
+  createPlatformAdapter,
+  ServiceHandler,
+  FileHandler,
+  ConfigHandler,
+  ProcessHandler,
+  ContainerHandler,
+  VerifyHandler,
+} from "../execution/index.js";
+import type { PlanExecutionResult, ProgressCallback } from "../execution/index.js";
 
 // ---------------------------------------------------------------------------
 // Types — lifecycle state and deployment instruction/result
@@ -45,6 +60,12 @@ export interface DeploymentInstruction {
   environmentName: string;
   /** Name of the partition (for debrief entries) */
   partitionName: string;
+  /** Optional planned steps from the Command agent — when provided, the
+   *  OperationExecutor runs these through platform-aware handlers with
+   *  boundary validation and automatic rollback on failure */
+  plan?: PlannedStep[];
+  /** Security boundaries to validate plan steps against */
+  boundaries?: SecurityBoundary[];
 }
 
 /**
@@ -75,6 +96,25 @@ export interface DeploymentResult {
   debriefEntries: DebriefEntry[];
 }
 
+/**
+ * Verification result for workspace artifact checks.
+ */
+interface VerificationResult {
+  passed: boolean;
+  checks: Array<{ name: string; passed: boolean; detail: string }>;
+}
+
+/**
+ * Result of executing workspace artifacts (equivalent to old DeploymentExecutor).
+ */
+interface WorkspaceExecutionResult {
+  success: boolean;
+  workspacePath: string;
+  artifacts: string[];
+  durationMs: number;
+  error: string | null;
+}
+
 // ---------------------------------------------------------------------------
 // EnvoyAgent — the local reasoning engine
 // ---------------------------------------------------------------------------
@@ -89,8 +129,10 @@ export interface DeploymentResult {
  * 1. Scans the local environment before deploying — what's already here?
  *    Is this machine ready? Are there conflicts with what's deployed?
  *
- * 2. Executes the deployment with local awareness — creates the workspace,
- *    writes artifacts, and records every decision.
+ * 2. Executes the deployment — either writing workspace artifacts (default)
+ *    or running a full plan through the OperationExecutor when the Command
+ *    agent provides planned steps with platform-aware handlers, boundary
+ *    validation, and automatic rollback on failure.
  *
  * 3. Verifies locally — checks that what was supposed to be deployed is
  *    actually deployed and in the expected state.
@@ -103,11 +145,12 @@ export interface DeploymentResult {
  * clearly shows which agent made which decision.
  */
 export class EnvoyAgent {
-  private executor: DeploymentExecutor;
+  private operationExecutor: DefaultOperationExecutor | null = null;
   private scanner: EnvironmentScanner;
   private investigator: DiagnosticInvestigator;
   private reporter: CommandReporter | null;
   private _lifecycleState: LifecycleState = "active";
+  private executorReady: Promise<void>;
 
   constructor(
     private debrief: DebriefWriter,
@@ -116,10 +159,34 @@ export class EnvoyAgent {
     reporter?: CommandReporter,
     llm?: LlmClient,
   ) {
-    this.executor = new DeploymentExecutor(baseDir);
     this.scanner = new EnvironmentScanner(baseDir, state);
     this.investigator = new DiagnosticInvestigator(state, llm);
     this.reporter = reporter ?? null;
+
+    // Initialize the operation executor asynchronously — platform detection
+    // requires dynamic imports
+    this.executorReady = this.initExecutor();
+  }
+
+  private async initExecutor(): Promise<void> {
+    const adapter = await createPlatformAdapter();
+    const registry = new DefaultOperationRegistry();
+
+    // Register all handlers in order of specificity
+    registry.register(new ServiceHandler(adapter));
+    registry.register(new FileHandler(adapter));
+    registry.register(new ConfigHandler());
+    registry.register(new ContainerHandler());
+    registry.register(new ProcessHandler());
+    registry.register(new VerifyHandler());
+
+    const validator = new BoundaryValidator();
+    this.operationExecutor = new DefaultOperationExecutor(
+      registry,
+      validator,
+      adapter.platform,
+      this.debrief,
+    );
   }
 
   // -------------------------------------------------------------------------
@@ -159,14 +226,22 @@ export class EnvoyAgent {
    * 1. Record receipt of deployment instruction
    * 2. Scan local environment — is this machine ready?
    * 3. Check for conflicts with current state
-   * 4. Execute the deployment
+   * 4. Execute the deployment (workspace artifacts or full plan)
    * 5. Verify the deployment locally
    * 6. Update local state
    * 7. Report result
+   *
+   * When `instruction.plan` is provided, the OperationExecutor handles
+   * step execution through platform-aware handlers with boundary
+   * validation and automatic rollback. Otherwise, workspace artifacts
+   * are written directly (manifest, variables, version, status markers).
    */
   async executeDeployment(
     instruction: DeploymentInstruction,
   ): Promise<DeploymentResult> {
+    // Ensure executor is initialized
+    await this.executorReady;
+
     // --- Lifecycle guard: reject new deployments when draining or paused ----
     if (this._lifecycleState !== "active") {
       const reason =
@@ -203,7 +278,7 @@ export class EnvoyAgent {
 
     // --- Step 1: Record receipt ------------------------------------------------
 
-    const receiptEntry = recordEntry({
+    recordEntry({
       partitionId: instruction.partitionId,
       deploymentId: instruction.deploymentId,
       agent: "envoy",
@@ -223,6 +298,7 @@ export class EnvoyAgent {
         environmentName: instruction.environmentName,
         partitionName: instruction.partitionName,
         variableCount: Object.keys(instruction.variables).length,
+        hasPlan: !!instruction.plan,
       },
     });
 
@@ -314,6 +390,225 @@ export class EnvoyAgent {
 
     // --- Step 4: Execute -------------------------------------------------------
 
+    // Branch: if a plan was provided by Command, use the OperationExecutor.
+    // Otherwise, write workspace artifacts directly (the default path).
+    if (instruction.plan && instruction.plan.length > 0) {
+      return this.executePlan(
+        instruction,
+        localRecord,
+        totalStart,
+        debriefEntryIds,
+        debriefEntries,
+        recordEntry,
+      );
+    }
+
+    return this.executeWorkspaceArtifacts(
+      instruction,
+      localRecord,
+      totalStart,
+      debriefEntryIds,
+      debriefEntries,
+      recordEntry,
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // Execution path: OperationExecutor (plan-based)
+  // -------------------------------------------------------------------------
+
+  /**
+   * Execute a deployment plan through the OperationExecutor.
+   * Used when the Command agent provides planned steps.
+   */
+  private async executePlan(
+    instruction: DeploymentInstruction,
+    localRecord: LocalDeploymentRecord,
+    totalStart: number,
+    debriefEntryIds: string[],
+    debriefEntries: DebriefEntry[],
+    recordEntry: (params: Parameters<DebriefWriter["record"]>[0]) => DebriefEntry,
+  ): Promise<DeploymentResult> {
+    const steps = instruction.plan!;
+    const boundaries = instruction.boundaries ?? [];
+
+    recordEntry({
+      partitionId: instruction.partitionId,
+      deploymentId: instruction.deploymentId,
+      agent: "envoy",
+      decisionType: "deployment-execution",
+      decision:
+        `Executing plan: ${steps.length} step(s) for ${instruction.operationId} ` +
+        `v${instruction.version} via OperationExecutor`,
+      reasoning:
+        `Environment scan passed. Executing ${steps.length} planned step(s) ` +
+        `via the OperationExecutor with ${boundaries.length} security boundary ` +
+        `constraint(s). Steps: ${steps.map((s) => s.description).join("; ")}. ` +
+        `All steps are validated against security boundaries before any execution begins. ` +
+        `If any step fails, completed steps will be automatically rolled back in reverse order.`,
+      context: {
+        step: "execute",
+        workspacePath: localRecord.workspacePath,
+        stepCount: steps.length,
+        boundaryCount: boundaries.length,
+        steps: steps.map((s) => ({ action: s.action, target: s.target, description: s.description })),
+      },
+    });
+
+    const execStart = Date.now();
+    const planResult = await this.operationExecutor!.executePlan(
+      steps,
+      boundaries,
+      undefined,
+      instruction.deploymentId,
+    );
+    const execDurationMs = Date.now() - execStart;
+
+    if (!planResult.success) {
+      const failedResult = planResult.results.find((r) => r.status === "failed");
+      const errorMsg = failedResult?.error ?? "Unknown execution error";
+
+      this.state.completeDeployment(instruction.deploymentId, "failed", errorMsg);
+
+      const diagnostic = this.investigator.investigate(
+        localRecord.workspacePath,
+        instruction,
+        { success: false, workspacePath: localRecord.workspacePath, artifacts: [], durationMs: execDurationMs, error: errorMsg },
+      );
+
+      recordEntry({
+        partitionId: instruction.partitionId,
+        deploymentId: instruction.deploymentId,
+        agent: "envoy",
+        decisionType: "deployment-failure",
+        decision: `Plan execution failed at step ${(planResult.failedStepIndex ?? 0) + 1}/${steps.length}: ${errorMsg}`,
+        reasoning:
+          `Execution failed on step "${steps[planResult.failedStepIndex ?? 0]?.description ?? "unknown"}". ` +
+          `Error: ${errorMsg}. ` +
+          `${planResult.rollbackResults ? `Automatic rollback was executed on ${planResult.rollbackResults.length} completed step(s). ` : ""}` +
+          `The environment should be in its previous state. Total execution time: ${execDurationMs}ms.`,
+        context: { step: "execute", error: errorMsg, durationMs: execDurationMs, failedStepIndex: planResult.failedStepIndex },
+      });
+
+      recordEntry({
+        partitionId: instruction.partitionId,
+        deploymentId: instruction.deploymentId,
+        agent: "envoy",
+        decisionType: "diagnostic-investigation",
+        decision: `Investigation: ${diagnostic.summary}`,
+        reasoning: `Root cause: ${diagnostic.rootCause} Recommendation: ${diagnostic.recommendation}`,
+        context: { diagnostic, evidenceCount: diagnostic.evidence.length, failureType: diagnostic.failureType },
+      });
+
+      const failResult: DeploymentResult = {
+        deploymentId: instruction.deploymentId,
+        success: false,
+        workspacePath: localRecord.workspacePath,
+        artifacts: [],
+        executionDurationMs: execDurationMs,
+        totalDurationMs: Date.now() - totalStart,
+        verificationPassed: false,
+        verificationChecks: [],
+        failureReason: errorMsg,
+        diagnostic,
+        debriefEntryIds,
+        debriefEntries,
+      };
+      this.reportToServer(failResult);
+      return failResult;
+    }
+
+    // Collect artifact names from completed steps
+    const artifacts = planResult.results
+      .filter((r) => r.status === "completed")
+      .map((r) => r.step.description);
+
+    // Update state and record completion
+    this.state.completeDeployment(instruction.deploymentId, "succeeded");
+    this.state.updateEnvironment(instruction.partitionId, instruction.environmentId, {
+      currentVersion: instruction.version,
+      currentDeploymentId: instruction.deploymentId,
+      activeVariables: instruction.variables,
+    });
+
+    const totalDurationMs = Date.now() - totalStart;
+
+    recordEntry({
+      partitionId: instruction.partitionId,
+      deploymentId: instruction.deploymentId,
+      agent: "envoy",
+      decisionType: "deployment-verification",
+      decision: `Plan execution verified — all ${planResult.results.length} steps completed`,
+      reasoning:
+        `All ${planResult.results.length} planned steps executed successfully ` +
+        `in ${execDurationMs}ms. Each step was validated against security boundaries ` +
+        `and executed through platform-aware handlers.`,
+      context: { step: "verify", passed: true, stepCount: planResult.results.length },
+    });
+
+    recordEntry({
+      partitionId: instruction.partitionId,
+      deploymentId: instruction.deploymentId,
+      agent: "envoy",
+      decisionType: "deployment-completion",
+      decision:
+        `Deployment complete: ${instruction.operationId} ` +
+        `v${instruction.version} is now live on "${instruction.environmentName}"`,
+      reasoning:
+        `Full local pipeline completed successfully: environment scan ` +
+        `confirmed readiness, ${planResult.results.length} execution step(s) ` +
+        `completed via OperationExecutor. Local state updated — ` +
+        `"${instruction.environmentName}" now runs v${instruction.version} ` +
+        `for partition "${instruction.partitionName}". ` +
+        `Total execution time: ${totalDurationMs}ms.`,
+      context: {
+        step: "complete",
+        artifacts,
+        executionDurationMs: execDurationMs,
+        totalDurationMs,
+        workspacePath: localRecord.workspacePath,
+        executedSteps: planResult.results.length,
+      },
+    });
+
+    const successResult: DeploymentResult = {
+      deploymentId: instruction.deploymentId,
+      success: true,
+      workspacePath: localRecord.workspacePath,
+      artifacts,
+      executionDurationMs: execDurationMs,
+      totalDurationMs,
+      verificationPassed: true,
+      verificationChecks: planResult.results.map((r) => ({
+        name: r.step.action,
+        passed: r.status === "completed",
+        detail: r.output || r.step.description,
+      })),
+      failureReason: null,
+      diagnostic: null,
+      debriefEntryIds,
+      debriefEntries,
+    };
+    this.reportToServer(successResult);
+    return successResult;
+  }
+
+  // -------------------------------------------------------------------------
+  // Execution path: workspace artifacts (default, backwards-compatible)
+  // -------------------------------------------------------------------------
+
+  /**
+   * Write workspace artifacts directly — the default execution path when
+   * no plan is provided. This is equivalent to what DeploymentExecutor did.
+   */
+  private async executeWorkspaceArtifacts(
+    instruction: DeploymentInstruction,
+    localRecord: LocalDeploymentRecord,
+    totalStart: number,
+    debriefEntryIds: string[],
+    debriefEntries: DebriefEntry[],
+    recordEntry: (params: Parameters<DebriefWriter["record"]>[0]) => DebriefEntry,
+  ): Promise<DeploymentResult> {
     recordEntry({
       partitionId: instruction.partitionId,
       deploymentId: instruction.deploymentId,
@@ -337,15 +632,7 @@ export class EnvoyAgent {
       },
     });
 
-    const execResult = await this.executor.execute({
-      deploymentId: instruction.deploymentId,
-      operationId: instruction.operationId,
-      partitionId: instruction.partitionId,
-      environmentId: instruction.environmentId,
-      version: instruction.version,
-      variables: instruction.variables,
-      receivedAt: localRecord.receivedAt.toISOString(),
-    });
+    const execResult = this.writeWorkspaceArtifacts(instruction, localRecord);
 
     if (!execResult.success) {
       this.state.completeDeployment(
@@ -354,7 +641,6 @@ export class EnvoyAgent {
         execResult.error,
       );
 
-      // --- Investigate the failure ---
       const diagnostic = this.investigator.investigate(
         execResult.workspacePath,
         instruction,
@@ -417,9 +703,9 @@ export class EnvoyAgent {
       return failResult;
     }
 
-    // --- Step 5: Verify locally ------------------------------------------------
+    // --- Verify locally ------------------------------------------------
 
-    const verification = this.executor.verify(
+    const verification = this.verifyWorkspace(
       execResult.workspacePath,
       instruction.version,
       instruction.operationId,
@@ -457,7 +743,6 @@ export class EnvoyAgent {
         "Post-deployment verification failed",
       );
 
-      // --- Investigate the verification failure ---
       const diagnostic = this.investigator.investigate(
         execResult.workspacePath,
         instruction,
@@ -498,7 +783,7 @@ export class EnvoyAgent {
       return failResult;
     }
 
-    // --- Step 6: Update local state --------------------------------------------
+    // --- Update local state --------------------------------------------
 
     this.state.completeDeployment(instruction.deploymentId, "succeeded");
     this.state.updateEnvironment(
@@ -511,7 +796,7 @@ export class EnvoyAgent {
       },
     );
 
-    // --- Step 7: Record completion ---------------------------------------------
+    // --- Record completion ---------------------------------------------
 
     const totalDurationMs = Date.now() - totalStart;
 
@@ -557,6 +842,154 @@ export class EnvoyAgent {
     };
     this.reportToServer(successResult);
     return successResult;
+  }
+
+  // -------------------------------------------------------------------------
+  // Internal: workspace artifact writing (migrated from DeploymentExecutor)
+  // -------------------------------------------------------------------------
+
+  /**
+   * Write workspace artifacts — the deployment metadata files that
+   * represent a deployed state on this machine.
+   */
+  private writeWorkspaceArtifacts(
+    instruction: DeploymentInstruction,
+    localRecord: LocalDeploymentRecord,
+  ): WorkspaceExecutionResult {
+    const start = Date.now();
+    const workspacePath = localRecord.workspacePath;
+
+    try {
+      fs.mkdirSync(workspacePath, { recursive: true });
+      const artifacts: string[] = [];
+
+      // Write deployment manifest
+      const manifestPath = path.join(workspacePath, "manifest.json");
+      fs.writeFileSync(manifestPath, JSON.stringify({
+        deploymentId: instruction.deploymentId,
+        operationId: instruction.operationId,
+        partitionId: instruction.partitionId,
+        environmentId: instruction.environmentId,
+        version: instruction.version,
+        variables: instruction.variables,
+        receivedAt: localRecord.receivedAt.toISOString(),
+      }, null, 2));
+      artifacts.push("manifest.json");
+
+      // Write resolved variables
+      const varsPath = path.join(workspacePath, "variables.env");
+      const varsContent = Object.entries(instruction.variables)
+        .map(([k, v]) => `${k}=${v}`)
+        .join("\n");
+      fs.writeFileSync(varsPath, varsContent);
+      artifacts.push("variables.env");
+
+      // Write version marker
+      const versionPath = path.join(workspacePath, "VERSION");
+      fs.writeFileSync(versionPath, `${instruction.operationId}@${instruction.version}`);
+      artifacts.push("VERSION");
+
+      // Write deployment status
+      const statusPath = path.join(workspacePath, "STATUS");
+      fs.writeFileSync(statusPath, "DEPLOYED");
+      artifacts.push("STATUS");
+
+      return {
+        success: true,
+        workspacePath,
+        artifacts,
+        durationMs: Date.now() - start,
+        error: null,
+      };
+    } catch (err) {
+      return {
+        success: false,
+        workspacePath,
+        artifacts: [],
+        durationMs: Date.now() - start,
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Internal: workspace verification (migrated from DeploymentExecutor)
+  // -------------------------------------------------------------------------
+
+  /**
+   * Verify a deployment workspace: check that the expected artifacts exist
+   * and contain the right content.
+   */
+  private verifyWorkspace(
+    workspacePath: string,
+    expectedVersion: string,
+    expectedOperationId: string,
+  ): VerificationResult {
+    const checks: Array<{ name: string; passed: boolean; detail: string }> = [];
+
+    const wsExists = fs.existsSync(workspacePath);
+    checks.push({
+      name: "workspace-exists",
+      passed: wsExists,
+      detail: wsExists
+        ? `Workspace directory exists at ${workspacePath}`
+        : `Workspace directory missing at ${workspacePath}`,
+    });
+
+    if (!wsExists) {
+      return { passed: false, checks };
+    }
+
+    const manifestPath = path.join(workspacePath, "manifest.json");
+    const manifestExists = fs.existsSync(manifestPath);
+    checks.push({
+      name: "manifest-present",
+      passed: manifestExists,
+      detail: manifestExists ? "Deployment manifest found" : "Deployment manifest missing",
+    });
+
+    const versionPath = path.join(workspacePath, "VERSION");
+    const versionExists = fs.existsSync(versionPath);
+    if (versionExists) {
+      const versionContent = fs.readFileSync(versionPath, "utf-8").trim();
+      const versionCorrect = versionContent === `${expectedOperationId}@${expectedVersion}`;
+      checks.push({
+        name: "version-correct",
+        passed: versionCorrect,
+        detail: versionCorrect
+          ? `Version marker reads "${versionContent}" — matches expected`
+          : `Version marker reads "${versionContent}" — expected "${expectedOperationId}@${expectedVersion}"`,
+      });
+    } else {
+      checks.push({ name: "version-correct", passed: false, detail: "VERSION file missing" });
+    }
+
+    const statusPath = path.join(workspacePath, "STATUS");
+    const statusExists = fs.existsSync(statusPath);
+    if (statusExists) {
+      const statusContent = fs.readFileSync(statusPath, "utf-8").trim();
+      const statusCorrect = statusContent === "DEPLOYED";
+      checks.push({
+        name: "status-deployed",
+        passed: statusCorrect,
+        detail: statusCorrect
+          ? "STATUS marker reads DEPLOYED"
+          : `STATUS marker reads "${statusContent}" — expected "DEPLOYED"`,
+      });
+    } else {
+      checks.push({ name: "status-deployed", passed: false, detail: "STATUS file missing" });
+    }
+
+    const varsPath = path.join(workspacePath, "variables.env");
+    const varsExists = fs.existsSync(varsPath);
+    checks.push({
+      name: "variables-present",
+      passed: varsExists,
+      detail: varsExists ? "Variables file found" : "Variables file missing",
+    });
+
+    const passed = checks.every((c) => c.passed);
+    return { passed, checks };
   }
 
   /**

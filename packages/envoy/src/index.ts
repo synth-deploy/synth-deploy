@@ -229,3 +229,33 @@ export type {
   FailureType,
   LogFinding,
 } from "./agent/diagnostic-investigator.js";
+
+// --- Execution engine ---
+
+export {
+  DefaultOperationExecutor,
+  DefaultOperationRegistry,
+  BoundaryValidator,
+  createPlatformAdapter,
+  LinuxPlatformAdapter,
+  ServiceHandler,
+  FileHandler,
+  ConfigHandler,
+  ProcessHandler,
+  ContainerHandler,
+  VerifyHandler,
+} from "./execution/index.js";
+export type {
+  OperationResult,
+  ExecutionProgressEvent,
+  ProgressCallback,
+  PlanExecutionResult,
+  OperationHandler,
+  HandlerResult,
+  ValidationResult,
+  PlanValidationResult,
+  Platform,
+  PlatformAdapter,
+  ServiceManager,
+  FilesystemOps,
+} from "./execution/index.js";

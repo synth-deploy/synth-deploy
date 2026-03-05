@@ -12,6 +12,7 @@
   "exports": {
     ".": "./dist/index.js",
     "./agent/*": "./dist/agent/*",
+    "./execution/*": "./dist/execution/*",
     "./state/*": "./dist/state/*",
     "./server.js": "./dist/server.js"
   },
