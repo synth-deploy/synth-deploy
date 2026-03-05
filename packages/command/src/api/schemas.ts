@@ -305,3 +305,55 @@ export const QueryRequestSchema = z.object({
   query: z.string().min(1),
   conversationId: z.string().optional(),
 });
+
+// --- Auth ---
+
+export const LoginSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(1),
+});
+
+export const RegisterSchema = z.object({
+  email: z.string().email(),
+  name: z.string().min(1),
+  password: z.string().min(8),
+});
+
+export const RefreshTokenSchema = z.object({
+  refreshToken: z.string().min(1),
+});
+
+export const CreateUserSchema = z.object({
+  email: z.string().email(),
+  name: z.string().min(1),
+  password: z.string().min(8),
+});
+
+export const UpdateUserSchema = z.object({
+  email: z.string().email().optional(),
+  name: z.string().min(1).optional(),
+  password: z.string().min(8).optional(),
+});
+
+export const AssignRolesSchema = z.object({
+  roleIds: z.array(z.string().min(1)),
+});
+
+export const CreateRoleSchema = z.object({
+  name: z.string().min(1),
+  permissions: z.array(z.string().min(1)),
+});
+
+export const UpdateRoleSchema = z.object({
+  name: z.string().min(1).optional(),
+  permissions: z.array(z.string().min(1)).optional(),
+});
+
+export const ApproveDeploymentSchema = z.object({
+  approvedBy: z.string().min(1),
+  modifications: z.string().optional(),
+});
+
+export const RejectDeploymentSchema = z.object({
+  reason: z.string().min(1),
+});

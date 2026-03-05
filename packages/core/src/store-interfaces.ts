@@ -17,6 +17,13 @@ import type {
   ArtifactVersion,
   SecurityBoundary,
   EnvoyId,
+  User,
+  UserId,
+  Role,
+  RoleId,
+  Permission,
+  UserRole,
+  Session,
 } from "./types.js";
 
 export interface IPartitionStore {
@@ -67,4 +74,42 @@ export interface IDeploymentStore {
 export interface ISettingsStore {
   get(): AppSettings;
   update(partial: Partial<AppSettings>): AppSettings;
+}
+
+// --- Auth store interfaces ---
+
+export interface IUserStore {
+  create(user: User): User;
+  getById(id: UserId): User | undefined;
+  getByEmail(email: string): User | undefined;
+  list(): User[];
+  update(id: UserId, updates: Partial<Pick<User, "email" | "name" | "passwordHash" | "updatedAt">>): User;
+  delete(id: UserId): void;
+  count(): number;
+}
+
+export interface IRoleStore {
+  create(role: Role): Role;
+  getById(id: RoleId): Role | undefined;
+  getByName(name: string): Role | undefined;
+  list(): Role[];
+  update(id: RoleId, updates: Partial<Pick<Role, "name" | "permissions">>): Role;
+  delete(id: RoleId): void;
+}
+
+export interface IUserRoleStore {
+  assign(userId: UserId, roleId: RoleId, assignedBy: UserId): UserRole;
+  getUserRoles(userId: UserId): Role[];
+  getUserPermissions(userId: UserId): Permission[];
+  removeRole(userId: UserId, roleId: RoleId): void;
+  setRoles(userId: UserId, roleIds: RoleId[], assignedBy: UserId): void;
+}
+
+export interface ISessionStore {
+  create(session: Session): Session;
+  getByToken(token: string): Session | undefined;
+  getByRefreshToken(refreshToken: string): Session | undefined;
+  deleteByToken(token: string): void;
+  deleteByUserId(userId: UserId): void;
+  deleteExpired(): void;
 }

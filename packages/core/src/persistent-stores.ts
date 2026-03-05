@@ -18,6 +18,13 @@ import type {
   SecurityBoundary,
   SecurityBoundaryType,
   EnvoyId,
+  User,
+  UserId,
+  Role,
+  RoleId,
+  Permission,
+  UserRole,
+  Session,
 } from "./types.js";
 import { DEFAULT_APP_SETTINGS } from "./types.js";
 
@@ -25,7 +32,7 @@ import { DEFAULT_APP_SETTINGS } from "./types.js";
 // Schema version — bump when table definitions change
 // ---------------------------------------------------------------------------
 
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 
 // ---------------------------------------------------------------------------
 // Safe JSON parse — returns fallback on corruption instead of crashing
@@ -144,6 +151,40 @@ export function openEntityDatabase(dbPath: string): Database.Database {
     CREATE TABLE IF NOT EXISTS settings (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      email TEXT NOT NULL UNIQUE,
+      name TEXT NOT NULL,
+      password_hash TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS roles (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL UNIQUE,
+      permissions TEXT NOT NULL,
+      is_built_in INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS user_roles (
+      user_id TEXT NOT NULL,
+      role_id TEXT NOT NULL,
+      assigned_at TEXT NOT NULL,
+      assigned_by TEXT NOT NULL,
+      PRIMARY KEY (user_id, role_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS sessions (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      token TEXT NOT NULL UNIQUE,
+      refresh_token TEXT NOT NULL UNIQUE,
+      expires_at TEXT NOT NULL,
+      created_at TEXT NOT NULL
     );
   `);
 
@@ -835,5 +876,380 @@ function rowToSecurityBoundary(row: SecurityBoundaryRow): SecurityBoundary {
     envoyId: row.envoy_id,
     boundaryType: row.boundary_type as SecurityBoundaryType,
     config: safeJsonParse(row.config, {}, { table: "envoy_security_boundaries", rowId: row.id, column: "config" }),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// PersistentUserStore
+// ---------------------------------------------------------------------------
+
+export class PersistentUserStore {
+  private stmts: {
+    insert: Database.Statement;
+    getById: Database.Statement;
+    getByEmail: Database.Statement;
+    list: Database.Statement;
+    update: Database.Statement;
+    deleteById: Database.Statement;
+    count: Database.Statement;
+  };
+
+  constructor(private db: Database.Database) {
+    this.stmts = {
+      insert: db.prepare(
+        `INSERT INTO users (id, email, name, password_hash, created_at, updated_at)
+         VALUES (@id, @email, @name, @password_hash, @created_at, @updated_at)`,
+      ),
+      getById: db.prepare(`SELECT * FROM users WHERE id = ?`),
+      getByEmail: db.prepare(`SELECT * FROM users WHERE email = ?`),
+      list: db.prepare(`SELECT * FROM users ORDER BY created_at ASC`),
+      update: db.prepare(
+        `UPDATE users SET email = @email, name = @name, password_hash = @password_hash, updated_at = @updated_at WHERE id = @id`,
+      ),
+      deleteById: db.prepare(`DELETE FROM users WHERE id = ?`),
+      count: db.prepare(`SELECT COUNT(*) as cnt FROM users`),
+    };
+  }
+
+  create(user: User): User {
+    this.stmts.insert.run({
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      password_hash: user.passwordHash,
+      created_at: user.createdAt.toISOString(),
+      updated_at: user.updatedAt.toISOString(),
+    });
+    return structuredClone(user);
+  }
+
+  getById(id: UserId): User | undefined {
+    const row = this.stmts.getById.get(id) as UserRow | undefined;
+    return row ? rowToUser(row) : undefined;
+  }
+
+  getByEmail(email: string): User | undefined {
+    const row = this.stmts.getByEmail.get(email) as UserRow | undefined;
+    return row ? rowToUser(row) : undefined;
+  }
+
+  list(): User[] {
+    const rows = this.stmts.list.all() as UserRow[];
+    return rows.map(rowToUser);
+  }
+
+  update(id: UserId, updates: Partial<Pick<User, "email" | "name" | "passwordHash" | "updatedAt">>): User {
+    const user = this.getById(id);
+    if (!user) throw new Error(`User not found: ${id}`);
+    const newEmail = updates.email ?? user.email;
+    const newName = updates.name ?? user.name;
+    const newHash = updates.passwordHash ?? user.passwordHash;
+    const newUpdatedAt = updates.updatedAt ?? new Date();
+    this.stmts.update.run({
+      id,
+      email: newEmail,
+      name: newName,
+      password_hash: newHash,
+      updated_at: newUpdatedAt.toISOString(),
+    });
+    return { ...user, email: newEmail, name: newName, passwordHash: newHash, updatedAt: newUpdatedAt };
+  }
+
+  delete(id: UserId): void {
+    this.stmts.deleteById.run(id);
+  }
+
+  count(): number {
+    const row = this.stmts.count.get() as { cnt: number };
+    return row.cnt;
+  }
+}
+
+interface UserRow {
+  id: string;
+  email: string;
+  name: string;
+  password_hash: string;
+  created_at: string;
+  updated_at: string;
+}
+
+function rowToUser(row: UserRow): User {
+  return {
+    id: row.id as UserId,
+    email: row.email,
+    name: row.name,
+    passwordHash: row.password_hash,
+    createdAt: new Date(row.created_at),
+    updatedAt: new Date(row.updated_at),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// PersistentRoleStore
+// ---------------------------------------------------------------------------
+
+export class PersistentRoleStore {
+  private stmts: {
+    insert: Database.Statement;
+    getById: Database.Statement;
+    getByName: Database.Statement;
+    list: Database.Statement;
+    update: Database.Statement;
+    deleteById: Database.Statement;
+  };
+
+  constructor(private db: Database.Database) {
+    this.stmts = {
+      insert: db.prepare(
+        `INSERT INTO roles (id, name, permissions, is_built_in, created_at)
+         VALUES (@id, @name, @permissions, @is_built_in, @created_at)`,
+      ),
+      getById: db.prepare(`SELECT * FROM roles WHERE id = ?`),
+      getByName: db.prepare(`SELECT * FROM roles WHERE name = ?`),
+      list: db.prepare(`SELECT * FROM roles ORDER BY created_at ASC`),
+      update: db.prepare(
+        `UPDATE roles SET name = @name, permissions = @permissions WHERE id = @id`,
+      ),
+      deleteById: db.prepare(`DELETE FROM roles WHERE id = ?`),
+    };
+  }
+
+  create(role: Role): Role {
+    this.stmts.insert.run({
+      id: role.id,
+      name: role.name,
+      permissions: JSON.stringify(role.permissions),
+      is_built_in: role.isBuiltIn ? 1 : 0,
+      created_at: role.createdAt.toISOString(),
+    });
+    return structuredClone(role);
+  }
+
+  getById(id: RoleId): Role | undefined {
+    const row = this.stmts.getById.get(id) as RoleRow | undefined;
+    return row ? rowToRole(row) : undefined;
+  }
+
+  getByName(name: string): Role | undefined {
+    const row = this.stmts.getByName.get(name) as RoleRow | undefined;
+    return row ? rowToRole(row) : undefined;
+  }
+
+  list(): Role[] {
+    const rows = this.stmts.list.all() as RoleRow[];
+    return rows.map(rowToRole);
+  }
+
+  update(id: RoleId, updates: Partial<Pick<Role, "name" | "permissions">>): Role {
+    const role = this.getById(id);
+    if (!role) throw new Error(`Role not found: ${id}`);
+    const newName = updates.name ?? role.name;
+    const newPermissions = updates.permissions ?? role.permissions;
+    this.stmts.update.run({
+      id,
+      name: newName,
+      permissions: JSON.stringify(newPermissions),
+    });
+    return { ...role, name: newName, permissions: newPermissions };
+  }
+
+  delete(id: RoleId): void {
+    this.stmts.deleteById.run(id);
+  }
+}
+
+interface RoleRow {
+  id: string;
+  name: string;
+  permissions: string;
+  is_built_in: number;
+  created_at: string;
+}
+
+function rowToRole(row: RoleRow): Role {
+  return {
+    id: row.id as RoleId,
+    name: row.name,
+    permissions: safeJsonParse<Permission[]>(row.permissions, [], { table: "roles", rowId: row.id, column: "permissions" }),
+    isBuiltIn: row.is_built_in === 1,
+    createdAt: new Date(row.created_at),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// PersistentUserRoleStore
+// ---------------------------------------------------------------------------
+
+export class PersistentUserRoleStore {
+  private stmts: {
+    insert: Database.Statement;
+    getByUser: Database.Statement;
+    deleteOne: Database.Statement;
+    deleteAllForUser: Database.Statement;
+  };
+
+  private roleStore: PersistentRoleStore;
+
+  constructor(private db: Database.Database, roleStore: PersistentRoleStore) {
+    this.roleStore = roleStore;
+    this.stmts = {
+      insert: db.prepare(
+        `INSERT OR REPLACE INTO user_roles (user_id, role_id, assigned_at, assigned_by)
+         VALUES (@user_id, @role_id, @assigned_at, @assigned_by)`,
+      ),
+      getByUser: db.prepare(`SELECT * FROM user_roles WHERE user_id = ?`),
+      deleteOne: db.prepare(`DELETE FROM user_roles WHERE user_id = ? AND role_id = ?`),
+      deleteAllForUser: db.prepare(`DELETE FROM user_roles WHERE user_id = ?`),
+    };
+  }
+
+  assign(userId: UserId, roleId: RoleId, assignedBy: UserId): UserRole {
+    const role = this.roleStore.getById(roleId);
+    if (!role) throw new Error(`Role not found: ${roleId}`);
+    const assignment: UserRole = {
+      userId,
+      roleId,
+      assignedAt: new Date(),
+      assignedBy,
+    };
+    this.stmts.insert.run({
+      user_id: userId,
+      role_id: roleId,
+      assigned_at: assignment.assignedAt.toISOString(),
+      assigned_by: assignedBy,
+    });
+    return assignment;
+  }
+
+  getUserRoles(userId: UserId): Role[] {
+    const rows = this.stmts.getByUser.all(userId) as UserRoleRow[];
+    const roles: Role[] = [];
+    for (const row of rows) {
+      const role = this.roleStore.getById(row.role_id as RoleId);
+      if (role) roles.push(role);
+    }
+    return roles;
+  }
+
+  getUserPermissions(userId: UserId): Permission[] {
+    const roles = this.getUserRoles(userId);
+    const permissionSet = new Set<Permission>();
+    for (const role of roles) {
+      for (const perm of role.permissions) {
+        permissionSet.add(perm);
+      }
+    }
+    return [...permissionSet];
+  }
+
+  removeRole(userId: UserId, roleId: RoleId): void {
+    this.stmts.deleteOne.run(userId, roleId);
+  }
+
+  setRoles(userId: UserId, roleIds: RoleId[], assignedBy: UserId): void {
+    const txn = this.db.transaction(() => {
+      this.stmts.deleteAllForUser.run(userId);
+      for (const roleId of roleIds) {
+        this.assign(userId, roleId, assignedBy);
+      }
+    });
+    txn();
+  }
+}
+
+interface UserRoleRow {
+  user_id: string;
+  role_id: string;
+  assigned_at: string;
+  assigned_by: string;
+}
+
+// ---------------------------------------------------------------------------
+// PersistentSessionStore
+// ---------------------------------------------------------------------------
+
+export class PersistentSessionStore {
+  private stmts: {
+    insert: Database.Statement;
+    getByToken: Database.Statement;
+    getByRefreshToken: Database.Statement;
+    deleteByToken: Database.Statement;
+    deleteByUserId: Database.Statement;
+    deleteExpired: Database.Statement;
+  };
+
+  constructor(private db: Database.Database) {
+    this.stmts = {
+      insert: db.prepare(
+        `INSERT INTO sessions (id, user_id, token, refresh_token, expires_at, created_at)
+         VALUES (@id, @user_id, @token, @refresh_token, @expires_at, @created_at)`,
+      ),
+      getByToken: db.prepare(`SELECT * FROM sessions WHERE token = ?`),
+      getByRefreshToken: db.prepare(`SELECT * FROM sessions WHERE refresh_token = ?`),
+      deleteByToken: db.prepare(`DELETE FROM sessions WHERE token = ?`),
+      deleteByUserId: db.prepare(`DELETE FROM sessions WHERE user_id = ?`),
+      deleteExpired: db.prepare(`DELETE FROM sessions WHERE expires_at < ?`),
+    };
+  }
+
+  create(session: Session): Session {
+    this.stmts.insert.run({
+      id: session.id,
+      user_id: session.userId,
+      token: session.token,
+      refresh_token: session.refreshToken,
+      expires_at: session.expiresAt.toISOString(),
+      created_at: session.createdAt.toISOString(),
+    });
+    return structuredClone(session);
+  }
+
+  getByToken(token: string): Session | undefined {
+    const row = this.stmts.getByToken.get(token) as SessionRow | undefined;
+    if (!row) return undefined;
+    const session = rowToSession(row);
+    if (session.expiresAt < new Date()) {
+      this.deleteByToken(token);
+      return undefined;
+    }
+    return session;
+  }
+
+  getByRefreshToken(refreshToken: string): Session | undefined {
+    const row = this.stmts.getByRefreshToken.get(refreshToken) as SessionRow | undefined;
+    return row ? rowToSession(row) : undefined;
+  }
+
+  deleteByToken(token: string): void {
+    this.stmts.deleteByToken.run(token);
+  }
+
+  deleteByUserId(userId: UserId): void {
+    this.stmts.deleteByUserId.run(userId);
+  }
+
+  deleteExpired(): void {
+    this.stmts.deleteExpired.run(new Date().toISOString());
+  }
+}
+
+interface SessionRow {
+  id: string;
+  user_id: string;
+  token: string;
+  refresh_token: string;
+  expires_at: string;
+  created_at: string;
+}
+
+function rowToSession(row: SessionRow): Session {
+  return {
+    id: row.id,
+    userId: row.user_id as UserId,
+    token: row.token,
+    refreshToken: row.refresh_token,
+    expiresAt: new Date(row.expires_at),
+    createdAt: new Date(row.created_at),
   };
 }

@@ -1,38 +1,85 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
+import { SignJWT, jwtVerify } from "jose";
+import type { IUserStore, IUserRoleStore, ISessionStore, UserId, Permission } from "@deploystack/core";
+
+export interface AuthenticatedUser {
+  id: UserId;
+  email: string;
+  name: string;
+  permissions: Permission[];
+}
+
+declare module "fastify" {
+  interface FastifyRequest {
+    user?: AuthenticatedUser;
+  }
+}
+
+const EXEMPT_ROUTES = ["/health", "/api/health", "/api/auth/login", "/api/auth/register", "/api/auth/refresh", "/api/auth/status"];
 
 /**
- * Registers API key authentication middleware on a Fastify instance.
+ * Registers JWT-based authentication middleware on a Fastify instance.
  *
- * Behavior:
- * - If DEPLOYSTACK_API_KEY is not set, auth is disabled (development mode).
- * - If set, all requests except GET /health require a valid
- *   Authorization: Bearer <key> header.
- * - Returns 401 { error: "Unauthorized" } on missing or invalid credentials.
+ * All /api/ and /mcp routes require a valid JWT Bearer token,
+ * except routes listed in EXEMPT_ROUTES. Static file serving and
+ * health endpoints are always accessible.
  */
-export function registerAuthMiddleware(app: FastifyInstance): { enabled: boolean } {
-  const apiKey = process.env.DEPLOYSTACK_API_KEY;
-
-  if (!apiKey) {
-    app.log.warn("DEPLOYSTACK_API_KEY not set — authentication disabled (development mode)");
-    return { enabled: false };
-  }
-
+export function registerAuthMiddleware(
+  app: FastifyInstance,
+  userStore: IUserStore,
+  userRoleStore: IUserRoleStore,
+  sessionStore: ISessionStore,
+  jwtSecret: Uint8Array,
+): { enabled: boolean } {
   app.addHook("onRequest", async (request: FastifyRequest, reply: FastifyReply) => {
-    // Health endpoint is always public
-    if (request.url === "/health") {
+    // Skip exempt routes
+    if (EXEMPT_ROUTES.some((r) => request.url.startsWith(r))) return;
+    // Also skip static file serving (non-API routes)
+    if (!request.url.startsWith("/api/") && request.url !== "/mcp") return;
+
+    const authHeader = request.headers.authorization;
+    if (!authHeader?.startsWith("Bearer ")) {
+      reply.status(401).send({ error: "Authentication required" });
       return;
     }
 
-    const authHeader = request.headers.authorization;
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return reply.status(401).send({ error: "Unauthorized" });
-    }
-
     const token = authHeader.slice(7);
-    if (token !== apiKey) {
-      return reply.status(401).send({ error: "Unauthorized" });
+    try {
+      const { payload } = await jwtVerify(token, jwtSecret);
+      const userId = payload.sub as UserId;
+      const user = userStore.getById(userId);
+      if (!user) {
+        reply.status(401).send({ error: "User not found" });
+        return;
+      }
+      const session = sessionStore.getByToken(token);
+      if (!session) {
+        reply.status(401).send({ error: "Session expired" });
+        return;
+      }
+      const permissions = userRoleStore.getUserPermissions(userId);
+      request.user = { id: userId, email: user.email, name: user.name, permissions };
+    } catch {
+      reply.status(401).send({ error: "Invalid token" });
     }
   });
 
   return { enabled: true };
+}
+
+export async function generateTokens(
+  userId: UserId,
+  jwtSecret: Uint8Array,
+): Promise<{ token: string; refreshToken: string; expiresAt: Date }> {
+  const token = await new SignJWT({ sub: userId })
+    .setProtectedHeader({ alg: "HS256" })
+    .setExpirationTime("15m")
+    .sign(jwtSecret);
+
+  const refreshToken = await new SignJWT({ sub: userId, type: "refresh" })
+    .setProtectedHeader({ alg: "HS256" })
+    .setExpirationTime("7d")
+    .sign(jwtSecret);
+
+  return { token, refreshToken, expiresAt: new Date(Date.now() + 15 * 60 * 1000) };
 }

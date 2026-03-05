@@ -7,6 +7,8 @@ export type {
   ArtifactId,
   ArtifactVersionId,
   SecurityBoundaryId,
+  UserId,
+  RoleId,
   DeploymentStatus,
   DeploymentTrigger,
   DeploymentPlan,
@@ -41,6 +43,12 @@ export type {
   CoBrandingConfig,
   McpServerConfig,
   AppSettings,
+  Permission,
+  User,
+  Role,
+  UserRole,
+  Session,
+  UserPublic,
 } from "./types.js";
 
 export {
@@ -65,6 +73,10 @@ export type {
   ISecurityBoundaryStore,
   IDeploymentStore,
   ISettingsStore,
+  IUserStore,
+  IRoleStore,
+  IUserRoleStore,
+  ISessionStore,
 } from "./store-interfaces.js";
 export {
   openEntityDatabase,
@@ -74,9 +86,17 @@ export {
   PersistentSettingsStore,
   PersistentArtifactStore,
   PersistentSecurityBoundaryStore,
+  PersistentUserStore,
+  PersistentRoleStore,
+  PersistentUserRoleStore,
+  PersistentSessionStore,
 } from "./persistent-stores.js";
 export { ArtifactStore } from "./artifact-store.js";
 export { SecurityBoundaryStore } from "./security-boundary-store.js";
+export { UserStore } from "./user-store.js";
+export { RoleStore } from "./role-store.js";
+export { UserRoleStore } from "./user-role-store.js";
+export { SessionStore } from "./session-store.js";
 export { PartitionContainer } from "./partition-container.js";
 export type {
   PrecedenceEntry,

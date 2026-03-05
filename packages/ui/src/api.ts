@@ -19,19 +19,68 @@ export type { OperationHistory };
 
 const BASE = "";
 
+let authToken: string | null = null;
+
+export function setAuthToken(token: string | null): void {
+  authToken = token;
+}
+
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...(init?.headers as Record<string, string>),
+  };
+  if (authToken) {
+    headers["Authorization"] = `Bearer ${authToken}`;
+  }
+
   const res = await fetch(`${BASE}${url}`, {
     ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...init?.headers,
-    },
+    headers,
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new Error(body.error ?? `Request failed: ${res.status}`);
   }
   return res.json();
+}
+
+// --- Auth ---
+
+interface AuthLoginResult {
+  user: { id: string; email: string; name: string; createdAt: string; updatedAt: string };
+  token: string;
+  refreshToken: string;
+  permissions: string[];
+}
+
+export async function authLogin(email: string, password: string): Promise<AuthLoginResult> {
+  return fetchJson("/api/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ email, password }),
+  });
+}
+
+export async function authRegister(email: string, name: string, password: string): Promise<AuthLoginResult> {
+  return fetchJson("/api/auth/register", {
+    method: "POST",
+    body: JSON.stringify({ email, name, password }),
+  });
+}
+
+export async function authRefresh(refreshToken: string): Promise<{ token: string; refreshToken: string; expiresAt: string }> {
+  return fetchJson("/api/auth/refresh", {
+    method: "POST",
+    body: JSON.stringify({ refreshToken }),
+  });
+}
+
+export async function authMe(): Promise<{ user: { id: string; email: string; name: string; createdAt: string; updatedAt: string }; permissions: string[] }> {
+  return fetchJson("/api/auth/me");
+}
+
+export async function authStatus(): Promise<{ needsSetup: boolean }> {
+  return fetchJson("/api/auth/status");
 }
 
 // --- Operations ---
