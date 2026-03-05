@@ -8,7 +8,9 @@ import {
   RejectDeploymentSchema,
   DeploymentListQuerySchema,
   DebriefQuerySchema,
+  ProgressEventSchema,
 } from "./schemas.js";
+import type { ProgressEventStore } from "./progress-event-store.js";
 
 /**
  * REST API routes for deployments. These are the traditional (non-MCP) interface
@@ -23,6 +25,7 @@ export function registerDeploymentRoutes(
   artifactStore: IArtifactStore,
   settings: ISettingsStore,
   telemetry: ITelemetryStore,
+  progressStore?: ProgressEventStore,
 ): void {
   // Create a deployment (plan phase)
   app.post("/api/deployments", { preHandler: [requirePermission("deployment.create")] }, async (request, reply) => {
@@ -237,4 +240,91 @@ export function registerDeploymentRoutes(
     entries.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
     return { entries: entries.slice(0, max) };
   });
+
+  // ---------------------------------------------------------------------------
+  // Progress streaming — envoy callback and SSE endpoints
+  // ---------------------------------------------------------------------------
+
+  // POST /api/deployments/:id/progress — receives progress events from envoy
+  app.post<{ Params: { id: string } }>(
+    "/api/deployments/:id/progress",
+    async (request, reply) => {
+      if (!progressStore) {
+        return reply.status(501).send({ error: "Progress streaming not configured" });
+      }
+
+      const parsed = ProgressEventSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.status(400).send({ error: "Invalid progress event", details: parsed.error.format() });
+      }
+
+      const event = parsed.data;
+
+      // Validate the deploymentId in the URL matches the body
+      if (event.deploymentId !== request.params.id) {
+        return reply.status(400).send({ error: "Deployment ID in URL does not match event body" });
+      }
+
+      progressStore.push(event);
+      return reply.status(200).send({ received: true });
+    },
+  );
+
+  // GET /api/deployments/:id/stream — SSE endpoint for live progress
+  app.get<{ Params: { id: string } }>(
+    "/api/deployments/:id/stream",
+    async (request, reply) => {
+      if (!progressStore) {
+        return reply.status(501).send({ error: "Progress streaming not configured" });
+      }
+
+      // Set SSE headers
+      reply.raw.writeHead(200, {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+        "X-Accel-Buffering": "no",
+      });
+
+      const deploymentId = request.params.id;
+
+      // Send catch-up events from the ring buffer
+      const existing = progressStore.getEvents(deploymentId);
+      for (const event of existing) {
+        reply.raw.write(`data: ${JSON.stringify(event)}\n\n`);
+      }
+
+      // Check if deployment already completed — if so, close after catch-up
+      const lastEvent = existing[existing.length - 1];
+      if (lastEvent?.type === "deployment-completed") {
+        reply.raw.end();
+        return;
+      }
+
+      // Subscribe to new events
+      const listener = (event: { deploymentId: string; type: string }) => {
+        try {
+          reply.raw.write(`data: ${JSON.stringify(event)}\n\n`);
+
+          // Close the stream when deployment completes
+          if (event.type === "deployment-completed") {
+            reply.raw.end();
+          }
+        } catch {
+          // Client disconnected — clean up
+          progressStore!.removeListener(deploymentId, listener);
+        }
+      };
+
+      progressStore.addListener(deploymentId, listener);
+
+      // Clean up on client disconnect
+      request.raw.on("close", () => {
+        progressStore!.removeListener(deploymentId, listener);
+      });
+
+      // Keep the connection open — don't return a response (raw handling)
+      await reply;
+    },
+  );
 }

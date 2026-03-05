@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { getDeployment, getPostmortem, listEnvironments, listArtifacts, listPartitions } from "../../api.js";
 import type { Deployment, DebriefEntry, Environment, Artifact, Partition, PostmortemReport } from "../../types.js";
 import { useCanvas } from "../../context/CanvasContext.js";
@@ -24,6 +24,255 @@ const decisionTypeColors: Record<string, string> = {
   "rollback-execution": "#dc2626",
   "cross-system-context": "#14b8a6",
 };
+
+// ---------------------------------------------------------------------------
+// Progress event types (matches server-side ProgressEvent)
+// ---------------------------------------------------------------------------
+
+interface ProgressEvent {
+  deploymentId: string;
+  type:
+    | "step-started"
+    | "step-completed"
+    | "step-failed"
+    | "rollback-started"
+    | "rollback-completed"
+    | "deployment-completed";
+  stepIndex: number;
+  stepDescription: string;
+  status: "in_progress" | "completed" | "failed";
+  output?: string;
+  error?: string;
+  timestamp: string;
+  overallProgress: number;
+}
+
+// ---------------------------------------------------------------------------
+// useDeploymentStream — SSE hook for live execution progress
+// ---------------------------------------------------------------------------
+
+function useDeploymentStream(deploymentId: string, isRunning: boolean) {
+  const [events, setEvents] = useState<ProgressEvent[]>([]);
+  const [stale, setStale] = useState(false);
+  const [completed, setCompleted] = useState(false);
+  const staleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const eventSourceRef = useRef<EventSource | null>(null);
+
+  const resetStaleTimer = useCallback(() => {
+    setStale(false);
+    if (staleTimerRef.current) clearTimeout(staleTimerRef.current);
+    staleTimerRef.current = setTimeout(() => setStale(true), 10_000);
+  }, []);
+
+  useEffect(() => {
+    if (!isRunning) return;
+
+    const es = new EventSource(`/api/deployments/${deploymentId}/stream`);
+    eventSourceRef.current = es;
+    resetStaleTimer();
+
+    es.onmessage = (msg) => {
+      try {
+        const event: ProgressEvent = JSON.parse(msg.data);
+        setEvents((prev) => [...prev, event]);
+        resetStaleTimer();
+
+        if (event.type === "deployment-completed") {
+          setCompleted(true);
+          es.close();
+          if (staleTimerRef.current) clearTimeout(staleTimerRef.current);
+        }
+      } catch {
+        // Ignore malformed messages
+      }
+    };
+
+    es.onerror = () => {
+      setStale(true);
+    };
+
+    return () => {
+      es.close();
+      eventSourceRef.current = null;
+      if (staleTimerRef.current) clearTimeout(staleTimerRef.current);
+    };
+  }, [deploymentId, isRunning, resetStaleTimer]);
+
+  return { events, stale, completed };
+}
+
+// ---------------------------------------------------------------------------
+// LiveProgressSection — renders real-time step progress
+// ---------------------------------------------------------------------------
+
+function LiveProgressSection({ events, stale }: { events: ProgressEvent[]; stale: boolean }) {
+  const logRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll the log area
+  useEffect(() => {
+    if (logRef.current) {
+      logRef.current.scrollTop = logRef.current.scrollHeight;
+    }
+  }, [events]);
+
+  if (events.length === 0) return null;
+
+  // Derive step states from events
+  const latestEvent = events[events.length - 1];
+  const overallProgress = latestEvent.overallProgress;
+  const isRollback = events.some((e) => e.type === "rollback-started");
+
+  // Build a map of stepIndex -> latest event for that step
+  const stepMap = new Map<number, ProgressEvent>();
+  for (const event of events) {
+    if (event.type === "step-started" || event.type === "step-completed" || event.type === "step-failed") {
+      stepMap.set(event.stepIndex, event);
+    }
+  }
+
+  return (
+    <div className="canvas-section">
+      <h3 className="canvas-section-title">
+        {isRollback ? "Rollback Progress" : "Live Execution Progress"}
+      </h3>
+
+      {/* Progress bar */}
+      <div style={{
+        background: "var(--agent-bg-secondary, #1e1e2e)",
+        borderRadius: 4,
+        height: 8,
+        marginBottom: 12,
+        overflow: "hidden",
+      }}>
+        <div style={{
+          background: latestEvent.status === "failed" ? "#dc2626" : "#3b82f6",
+          height: "100%",
+          width: `${overallProgress}%`,
+          transition: "width 0.3s ease-out",
+          borderRadius: 4,
+        }} />
+      </div>
+      <div style={{ fontSize: 11, color: "var(--agent-text-muted)", marginBottom: 8, textAlign: "right" }}>
+        {overallProgress}%
+      </div>
+
+      {/* Stale indicator */}
+      {stale && (
+        <div style={{
+          background: "#f59e0b22",
+          border: "1px solid #f59e0b44",
+          borderRadius: 4,
+          padding: "6px 10px",
+          fontSize: 12,
+          color: "#f59e0b",
+          marginBottom: 10,
+        }}>
+          Connection to envoy lost — deployment may still be in progress
+        </div>
+      )}
+
+      {/* Step list */}
+      <div className="canvas-timeline">
+        {Array.from(stepMap.entries())
+          .sort(([a], [b]) => a - b)
+          .map(([idx, event]) => {
+            const isActive = event.type === "step-started";
+            const isFailed = event.type === "step-failed";
+            const isCompleted = event.type === "step-completed";
+
+            const dotColor = isCompleted
+              ? "#16a34a"
+              : isFailed
+                ? "#dc2626"
+                : "#3b82f6";
+
+            return (
+              <div key={idx} className="canvas-timeline-entry" style={{ cursor: "default" }}>
+                <div className="canvas-timeline-dot" style={{
+                  background: dotColor,
+                  animation: isActive ? "pulse 1.5s infinite" : undefined,
+                }} />
+                <div className="canvas-timeline-content">
+                  <div className="canvas-timeline-header">
+                    <span className="canvas-timeline-type">
+                      {isCompleted ? "completed" : isFailed ? "failed" : "running"}
+                    </span>
+                    <span className="canvas-timeline-time">
+                      Step {idx + 1}
+                    </span>
+                  </div>
+                  <div className="canvas-timeline-decision">{event.stepDescription}</div>
+                  {event.output && (
+                    <div style={{ fontSize: 11, color: "var(--agent-text-muted)", marginTop: 2 }}>
+                      {event.output}
+                    </div>
+                  )}
+                  {event.error && (
+                    <div style={{ fontSize: 11, color: "#dc2626", marginTop: 2 }}>
+                      {event.error}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+      </div>
+
+      {/* Rollback events */}
+      {isRollback && (
+        <div style={{ marginTop: 8 }}>
+          {events
+            .filter((e) => e.type === "rollback-started" || e.type === "rollback-completed")
+            .map((event, i) => (
+              <div key={`rb-${i}`} className="canvas-timeline-entry" style={{ cursor: "default" }}>
+                <div className="canvas-timeline-dot" style={{
+                  background: event.type === "rollback-completed" ? "#f59e0b" : "#dc2626",
+                }} />
+                <div className="canvas-timeline-content">
+                  <div className="canvas-timeline-header">
+                    <span className="canvas-timeline-type">{event.type}</span>
+                  </div>
+                  <div className="canvas-timeline-decision">{event.stepDescription}</div>
+                </div>
+              </div>
+            ))}
+        </div>
+      )}
+
+      {/* Live output log */}
+      {events.some((e) => e.output) && (
+        <div
+          ref={logRef}
+          style={{
+            marginTop: 10,
+            maxHeight: 200,
+            overflowY: "auto",
+            background: "var(--agent-bg-secondary, #0d0d14)",
+            borderRadius: 4,
+            padding: "8px 10px",
+            fontSize: 11,
+            fontFamily: "monospace",
+            color: "var(--agent-text-muted)",
+            lineHeight: 1.6,
+          }}
+        >
+          {events
+            .filter((e) => e.output)
+            .map((e, i) => (
+              <div key={i}>
+                <span style={{ color: "#6b7280" }}>[{new Date(e.timestamp).toLocaleTimeString()}]</span>{" "}
+                {e.output}
+              </div>
+            ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Main component
+// ---------------------------------------------------------------------------
 
 interface Props {
   deploymentId: string;
@@ -64,6 +313,20 @@ export default function DeploymentDetailPanel({ deploymentId, title }: Props) {
       setLoading(false);
     }).catch(() => setLoading(false));
   }, [deploymentId]);
+
+  // Live streaming for running deployments
+  const isRunning = deployment?.status === "running";
+  const { events: progressEvents, stale, completed: streamCompleted } = useDeploymentStream(deploymentId, isRunning);
+
+  // Re-fetch deployment when stream completes (to get final state)
+  useEffect(() => {
+    if (streamCompleted) {
+      getDeployment(deploymentId).then((result) => {
+        setDeployment(result.deployment);
+        setDebrief(result.debrief);
+      }).catch(() => {});
+    }
+  }, [streamCompleted, deploymentId]);
 
   if (loading) return <CanvasPanelHost title={title}><div className="loading">Loading...</div></CanvasPanelHost>;
   if (!deployment) return <CanvasPanelHost title={title}><div className="error-msg">Deployment not found</div></CanvasPanelHost>;
@@ -114,6 +377,11 @@ export default function DeploymentDetailPanel({ deploymentId, title }: Props) {
             <span>Approved by: {deployment.approvedBy}</span>
           )}
         </div>
+
+        {/* Live execution progress (only for running deployments) */}
+        {isRunning && progressEvents.length > 0 && (
+          <LiveProgressSection events={progressEvents} stale={stale} />
+        )}
 
         {/* Deployment Plan */}
         {deployment.plan && (

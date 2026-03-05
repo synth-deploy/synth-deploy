@@ -31,6 +31,7 @@ import { registerAuthRoutes } from "./api/auth.js";
 import { registerUserRoutes } from "./api/users.js";
 import { startStaleDeploymentScanner } from "./agent/stale-deployment-detector.js";
 import { startRetentionScanner } from "./agent/debrief-retention.js";
+import { ProgressEventStore } from "./api/progress-event-store.js";
 
 // --- Bootstrap shared state ---
 
@@ -538,7 +539,8 @@ registerHealthRoutes(app, {
   mcpServers: settings.get().mcpServers,
   llmClient: llm,
 });
-registerDeploymentRoutes(app, deployments, debrief, partitions, environments, artifactStore, settings, telemetryStore);
+const progressStore = new ProgressEventStore();
+registerDeploymentRoutes(app, deployments, debrief, partitions, environments, artifactStore, settings, telemetryStore, progressStore);
 registerEnvoyReportRoutes(app, debrief, deployments);
 registerArtifactRoutes(app, artifactStore, telemetryStore);
 registerSecurityBoundaryRoutes(app, securityBoundaryStore, telemetryStore);
