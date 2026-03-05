@@ -250,7 +250,7 @@ export async function getDeployment(id: string): Promise<{ deployment: Deploymen
 
 export async function createDeployment(trigger: {
   artifactId: string;
-  environmentId: string;
+  environmentId?: string;
   partitionId?: string;
   version?: string;
 }): Promise<{ deployment: Deployment }> {

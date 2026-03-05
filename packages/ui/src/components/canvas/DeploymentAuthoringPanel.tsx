@@ -49,11 +49,11 @@ export default function DeploymentAuthoringPanel({ title, preselectedArtifactId 
       setEnvironments(envs);
       setEnvoys(envoyList);
       setLoading(false);
-    });
+    }).catch(() => setLoading(false));
   }, []);
 
   async function handleDeploy() {
-    if (!selectedArtifactId || !selectedEnvironmentId) return;
+    if (!selectedArtifactId || (environmentsEnabled && !selectedEnvironmentId)) return;
 
     setSubmitting(true);
     setError(null);
@@ -61,7 +61,7 @@ export default function DeploymentAuthoringPanel({ title, preselectedArtifactId 
     try {
       const result = await createDeployment({
         artifactId: selectedArtifactId,
-        environmentId: selectedEnvironmentId,
+        environmentId: environmentsEnabled ? selectedEnvironmentId : undefined,
         partitionId: selectedPartitionId || undefined,
         version: version || undefined,
       });
@@ -71,8 +71,9 @@ export default function DeploymentAuthoringPanel({ title, preselectedArtifactId 
         title: `Deployment ${result.deployment.version || result.deployment.id.slice(0, 8)}`,
         params: { id: result.deployment.id },
       });
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
       setSubmitting(false);
     }
   }
@@ -182,7 +183,7 @@ export default function DeploymentAuthoringPanel({ title, preselectedArtifactId 
           </div>
 
           {/* Summary + deploy */}
-          {selectedArtifactId && selectedEnvironmentId && (
+          {selectedArtifactId && (!environmentsEnabled || selectedEnvironmentId) && (
             <div className="card" style={{ padding: 16, marginBottom: 16 }}>
               <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>
                 Deployment Summary

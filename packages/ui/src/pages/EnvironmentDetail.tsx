@@ -120,17 +120,22 @@ export default function EnvironmentDetail() {
         )}
       </div>
 
-      {showDeleteConfirm && (
+      {showDeleteConfirm && !hasDeployments && (
         <ConfirmDialog
           title="Delete Environment"
-          message={
-            hasDeployments
-              ? `This environment has ${deployments.length} deployment(s). Are you sure you want to delete "${env.name}"?`
-              : `Are you sure you want to delete "${env.name}"? This cannot be undone.`
-          }
+          message={`Are you sure you want to delete "${env.name}"? This cannot be undone.`}
           onConfirm={handleDelete}
           onCancel={() => setShowDeleteConfirm(false)}
           confirmLabel="Delete"
+        />
+      )}
+      {showDeleteConfirm && hasDeployments && (
+        <ConfirmDialog
+          title="Cannot Delete Environment"
+          message={`This environment has ${deployments.length} active deployment(s). Remove or reassign them before deleting "${env.name}".`}
+          onConfirm={() => setShowDeleteConfirm(false)}
+          onCancel={() => setShowDeleteConfirm(false)}
+          confirmLabel="OK"
         />
       )}
     </div>

@@ -67,11 +67,10 @@
   --v2-bg: #080b14;
   --v2-surface: rgba(15, 20, 30, 0.5);
   --v2-command: #63e1be;
-  --v2-order: #f59e0b;
   --v2-partition: #818cf8;
   --v2-envoy: #34d399;
   --v2-debrief: #e879f9;
-  --v2-operation: #6b7280;
+  --v2-artifact: #6b7280;
 }
 
 * {
@@ -2078,7 +2077,7 @@ table a:hover {
   min-width: 80px;
 }
 
-.canvas-activity-operation,
+.canvas-activity-artifact,
 .canvas-activity-partition {
   color: var(--agent-text-secondary);
   min-width: 100px;
@@ -2676,14 +2675,14 @@ table a:hover {
   color: #6b7280;
 }
 
-/* Operations grid */
-.v2-operations-grid {
+/* Artifacts grid */
+.v2-artifacts-grid {
   display: flex;
   gap: 12px;
   margin-bottom: 24px;
 }
 
-.v2-operation-card {
+.v2-artifact-card {
   flex: 1;
   background: rgba(15,20,30,0.5);
   border: 1px solid rgba(107,114,128,0.15);
@@ -2694,11 +2693,11 @@ table a:hover {
   transition: border-color 0.2s ease;
 }
 
-.v2-operation-card:hover {
+.v2-artifact-card:hover {
   border-color: rgba(107,114,128,0.35);
 }
 
-.v2-operation-card-grid-bg {
+.v2-artifact-card-grid-bg {
   position: absolute;
   inset: 0;
   background-image:
@@ -2709,11 +2708,11 @@ table a:hover {
   pointer-events: none;
 }
 
-.v2-operation-card-inner {
+.v2-artifact-card-inner {
   position: relative;
 }
 
-.v2-operation-id {
+.v2-artifact-id {
   font-family: var(--font-mono);
   font-size: 10px;
   color: #4b5563;
@@ -2722,7 +2721,7 @@ table a:hover {
   text-transform: uppercase;
 }
 
-.v2-operation-name {
+.v2-artifact-name {
   font-family: var(--font);
   font-size: 14px;
   color: #cbd5e1;
@@ -2730,106 +2729,23 @@ table a:hover {
   margin-bottom: 4px;
 }
 
-.v2-operation-meta {
+.v2-artifact-meta {
   font-family: var(--font-mono);
   font-size: 11px;
   color: #6b7280;
 }
 
-.v2-operation-steps {
+.v2-artifact-steps {
   margin-top: 12px;
   display: flex;
   gap: 4px;
 }
 
-.v2-operation-step-bar {
+.v2-artifact-step-bar {
   width: 20px;
   height: 4px;
   border-radius: 2px;
   background: rgba(107,114,128,0.2);
-}
-
-/* Orders list */
-.v2-orders-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-bottom: 8px;
-}
-
-.v2-order-row {
-  background: rgba(245,158,11,0.04);
-  border: 1px solid rgba(245,158,11,0.15);
-  border-radius: 10px;
-  padding: 10px 16px;
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  cursor: pointer;
-  transition: transform 0.3s, border-color 0.2s;
-}
-
-.v2-order-row:hover {
-  border-color: rgba(245,158,11,0.35);
-}
-
-.v2-order-stack-icon {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  opacity: 0.6;
-}
-
-.v2-order-stack-line {
-  width: 16px;
-  height: 3px;
-  border-radius: 1px;
-  background: #f59e0b;
-}
-
-.v2-order-info {
-  flex: 1;
-}
-
-.v2-order-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.v2-order-op-name {
-  font-family: var(--font);
-  font-size: 13px;
-  color: #cbd5e1;
-  font-weight: 600;
-}
-
-.v2-order-version {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: #f59e0b;
-}
-
-.v2-order-target {
-  font-family: var(--font);
-  font-size: 11px;
-  color: #6b7280;
-  margin-top: 2px;
-}
-
-.v2-order-status-pill {
-  padding: 3px 10px;
-  border-radius: 100px;
-  background: rgba(245,158,11,0.1);
-  border: 1px solid rgba(245,158,11,0.2);
-}
-
-.v2-order-status-pill span {
-  font-family: var(--font-mono);
-  font-size: 9px;
-  color: #f59e0b;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
 }
 
 /* Deployment particles */
@@ -3358,8 +3274,8 @@ table a:hover {
   color: #4b5563;
 }
 
-/* Operation List Item */
-.v2-operation-list-item {
+/* Artifact List Item */
+.v2-artifact-list-item {
   background: rgba(15,20,30,0.5);
   border: 1px solid rgba(107,114,128,0.15);
   border-radius: 12px;
@@ -3368,18 +3284,18 @@ table a:hover {
   overflow: hidden;
 }
 
-.v2-operation-list-inner {
+.v2-artifact-list-inner {
   position: relative;
   display: flex;
   align-items: center;
   gap: 16px;
 }
 
-.v2-operation-list-left {
+.v2-artifact-list-left {
   flex: 1;
 }
 
-.v2-operation-list-envs {
+.v2-artifact-list-envs {
   display: flex;
   gap: 4px;
   flex-wrap: wrap;

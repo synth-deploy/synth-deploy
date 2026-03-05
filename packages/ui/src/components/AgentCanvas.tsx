@@ -13,6 +13,7 @@ import SignalDetailPanel from "./canvas/SignalDetailPanel.js";
 import EnvoyRegistryPanel from "./canvas/EnvoyRegistryPanel.js";
 import EnvoyDetailPanel from "./canvas/EnvoyDetailPanel.js";
 import SettingsPanel from "./canvas/SettingsPanel.js";
+import ArtifactCatalogPanel from "./canvas/ArtifactCatalogPanel.js";
 import ErrorBoundary from "./ErrorBoundary.js";
 
 export default function AgentCanvas() {
@@ -127,6 +128,9 @@ export default function AgentCanvas() {
             title={panel.title}
           />
         );
+
+      case "artifact-catalog":
+        return <ArtifactCatalogPanel key={panel.id} title={panel.title} />;
 
       case "settings":
         return <SettingsPanel key={panel.id} title={panel.title} />;

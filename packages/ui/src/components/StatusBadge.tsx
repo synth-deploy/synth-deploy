@@ -5,6 +5,8 @@ const labels: Record<DeploymentStatus, string> = {
   failed: "Failed",
   running: "Running",
   pending: "Pending",
+  planning: "Planning",
+  approved: "Approved",
   rolled_back: "Rolled Back",
 };
 

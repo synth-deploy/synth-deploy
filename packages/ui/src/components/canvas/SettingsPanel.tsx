@@ -93,7 +93,7 @@ export default function SettingsPanel({ title }: Props) {
 
   async function handleClearCoBranding() {
     if (!settings) return;
-    const updated = await updateSettings({ coBranding: null } as Partial<AppSettings>);
+    const updated = await updateSettings({ coBranding: undefined } as Partial<AppSettings>);
     setSettings(updated);
     setCoBrandingOperatorName("");
     setCoBrandingLogoUrl("");

@@ -105,6 +105,88 @@ export default function DeploymentDetail() {
         </div>
       </div>
 
+      {/* Deployment Plan */}
+      {deployment.plan && deployment.plan.steps.length > 0 && (
+        <div className="section">
+          <div className="card">
+            <div className="card-header">
+              <h3>Deployment Plan</h3>
+              <span className="text-muted" style={{ fontSize: 12 }}>
+                {deployment.plan.steps.length} step{deployment.plan.steps.length !== 1 ? "s" : ""}
+              </span>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "8px 0" }}>
+              {deployment.plan.steps.map((s, i) => (
+                <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "6px 0", borderBottom: "1px solid var(--border)" }}>
+                  <span style={{ fontWeight: 600, fontSize: 12, color: "var(--text-secondary)", minWidth: 24 }}>{i + 1}.</span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13, fontWeight: 500 }}>{s.description}</div>
+                    {s.action && <div className="text-secondary" style={{ fontSize: 12, marginTop: 2 }}>{s.action} &rarr; {s.target}</div>}
+                  </div>
+                  <span className={`badge badge-${s.reversible ? "succeeded" : "running"}`} style={{ fontSize: 10 }}>
+                    {s.reversible ? "reversible" : "irreversible"}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Rollback Plan */}
+      {deployment.rollbackPlan && deployment.rollbackPlan.steps.length > 0 && (
+        <div className="section">
+          <div className="card">
+            <div className="card-header">
+              <h3>Rollback Plan</h3>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4, padding: "8px 0" }}>
+              {deployment.rollbackPlan.steps.map((s, i) => (
+                <div key={i} style={{ fontSize: 13, padding: "4px 0", borderBottom: "1px solid var(--border)" }}>
+                  <span style={{ fontWeight: 600, fontSize: 12, color: "var(--text-secondary)" }}>{i + 1}.</span> {s.description}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Execution Record */}
+      {deployment.executionRecord && deployment.executionRecord.steps.length > 0 && (
+        <div className="section">
+          <div className="card">
+            <div className="card-header">
+              <h3>Execution Record</h3>
+              <span className="text-muted" style={{ fontSize: 12 }}>
+                {deployment.executionRecord.steps.filter((s) => s.status === "completed").length} / {deployment.executionRecord.steps.length} completed
+              </span>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "8px 0" }}>
+              {deployment.executionRecord.steps.map((s, i) => (
+                <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "6px 0", borderBottom: "1px solid var(--border)" }}>
+                  <span className={`badge badge-${s.status === "completed" ? "succeeded" : s.status === "failed" ? "failed" : "pending"}`} style={{ fontSize: 10, minWidth: 60, textAlign: "center" }}>
+                    {s.status}
+                  </span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13 }}>{s.description}</div>
+                    {s.output && <div className="text-secondary" style={{ fontSize: 12, marginTop: 2, fontFamily: "var(--font-mono)" }}>{s.output}</div>}
+                    {s.error && <div style={{ fontSize: 12, marginTop: 2, color: "#dc2626" }}>{s.error}</div>}
+                  </div>
+                  {s.completedAt && s.startedAt && (() => {
+                    const ms = new Date(s.completedAt).getTime() - new Date(s.startedAt).getTime();
+                    return (
+                      <span className="text-muted" style={{ fontSize: 11 }}>
+                        {ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`}
+                      </span>
+                    );
+                  })()}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Failure Analysis — shown for failed deployments even if postmortem failed to load */}
       {deployment.status === "failed" && !postmortem?.failureAnalysis && (
         <div className="failure-card">

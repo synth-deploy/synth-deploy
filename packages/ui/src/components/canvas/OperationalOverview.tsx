@@ -7,6 +7,8 @@ import {
   listEnvoys,
   createArtifact,
   createDeployment,
+  getArtifact,
+  getDeployment,
   getRecentDebrief,
   getDeploymentContext,
   getHealth,
@@ -28,12 +30,12 @@ export default function OperationalOverview() {
   const [systemState, setSystemState] = useState<SystemState | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const fetchState = () =>
-      getSystemState()
-        .then(setSystemState)
-        .catch(() => {});
+  const fetchState = () =>
+    getSystemState()
+      .then(setSystemState)
+      .catch(() => {});
 
+  useEffect(() => {
     fetchState().then(() => setLoading(false));
 
     const interval = setInterval(fetchState, 30000);
@@ -52,7 +54,7 @@ export default function OperationalOverview() {
 
   switch (systemState.state) {
     case "empty":
-      return <EmptyState />;
+      return <EmptyState onComplete={fetchState} />;
     case "alert":
       return <AlertState signals={systemState.signals} stats={systemState.stats} />;
     case "normal":
@@ -64,7 +66,7 @@ export default function OperationalOverview() {
 // EmptyState — guided first-deployment onboarding (#137)
 // ---------------------------------------------------------------------------
 
-function EmptyState() {
+function EmptyState({ onComplete }: { onComplete: () => void }) {
   const { pushPanel } = useCanvas();
   const { settings } = useSettings();
   const environmentsEnabled = settings?.environmentsEnabled ?? true;
@@ -75,6 +77,8 @@ function EmptyState() {
   const [artifactName, setArtifactName] = useState("");
   const [artifactType, setArtifactType] = useState("docker");
   const [createdArtifact, setCreatedArtifact] = useState<Artifact | null>(null);
+  const [analysisSummary, setAnalysisSummary] = useState<string | null>(null);
+  const [analysisPolling, setAnalysisPolling] = useState(false);
   const [step1Submitting, setStep1Submitting] = useState(false);
   const [step1Error, setStep1Error] = useState<string | null>(null);
 
@@ -89,6 +93,32 @@ function EmptyState() {
   const [step3Submitting, setStep3Submitting] = useState(false);
   const [step3Error, setStep3Error] = useState<string | null>(null);
   const [deploymentId, setDeploymentId] = useState<string | null>(null);
+  const [deploymentStatus, setDeploymentStatus] = useState<string | null>(null);
+  const [deploymentDebrief, setDeploymentDebrief] = useState<DebriefEntry[]>([]);
+
+  // Poll for artifact analysis after creation
+  useEffect(() => {
+    if (!createdArtifact || analysisSummary) return;
+    setAnalysisPolling(true);
+    const poll = setInterval(() => {
+      getArtifact(createdArtifact.id)
+        .then(({ artifact }) => {
+          if (artifact.analysis.summary) {
+            setAnalysisSummary(artifact.analysis.summary);
+            setCreatedArtifact(artifact);
+            setAnalysisPolling(false);
+            clearInterval(poll);
+          }
+        })
+        .catch(() => {});
+    }, 3000);
+    // Stop after 30s regardless
+    const timeout = setTimeout(() => {
+      setAnalysisPolling(false);
+      clearInterval(poll);
+    }, 30000);
+    return () => { clearInterval(poll); clearTimeout(timeout); };
+  }, [createdArtifact?.id, analysisSummary]);
 
   // Poll for envoy connection in step 2
   useEffect(() => {
@@ -117,6 +147,25 @@ function EmptyState() {
     listEnvironments().then(setEnvironments).catch(() => {});
   }, [step]);
 
+  // Poll deployment status and debrief after creation
+  useEffect(() => {
+    if (!deploymentId) return;
+    const poll = setInterval(() => {
+      getDeployment(deploymentId)
+        .then(({ deployment, debrief }) => {
+          setDeploymentStatus(deployment.status);
+          setDeploymentDebrief(debrief);
+          if (deployment.status === "succeeded" || deployment.status === "failed" || deployment.status === "rolled_back") {
+            clearInterval(poll);
+            // Trigger transition to normal state
+            setTimeout(onComplete, 2000);
+          }
+        })
+        .catch(() => {});
+    }, 3000);
+    return () => clearInterval(poll);
+  }, [deploymentId]);
+
   async function handleCreateArtifact() {
     if (!artifactName.trim()) {
       setStep1Error("Artifact name is required");
@@ -127,6 +176,9 @@ function EmptyState() {
     try {
       const artifact = await createArtifact({ name: artifactName.trim(), type: artifactType });
       setCreatedArtifact(artifact);
+      if (artifact.analysis.summary) {
+        setAnalysisSummary(artifact.analysis.summary);
+      }
       setStep(2);
     } catch (e: unknown) {
       setStep1Error(e instanceof Error ? e.message : String(e));
@@ -146,10 +198,11 @@ function EmptyState() {
     try {
       const result = await createDeployment({
         artifactId: createdArtifact.id,
-        environmentId: selectedEnvId,
+        environmentId: environmentsEnabled ? selectedEnvId : undefined,
         version: version.trim() || "1.0.0",
       });
       setDeploymentId(result.deployment.id);
+      setDeploymentStatus(result.deployment.status);
     } catch (e: unknown) {
       setStep3Error(e instanceof Error ? e.message : String(e));
     } finally {
@@ -178,6 +231,16 @@ function EmptyState() {
     background: step > s ? "#34d399" : step === s ? "rgba(99, 225, 190, 0.2)" : "rgba(107, 114, 128, 0.15)",
     color: step > s ? "#0f1420" : step === s ? "#63e1be" : "#6b7280",
   });
+
+  const statusLabel: Record<string, string> = {
+    pending: "Waiting to start...",
+    planning: "Generating plan...",
+    approved: "Plan approved, executing...",
+    running: "Executing deployment...",
+    succeeded: "Deployment succeeded!",
+    failed: "Deployment failed.",
+    rolled_back: "Rolled back.",
+  };
 
   return (
     <div className="v2-dashboard">
@@ -213,6 +276,7 @@ function EmptyState() {
               placeholder="Artifact name (e.g. my-web-app)"
               value={artifactName}
               onChange={(e) => setArtifactName(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleCreateArtifact()}
               style={{ fontSize: 13, padding: "8px 12px", borderRadius: 6, border: "1px solid var(--agent-border)", background: "var(--agent-bg)", color: "var(--agent-text)" }}
             />
             <select
@@ -239,9 +303,22 @@ function EmptyState() {
         )}
 
         {step > 1 && createdArtifact && (
-          <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#34d399" }}>
-            <span style={{ fontWeight: 600 }}>{createdArtifact.name}</span>
-            <span style={{ color: "var(--agent-text-muted)" }}>({createdArtifact.type})</span>
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#34d399" }}>
+              <span style={{ fontWeight: 600 }}>{createdArtifact.name}</span>
+              <span style={{ color: "var(--agent-text-muted)" }}>({createdArtifact.type})</span>
+            </div>
+            {analysisPolling && !analysisSummary && (
+              <div style={{ fontSize: 12, color: "var(--agent-text-muted)", marginTop: 6, display: "flex", alignItems: "center", gap: 6 }}>
+                <span className="v2-envoy-spinner" style={{ width: 12, height: 12, border: "2px solid rgba(99,225,190,0.2)", borderTopColor: "#63e1be", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
+                Analyzing artifact...
+              </div>
+            )}
+            {analysisSummary && (
+              <div style={{ fontSize: 12, color: "var(--agent-text-muted)", marginTop: 6, padding: "6px 10px", background: "rgba(99,225,190,0.05)", borderRadius: 6, borderLeft: "2px solid rgba(99,225,190,0.3)" }}>
+                {analysisSummary}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -318,15 +395,15 @@ function EmptyState() {
       <div style={stepStyle(3)}>
         <div style={stepHeaderStyle}>
           <div style={stepNumberStyle(3)}>
-            {deploymentId ? "\u2713" : "3"}
+            {deploymentStatus === "succeeded" ? "\u2713" : "3"}
           </div>
           <div>
             <div style={{ fontWeight: 600, fontSize: 15, color: "var(--agent-text)" }}>
-              {deploymentId ? "Deployment created!" : "Ready for your first intelligent deployment"}
+              {deploymentId ? (statusLabel[deploymentStatus ?? "pending"] ?? "Processing...") : "Ready for your first intelligent deployment"}
             </div>
             <div style={{ fontSize: 12, color: "var(--agent-text-muted)" }}>
               {deploymentId
-                ? "Your first deployment is underway. View the plan, watch execution, and review the debrief."
+                ? "Watch the plan, execution, and debrief unfold below."
                 : "Deploy your artifact. DeployStack will analyze it, generate a plan, and execute it."}
             </div>
           </div>
@@ -357,6 +434,7 @@ function EmptyState() {
               placeholder="Version (e.g. 1.0.0)"
               value={version}
               onChange={(e) => setVersion(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleDeploy()}
               style={{ fontSize: 13, padding: "8px 12px", borderRadius: 6, border: "1px solid var(--agent-border)", background: "var(--agent-bg)", color: "var(--agent-text)" }}
             />
 
@@ -373,17 +451,52 @@ function EmptyState() {
         )}
 
         {deploymentId && (
-          <button
-            className="btn btn-primary"
-            onClick={() => pushPanel({
-              type: "deployment-detail",
-              title: "First Deployment",
-              params: { id: deploymentId },
-            })}
-            style={{ marginTop: 8 }}
-          >
-            View Deployment
-          </button>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {/* Deployment status indicator */}
+            {deploymentStatus && deploymentStatus !== "succeeded" && deploymentStatus !== "failed" && deploymentStatus !== "rolled_back" && (
+              <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--agent-text-muted)" }}>
+                <span className="v2-envoy-spinner" style={{ width: 14, height: 14, border: "2px solid rgba(99,225,190,0.2)", borderTopColor: "#63e1be", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
+                {statusLabel[deploymentStatus] ?? "Processing..."}
+              </div>
+            )}
+
+            {/* Debrief entries — live during deployment */}
+            {deploymentDebrief.length > 0 && (
+              <div style={{ marginTop: 4 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: "var(--agent-text-muted)", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                  Debrief
+                </div>
+                {deploymentDebrief.map((entry) => (
+                  <div key={entry.id} style={{ fontSize: 12, color: "var(--agent-text-muted)", padding: "4px 0", borderBottom: "1px solid rgba(107,114,128,0.1)" }}>
+                    <span style={{ color: entry.agent === "envoy" ? "#34d399" : "#63e1be", fontWeight: 500 }}>
+                      {entry.agent === "envoy" ? "Envoy" : "Command"}
+                    </span>
+                    {" \u2014 "}
+                    {entry.decision}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Action buttons */}
+            <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+              <button
+                className="btn btn-primary"
+                onClick={() => pushPanel({
+                  type: "deployment-detail",
+                  title: "First Deployment",
+                  params: { id: deploymentId },
+                })}
+              >
+                View Full Detail
+              </button>
+              {(deploymentStatus === "succeeded" || deploymentStatus === "failed" || deploymentStatus === "rolled_back") && (
+                <button className="btn btn-secondary" onClick={onComplete}>
+                  Continue to Dashboard
+                </button>
+              )}
+            </div>
+          </div>
         )}
       </div>
     </div>
@@ -537,10 +650,11 @@ function NormalState({ stats: _stats }: { stats: SystemState["stats"] }) {
     try {
       const result = await createDeployment({
         artifactId: deployArtifactId,
-        environmentId: deployEnvId,
+        environmentId: environmentsEnabled ? deployEnvId : undefined,
         partitionId: deployPartitionId || undefined,
         version: deployVersion.trim() || undefined,
       });
+      setDeploying(false);
       pushPanel({
         type: "deployment-detail",
         title: `Deployment ${result.deployment.version || result.deployment.id.slice(0, 8)}`,
@@ -900,14 +1014,14 @@ function NormalState({ stats: _stats }: { stats: SystemState["stats"] }) {
         subtitle="what you're deploying"
         count={artifacts.length}
         onClick={() =>
-          pushPanel({ type: "deployment-authoring", title: "Deploy", params: {} })
+          pushPanel({ type: "artifact-catalog", title: "Artifact Catalog", params: {} })
         }
       />
-      <div className="v2-operations-grid">
+      <div className="v2-artifacts-grid">
         {artifacts.map((art) => (
           <div
             key={art.id}
-            className="v2-operation-card"
+            className="v2-artifact-card"
             onClick={() =>
               pushPanel({
                 type: "deployment-authoring",
@@ -916,11 +1030,11 @@ function NormalState({ stats: _stats }: { stats: SystemState["stats"] }) {
               })
             }
           >
-            <div className="v2-operation-card-grid-bg" />
-            <div className="v2-operation-card-inner">
-              <div className="v2-operation-id">{art.type}</div>
-              <div className="v2-operation-name">{art.name}</div>
-              <div className="v2-operation-meta">
+            <div className="v2-artifact-card-grid-bg" />
+            <div className="v2-artifact-card-inner">
+              <div className="v2-artifact-id">{art.type}</div>
+              <div className="v2-artifact-name">{art.name}</div>
+              <div className="v2-artifact-meta">
                 {art.analysis.summary
                   ? art.analysis.summary.slice(0, 60) + (art.analysis.summary.length > 60 ? "..." : "")
                   : "Pending analysis"}

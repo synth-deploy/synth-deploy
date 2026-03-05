@@ -57,7 +57,7 @@ export default function Settings() {
   const [envoySaved, setEnvoySaved] = useState(false);
   const [llmSaved, setLlmSaved] = useState(false);
   const [deployDefaultsSaved, setDeployDefaultsSaved] = useState(false);
-  const [llmHealth, setLlmHealth] = useState<{ configured: boolean; healthy: boolean; provider: string | null; lastChecked: string } | null>(null);
+  const [llmHealth, setLlmHealth] = useState<{ configured: boolean; healthy: boolean; provider?: string; lastChecked?: string } | null>(null);
   const [llmHealthLoading, setLlmHealthLoading] = useState(false);
 
   useEffect(() => {
@@ -76,7 +76,7 @@ export default function Settings() {
       const health = await getLlmHealth();
       setLlmHealth(health);
     } catch {
-      setLlmHealth({ configured: false, healthy: false, provider: null, lastChecked: new Date().toISOString() });
+      setLlmHealth({ configured: false, healthy: false, lastChecked: new Date().toISOString() });
     } finally {
       setLlmHealthLoading(false);
     }
@@ -519,7 +519,7 @@ export default function Settings() {
                   )}
                   <div>
                     <span style={{ color: "var(--text-secondary)" }}>Last Checked: </span>
-                    <span>{new Date(llmHealth.lastChecked).toLocaleString()}</span>
+                    <span>{llmHealth.lastChecked ? new Date(llmHealth.lastChecked).toLocaleString() : "Never"}</span>
                   </div>
                 </div>
               </div>
