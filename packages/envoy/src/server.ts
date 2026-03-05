@@ -1,7 +1,7 @@
 import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import type { EnvoyAgent, DeploymentInstruction, LifecycleState } from "./agent/envoy-agent.js";
+import type { EnvoyAgent, DeploymentInstruction, PlanningInstruction, LifecycleState } from "./agent/envoy-agent.js";
 import type { EnvoyKnowledgeStore } from "./state/knowledge-store.js";
 import type { QueryEngine } from "./agent/query-engine.js";
 import type { EscalationPackager } from "./agent/escalation-packager.js";
@@ -32,6 +32,62 @@ const EscalateDeploymentSchema = z.object({
 
 const EscalateGeneralSchema = z.object({
   reason: z.string().min(1),
+});
+
+const PlanRequestSchema = z.object({
+  deploymentId: z.string(),
+  artifact: z.object({
+    id: z.string(),
+    name: z.string(),
+    type: z.string(),
+    analysis: z.object({
+      summary: z.string(),
+      dependencies: z.array(z.string()),
+      configurationExpectations: z.record(z.string()),
+      deploymentIntent: z.string().optional(),
+      confidence: z.number(),
+    }),
+  }),
+  environment: z.object({
+    id: z.string(),
+    name: z.string(),
+    variables: z.record(z.string()),
+  }),
+  partition: z.object({
+    id: z.string(),
+    name: z.string(),
+    variables: z.record(z.string()),
+  }).optional(),
+  version: z.string(),
+  resolvedVariables: z.record(z.string()),
+});
+
+const ExecuteRequestSchema = z.object({
+  deploymentId: z.string(),
+  plan: z.object({
+    steps: z.array(z.object({
+      description: z.string(),
+      action: z.string(),
+      target: z.string(),
+      reversible: z.boolean(),
+      rollbackAction: z.string().optional(),
+    })),
+    reasoning: z.string(),
+    diffFromCurrent: z.string().optional(),
+    diffFromPreviousPlan: z.string().optional(),
+  }),
+  rollbackPlan: z.object({
+    steps: z.array(z.object({
+      description: z.string(),
+      action: z.string(),
+      target: z.string(),
+      reversible: z.boolean(),
+      rollbackAction: z.string().optional(),
+    })),
+    reasoning: z.string(),
+    diffFromCurrent: z.string().optional(),
+    diffFromPreviousPlan: z.string().optional(),
+  }),
 });
 
 // ---------------------------------------------------------------------------
@@ -91,6 +147,47 @@ export function createEnvoyServer(
 
     const instruction: DeploymentInstruction = parsed.data;
     const result = await agent.executeDeployment(instruction);
+
+    return reply.status(result.success ? 200 : 500).send(result);
+  });
+
+  // -- Plan deployment (Phase 1: read-only reasoning) -------------------------
+
+  app.post("/plan", async (request, reply) => {
+    const parsed = PlanRequestSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({
+        error: "Invalid planning instruction",
+        details: parsed.error.format(),
+      });
+    }
+
+    const instruction: PlanningInstruction = parsed.data;
+
+    try {
+      const result = await agent.planDeployment(instruction);
+      return reply.status(200).send(result);
+    } catch (err) {
+      return reply.status(500).send({
+        error: "Planning failed",
+        details: err instanceof Error ? err.message : String(err),
+      });
+    }
+  });
+
+  // -- Execute approved plan (Phase 2: deterministic execution) ---------------
+
+  app.post("/execute", async (request, reply) => {
+    const parsed = ExecuteRequestSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({
+        error: "Invalid execution request",
+        details: parsed.error.format(),
+      });
+    }
+
+    const { deploymentId, plan, rollbackPlan } = parsed.data;
+    const result = await agent.executeApprovedPlan(deploymentId, plan, rollbackPlan);
 
     return reply.status(result.success ? 200 : 500).send(result);
   });
