@@ -593,7 +593,7 @@ registerFleetRoutes(app, fleetStore, envoyRegistry, deployments, fleetExecutor, 
 
 const graphStore = new DeploymentGraphStore();
 const graphInferenceEngine = new GraphInferenceEngine(llm, artifactStore);
-registerGraphRoutes(app, graphStore, graphInferenceEngine, envoyRegistry, artifactStore);
+registerGraphRoutes(app, graphStore, graphInferenceEngine, envoyRegistry, artifactStore, debrief);
 
 // --- Artifact Intake Pipeline ---
 

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { getSettings, updateSettings, getCommandInfo, verifyTaskModel, listIdpProviders, createIdpProvider, updateIdpProvider, deleteIdpProvider, testIdpProvider, listRoleMappings, createRoleMapping, deleteRoleMapping, testLdapUser, listIntakeChannels, createIntakeChannel, updateIntakeChannel, deleteIntakeChannel, testIntakeChannel } from "../../api.js";
-import type { AppSettings, CommandInfo, ConflictPolicy, McpServerConfig, TaskModelTask, CapabilityVerificationResult, IdpProvider, RoleMappingRule, IntakeChannel } from "../../types.js";
+import { getSettings, updateSettings, getCommandInfo, verifyTaskModel, listIdpProviders, createIdpProvider, updateIdpProvider, deleteIdpProvider, testIdpProvider, listRoleMappings, createRoleMapping, deleteRoleMapping, testLdapUser, listIntakeChannels, createIntakeChannel, updateIntakeChannel, deleteIntakeChannel, testIntakeChannel, manualUploadArtifact, listIntakeEvents } from "../../api.js";
+import type { AppSettings, CommandInfo, ConflictPolicy, McpServerConfig, TaskModelTask, CapabilityVerificationResult, IdpProvider, RoleMappingRule, IntakeChannel, IntakeEvent } from "../../types.js";
 import { TASK_MODEL_META } from "../../types.js";
 import { useSettings } from "../../context/SettingsContext.js";
 import { useAuth } from "../../context/AuthContext.js";
@@ -89,6 +89,16 @@ export default function SettingsPanel({ title }: Props) {
   const [intakeTestResults, setIntakeTestResults] = useState<Record<string, { success: boolean; error?: string }>>({});
   const [intakeCreatedToken, setIntakeCreatedToken] = useState<string | null>(null);
 
+  // --- Manual upload state ---
+  const [manualArtifactName, setManualArtifactName] = useState("");
+  const [manualArtifactType, setManualArtifactType] = useState("docker");
+  const [manualVersion, setManualVersion] = useState("");
+  const [manualUploading, setManualUploading] = useState(false);
+  const [manualUploadResult, setManualUploadResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  // --- Intake activity feed state ---
+  const [intakeEvents, setIntakeEvents] = useState<IntakeEvent[]>([]);
+
   useEffect(() => {
     Promise.all([getSettings(), getCommandInfo()])
       .then(([s, info]) => {
@@ -105,6 +115,16 @@ export default function SettingsPanel({ title }: Props) {
     listIdpProviders().then(setIdpProviders).catch(() => {});
     // Load intake channels
     listIntakeChannels().then(setIntakeChannels).catch(() => {});
+    // Load intake events
+    listIntakeEvents({ limit: 20 }).then(setIntakeEvents).catch(() => {});
+  }, []);
+
+  // Auto-refresh intake events every 10 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      listIntakeEvents({ limit: 20 }).then(setIntakeEvents).catch(() => {});
+    }, 10_000);
+    return () => clearInterval(interval);
   }, []);
 
   async function handleSaveAgent() {
@@ -466,6 +486,28 @@ export default function SettingsPanel({ title }: Props) {
       setIntakeTestResults((prev) => ({ ...prev, [id]: { success: false, error: err instanceof Error ? err.message : "Test failed" } }));
     } finally {
       setIntakeTesting(null);
+    }
+  }
+
+  async function handleManualUpload() {
+    if (!manualArtifactName || !manualArtifactType || !manualVersion) return;
+    setManualUploading(true);
+    setManualUploadResult(null);
+    try {
+      const result = await manualUploadArtifact({
+        artifactName: manualArtifactName,
+        artifactType: manualArtifactType,
+        version: manualVersion,
+      });
+      setManualUploadResult({ success: true, message: `Artifact uploaded successfully (ID: ${result.artifactId})` });
+      setManualArtifactName("");
+      setManualVersion("");
+      // Refresh intake events to show the new one
+      listIntakeEvents({ limit: 20 }).then(setIntakeEvents).catch(() => {});
+    } catch (err) {
+      setManualUploadResult({ success: false, message: err instanceof Error ? err.message : "Upload failed" });
+    } finally {
+      setManualUploading(false);
     }
   }
 
@@ -1509,6 +1551,63 @@ export default function SettingsPanel({ title }: Props) {
               </div>
             )}
 
+            {/* Manual Upload subsection */}
+            <div style={{ marginTop: 16, marginBottom: 16, padding: 12, border: "1px solid var(--border-color, #e2e8f0)", borderRadius: 6 }}>
+              <h4 style={{ margin: "0 0 8px 0", fontSize: "0.95em" }}>Manual Upload</h4>
+              <div className="settings-description" style={{ marginBottom: 8 }}>
+                Submit an artifact directly without a CI/CD pipeline or registry.
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label>Artifact Name</label>
+                  <input
+                    value={manualArtifactName}
+                    onChange={(e) => setManualArtifactName(e.target.value)}
+                    placeholder="e.g. my-api-service"
+                    style={{ maxWidth: 300 }}
+                  />
+                </div>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label>Artifact Type</label>
+                  <select
+                    value={manualArtifactType}
+                    onChange={(e) => setManualArtifactType(e.target.value)}
+                    style={{ maxWidth: 300 }}
+                  >
+                    <option value="docker">Docker</option>
+                    <option value="npm">npm</option>
+                    <option value="nuget">NuGet</option>
+                    <option value="helm">Helm</option>
+                    <option value="generic">Generic</option>
+                  </select>
+                </div>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label>Version</label>
+                  <input
+                    value={manualVersion}
+                    onChange={(e) => setManualVersion(e.target.value)}
+                    placeholder="e.g. 1.2.3"
+                    style={{ maxWidth: 300 }}
+                  />
+                </div>
+                <div>
+                  <button
+                    className="btn btn-primary"
+                    onClick={handleManualUpload}
+                    disabled={!manualArtifactName || !manualVersion || manualUploading}
+                    style={{ padding: "6px 14px" }}
+                  >
+                    {manualUploading ? "Uploading..." : "Upload Artifact"}
+                  </button>
+                </div>
+                {manualUploadResult && (
+                  <div style={{ fontSize: "0.85em", color: manualUploadResult.success ? "var(--color-success, #22c55e)" : "var(--color-error, #ef4444)" }}>
+                    {manualUploadResult.message}
+                  </div>
+                )}
+              </div>
+            </div>
+
             {intakeShowForm ? (
               <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
                 <div className="form-group" style={{ marginBottom: 0 }}>
@@ -1654,6 +1753,54 @@ export default function SettingsPanel({ title }: Props) {
               <button className="btn" onClick={() => setIntakeShowForm(true)}>
                 Add Intake Channel
               </button>
+            )}
+          </div>
+
+          {/* Recent Intake Activity */}
+          <div className="card" style={{ marginTop: 16 }}>
+            <div className="card-header">
+              <h3>Recent Intake Activity</h3>
+            </div>
+            {intakeEvents.length === 0 ? (
+              <div style={{ padding: 12, opacity: 0.6, fontSize: "0.9em" }}>
+                No intake events yet
+              </div>
+            ) : (
+              <div>
+                {intakeEvents.map((event) => {
+                  const statusColors: Record<string, { bg: string; color: string }> = {
+                    received: { bg: "var(--color-info-bg, #dbeafe)", color: "var(--color-info, #2563eb)" },
+                    processing: { bg: "var(--color-warning-bg, #fef3c7)", color: "var(--color-warning, #d97706)" },
+                    completed: { bg: "var(--color-success-bg, #dcfce7)", color: "var(--color-success, #16a34a)" },
+                    failed: { bg: "var(--color-error-bg, #fee2e2)", color: "var(--color-error, #ef4444)" },
+                  };
+                  const sc = statusColors[event.status] ?? statusColors.received;
+                  const artifactName = (event.payload?.artifactName as string) ?? "Unknown artifact";
+                  const timestamp = event.createdAt ? new Date(event.createdAt).toLocaleString() : "";
+                  return (
+                    <div key={event.id} style={{ padding: "8px 12px", borderBottom: "1px solid var(--border-color, #e2e8f0)", display: "flex", alignItems: "center", gap: 8 }}>
+                      <span
+                        style={{
+                          display: "inline-block",
+                          padding: "1px 6px",
+                          borderRadius: 4,
+                          fontSize: "0.75em",
+                          fontWeight: 600,
+                          background: sc.bg,
+                          color: sc.color,
+                          minWidth: 70,
+                          textAlign: "center",
+                        }}
+                      >
+                        {event.status}
+                      </span>
+                      <span style={{ flex: 1, fontSize: "0.9em" }}>{artifactName}</span>
+                      <span style={{ fontSize: "0.8em", opacity: 0.6 }}>{event.channelId}</span>
+                      <span style={{ fontSize: "0.8em", opacity: 0.5 }}>{timestamp}</span>
+                    </div>
+                  );
+                })}
+              </div>
             )}
           </div>
         </div>

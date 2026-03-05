@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import type { FastifyInstance } from "fastify";
-import type { FleetDeployment, FleetDeploymentStatus, FleetProgress, IDeploymentStore, DebriefWriter } from "@deploystack/core";
+import type { Deployment, FleetDeployment, FleetProgress, IDeploymentStore, DebriefWriter } from "@deploystack/core";
 import type { EnvoyRegistry } from "../agent/envoy-registry.js";
 import type { FleetDeploymentStore } from "../fleet/fleet-store.js";
 import type { FleetExecutor, FleetProgressEvent } from "../fleet/fleet-executor.js";
@@ -80,7 +80,7 @@ export function registerFleetRoutes(
         envoyFilter: body.envoyFilter,
         rolloutConfig,
         representativeEnvoyIds: representativeIds,
-        status: "selecting_representatives" as FleetDeploymentStatus,
+        status: "selecting_representatives",
         progress: {
           totalEnvoys: targetEnvoys.length,
           validated: 0,
@@ -111,6 +111,66 @@ export function registerFleetRoutes(
       });
 
       return reply.status(201).send({ fleetDeployment });
+    },
+  );
+
+  // -----------------------------------------------------------------------
+  // POST /api/fleet-deployments/:id/plan — create representative plan
+  // -----------------------------------------------------------------------
+  app.post<{ Params: { id: string } }>(
+    "/api/fleet-deployments/:id/plan",
+    { preHandler: [requirePermission("deployment.create")] },
+    async (request, reply) => {
+      const fleet = fleetStore.getById(request.params.id);
+      if (!fleet) {
+        return reply.status(404).send({ error: "Fleet deployment not found" });
+      }
+
+      if (fleet.status !== "selecting_representatives") {
+        return reply.status(409).send({
+          error: `Cannot create plan in "${fleet.status}" status — must be "selecting_representatives"`,
+        });
+      }
+
+      const body = request.body as { envoyId?: string } | undefined;
+      const targetEnvoyId = body?.envoyId ?? fleet.representativeEnvoyIds[0];
+
+      if (!targetEnvoyId || !fleet.representativeEnvoyIds.includes(targetEnvoyId)) {
+        return reply.status(422).send({
+          error: "Invalid or missing representative envoy ID",
+        });
+      }
+
+      const deployment: Deployment = {
+        id: crypto.randomUUID(),
+        artifactId: fleet.artifactId,
+        artifactVersionId: fleet.artifactVersionId,
+        envoyId: targetEnvoyId,
+        environmentId: fleet.environmentId,
+        version: "",
+        status: "pending",
+        variables: {},
+        debriefEntryIds: [],
+        createdAt: new Date(),
+      };
+
+      deploymentStore.save(deployment);
+
+      fleet.representativePlanId = deployment.id;
+      fleet.status = "planning";
+      fleetStore.update(fleet);
+
+      debrief.record({
+        partitionId: null,
+        deploymentId: fleet.id,
+        agent: "command",
+        decisionType: "system",
+        decision: `Representative plan created for envoy ${targetEnvoyId}`,
+        reasoning: `Created deployment ${deployment.id} as the representative plan for fleet ${fleet.id}. The plan can be reviewed and approved via the standard deployment surface.`,
+        context: { fleetId: fleet.id, deploymentId: deployment.id, envoyId: targetEnvoyId },
+      });
+
+      return reply.status(201).send({ deployment });
     },
   );
 
@@ -173,7 +233,7 @@ export function registerFleetRoutes(
       }
 
       // Transition to validating
-      fleet.status = "validating" as FleetDeploymentStatus;
+      fleet.status = "validating";
       fleetStore.update(fleet);
 
       const actor = (request.user?.email) ?? "anonymous";
@@ -196,8 +256,8 @@ export function registerFleetRoutes(
           fleet.validationResult = validationResult;
           fleet.progress.validated = validationResult.validated;
           fleet.status = validationResult.failed > 0
-            ? ("awaiting_approval" as FleetDeploymentStatus)
-            : ("validated" as FleetDeploymentStatus);
+            ? "validation_failed"
+            : "validated";
           fleetStore.update(fleet);
 
           debrief.record({
@@ -213,14 +273,14 @@ export function registerFleetRoutes(
           });
         })
         .catch((err) => {
-          fleet.status = "failed" as FleetDeploymentStatus;
+          fleet.status = "failed";
           fleetStore.update(fleet);
 
           debrief.record({
             partitionId: null,
             deploymentId: fleet.id,
             agent: "command",
-            decisionType: "deployment-failure" as Parameters<typeof debrief.record>[0]["decisionType"],
+            decisionType: "deployment-failure",
             decision: "Fleet validation failed unexpectedly",
             reasoning: err instanceof Error ? err.message : String(err),
             context: { error: err instanceof Error ? err.message : String(err) },
@@ -243,9 +303,9 @@ export function registerFleetRoutes(
         return reply.status(404).send({ error: "Fleet deployment not found" });
       }
 
-      if (fleet.status !== "validated" && fleet.status !== "paused") {
+      if (fleet.status !== "validated" && fleet.status !== "validation_failed" && fleet.status !== "paused") {
         return reply.status(409).send({
-          error: `Cannot execute fleet deployment in "${fleet.status}" status — must be "validated" or "paused"`,
+          error: `Cannot execute fleet deployment in "${fleet.status}" status — must be "validated", "validation_failed", or "paused"`,
         });
       }
 
@@ -261,7 +321,7 @@ export function registerFleetRoutes(
         ? deploymentStore.get(fleet.representativePlanId)?.rollbackPlan
         : undefined;
 
-      fleet.status = "executing" as FleetDeploymentStatus;
+      fleet.status = "executing";
       fleetStore.update(fleet);
 
       const actor = (request.user?.email) ?? "anonymous";
@@ -279,17 +339,18 @@ export function registerFleetRoutes(
 
       // Execute rollout asynchronously
       (async () => {
+        const startTime = Date.now();
         try {
           for await (const event of fleetExecutor.executeRollout(fleet, plan, rollbackPlan)) {
             // Update fleet progress from each event
             fleet.progress = event.progress;
 
             if (event.type === "fleet-completed") {
-              fleet.status = "completed" as FleetDeploymentStatus;
+              fleet.status = "completed";
             } else if (event.type === "fleet-failed") {
-              fleet.status = "failed" as FleetDeploymentStatus;
+              fleet.status = "failed";
             } else if (event.type === "fleet-paused") {
-              fleet.status = "paused" as FleetDeploymentStatus;
+              fleet.status = "paused";
             }
 
             fleetStore.update(fleet);
@@ -300,7 +361,7 @@ export function registerFleetRoutes(
                 partitionId: null,
                 deploymentId: fleet.id,
                 agent: "command",
-                decisionType: "deployment-failure" as Parameters<typeof debrief.record>[0]["decisionType"],
+                decisionType: "deployment-failure",
                 decision: `Envoy ${event.envoyName ?? event.envoyId} failed during fleet rollout`,
                 reasoning: event.error ?? "Unknown error",
                 context: { envoyId: event.envoyId, batchIndex: event.batchIndex, error: event.error },
@@ -310,7 +371,7 @@ export function registerFleetRoutes(
                 partitionId: null,
                 deploymentId: fleet.id,
                 agent: "command",
-                decisionType: "deployment-completion" as Parameters<typeof debrief.record>[0]["decisionType"],
+                decisionType: "deployment-completion",
                 decision: `Fleet rollout completed: ${event.progress.succeeded}/${event.progress.totalEnvoys} succeeded`,
                 reasoning: `Rollout finished with ${event.progress.failed} failure(s).`,
                 context: { succeeded: event.progress.succeeded, failed: event.progress.failed, total: event.progress.totalEnvoys },
@@ -320,25 +381,48 @@ export function registerFleetRoutes(
                 partitionId: null,
                 deploymentId: fleet.id,
                 agent: "command",
-                decisionType: "deployment-failure" as Parameters<typeof debrief.record>[0]["decisionType"],
+                decisionType: "deployment-failure",
                 decision: `Fleet rollout halted: failure threshold reached`,
                 reasoning: event.error ?? "Failure count exceeded haltOnFailureCount",
                 context: { succeeded: event.progress.succeeded, failed: event.progress.failed },
               });
             }
           }
+
+          // Fleet-level summary debrief entry
+          const durationMs = Date.now() - startTime;
+          const durationSec = Math.round(durationMs / 1000);
+          debrief.record({
+            partitionId: null,
+            deploymentId: fleet.id,
+            agent: "command",
+            decisionType: "deployment-completion",
+            decision: `Fleet deployment ${fleet.status}: ${fleet.progress.succeeded}/${fleet.progress.totalEnvoys} envoys succeeded, ${fleet.progress.failed} failed`,
+            reasoning: `Strategy: ${fleet.rolloutConfig.strategy}. Total duration: ${durationSec}s.`,
+            context: {
+              succeeded: fleet.progress.succeeded,
+              failed: fleet.progress.failed,
+              total: fleet.progress.totalEnvoys,
+              strategy: fleet.rolloutConfig.strategy,
+              durationMs,
+              finalStatus: fleet.status,
+            },
+          });
         } catch (err) {
-          fleet.status = "failed" as FleetDeploymentStatus;
+          const durationMs = Date.now() - startTime;
+          const durationSec = Math.round(durationMs / 1000);
+
+          fleet.status = "failed";
           fleetStore.update(fleet);
 
           debrief.record({
             partitionId: null,
             deploymentId: fleet.id,
             agent: "command",
-            decisionType: "deployment-failure" as Parameters<typeof debrief.record>[0]["decisionType"],
-            decision: "Fleet rollout failed with unexpected error",
+            decisionType: "deployment-failure",
+            decision: `Fleet rollout failed with unexpected error after ${durationSec}s`,
             reasoning: err instanceof Error ? err.message : String(err),
-            context: { error: err instanceof Error ? err.message : String(err) },
+            context: { error: err instanceof Error ? err.message : String(err), durationMs },
           });
         }
       })();
@@ -365,7 +449,7 @@ export function registerFleetRoutes(
         });
       }
 
-      fleet.status = "paused" as FleetDeploymentStatus;
+      fleet.status = "paused";
       fleetStore.update(fleet);
 
       const actor = (request.user?.email) ?? "anonymous";
@@ -404,7 +488,7 @@ export function registerFleetRoutes(
       }
 
       // Transition back to validated so the execute endpoint can be called again
-      fleet.status = "validated" as FleetDeploymentStatus;
+      fleet.status = "validated";
       fleetStore.update(fleet);
 
       const actor = (request.user?.email) ?? "anonymous";

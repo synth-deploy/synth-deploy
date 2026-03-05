@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import type { IArtifactStore } from "@deploystack/core";
 import type { DeploymentPlan } from "@deploystack/core";
+import type { DebriefWriter } from "@deploystack/core";
 import { requirePermission } from "../middleware/permissions.js";
 import type { DeploymentGraphStore } from "../graph/graph-store.js";
 import type { GraphInferenceEngine } from "../graph/graph-inference.js";
@@ -18,6 +19,7 @@ export function registerGraphRoutes(
   inferenceEngine: GraphInferenceEngine,
   envoyRegistry: EnvoyRegistry,
   artifactStore: IArtifactStore,
+  debrief: DebriefWriter,
 ): void {
   // Create a deployment graph (triggers inference)
   app.post(
@@ -77,6 +79,23 @@ export function registerGraphRoutes(
       }
 
       graphStore.create(graph);
+
+      // Record debrief entry for graph creation with inference reasoning
+      debrief.record({
+        partitionId: graph.partitionId ?? null,
+        deploymentId: null,
+        agent: "command",
+        decisionType: "plan-generation",
+        decision: `Created deployment graph "${graph.name}" with ${graph.nodes.length} nodes and ${graph.edges.length} edges`,
+        reasoning: `Inferred dependency graph for artifacts: ${body.artifactIds.join(", ")}. Edges: ${JSON.stringify(graph.edges.map((e) => `${e.from} -[${e.type}]-> ${e.to}`))}`,
+        context: {
+          graphId: graph.id,
+          nodeCount: graph.nodes.length,
+          edgeCount: graph.edges.length,
+          approvalMode: graph.approvalMode,
+          edges: graph.edges,
+        },
+      });
 
       return reply.status(201).send({ graph });
     },
@@ -143,6 +162,23 @@ export function registerGraphRoutes(
       }
 
       const updated = graphStore.update(id, body);
+
+      // Record debrief entry for user corrections
+      debrief.record({
+        partitionId: graph.partitionId ?? null,
+        deploymentId: null,
+        agent: "command",
+        decisionType: "plan-modification",
+        decision: `User corrected deployment graph "${graph.name}"`,
+        reasoning: `Updated fields: ${Object.keys(body).filter((k) => body[k as keyof typeof body] !== undefined).join(", ")}`,
+        context: {
+          graphId: id,
+          updatedFields: Object.keys(body).filter(
+            (k) => body[k as keyof typeof body] !== undefined,
+          ),
+        },
+      });
+
       return { graph: updated };
     },
   );
@@ -178,6 +214,7 @@ export function registerGraphRoutes(
       const { id } = request.params as { id: string };
       const body = request.body as {
         plans: Record<string, DeploymentPlan>; // nodeId -> plan
+        partitionVariables?: Record<string, string>;
       };
 
       const graph = graphStore.getById(id);
@@ -219,12 +256,17 @@ export function registerGraphRoutes(
 
       const plansMap = new Map(Object.entries(body.plans));
       const events: Array<Record<string, unknown>> = [];
+      const dataFlowValues: Record<string, Record<string, string>> = {};
 
       // Execute and collect results
       // (In a production system this would be async with SSE/WebSocket progress,
       //  but for now we run synchronously and return the final state.)
       try {
-        for await (const event of executor.execute(graph, plansMap)) {
+        for await (const event of executor.execute(
+          graph,
+          plansMap,
+          body.partitionVariables,
+        )) {
           events.push(event as unknown as Record<string, unknown>);
 
           // Update node status in store
@@ -233,8 +275,14 @@ export function registerGraphRoutes(
               graphStore.updateNode(id, event.nodeId, { status: "executing" });
             } else if (event.type === "node-completed") {
               graphStore.updateNode(id, event.nodeId, { status: "completed" });
+              if (event.outputCapture) {
+                dataFlowValues[event.nodeId] = event.outputCapture;
+              }
             } else if (event.type === "node-failed") {
               graphStore.updateNode(id, event.nodeId, { status: "failed" });
+            } else if (event.type === "node-skipped") {
+              // Skipped nodes remain in "pending" status — they were never started
+              graphStore.updateNode(id, event.nodeId, { status: "pending" });
             }
           }
 
@@ -251,6 +299,31 @@ export function registerGraphRoutes(
       }
 
       const finalGraph = graphStore.getById(id);
+
+      // Record debrief summary for execution completion
+      const finalCompletedCount =
+        finalGraph?.nodes.filter((n) => n.status === "completed").length ?? 0;
+      const finalFailedCount =
+        finalGraph?.nodes.filter((n) => n.status === "failed").length ?? 0;
+
+      debrief.record({
+        partitionId: graph.partitionId ?? null,
+        deploymentId: null,
+        agent: "command",
+        decisionType:
+          finalFailedCount > 0 ? "deployment-failure" : "deployment-completion",
+        decision: `Graph "${graph.name}" execution ${finalFailedCount > 0 ? "failed" : "completed"}: ${finalCompletedCount}/${graph.nodes.length} nodes succeeded`,
+        reasoning: `Executed deployment graph with ${graph.nodes.length} nodes. ${finalCompletedCount} completed, ${finalFailedCount} failed. Data flow values captured for ${Object.keys(dataFlowValues).length} nodes.`,
+        context: {
+          graphId: id,
+          completedCount: finalCompletedCount,
+          failedCount: finalFailedCount,
+          totalNodes: graph.nodes.length,
+          dataFlowValues,
+          partitionVariables: body.partitionVariables,
+        },
+      });
+
       return { graph: finalGraph, events };
     },
   );
@@ -324,17 +397,120 @@ export function registerGraphRoutes(
         });
       }
 
-      const node = graphStore.updateNode(id, nodeId, {
-        status: "awaiting_approval",
-      });
-      if (!node) {
+      const existingNode = graph.nodes.find((n) => n.id === nodeId);
+      if (!existingNode) {
         return reply.status(404).send({ error: "Node not found" });
       }
 
+      if (existingNode.status !== "awaiting_approval") {
+        return reply.status(409).send({
+          error: `Node is not awaiting approval (current status: ${existingNode.status})`,
+        });
+      }
+
       // Mark as approved (ready to execute)
-      graphStore.updateNode(id, nodeId, { status: "pending" });
+      const node = graphStore.updateNode(id, nodeId, { status: "pending" });
 
       return { node };
+    },
+  );
+
+  // Approve remaining nodes — switch from per-node to graph approval mid-execution
+  app.post(
+    "/api/deployment-graphs/:id/approve-remaining",
+    { preHandler: [requirePermission("deployment.approve")] },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+
+      const graph = graphStore.getById(id);
+      if (!graph) {
+        return reply.status(404).send({ error: "Deployment graph not found" });
+      }
+
+      if (graph.status !== "executing" && graph.status !== "awaiting_approval") {
+        return reply.status(409).send({
+          error: `Cannot approve remaining in status: ${graph.status}`,
+        });
+      }
+
+      graphStore.update(id, { approvalMode: "graph" });
+
+      return { graph: graphStore.getById(id) };
+    },
+  );
+
+  // Retry a failed node
+  app.post(
+    "/api/deployment-graphs/:id/nodes/:nodeId/retry",
+    { preHandler: [requirePermission("deployment.approve")] },
+    async (request, reply) => {
+      const { id, nodeId } = request.params as { id: string; nodeId: string };
+
+      const graph = graphStore.getById(id);
+      if (!graph) {
+        return reply.status(404).send({ error: "Deployment graph not found" });
+      }
+
+      if (graph.status !== "failed") {
+        return reply.status(409).send({
+          error: `Cannot retry node when graph status is: ${graph.status}`,
+        });
+      }
+
+      const existingNode = graph.nodes.find((n) => n.id === nodeId);
+      if (!existingNode) {
+        return reply.status(404).send({ error: "Node not found" });
+      }
+
+      if (existingNode.status !== "failed") {
+        return reply.status(409).send({
+          error: `Node is not in failed status (current status: ${existingNode.status})`,
+        });
+      }
+
+      // Re-queue for execution
+      const node = graphStore.updateNode(id, nodeId, { status: "pending" });
+
+      return { node };
+    },
+  );
+
+  // Skip a failed node — allows downstream to proceed
+  app.post(
+    "/api/deployment-graphs/:id/nodes/:nodeId/skip",
+    { preHandler: [requirePermission("deployment.approve")] },
+    async (request, reply) => {
+      const { id, nodeId } = request.params as { id: string; nodeId: string };
+
+      const graph = graphStore.getById(id);
+      if (!graph) {
+        return reply.status(404).send({ error: "Deployment graph not found" });
+      }
+
+      if (graph.status !== "failed") {
+        return reply.status(409).send({
+          error: `Cannot skip node when graph status is: ${graph.status}`,
+        });
+      }
+
+      const existingNode = graph.nodes.find((n) => n.id === nodeId);
+      if (!existingNode) {
+        return reply.status(404).send({ error: "Node not found" });
+      }
+
+      if (existingNode.status !== "failed") {
+        return reply.status(409).send({
+          error: `Node is not in failed status (current status: ${existingNode.status})`,
+        });
+      }
+
+      // Mark as completed (skipped) so downstream nodes can proceed
+      const node = graphStore.updateNode(id, nodeId, { status: "completed" });
+
+      // Set graph back to awaiting_approval so it can be re-executed
+      graphStore.updateStatus(id, "awaiting_approval");
+
+      return { node, skipped: true, graph: graphStore.getById(id) };
     },
   );
 }

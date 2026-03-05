@@ -1532,6 +1532,10 @@ function encryptConfigSecrets(config: Record<string, unknown>, key: Buffer): Rec
     result.clientSecret = encryptValue(result.clientSecret, key);
     result.__secretEncrypted = true;
   }
+  if (typeof result.bindCredential === "string" && result.bindCredential.length > 0) {
+    result.bindCredential = encryptValue(result.bindCredential, key);
+    result.__bindCredentialEncrypted = true;
+  }
   return result;
 }
 
@@ -1540,6 +1544,10 @@ function decryptConfigSecrets(config: Record<string, unknown>, key: Buffer): Rec
   if (result.__secretEncrypted && typeof result.clientSecret === "string") {
     result.clientSecret = decryptValue(result.clientSecret, key);
     delete result.__secretEncrypted;
+  }
+  if (result.__bindCredentialEncrypted && typeof result.bindCredential === "string") {
+    result.bindCredential = decryptValue(result.bindCredential, key);
+    delete result.__bindCredentialEncrypted;
   }
   return result;
 }
@@ -1606,11 +1614,62 @@ export class PersistentIdpProviderStore {
 
   getById(id: string): IdpProvider | undefined {
     const row = this.stmts.getById.get(id) as IdpProviderRow | undefined;
-    return row ? rowToIdpProvider(row, this.encryptionKey) : undefined;
+    if (!row) return undefined;
+    const provider = rowToIdpProvider(row, this.encryptionKey);
+
+    // Re-encrypt legacy plaintext secrets on read
+    if (this.encryptionKey) {
+      const rawConfig = JSON.parse(row.config);
+      let needsReEncrypt = false;
+      if (typeof rawConfig.clientSecret === "string" && !rawConfig.__secretEncrypted) {
+        needsReEncrypt = true;
+      }
+      if (typeof rawConfig.bindCredential === "string" && !rawConfig.__bindCredentialEncrypted) {
+        needsReEncrypt = true;
+      }
+      if (needsReEncrypt) {
+        // Re-encrypt by updating in place
+        const encrypted = encryptConfigSecrets(rawConfig, this.encryptionKey);
+        this.stmts.update.run({
+          id,
+          name: row.name,
+          enabled: row.enabled,
+          config: JSON.stringify(encrypted),
+          updated_at: new Date().toISOString(),
+        });
+      }
+    }
+
+    return provider;
   }
 
   list(): IdpProvider[] {
     const rows = this.stmts.list.all() as IdpProviderRow[];
+
+    // Re-encrypt legacy plaintext secrets if encryption key is now available
+    if (this.encryptionKey) {
+      for (const row of rows) {
+        const rawConfig = JSON.parse(row.config);
+        let needsReEncrypt = false;
+        if (typeof rawConfig.clientSecret === "string" && !rawConfig.__secretEncrypted) {
+          needsReEncrypt = true;
+        }
+        if (typeof rawConfig.bindCredential === "string" && !rawConfig.__bindCredentialEncrypted) {
+          needsReEncrypt = true;
+        }
+        if (needsReEncrypt) {
+          const encrypted = encryptConfigSecrets(rawConfig, this.encryptionKey);
+          this.stmts.update.run({
+            id: row.id,
+            name: row.name,
+            enabled: row.enabled,
+            config: JSON.stringify(encrypted),
+            updated_at: new Date().toISOString(),
+          });
+        }
+      }
+    }
+
     return rows.map((r) => rowToIdpProvider(r, this.encryptionKey));
   }
 

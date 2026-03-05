@@ -558,6 +558,8 @@ export type FleetDeploymentStatus =
   | "planning"
   | "awaiting_approval"
   | "validating"
+  | "validated"
+  | "validation_failed"
   | "executing"
   | "paused"
   | "completed"

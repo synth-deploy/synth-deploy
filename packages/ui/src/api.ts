@@ -775,6 +775,17 @@ export async function testIntakeChannel(id: string): Promise<{ success: boolean;
   return fetchJson(`/api/intake/channels/${id}/test`, { method: "POST" });
 }
 
+export async function manualUploadArtifact(data: {
+  artifactName: string;
+  artifactType: string;
+  version: string;
+}): Promise<{ eventId: string; artifactId: string; versionId: string }> {
+  return fetchJson("/api/intake/manual", {
+    method: "POST",
+    body: JSON.stringify({ ...data, source: "manual-upload" }),
+  });
+}
+
 export async function listIntakeEvents(params?: { channelId?: string; limit?: number }): Promise<IntakeEvent[]> {
   const qs = new URLSearchParams();
   if (params?.channelId) qs.set("channelId", params.channelId);

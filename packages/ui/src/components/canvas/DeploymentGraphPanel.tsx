@@ -96,6 +96,35 @@ async function approveNode(graphId: string, nodeId: string): Promise<void> {
   });
 }
 
+async function approveRemaining(graphId: string): Promise<void> {
+  await fetchJson(`/api/deployment-graphs/${graphId}/approve-remaining`, {
+    method: "POST",
+  });
+}
+
+async function retryNode(graphId: string, nodeId: string): Promise<void> {
+  await fetchJson(`/api/deployment-graphs/${graphId}/nodes/${nodeId}/retry`, {
+    method: "POST",
+  });
+}
+
+async function skipNode(graphId: string, nodeId: string): Promise<void> {
+  await fetchJson(`/api/deployment-graphs/${graphId}/nodes/${nodeId}/skip`, {
+    method: "POST",
+  });
+}
+
+async function updateGraph(
+  graphId: string,
+  updates: { nodes?: GraphNode[]; edges?: GraphEdge[] },
+): Promise<DeploymentGraph> {
+  const data = await fetchJson<{ graph: DeploymentGraph }>(
+    `/api/deployment-graphs/${graphId}`,
+    { method: "PUT", body: JSON.stringify(updates) },
+  );
+  return data.graph;
+}
+
 // ---------------------------------------------------------------------------
 // Status badge colors
 // ---------------------------------------------------------------------------
@@ -214,10 +243,32 @@ function GraphDetailView({ title, graphId }: { title: string; graphId: string })
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [editMode, setEditMode] = useState(false);
+  const [editedEdges, setEditedEdges] = useState<GraphEdge[]>([]);
+  const [editedNodes, setEditedNodes] = useState<GraphNode[]>([]);
+
+  // Add-edge form state
+  const [newEdgeFrom, setNewEdgeFrom] = useState("");
+  const [newEdgeTo, setNewEdgeTo] = useState("");
+  const [newEdgeType, setNewEdgeType] = useState<"depends_on" | "data_flow">("depends_on");
+  const [newEdgeOutputName, setNewEdgeOutputName] = useState("");
+  const [newEdgeInputVar, setNewEdgeInputVar] = useState("");
+
+  // Add-binding form state
+  const [bindingNodeId, setBindingNodeId] = useState<string | null>(null);
+  const [newBindingName, setNewBindingName] = useState("");
+  const [newBindingSource, setNewBindingSource] = useState<"plan_step_output" | "manual">("manual");
+  const [newBindingValue, setNewBindingValue] = useState("");
+  const [newBindingStepIndex, setNewBindingStepIndex] = useState("");
+  const [newBindingOutputKey, setNewBindingOutputKey] = useState("");
 
   const reload = useCallback(() => {
     fetchGraph(graphId)
-      .then(setGraph)
+      .then((g) => {
+        setGraph(g);
+        setEditedEdges(g.edges);
+        setEditedNodes(g.nodes);
+      })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, [graphId]);
@@ -242,6 +293,8 @@ function GraphDetailView({ title, graphId }: { title: string; graphId: string })
     );
   }
 
+  const canEdit = graph.status === "draft" || graph.status === "awaiting_approval";
+
   // Build execution order numbers from edges (simple topological numbering)
   const orderMap = buildOrderMap(graph.nodes, graph.edges);
 
@@ -257,6 +310,108 @@ function GraphDetailView({ title, graphId }: { title: string; graphId: string })
       reload();
     } catch (e) {
       setActionError(e instanceof Error ? e.message : "Approval failed");
+    }
+  };
+
+  const handleApproveRemaining = async () => {
+    setActionError(null);
+    try {
+      await approveRemaining(graphId);
+      reload();
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : "Approve remaining failed");
+    }
+  };
+
+  const handleRetryNode = async (nodeId: string) => {
+    setActionError(null);
+    try {
+      await retryNode(graphId, nodeId);
+      reload();
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : "Retry failed");
+    }
+  };
+
+  const handleSkipNode = async (nodeId: string) => {
+    setActionError(null);
+    try {
+      await skipNode(graphId, nodeId);
+      reload();
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : "Skip failed");
+    }
+  };
+
+  const handleToggleEdit = () => {
+    if (editMode) {
+      // Cancel edit — reset to graph state
+      setEditedEdges(graph.edges);
+      setEditedNodes(graph.nodes);
+    }
+    setEditMode(!editMode);
+  };
+
+  const handleRemoveEdge = (index: number) => {
+    setEditedEdges((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleAddEdge = () => {
+    if (!newEdgeFrom || !newEdgeTo || newEdgeFrom === newEdgeTo) return;
+    const edge: GraphEdge = {
+      from: newEdgeFrom,
+      to: newEdgeTo,
+      type: newEdgeType,
+    };
+    if (newEdgeType === "data_flow" && newEdgeOutputName && newEdgeInputVar) {
+      edge.dataBinding = {
+        outputName: newEdgeOutputName,
+        inputVariable: newEdgeInputVar,
+      };
+    }
+    setEditedEdges((prev) => [...prev, edge]);
+    setNewEdgeFrom("");
+    setNewEdgeTo("");
+    setNewEdgeType("depends_on");
+    setNewEdgeOutputName("");
+    setNewEdgeInputVar("");
+  };
+
+  const handleAddBinding = (nodeId: string) => {
+    if (!newBindingName) return;
+    const binding: OutputBinding = {
+      name: newBindingName,
+      source: newBindingSource,
+    };
+    if (newBindingSource === "manual") {
+      binding.value = newBindingValue;
+    } else {
+      binding.stepIndex = parseInt(newBindingStepIndex, 10) || 0;
+      binding.outputKey = newBindingOutputKey;
+    }
+    setEditedNodes((prev) =>
+      prev.map((n) =>
+        n.id === nodeId
+          ? { ...n, outputBindings: [...(n.outputBindings ?? []), binding] }
+          : n,
+      ),
+    );
+    setBindingNodeId(null);
+    setNewBindingName("");
+    setNewBindingSource("manual");
+    setNewBindingValue("");
+    setNewBindingStepIndex("");
+    setNewBindingOutputKey("");
+  };
+
+  const handleSaveEdits = async () => {
+    setActionError(null);
+    try {
+      await updateGraph(graphId, { nodes: editedNodes, edges: editedEdges });
+      setEditMode(false);
+      reload();
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : "Save failed");
     }
   };
 
@@ -278,7 +433,49 @@ function GraphDetailView({ title, graphId }: { title: string; graphId: string })
             <span style={{ fontSize: 12, color: "#888" }}>
               Updated {new Date(graph.updatedAt).toLocaleString()}
             </span>
+
+            {canEdit && (
+              <button
+                onClick={handleToggleEdit}
+                style={{
+                  marginLeft: "auto", fontSize: 11, padding: "2px 10px",
+                  borderRadius: 4, border: `1px solid ${editMode ? "#dc262640" : "#8b5cf640"}`,
+                  background: editMode ? "#dc262615" : "#8b5cf615",
+                  color: editMode ? "#dc2626" : "#8b5cf6",
+                  cursor: "pointer",
+                }}
+              >
+                {editMode ? "Cancel Edit" : "Edit"}
+              </button>
+            )}
+
+            {graph.approvalMode === "per-node" &&
+              (graph.status === "executing" || graph.status === "awaiting_approval") && (
+              <button
+                onClick={handleApproveRemaining}
+                style={{
+                  marginLeft: canEdit ? 0 : "auto", fontSize: 11, padding: "2px 10px",
+                  borderRadius: 4, border: "1px solid #16a34a40",
+                  background: "#16a34a15", color: "#16a34a", cursor: "pointer",
+                }}
+              >
+                Approve Remaining
+              </button>
+            )}
           </div>
+
+          {editMode && (
+            <button
+              onClick={handleSaveEdits}
+              style={{
+                fontSize: 12, padding: "4px 16px", borderRadius: 4,
+                border: "1px solid #16a34a40", background: "#16a34a20",
+                color: "#16a34a", cursor: "pointer", marginBottom: 8,
+              }}
+            >
+              Save Changes
+            </button>
+          )}
 
           {(graph.status === "executing" || graph.status === "completed" || graph.status === "failed") && (
             <ProgressBar
@@ -332,7 +529,7 @@ function GraphDetailView({ title, graphId }: { title: string; graphId: string })
                   </span>
                   <StatusBadge status={node.status} />
 
-                  {graph.approvalMode === "per-node" && node.status === "pending" && (
+                  {graph.approvalMode === "per-node" && node.status === "awaiting_approval" && (
                     <button
                       onClick={() => handleApproveNode(node.id)}
                       style={{
@@ -343,6 +540,31 @@ function GraphDetailView({ title, graphId }: { title: string; graphId: string })
                     >
                       Approve
                     </button>
+                  )}
+
+                  {node.status === "failed" && graph.status === "failed" && (
+                    <div style={{ marginLeft: "auto", display: "flex", gap: 4 }}>
+                      <button
+                        onClick={() => handleRetryNode(node.id)}
+                        style={{
+                          fontSize: 11, padding: "2px 10px",
+                          borderRadius: 4, border: "1px solid #2563eb40",
+                          background: "#2563eb15", color: "#2563eb", cursor: "pointer",
+                        }}
+                      >
+                        Retry
+                      </button>
+                      <button
+                        onClick={() => handleSkipNode(node.id)}
+                        style={{
+                          fontSize: 11, padding: "2px 10px",
+                          borderRadius: 4, border: "1px solid #ca8a0440",
+                          background: "#ca8a0415", color: "#ca8a04", cursor: "pointer",
+                        }}
+                      >
+                        Skip
+                      </button>
+                    </div>
                   )}
                 </div>
 
@@ -372,50 +594,196 @@ function GraphDetailView({ title, graphId }: { title: string; graphId: string })
                     ))}
                   </div>
                 )}
+
+                {/* Add Binding form (edit mode) */}
+                {editMode && (
+                  <div style={{ marginTop: 6, paddingLeft: 30 }}>
+                    {bindingNodeId === node.id ? (
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 4, alignItems: "center" }}>
+                        <input
+                          placeholder="Name"
+                          value={newBindingName}
+                          onChange={(e) => setNewBindingName(e.target.value)}
+                          style={inputStyle}
+                        />
+                        <select
+                          value={newBindingSource}
+                          onChange={(e) => setNewBindingSource(e.target.value as "plan_step_output" | "manual")}
+                          style={inputStyle}
+                        >
+                          <option value="manual">manual</option>
+                          <option value="plan_step_output">plan_step_output</option>
+                        </select>
+                        {newBindingSource === "manual" ? (
+                          <input
+                            placeholder="Value"
+                            value={newBindingValue}
+                            onChange={(e) => setNewBindingValue(e.target.value)}
+                            style={inputStyle}
+                          />
+                        ) : (
+                          <>
+                            <input
+                              placeholder="Step index"
+                              value={newBindingStepIndex}
+                              onChange={(e) => setNewBindingStepIndex(e.target.value)}
+                              style={{ ...inputStyle, width: 70 }}
+                            />
+                            <input
+                              placeholder="Output key"
+                              value={newBindingOutputKey}
+                              onChange={(e) => setNewBindingOutputKey(e.target.value)}
+                              style={inputStyle}
+                            />
+                          </>
+                        )}
+                        <button onClick={() => handleAddBinding(node.id)} style={smallBtnStyle("#16a34a")}>
+                          Add
+                        </button>
+                        <button onClick={() => setBindingNodeId(null)} style={smallBtnStyle("#dc2626")}>
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setBindingNodeId(node.id)}
+                        style={{ ...smallBtnStyle("#38bdf8"), marginTop: 2 }}
+                      >
+                        + Add Binding
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             ))}
         </div>
 
         {/* Edges */}
-        {graph.edges.length > 0 && (
-          <div style={{ marginBottom: 20 }}>
-            <h4 style={{ fontSize: 13, fontWeight: 600, color: "#aaa", marginBottom: 8, textTransform: "uppercase", letterSpacing: 1 }}>
-              Dependencies ({graph.edges.length})
-            </h4>
+        <div style={{ marginBottom: 20 }}>
+          <h4 style={{ fontSize: 13, fontWeight: 600, color: "#aaa", marginBottom: 8, textTransform: "uppercase", letterSpacing: 1 }}>
+            Dependencies ({editMode ? editedEdges.length : graph.edges.length})
+          </h4>
 
-            {graph.edges.map((edge, i) => {
-              const fromNode = graph.nodes.find((n) => n.id === edge.from);
-              const toNode = graph.nodes.find((n) => n.id === edge.to);
-              return (
-                <div
-                  key={i}
-                  style={{
-                    fontSize: 12, color: "#999", padding: "4px 0",
-                    display: "flex", alignItems: "center", gap: 6,
-                  }}
+          {(editMode ? editedEdges : graph.edges).map((edge, i) => {
+            const fromNode = graph.nodes.find((n) => n.id === edge.from);
+            const toNode = graph.nodes.find((n) => n.id === edge.to);
+            return (
+              <div
+                key={i}
+                style={{
+                  fontSize: 12, color: "#999", padding: "4px 0",
+                  display: "flex", alignItems: "center", gap: 6,
+                }}
+              >
+                <span style={{ fontWeight: 500, color: "#ccc" }}>
+                  {fromNode?.artifactName ?? edge.from.slice(0, 8)}
+                </span>
+                <span style={{ color: edge.type === "data_flow" ? "#38bdf8" : "#8b5cf6" }}>
+                  {edge.type === "data_flow" ? "-- data -->" : "-- depends -->"}
+                </span>
+                <span style={{ fontWeight: 500, color: "#ccc" }}>
+                  {toNode?.artifactName ?? edge.to.slice(0, 8)}
+                </span>
+                {edge.dataBinding && (
+                  <span style={{ fontSize: 10, color: "#666" }}>
+                    ({edge.dataBinding.outputName} {"->"} {"$"}{edge.dataBinding.inputVariable})
+                  </span>
+                )}
+                {editMode && (
+                  <button
+                    onClick={() => handleRemoveEdge(i)}
+                    style={{
+                      marginLeft: "auto", fontSize: 10, padding: "1px 6px",
+                      borderRadius: 3, border: "1px solid #dc262640",
+                      background: "#dc262610", color: "#dc2626", cursor: "pointer",
+                    }}
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
+            );
+          })}
+
+          {/* Add Edge form (edit mode) */}
+          {editMode && (
+            <div style={{
+              marginTop: 8, padding: "8px 10px",
+              background: "rgba(139,92,246,0.04)", borderRadius: 6,
+              border: "1px solid rgba(139,92,246,0.1)",
+            }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: "#aaa", marginBottom: 6 }}>
+                Add Edge
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 4, alignItems: "center" }}>
+                <select value={newEdgeFrom} onChange={(e) => setNewEdgeFrom(e.target.value)} style={inputStyle}>
+                  <option value="">From...</option>
+                  {graph.nodes.map((n) => (
+                    <option key={n.id} value={n.id}>
+                      {n.artifactName ?? n.artifactId}
+                    </option>
+                  ))}
+                </select>
+                <select value={newEdgeTo} onChange={(e) => setNewEdgeTo(e.target.value)} style={inputStyle}>
+                  <option value="">To...</option>
+                  {graph.nodes.map((n) => (
+                    <option key={n.id} value={n.id}>
+                      {n.artifactName ?? n.artifactId}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={newEdgeType}
+                  onChange={(e) => setNewEdgeType(e.target.value as "depends_on" | "data_flow")}
+                  style={inputStyle}
                 >
-                  <span style={{ fontWeight: 500, color: "#ccc" }}>
-                    {fromNode?.artifactName ?? edge.from.slice(0, 8)}
-                  </span>
-                  <span style={{ color: edge.type === "data_flow" ? "#38bdf8" : "#8b5cf6" }}>
-                    {edge.type === "data_flow" ? "-- data -->" : "-- depends -->"}
-                  </span>
-                  <span style={{ fontWeight: 500, color: "#ccc" }}>
-                    {toNode?.artifactName ?? edge.to.slice(0, 8)}
-                  </span>
-                  {edge.dataBinding && (
-                    <span style={{ fontSize: 10, color: "#666" }}>
-                      ({edge.dataBinding.outputName} {"->"} {"$"}{edge.dataBinding.inputVariable})
-                    </span>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
+                  <option value="depends_on">depends_on</option>
+                  <option value="data_flow">data_flow</option>
+                </select>
+                {newEdgeType === "data_flow" && (
+                  <>
+                    <input
+                      placeholder="Output name"
+                      value={newEdgeOutputName}
+                      onChange={(e) => setNewEdgeOutputName(e.target.value)}
+                      style={inputStyle}
+                    />
+                    <input
+                      placeholder="Input variable"
+                      value={newEdgeInputVar}
+                      onChange={(e) => setNewEdgeInputVar(e.target.value)}
+                      style={inputStyle}
+                    />
+                  </>
+                )}
+                <button onClick={handleAddEdge} style={smallBtnStyle("#16a34a")}>
+                  Add
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </CanvasPanelHost>
   );
+}
+
+// ---------------------------------------------------------------------------
+// Shared styles
+// ---------------------------------------------------------------------------
+
+const inputStyle: React.CSSProperties = {
+  fontSize: 11, padding: "2px 6px", borderRadius: 3,
+  border: "1px solid #444", background: "#1a1a1a", color: "#ccc",
+  outline: "none", minWidth: 80,
+};
+
+function smallBtnStyle(color: string): React.CSSProperties {
+  return {
+    fontSize: 10, padding: "1px 8px", borderRadius: 3,
+    border: `1px solid ${color}40`, background: `${color}15`,
+    color, cursor: "pointer",
+  };
 }
 
 // ---------------------------------------------------------------------------

@@ -324,6 +324,68 @@ export function registerIntakeRoutes(
   );
 
   // -----------------------------------------------------------------------
+  // Manual upload — form-based artifact submission via UI
+  // -----------------------------------------------------------------------
+
+  app.post(
+    "/api/intake/manual",
+    { preHandler: [requirePermission("artifact.create")] },
+    async (request, reply) => {
+      const body = request.body as Record<string, unknown>;
+      const artifactName = body.artifactName as string;
+      const artifactType = body.artifactType as string;
+      const version = body.version as string;
+      const source = (body.source as string) ?? "manual-upload";
+      const metadata = (body.metadata as Record<string, unknown>) ?? {};
+
+      if (!artifactName || !artifactType || !version) {
+        return reply.status(400).send({ error: "artifactName, artifactType, and version are required" });
+      }
+
+      const event = eventStore.create({
+        channelId: "manual",
+        status: "processing",
+        payload: body,
+      });
+
+      try {
+        const result = await processor.process(
+          {
+            artifactName,
+            artifactType,
+            version,
+            source,
+            metadata,
+          },
+          "manual",
+        );
+
+        eventStore.update(event.id, {
+          status: "completed",
+          artifactId: result.artifactId,
+          processedAt: new Date(),
+        });
+
+        return reply.status(201).send({
+          eventId: event.id,
+          artifactId: result.artifactId,
+          versionId: result.versionId,
+        });
+      } catch (err) {
+        eventStore.update(event.id, {
+          status: "failed",
+          error: err instanceof Error ? err.message : "Processing failed",
+          processedAt: new Date(),
+        });
+        return reply.status(500).send({
+          error: "Intake processing failed",
+          eventId: event.id,
+        });
+      }
+    },
+  );
+
+  // -----------------------------------------------------------------------
   // Events — view recent intake events
   // -----------------------------------------------------------------------
 
