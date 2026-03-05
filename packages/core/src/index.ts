@@ -7,6 +7,8 @@ export type {
   ArtifactId,
   ArtifactVersionId,
   SecurityBoundaryId,
+  UserId,
+  RoleId,
   DeploymentStatus,
   DeploymentTrigger,
   DeploymentPlan,
@@ -46,6 +48,12 @@ export type {
   AppSettings,
   TelemetryEvent,
   TelemetryAction,
+  Permission,
+  User,
+  Role,
+  UserRole,
+  Session,
+  UserPublic,
 } from "./types.js";
 
 export {
@@ -71,6 +79,10 @@ export type {
   IDeploymentStore,
   ISettingsStore,
   ITelemetryStore,
+  IUserStore,
+  IRoleStore,
+  IUserRoleStore,
+  ISessionStore,
 } from "./store-interfaces.js";
 export {
   openEntityDatabase,
@@ -81,10 +93,18 @@ export {
   PersistentArtifactStore,
   PersistentSecurityBoundaryStore,
   PersistentTelemetryStore,
+  PersistentUserStore,
+  PersistentRoleStore,
+  PersistentUserRoleStore,
+  PersistentSessionStore,
 } from "./persistent-stores.js";
 export { ArtifactStore } from "./artifact-store.js";
 export { SecurityBoundaryStore } from "./security-boundary-store.js";
 export { TelemetryStore } from "./telemetry-store.js";
+export { UserStore } from "./user-store.js";
+export { RoleStore } from "./role-store.js";
+export { UserRoleStore } from "./user-role-store.js";
+export { SessionStore } from "./session-store.js";
 export { PartitionContainer } from "./partition-container.js";
 export type {
   PrecedenceEntry,

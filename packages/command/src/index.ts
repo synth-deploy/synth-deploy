@@ -7,8 +7,8 @@ import fastifyCors from "@fastify/cors";
 import rateLimit from "@fastify/rate-limit";
 import fastifyStatic from "@fastify/static";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { PersistentDecisionDebrief, openEntityDatabase, PersistentPartitionStore, PersistentOperationStore, PersistentEnvironmentStore, PersistentSettingsStore, PersistentDeploymentStore, PersistentOrderStore, PersistentStepTypeStore, PersistentArtifactStore, PersistentSecurityBoundaryStore, PersistentTelemetryStore, LlmClient, DEFAULT_DEPLOY_CONFIG } from "@deploystack/core";
-import type { Deployment, DeploymentStep, DeployConfig, Artifact, ArtifactVersion, SecurityBoundary } from "@deploystack/core";
+import { PersistentDecisionDebrief, openEntityDatabase, PersistentPartitionStore, PersistentOperationStore, PersistentEnvironmentStore, PersistentSettingsStore, PersistentDeploymentStore, PersistentOrderStore, PersistentStepTypeStore, PersistentArtifactStore, PersistentSecurityBoundaryStore, PersistentTelemetryStore, PersistentUserStore, PersistentRoleStore, PersistentUserRoleStore, PersistentSessionStore, LlmClient, DEFAULT_DEPLOY_CONFIG } from "@deploystack/core";
+import type { Deployment, DeploymentStep, DeployConfig, Artifact, ArtifactVersion, SecurityBoundary, Permission, RoleId } from "@deploystack/core";
 import { CommandAgent } from "./agent/command-agent.js";
 import { EnvoyHealthChecker } from "./agent/health-checker.js";
 import { McpClientManager } from "./agent/mcp-client-manager.js";
@@ -26,6 +26,8 @@ import { registerTelemetryRoutes } from "./api/telemetry.js";
 import { registerEnvoyRoutes } from "./api/envoys.js";
 import { EnvoyRegistry } from "./agent/envoy-registry.js";
 import { registerAuthMiddleware } from "./middleware/auth.js";
+import { registerAuthRoutes } from "./api/auth.js";
+import { registerUserRoutes } from "./api/users.js";
 import { startStaleDeploymentScanner } from "./agent/stale-deployment-detector.js";
 import { startRetentionScanner } from "./agent/debrief-retention.js";
 
@@ -46,7 +48,72 @@ const stepTypeStore = new PersistentStepTypeStore(entityDb);
 const artifactStore = new PersistentArtifactStore(entityDb);
 const securityBoundaryStore = new PersistentSecurityBoundaryStore(entityDb);
 const telemetryStore = new PersistentTelemetryStore(entityDb);
+const userStore = new PersistentUserStore(entityDb);
+const roleStore = new PersistentRoleStore(entityDb);
+const userRoleStore = new PersistentUserRoleStore(entityDb, roleStore);
+const sessionStore = new PersistentSessionStore(entityDb);
 const envoyRegistry = new EnvoyRegistry();
+
+// --- JWT secret ---
+const jwtSecretEnv = process.env.DEPLOYSTACK_JWT_SECRET;
+let jwtSecret: Uint8Array;
+if (jwtSecretEnv) {
+  jwtSecret = new TextEncoder().encode(jwtSecretEnv);
+} else {
+  jwtSecret = crypto.getRandomValues(new Uint8Array(32));
+  console.warn("[DeployStack] DEPLOYSTACK_JWT_SECRET not set — generated random secret (sessions will not survive restarts)");
+}
+
+// --- Seed default roles ---
+const ALL_PERMISSIONS: Permission[] = [
+  "deployment.create", "deployment.approve", "deployment.reject", "deployment.view", "deployment.rollback",
+  "artifact.create", "artifact.update", "artifact.annotate", "artifact.delete", "artifact.view",
+  "environment.create", "environment.update", "environment.delete", "environment.view",
+  "partition.create", "partition.update", "partition.delete", "partition.view",
+  "envoy.register", "envoy.configure", "envoy.view",
+  "settings.manage", "users.manage", "roles.manage",
+];
+
+const DEPLOYER_PERMISSIONS: Permission[] = [
+  "deployment.create", "deployment.approve", "deployment.reject", "deployment.view", "deployment.rollback",
+  "artifact.create", "artifact.update", "artifact.annotate", "artifact.view",
+  "environment.view",
+  "partition.view",
+  "envoy.view",
+];
+
+const VIEWER_PERMISSIONS: Permission[] = [
+  "deployment.view",
+  "artifact.view",
+  "environment.view",
+  "partition.view",
+  "envoy.view",
+];
+
+if (roleStore.list().length === 0) {
+  roleStore.create({
+    id: crypto.randomUUID() as RoleId,
+    name: "Admin",
+    permissions: ALL_PERMISSIONS,
+    isBuiltIn: true,
+    createdAt: new Date(),
+  });
+  roleStore.create({
+    id: crypto.randomUUID() as RoleId,
+    name: "Deployer",
+    permissions: DEPLOYER_PERMISSIONS,
+    isBuiltIn: true,
+    createdAt: new Date(),
+  });
+  roleStore.create({
+    id: crypto.randomUUID() as RoleId,
+    name: "Viewer",
+    permissions: VIEWER_PERMISSIONS,
+    isBuiltIn: true,
+    createdAt: new Date(),
+  });
+  console.log("[DeployStack] Seeded default roles: Admin, Deployer, Viewer");
+}
 const envoyUrl = settings.get().envoy?.url;
 const healthChecker = envoyUrl ? new EnvoyHealthChecker(envoyUrl) : undefined;
 const agent = new CommandAgent(debrief, deployments, orders, healthChecker, {}, settings);
@@ -522,7 +589,7 @@ await app.register(rateLimit, {
 });
 
 // Register authentication middleware
-const auth = registerAuthMiddleware(app);
+const auth = registerAuthMiddleware(app, userStore, userRoleStore, sessionStore, jwtSecret);
 
 // Register REST routes
 registerHealthRoutes(app, {
@@ -544,6 +611,8 @@ registerAgentRoutes(app, agent, partitions, environments, operations, deployment
 registerSettingsRoutes(app, settings, telemetryStore);
 registerTelemetryRoutes(app, telemetryStore);
 registerEnvoyRoutes(app, settings, envoyRegistry);
+registerAuthRoutes(app, userStore, roleStore, userRoleStore, sessionStore, jwtSecret);
+registerUserRoutes(app, userStore, roleStore, userRoleStore);
 
 // --- Serve UI static files if built ---
 
@@ -672,8 +741,8 @@ app.listen({ port: PORT, host: HOST }, (err) => {
   const uiStatus = existsSync(uiDistPath) ? `UI:       http://${HOST}:${PORT}/` : "UI:       not built (run npm run build:ui)";
 
   const authStatus = auth.enabled
-    ? "Auth:     enabled (API key required)                 "
-    : "Auth:     disabled (set DEPLOYSTACK_API_KEY)         ";
+    ? "Auth:     enabled (JWT)                              "
+    : "Auth:     disabled                                   ";
 
   const seedStatus = process.env.DEPLOYSTACK_SEED_DEMO !== 'false'
     ? "Seed: 3 partitions, 3 envs, 3 ops, 3 artifacts     \n║        5 orders, 10 deployments, 2 boundaries       "

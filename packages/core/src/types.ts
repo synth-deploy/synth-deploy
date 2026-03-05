@@ -10,6 +10,8 @@ export type EnvoyId = string;
 export type ArtifactId = string;
 export type ArtifactVersionId = string;
 export type SecurityBoundaryId = string;
+export type UserId = string & { readonly __brand: "UserId" };
+export type RoleId = string & { readonly __brand: "RoleId" };
 
 // --- Deployment ---
 
@@ -126,7 +128,11 @@ export interface DebriefEntry {
   decision: string;
   reasoning: string;
   context: Record<string, unknown>;
-  actor?: string;
+  actor?: string | {
+    userId: UserId;
+    email: string;
+    name: string;
+  };
 }
 
 // --- Partition ---
@@ -409,3 +415,48 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   },
   mcpServers: [],
 };
+
+// --- Auth types ---
+
+export type Permission =
+  | "deployment.create" | "deployment.approve" | "deployment.reject" | "deployment.view" | "deployment.rollback"
+  | "artifact.create" | "artifact.update" | "artifact.annotate" | "artifact.delete" | "artifact.view"
+  | "environment.create" | "environment.update" | "environment.delete" | "environment.view"
+  | "partition.create" | "partition.update" | "partition.delete" | "partition.view"
+  | "envoy.register" | "envoy.configure" | "envoy.view"
+  | "settings.manage" | "users.manage" | "roles.manage";
+
+export interface User {
+  id: UserId;
+  email: string;
+  name: string;
+  passwordHash: string; // bcrypt — never sent to frontend
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface Role {
+  id: RoleId;
+  name: string; // "admin", "deployer", "viewer", or custom
+  permissions: Permission[];
+  isBuiltIn: boolean;
+  createdAt: Date;
+}
+
+export interface UserRole {
+  userId: UserId;
+  roleId: RoleId;
+  assignedAt: Date;
+  assignedBy: UserId;
+}
+
+export interface Session {
+  id: string;
+  userId: UserId;
+  token: string;
+  refreshToken: string;
+  expiresAt: Date;
+  createdAt: Date;
+}
+
+export type UserPublic = Omit<User, "passwordHash">;
