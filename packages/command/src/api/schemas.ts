@@ -249,6 +249,27 @@ export const DebriefQuerySchema = z.object({
   decisionType: z.string().optional(),
 });
 
+// --- Progress Events (from envoy callback) ---
+
+export const ProgressEventSchema = z.object({
+  deploymentId: z.string(),
+  type: z.enum([
+    "step-started",
+    "step-completed",
+    "step-failed",
+    "rollback-started",
+    "rollback-completed",
+    "deployment-completed",
+  ]),
+  stepIndex: z.number().int().nonnegative(),
+  stepDescription: z.string(),
+  status: z.enum(["in_progress", "completed", "failed"]),
+  output: z.string().optional(),
+  error: z.string().optional(),
+  timestamp: z.string(),
+  overallProgress: z.number().min(0).max(100),
+});
+
 // --- Telemetry ---
 
 export const TelemetryQuerySchema = z.object({

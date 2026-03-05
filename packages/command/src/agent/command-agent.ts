@@ -1369,6 +1369,11 @@ export class CommandAgent {
 
     let envoyResult: EnvoyDeployResult;
     try {
+      // Construct progress callback URL so the envoy can stream execution events back
+      const commandPort = parseInt(process.env.PORT ?? "3000", 10);
+      const commandHost = process.env.DEPLOYSTACK_COMMAND_HOST ?? "localhost";
+      const progressCallbackUrl = `http://${commandHost}:${commandPort}/api/deployments/${deployment.id}/progress`;
+
       envoyResult = await client.deploy({
         deploymentId: deployment.id,
         partitionId: deployment.partitionId ?? "",
@@ -1378,6 +1383,7 @@ export class CommandAgent {
         variables: deployment.variables,
         environmentName: environment.name,
         partitionName: partition?.name ?? "",
+        progressCallbackUrl,
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

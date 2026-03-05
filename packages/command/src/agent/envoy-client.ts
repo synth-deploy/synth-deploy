@@ -173,6 +173,7 @@ export class EnvoyClient {
     variables: Record<string, string>;
     environmentName: string;
     partitionName: string;
+    progressCallbackUrl?: string;
   }): Promise<EnvoyDeployResult> {
     const response = await fetchWithRetry(
       `${this.baseUrl}/deploy`,

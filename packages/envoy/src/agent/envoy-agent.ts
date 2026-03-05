@@ -30,6 +30,7 @@ import {
   ContainerHandler,
   VerifyHandler,
 } from "../execution/index.js";
+import { createCallbackReporter } from "../execution/progress-reporter.js";
 
 // ---------------------------------------------------------------------------
 // Types — lifecycle state and deployment instruction/result
@@ -67,6 +68,8 @@ export interface DeploymentInstruction {
   plan?: PlannedStep[];
   /** Security boundaries to validate plan steps against */
   boundaries?: SecurityBoundary[];
+  /** URL to POST progress events to during execution (provided by Command) */
+  progressCallbackUrl?: string;
 }
 
 /**
@@ -1429,6 +1432,7 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
     plan: DeploymentPlan,
     rollbackPlan: DeploymentPlan,
     artifactContext?: { artifactType: string; artifactName: string; environmentId: string },
+    progressCallbackUrl?: string,
   ): Promise<DeploymentResult> {
     await this.executorReady;
 
@@ -1491,10 +1495,15 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
 
     // Execute each step through the OperationExecutor if available
     if (this.operationExecutor && plan.steps.length > 0) {
+      // Set up progress callback to stream events to Command if URL provided
+      const progressCallback = progressCallbackUrl
+        ? createCallbackReporter(progressCallbackUrl)
+        : undefined;
+
       const planResult = await this.operationExecutor.executePlan(
         plan.steps,
         [],
-        undefined,
+        progressCallback,
         deploymentId,
       );
 
