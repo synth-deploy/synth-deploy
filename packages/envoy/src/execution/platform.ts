@@ -50,10 +50,17 @@ export async function createPlatformAdapter(): Promise<PlatformAdapter> {
   const platform = process.platform as Platform;
 
   switch (platform) {
-    case "linux":
     case "darwin": {
+      const { DarwinPlatformAdapter } = await import("./platform/darwin.js");
+      return new DarwinPlatformAdapter();
+    }
+    case "linux": {
       const { LinuxPlatformAdapter } = await import("./platform/linux.js");
       return new LinuxPlatformAdapter(platform);
+    }
+    case "win32": {
+      const { Win32PlatformAdapter } = await import("./platform/win32.js");
+      return new Win32PlatformAdapter();
     }
     default: {
       // Unsupported platform — create a linux adapter as best-effort
