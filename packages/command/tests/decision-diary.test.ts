@@ -373,8 +373,16 @@ describe("Decision Diary — orchestration completeness", () => {
       "deployment-verification",
       "deployment-completion",
       "deployment-failure",
+      "diagnostic-investigation",
+      "environment-scan",
       "system",
       "llm-call",
+      "artifact-analysis",
+      "plan-generation",
+      "plan-approval",
+      "plan-rejection",
+      "rollback-execution",
+      "cross-system-context",
       "order-created",
     ];
 

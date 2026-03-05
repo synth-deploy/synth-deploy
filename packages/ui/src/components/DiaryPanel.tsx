@@ -15,7 +15,13 @@ const DT_COLORS: Record<string, string> = {
   "diagnostic-investigation": "#ec4899",
   "environment-scan": "#14b8a6",
   system: "#6b7280",
-  "order-created": "#a855f7",
+  "llm-call": "#6b7280",
+  "artifact-analysis": "#ec4899",
+  "plan-generation": "#6366f1",
+  "plan-approval": "#16a34a",
+  "plan-rejection": "#dc2626",
+  "rollback-execution": "#dc2626",
+  "cross-system-context": "#14b8a6",
 };
 
 function formatTime(date: string | Date): string {

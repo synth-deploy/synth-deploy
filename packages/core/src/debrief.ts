@@ -16,6 +16,13 @@ export interface DebriefRecordParams {
   decision: string;
   reasoning: string;
   context?: Record<string, unknown>;
+  actor?: string;
+  /**
+   * When true, this entry is a conversational query response (e.g. from queryAgent)
+   * and will NOT be recorded in the debrief. The Debrief records actions, decisions,
+   * and the information that informed them — not LLM conversation history.
+   */
+  isConversation?: boolean;
 }
 
 export interface DebriefWriter {
@@ -49,8 +56,16 @@ export class DecisionDebrief implements DebriefWriter, DebriefReader {
       decision: params.decision,
       reasoning: params.reasoning,
       context: params.context ?? {},
+      actor: params.actor,
     };
-    this.entries.set(entry.id, entry);
+
+    // Conversational query responses are excluded from the debrief.
+    // The Debrief records actions and decisions, not LLM conversation history.
+    // The entry object is still returned for caller convenience but is not stored.
+    if (!params.isConversation) {
+      this.entries.set(entry.id, entry);
+    }
+
     return entry;
   }
 

@@ -12,9 +12,11 @@ export function formatDebriefEntry(entry: DebriefEntry): string {
   const partition = entry.partitionId ?? "system";
   const deployment = entry.deploymentId ? entry.deploymentId.slice(0, 8) : "n/a";
 
+  const actorLabel = entry.actor ? ` | Actor: ${entry.actor}` : "";
+
   const lines = [
     `[${ts}] ${type}`,
-    `  Partition: ${partition} | Deployment: ${deployment} | Agent: ${entry.agent}`,
+    `  Partition: ${partition} | Deployment: ${deployment} | Agent: ${entry.agent}${actorLabel}`,
     `  Decision: ${entry.decision}`,
     `  Reasoning: ${entry.reasoning}`,
   ];
