@@ -6,7 +6,9 @@ import { EnvoyAgent } from "./agent/envoy-agent.js";
 import { DeploymentExecutor } from "./agent/deployment-executor.js";
 import { EnvironmentScanner } from "./agent/environment-scanner.js";
 import { QueryEngine } from "./agent/query-engine.js";
+import { PersistentEnvoyKnowledgeStore } from "./state/persistent-knowledge-store.js";
 import { LocalStateStore } from "./state/local-state.js";
+import type { EnvoyKnowledgeStore } from "./state/knowledge-store.js";
 import { createEnvoyServer } from "./server.js";
 
 // --- Configuration ---
@@ -24,7 +26,21 @@ fs.mkdirSync(path.join(BASE_DIR, "deployments"), { recursive: true });
 const COMMAND_URL = process.env.DEPLOYSTACK_COMMAND_URL ?? "";
 
 const debrief = new DecisionDebrief();
-const state = new LocalStateStore();
+
+// Use SQLite-backed persistent store when a base directory is available.
+// Fall back to in-memory LocalStateStore when persistence isn't feasible.
+let state: EnvoyKnowledgeStore;
+let persistentStore: PersistentEnvoyKnowledgeStore | null = null;
+try {
+  const dbPath = path.join(BASE_DIR, "envoy-knowledge.db");
+  persistentStore = new PersistentEnvoyKnowledgeStore(dbPath);
+  state = persistentStore;
+} catch (err) {
+  console.warn(
+    `[Envoy] Failed to open persistent knowledge store, falling back to in-memory: ${err instanceof Error ? err.message : err}`,
+  );
+  state = new LocalStateStore();
+}
 
 // Connect the CommandReporter if a Command URL is configured
 let reporter: import("./agent/command-reporter.js").CommandReporter | undefined;
@@ -53,6 +69,7 @@ debrief.record({
     port: PORT,
     host: HOST,
     commandUrl: COMMAND_URL || "(not configured)",
+    storeType: persistentStore ? "persistent (SQLite)" : "in-memory",
   },
 });
 
@@ -169,6 +186,10 @@ const workspaceCleanupInterval = setInterval(() => {
 
 app.addHook("onClose", async () => {
   clearInterval(workspaceCleanupInterval);
+  // Close persistent store database connection on shutdown
+  if (persistentStore) {
+    persistentStore.close();
+  }
 });
 
 app.listen({ port: PORT, host: HOST }, (err) => {
@@ -215,10 +236,15 @@ export type {
 export { EnvironmentScanner } from "./agent/environment-scanner.js";
 export type { EnvironmentScanResult } from "./agent/environment-scanner.js";
 export { LocalStateStore } from "./state/local-state.js";
+export { PersistentEnvoyKnowledgeStore } from "./state/persistent-knowledge-store.js";
 export type {
+  EnvoyKnowledgeStore,
   LocalDeploymentRecord,
   EnvironmentSnapshot,
-} from "./state/local-state.js";
+  StoredPlan,
+  SystemKnowledgeEntry,
+  SystemKnowledgeCategory,
+} from "./state/knowledge-store.js";
 export { createEnvoyServer } from "./server.js";
 export { CommandReporter } from "./agent/command-reporter.js";
 export type { EnvoyReport, SerializedDebriefEntry } from "./agent/command-reporter.js";

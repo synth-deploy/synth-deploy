@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { LlmClient, LlmResult } from "@deploystack/core";
-import type { LocalStateStore } from "../state/local-state.js";
+import type { EnvoyKnowledgeStore } from "../state/knowledge-store.js";
 import type { DeploymentInstruction } from "./envoy-agent.js";
 import type { ExecutionResult } from "./deployment-executor.js";
 
@@ -183,7 +183,7 @@ export class DiagnosticInvestigator {
   private llm: LlmClient | null;
 
   constructor(
-    private state: LocalStateStore,
+    private state: EnvoyKnowledgeStore,
     llm?: LlmClient,
   ) {
     this.llm = llm ?? null;

@@ -2,7 +2,7 @@ import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type { EnvoyAgent, DeploymentInstruction, LifecycleState } from "./agent/envoy-agent.js";
-import type { LocalStateStore } from "./state/local-state.js";
+import type { EnvoyKnowledgeStore } from "./state/knowledge-store.js";
 import type { QueryEngine } from "./agent/query-engine.js";
 import type { EscalationPackager } from "./agent/escalation-packager.js";
 
@@ -57,7 +57,7 @@ const EscalateGeneralSchema = z.object({
  */
 export function createEnvoyServer(
   agent: EnvoyAgent,
-  state: LocalStateStore,
+  state: EnvoyKnowledgeStore,
   queryEngine?: QueryEngine,
   escalationPackager?: EscalationPackager,
 ): FastifyInstance {

@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import type { LocalStateStore } from "../state/local-state.js";
+import type { EnvoyKnowledgeStore } from "../state/knowledge-store.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -43,7 +43,7 @@ export interface EnvironmentScanResult {
 export class EnvironmentScanner {
   constructor(
     private baseDir: string,
-    private stateStore: LocalStateStore,
+    private stateStore: EnvoyKnowledgeStore,
   ) {}
 
   scan(): EnvironmentScanResult {
