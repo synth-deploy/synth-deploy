@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import {
   listOperations,
   listPartitions,
@@ -6,10 +6,8 @@ import {
   listOrders,
   createOrder,
   triggerDeployment,
-  interpretIntent,
 } from "../../api.js";
 import type { Operation, Partition, Environment, Order } from "../../types.js";
-import type { IntentResult } from "../../api.js";
 import { useSettings } from "../../context/SettingsContext.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
 import { useCanvas } from "../../context/CanvasContext.js";
@@ -17,12 +15,11 @@ import EnvBadge from "../EnvBadge.js";
 
 interface Props {
   title: string;
-  initialIntent?: string;
   /** Pre-select an Order when navigating from the Orders section */
   preselectedOrderId?: string;
 }
 
-export default function DeploymentAuthoringPanel({ title, initialIntent, preselectedOrderId }: Props) {
+export default function DeploymentAuthoringPanel({ title, preselectedOrderId }: Props) {
   const { pushPanel } = useCanvas();
   const { settings: appSettings } = useSettings();
   const environmentsEnabled = appSettings?.environmentsEnabled ?? true;
@@ -33,12 +30,8 @@ export default function DeploymentAuthoringPanel({ title, initialIntent, presele
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [interpreting, setInterpreting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(preselectedOrderId ?? null);
-  const [intentResult, setIntentResult] = useState<IntentResult | null>(null);
-  const conversationIdRef = useRef(crypto.randomUUID());
-  const initialSubmittedRef = useRef(false);
 
   // New Order creation state
   const [showNewOrder, setShowNewOrder] = useState(false);
@@ -59,69 +52,6 @@ export default function DeploymentAuthoringPanel({ title, initialIntent, presele
       },
     );
   }, []);
-
-  // Auto-submit initial intent (from CommandChannel)
-  useEffect(() => {
-    if (initialIntent && !loading && !initialSubmittedRef.current) {
-      initialSubmittedRef.current = true;
-      handleIntentSubmit(initialIntent);
-    }
-  }, [initialIntent, loading]);
-
-  async function handleIntentSubmit(intent: string) {
-    setInterpreting(true);
-    setError(null);
-
-    try {
-      const result = await interpretIntent(intent, {}, conversationIdRef.current);
-      setIntentResult(result);
-
-      if (result.ready) {
-        // Intent resolved all fields — create an Order and deploy
-        setTimeout(() => deployFromIntent(result), 300);
-      }
-    } catch (e: any) {
-      setError(e.message);
-    } finally {
-      setInterpreting(false);
-    }
-  }
-
-  async function deployFromIntent(result: IntentResult) {
-    setSubmitting(true);
-    setError(null);
-
-    try {
-      // Create an Order from the resolved intent fields
-      const order = await createOrder({
-        operationId: result.resolved.operationId.value,
-        partitionId: result.resolved.partitionId.value,
-        environmentId: result.resolved.environmentId.value,
-        version: result.resolved.version.value,
-      });
-
-      // Deploy from the newly created Order
-      const deployResult = await triggerDeployment({
-        orderId: order.id,
-        partitionId: result.resolved.partitionId.value,
-        environmentId: result.resolved.environmentId.value,
-        triggeredBy: "agent",
-        variables:
-          Object.keys(result.resolved.variables).length > 0
-            ? result.resolved.variables
-            : undefined,
-      });
-
-      pushPanel({
-        type: "deployment-detail",
-        title: `Deployment ${deployResult.deployment.version}`,
-        params: { id: deployResult.deployment.id },
-      });
-    } catch (e: any) {
-      setError(e.message);
-      setSubmitting(false);
-    }
-  }
 
   async function deployFromOrder(order: Order) {
     setSubmitting(true);
@@ -187,24 +117,8 @@ export default function DeploymentAuthoringPanel({ title, initialIntent, presele
       <div className="canvas-detail">
         {error && <div className="error-msg">{error}</div>}
 
-        {interpreting && <div className="canvas-interpreting">Interpreting intent...</div>}
-
-        {/* Intent resolution results (from CommandChannel) */}
-        {intentResult && !intentResult.ready && (
-          <IntentResolutionView
-            result={intentResult}
-            operations={operations}
-            partitions={partitions}
-            environments={environments}
-            environmentsEnabled={environmentsEnabled}
-            submitting={submitting}
-            onDeploy={() => deployFromIntent(intentResult)}
-          />
-        )}
-
         {/* Order selection — the primary deployment flow */}
-        {!intentResult && !interpreting && (
-          <>
+        <>
             {/* Header with create button */}
             <div
               style={{
@@ -330,7 +244,7 @@ export default function DeploymentAuthoringPanel({ title, initialIntent, presele
               </div>
             ) : (
               <div className="canvas-empty">
-                <p>No Orders available. Create one above, or use the Command Channel to describe a deployment.</p>
+                <p>No Orders available. Create one above to get started.</p>
               </div>
             )}
 
@@ -370,166 +284,7 @@ export default function DeploymentAuthoringPanel({ title, initialIntent, presele
               </div>
             )}
           </>
-        )}
       </div>
     </CanvasPanelHost>
-  );
-}
-
-// --- Intent resolution sub-view (shown when CommandChannel resolves an intent) ---
-
-function IntentResolutionView({
-  result,
-  operations,
-  partitions,
-  environments,
-  environmentsEnabled,
-  submitting,
-  onDeploy,
-}: {
-  result: IntentResult;
-  operations: Operation[];
-  partitions: Partition[];
-  environments: Environment[];
-  environmentsEnabled: boolean;
-  submitting: boolean;
-  onDeploy: () => void;
-}) {
-  function operationName(id: string): string {
-    return operations.find((p) => p.id === id)?.name ?? id;
-  }
-  function partitionName(id: string): string {
-    return partitions.find((t) => t.id === id)?.name ?? id;
-  }
-  function envName(id: string): string {
-    return environments.find((e) => e.id === id)?.name ?? id;
-  }
-
-  const missing = environmentsEnabled
-    ? result.missingFields
-    : result.missingFields.filter((f) => f !== "environmentId");
-
-  return (
-    <div className="canvas-resolved-config">
-      <div className="canvas-resolved-header">
-        <h3>Resolved Configuration</h3>
-        {result.ready && <span className="badge badge-succeeded">Ready</span>}
-      </div>
-      <div className="resolved-fields">
-        <ResolvedFieldDisplay
-          label="Operation"
-          field={result.resolved.operationId}
-          displayValue={
-            result.resolved.operationId.value
-              ? operationName(result.resolved.operationId.value)
-              : ""
-          }
-        />
-        <ResolvedFieldDisplay
-          label="Partition"
-          field={result.resolved.partitionId}
-          displayValue={
-            result.resolved.partitionId.value
-              ? partitionName(result.resolved.partitionId.value)
-              : ""
-          }
-        />
-        {environmentsEnabled && (
-          <ResolvedFieldDisplay
-            label="Environment"
-            field={result.resolved.environmentId}
-            displayValue={
-              result.resolved.environmentId.value
-                ? envName(result.resolved.environmentId.value)
-                : ""
-            }
-          />
-        )}
-        <ResolvedFieldDisplay
-          label="Version"
-          field={result.resolved.version}
-          displayValue={result.resolved.version.value}
-        />
-      </div>
-
-      {Object.keys(result.resolved.variables).length > 0 && (
-        <div className="canvas-section">
-          <div className="canvas-section-title">Variables</div>
-          <div className="canvas-var-table">
-            {Object.entries(result.resolved.variables).map(([k, v]) => (
-              <div key={k} className="canvas-var-row">
-                <span className="mono">{k}</span>
-                <span className="mono">{v}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {missing.length > 0 && (
-        <div className="resolved-missing">
-          <strong>Missing: {missing.join(", ")}</strong>
-          <div style={{ marginTop: 4, fontSize: 12 }}>
-            Try including{" "}
-            {missing
-              .map((f) => {
-                if (f === "operationId") return "the operation name";
-                if (f === "partitionId") return "the partition name";
-                if (f === "environmentId") return '"production" or "staging"';
-                if (f === "version") return 'a version like "v1.2.3"';
-                return f;
-              })
-              .join(", ")}{" "}
-            in your intent.
-          </div>
-        </div>
-      )}
-
-      {!result.ready && (
-        <button
-          className="btn btn-primary mt-16"
-          disabled={submitting || missing.length > 0}
-          onClick={onDeploy}
-        >
-          {submitting ? "Deploying..." : "Create Order & Deploy"}
-        </button>
-      )}
-    </div>
-  );
-}
-
-// --- Shared sub-component ---
-
-const confidenceLabels: Record<string, string> = {
-  exact: "Exact match found in intent",
-  inferred: "Inferred from context (not explicitly stated)",
-  missing: "Could not be resolved from intent",
-};
-
-function ResolvedFieldDisplay({
-  label,
-  field,
-  displayValue,
-}: {
-  label: string;
-  field: { value: string; confidence: string; matchedFrom?: string };
-  displayValue: string;
-}) {
-  return (
-    <div className={`resolved-field resolved-field-${field.confidence}`}>
-      <span className="resolved-field-label">{label}</span>
-      <span className="resolved-field-value">
-        {field.confidence === "missing" ? (
-          <span className="resolved-field-missing">Not resolved</span>
-        ) : (
-          displayValue
-        )}
-      </span>
-      {field.matchedFrom && <span className="resolved-field-source">{field.matchedFrom}</span>}
-      <span
-        className={`resolved-confidence-dot confidence-${field.confidence}`}
-        title={confidenceLabels[field.confidence] ?? field.confidence}
-      />
-    </div>
   );
 }

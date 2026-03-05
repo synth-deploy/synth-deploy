@@ -301,18 +301,6 @@ export const DebriefQuerySchema = z.object({
 
 // --- Agent ---
 
-export const IntentRequestSchema = z.object({
-  intent: z.string().min(1),
-  conversationId: z.string().optional(),
-  partialConfig: z.object({
-    operationId: z.string().optional(),
-    partitionId: z.string().optional(),
-    environmentId: z.string().optional(),
-    version: z.string().optional(),
-    variables: z.record(z.string()).optional(),
-  }).optional(),
-});
-
 export const QueryRequestSchema = z.object({
   query: z.string().min(1),
   conversationId: z.string().optional(),

@@ -23,14 +23,6 @@ export default function AgentCanvas() {
 
   function handleAgentResult(result: CanvasQueryResult) {
     switch (result.action) {
-      case "deploy":
-        pushPanel({
-          type: "deployment-authoring",
-          title: result.title ?? "New Deployment",
-          params: { intent: "" },
-        });
-        break;
-
       case "navigate":
       case "data":
         pushPanel({
@@ -92,7 +84,6 @@ export default function AgentCanvas() {
           <DeploymentAuthoringPanel
             key={panel.id}
             title={panel.title}
-            initialIntent={params.intent}
             preselectedOrderId={params.orderId}
           />
         );

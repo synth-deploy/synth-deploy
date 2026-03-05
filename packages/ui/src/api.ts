@@ -341,30 +341,6 @@ export async function verifyTaskModel(
 
 // --- Agent Mode ---
 
-export interface ResolvedField {
-  value: string;
-  confidence: "exact" | "inferred" | "missing";
-  matchedFrom?: string;
-}
-
-export interface IntentResult {
-  resolved: {
-    operationId: ResolvedField;
-    partitionId: ResolvedField;
-    environmentId: ResolvedField;
-    version: ResolvedField;
-    variables: Record<string, string>;
-  };
-  ready: boolean;
-  missingFields: string[];
-  uiUpdates: Array<{
-    field: string;
-    action: "set" | "highlight" | "warn";
-    value?: string;
-    message?: string;
-  }>;
-}
-
 export interface ContextSignal {
   type: "trend" | "health" | "drift";
   severity: "info" | "warning" | "critical";
@@ -389,23 +365,6 @@ export interface DeploymentContext {
   }>;
 }
 
-export async function interpretIntent(
-  intent: string,
-  partialConfig?: {
-    operationId?: string;
-    partitionId?: string;
-    environmentId?: string;
-    version?: string;
-    variables?: Record<string, string>;
-  },
-  conversationId?: string,
-): Promise<IntentResult> {
-  return fetchJson("/api/agent/interpret-intent", {
-    method: "POST",
-    body: JSON.stringify({ intent, partialConfig, conversationId }),
-  });
-}
-
 export async function getDeploymentContext(): Promise<DeploymentContext> {
   return fetchJson("/api/agent/context");
 }
@@ -413,7 +372,7 @@ export async function getDeploymentContext(): Promise<DeploymentContext> {
 // --- Canvas Query ---
 
 export interface CanvasQueryResult {
-  action: "deploy" | "navigate" | "data";
+  action: "navigate" | "data";
   view: string;
   params: Record<string, string>;
   title?: string;

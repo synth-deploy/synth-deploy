@@ -15,7 +15,6 @@ import {
   listEnvironments,
   getSettings,
   updateSettings,
-  interpretIntent,
   listOrders,
   getOrder,
   createOrder,
@@ -274,26 +273,6 @@ describe("API client — settings", () => {
     expect(url).toBe("/api/settings");
     expect(init.method).toBe("PUT");
     expect(JSON.parse(init.body)).toEqual({ environmentsEnabled: false });
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Successful fetch — Agent intent
-// ---------------------------------------------------------------------------
-
-describe("API client — agent", () => {
-  it("interpretIntent sends POST with intent and partial config", async () => {
-    const intentResult = { resolved: {}, ready: false, missingFields: [], uiUpdates: [] };
-    mockFetchResponse(intentResult);
-
-    await interpretIntent("deploy web-app to prod", { operationId: "op-1" }, "conv-1");
-    const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toBe("/api/agent/interpret-intent");
-    expect(init.method).toBe("POST");
-    const body = JSON.parse(init.body);
-    expect(body.intent).toBe("deploy web-app to prod");
-    expect(body.partialConfig.operationId).toBe("op-1");
-    expect(body.conversationId).toBe("conv-1");
   });
 });
 

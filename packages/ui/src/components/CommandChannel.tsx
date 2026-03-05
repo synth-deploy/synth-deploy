@@ -75,15 +75,15 @@ export default function CommandChannel({ scope, onAgentResult }: CommandChannelP
           speaker: "command",
           time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false }),
           text: scope
-            ? `Looking into that for ${scope}. I can see the full deployment history and current Envoy status for this Partition.`
-            : "Understood. I'll investigate and report back.",
+            ? `Looking into that for ${scope}. I can see the full deployment history and current status for this Partition.`
+            : "Let me look into that for you.",
           entities: scope ? [{ type: "Partition" as EntityType, label: scope }] : [],
         },
       ]);
     }
   };
 
-  const prefix = scope ? `COMMAND \u203A ${scope} \u203A` : "COMMAND \u203A";
+  const prefix = scope ? `ASK \u203A ${scope} \u203A` : "ASK \u203A";
 
   return (
     <div className="command-channel">
@@ -98,7 +98,7 @@ export default function CommandChannel({ scope, onAgentResult }: CommandChannelP
         {expanded && (
           <div className="command-channel-panel-header">
             <span className="command-channel-scope-label">
-              {scope ? "Session scoped to" : "Session anchored to"}
+              {scope ? "Investigating" : "Querying"}
             </span>
             {scope ? (
               <EntityTag type="Partition" label={scope} />
@@ -126,7 +126,7 @@ export default function CommandChannel({ scope, onAgentResult }: CommandChannelP
               >
                 <div className="command-channel-msg-header">
                   <span className={`command-channel-speaker ${isYou ? "speaker-you" : "speaker-command"}`}>
-                    {isYou ? "YOU" : "COMMAND"}
+                    {isYou ? "YOU" : "ENVOY"}
                   </span>
                   <span className="command-channel-time">{msg.time}</span>
                   {msg.entities && (
@@ -144,7 +144,7 @@ export default function CommandChannel({ scope, onAgentResult }: CommandChannelP
           {typing && (
             <div className="command-channel-msg command-channel-msg-command">
               <div className="command-channel-msg-header">
-                <span className="command-channel-speaker speaker-command">COMMAND</span>
+                <span className="command-channel-speaker speaker-command">ENVOY</span>
                 <div className="command-channel-typing-dots">
                   <div className="typing-dot" style={{ animationDelay: "0s" }} />
                   <div className="typing-dot" style={{ animationDelay: "0.15s" }} />
@@ -173,7 +173,7 @@ export default function CommandChannel({ scope, onAgentResult }: CommandChannelP
             onFocus={() => {
               if (messages.length > 0 && !expanded) setExpanded(true);
             }}
-            placeholder={scope ? `Ask about ${scope} or issue intent...` : "Issue intent or ask a question..."}
+            placeholder={scope ? `Ask about ${scope}...` : "What do you want to know?"}
           />
           {messages.length > 0 && (
             <button
@@ -212,8 +212,8 @@ export default function CommandChannel({ scope, onAgentResult }: CommandChannelP
         {!expanded && messages.length === 0 && (
           <div className="command-channel-hint">
             {scope
-              ? `Scoped to ${scope} \u2014 type to act or investigate`
-              : "Type intent to act \u00B7 Ask questions to investigate \u00B7 Your context becomes part of the Debrief"}
+              ? `Scoped to ${scope} \u2014 ask questions to investigate`
+              : "Ask questions to investigate \u00B7 Navigate by describing what you need \u00B7 Your context becomes part of the Debrief"}
           </div>
         )}
       </div>
