@@ -58,6 +58,7 @@ function useDeploymentStream(deploymentId: string, isRunning: boolean) {
   const [completed, setCompleted] = useState(false);
   const staleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
+  const seenIdsRef = useRef<Set<string>>(new Set());
 
   const resetStaleTimer = useCallback(() => {
     setStale(false);
@@ -74,6 +75,16 @@ function useDeploymentStream(deploymentId: string, isRunning: boolean) {
 
     es.onmessage = (msg) => {
       try {
+        // Deduplicate events on reconnect — server sends id: field,
+        // EventSource auto-sends Last-Event-ID on reconnect, but
+        // guard against duplicates in case of overlap
+        if (msg.lastEventId && seenIdsRef.current.has(msg.lastEventId)) {
+          return;
+        }
+        if (msg.lastEventId) {
+          seenIdsRef.current.add(msg.lastEventId);
+        }
+
         const event: ProgressEvent = JSON.parse(msg.data);
         setEvents((prev) => [...prev, event]);
         resetStaleTimer();
@@ -88,6 +99,8 @@ function useDeploymentStream(deploymentId: string, isRunning: boolean) {
       }
     };
 
+    // EventSource auto-reconnects on error and sends Last-Event-ID header.
+    // Mark stale while disconnected so UI shows the warning.
     es.onerror = () => {
       setStale(true);
     };

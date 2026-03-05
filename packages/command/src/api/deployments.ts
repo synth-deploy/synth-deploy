@@ -530,10 +530,16 @@ export function registerDeploymentRoutes(
 
       const deploymentId = request.params.id;
 
-      // Send catch-up events from the ring buffer
-      const existing = progressStore.getEvents(deploymentId);
+      // Check for Last-Event-ID header (reconnection with replay)
+      const lastEventIdHeader = request.headers["last-event-id"];
+      const lastEventId = lastEventIdHeader ? parseInt(String(lastEventIdHeader), 10) : 0;
+
+      // Send catch-up events — either all (fresh connect) or since last ID (reconnect)
+      const existing = lastEventId
+        ? progressStore.getEventsSince(deploymentId, lastEventId)
+        : progressStore.getEvents(deploymentId);
       for (const event of existing) {
-        reply.raw.write(`data: ${JSON.stringify(event)}\n\n`);
+        reply.raw.write(`id: ${event.id}\ndata: ${JSON.stringify(event)}\n\n`);
       }
 
       // Check if deployment already completed — if so, close after catch-up
@@ -544,9 +550,9 @@ export function registerDeploymentRoutes(
       }
 
       // Subscribe to new events
-      const listener = (event: { deploymentId: string; type: string }) => {
+      const listener = (event: { id?: number; deploymentId: string; type: string }) => {
         try {
-          reply.raw.write(`data: ${JSON.stringify(event)}\n\n`);
+          reply.raw.write(`id: ${event.id}\ndata: ${JSON.stringify(event)}\n\n`);
 
           // Close the stream when deployment completes
           if (event.type === "deployment-completed") {

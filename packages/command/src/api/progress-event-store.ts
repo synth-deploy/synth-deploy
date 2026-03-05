@@ -11,6 +11,7 @@
  */
 
 export interface ProgressEvent {
+  id?: number;
   deploymentId: string;
   type:
     | "step-started"
@@ -37,13 +38,17 @@ export class ProgressEventStore {
   private buffers = new Map<string, ProgressEvent[]>();
   private listeners = new Map<string, Set<ProgressListener>>();
   private cleanupTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private nextEventId = 1;
 
   /**
-   * Push a new event for a deployment. Stores in the ring buffer
-   * and notifies all subscribed SSE listeners.
+   * Push a new event for a deployment. Assigns a sequential ID,
+   * stores in the ring buffer, and notifies all subscribed SSE listeners.
    */
   push(event: ProgressEvent): void {
     const { deploymentId } = event;
+
+    // Assign sequential event ID for SSE Last-Event-ID replay
+    event.id = this.nextEventId++;
 
     // Ensure buffer exists
     if (!this.buffers.has(deploymentId)) {
@@ -81,6 +86,15 @@ export class ProgressEventStore {
    */
   getEvents(deploymentId: string): ProgressEvent[] {
     return this.buffers.get(deploymentId) ?? [];
+  }
+
+  /**
+   * Get buffered events after a given event ID (for reconnect replay).
+   * Returns only events with id > afterId.
+   */
+  getEventsSince(deploymentId: string, afterId: number): ProgressEvent[] {
+    const buffer = this.buffers.get(deploymentId) ?? [];
+    return buffer.filter((e) => (e.id ?? 0) > afterId);
   }
 
   /**
