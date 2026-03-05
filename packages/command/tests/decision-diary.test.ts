@@ -5,18 +5,15 @@ import os from "node:os";
 import {
   DecisionDebrief,
   PersistentDecisionDebrief,
-  OrderStore,
+  PartitionStore,
+  EnvironmentStore,
+  ArtifactStore,
   formatDebriefEntry,
   formatDebriefEntries,
 } from "@deploystack/core";
 import type {
-  Partition,
-  Environment,
   DebriefEntry,
   DecisionType,
-  DebriefWriter,
-  DebriefReader,
-  Operation,
 } from "@deploystack/core";
 import {
   CommandAgent,
@@ -57,99 +54,6 @@ const CONN_REFUSED: HealthCheckResult = {
   error: "ECONNREFUSED: Connection refused",
 };
 
-function makePartition(overrides: Partial<Partition> = {}): Partition {
-  return {
-    id: "partition-1",
-    name: "Acme Corp",
-    variables: {},
-    createdAt: new Date(),
-    ...overrides,
-  };
-}
-
-function makeEnvironment(overrides: Partial<Environment> = {}): Environment {
-  return {
-    id: "env-prod",
-    name: "production",
-    variables: {},
-    ...overrides,
-  };
-}
-
-function makeOperation(overrides: Partial<Operation> = {}): Operation {
-  return {
-    id: "web-app",
-    name: "web-app",
-    environmentIds: ["env-prod"],
-    steps: [],
-    deployConfig: {
-      healthCheckEnabled: true,
-      healthCheckRetries: 1,
-      timeoutMs: 30000,
-      verificationStrategy: "basic",
-    },
-    ...overrides,
-  };
-}
-
-function makeOrderAndTrigger(
-  agent: CommandAgent,
-  opts: {
-    partition?: Partition;
-    environment?: Environment;
-    operation?: Operation;
-    version?: string;
-    variables?: Record<string, string>;
-  } = {},
-) {
-  const partition = opts.partition ?? makePartition();
-  const environment = opts.environment ?? makeEnvironment();
-  const operation = opts.operation ?? makeOperation();
-  const version = opts.version ?? "2.0.0";
-
-  const order = agent.createOrderSnapshot(version, partition, environment, operation);
-  const trigger = {
-    orderId: order.id,
-    partitionId: partition.id,
-    environmentId: environment.id,
-    triggeredBy: "user" as const,
-    ...(opts.variables ? { variables: opts.variables } : {}),
-  };
-  return { order, trigger, partition, environment, operation };
-}
-
-/**
- * Test convenience: creates an Order snapshot and triggers deployment in one call.
- * Mirrors the old API where tests passed (trigger, partition, env, operation) directly.
- */
-async function testDeploy(
-  agent: CommandAgent,
-  oldTrigger: { operationId?: string; partitionId?: string; environmentId?: string; version?: string; variables?: Record<string, string> },
-  partition?: Partition,
-  environment?: Environment,
-  operation?: Operation,
-) {
-  const p = partition ?? makePartition();
-  const e = environment ?? makeEnvironment();
-  const op = operation ?? makeOperation();
-  const version = oldTrigger.version ?? "2.0.0";
-
-  // Ensure partition/environment IDs match
-  const effectivePartition = oldTrigger.partitionId && oldTrigger.partitionId !== p.id
-    ? makePartition({ id: oldTrigger.partitionId })
-    : p;
-
-  const order = agent.createOrderSnapshot(version, effectivePartition, e, op);
-  const trigger = {
-    orderId: order.id,
-    partitionId: effectivePartition.id,
-    environmentId: e.id,
-    triggeredBy: "user" as const,
-    ...(oldTrigger.variables ? { variables: oldTrigger.variables } : {}),
-  };
-  return agent.triggerDeployment(trigger, effectivePartition, e, op, order);
-}
-
 function findDecisions(entries: DebriefEntry[], substr: string): DebriefEntry[] {
   return entries.filter((e) =>
     e.decision.toLowerCase().includes(substr.toLowerCase()),
@@ -165,35 +69,105 @@ function findDecisions(entries: DebriefEntry[], substr: string): DebriefEntry[] 
 const MIN_SPECIFIC_WORD_COUNT = 3;
 
 // ---------------------------------------------------------------------------
+// Shared factory: sets up agent with seeded stores
+// ---------------------------------------------------------------------------
+
+function createTestAgent(diary: DecisionDebrief | PersistentDecisionDebrief, healthChecker: MockHealthChecker) {
+  const deployments = new InMemoryDeploymentStore();
+  const artifactStore = new ArtifactStore();
+  const environmentStore = new EnvironmentStore();
+  const partitionStore = new PartitionStore();
+  const agent = new CommandAgent(
+    diary, deployments, artifactStore, environmentStore, partitionStore,
+    healthChecker, { healthCheckBackoffMs: 1, executionDelayMs: 1 },
+  );
+  return { agent, deployments, artifactStore, environmentStore, partitionStore };
+}
+
+/** Seed a minimal artifact for testing. */
+function seedArtifact(store: ArtifactStore, name = "web-app") {
+  return store.create({
+    name,
+    type: "nodejs",
+    analysis: {
+      summary: "Test artifact",
+      dependencies: [],
+      configurationExpectations: {},
+      deploymentIntent: "rolling",
+      confidence: 0.9,
+    },
+    annotations: [],
+    learningHistory: [],
+  });
+}
+
+/** Run a deployment through the agent with minimal setup. */
+async function testDeploy(
+  agent: CommandAgent,
+  artifactStore: ArtifactStore,
+  environmentStore: EnvironmentStore,
+  partitionStore: PartitionStore,
+  opts: {
+    partitionName?: string;
+    partitionId?: string;
+    partitionVars?: Record<string, string>;
+    envName?: string;
+    envVars?: Record<string, string>;
+    version?: string;
+    variables?: Record<string, string>;
+  } = {},
+) {
+  const artifact = seedArtifact(artifactStore);
+  const partition = partitionStore.create(
+    opts.partitionName ?? "Acme Corp",
+    opts.partitionVars ?? {},
+  );
+  const env = environmentStore.create(
+    opts.envName ?? "production",
+    opts.envVars ?? {},
+  );
+
+  const trigger = {
+    artifactId: artifact.id,
+    artifactVersionId: opts.version ?? "2.0.0",
+    partitionId: opts.partitionId ?? partition.id,
+    environmentId: env.id,
+    triggeredBy: "user" as const,
+    ...(opts.variables ? { variables: opts.variables } : {}),
+  };
+
+  return agent.triggerDeployment(trigger);
+}
+
+// ---------------------------------------------------------------------------
 // Test suite: Entry specificity — entries must be actionable, not generic
 // ---------------------------------------------------------------------------
 
 describe("Decision Diary — entry specificity", () => {
   let diary: DecisionDebrief;
-  let deployments: InMemoryDeploymentStore;
   let healthChecker: MockHealthChecker;
   let agent: CommandAgent;
+  let artifactStore: ArtifactStore;
+  let environmentStore: EnvironmentStore;
+  let partitionStore: PartitionStore;
 
   beforeEach(() => {
     diary = new DecisionDebrief();
-    deployments = new InMemoryDeploymentStore();
     healthChecker = new MockHealthChecker();
-    agent = new CommandAgent(diary, deployments, new OrderStore(), healthChecker, {
-      healthCheckBackoffMs: 1,
-      executionDelayMs: 1,
-    });
+    const ctx = createTestAgent(diary, healthChecker);
+    agent = ctx.agent;
+    artifactStore = ctx.artifactStore;
+    environmentStore = ctx.environmentStore;
+    partitionStore = ctx.partitionStore;
   });
 
-  it("every decision text is specific — contains operation, version, or environment names", async () => {
-    const partition = makePartition({
-      variables: { APP_ENV: "production", DB_HOST: "acme-db-1" },
-    });
-    const env = makeEnvironment({
-      variables: { APP_ENV: "production", LOG_LEVEL: "warn" },
-    });
-
+  it("every decision text is specific — contains artifact, version, or environment names", async () => {
     healthChecker.willReturn(HEALTHY);
-    const result = await testDeploy(agent, { variables: { LOG_LEVEL: "error" } }, partition, env);
+    const result = await testDeploy(agent, artifactStore, environmentStore, partitionStore, {
+      partitionVars: { APP_ENV: "production", DB_HOST: "acme-db-1" },
+      envVars: { APP_ENV: "production", LOG_LEVEL: "warn" },
+      variables: { LOG_LEVEL: "error" },
+    });
 
     const entries = diary.getByDeployment(result.id);
     expect(entries.length).toBeGreaterThanOrEqual(5);
@@ -209,16 +183,13 @@ describe("Decision Diary — entry specificity", () => {
   });
 
   it("reasoning always references concrete values — never generic placeholder text", async () => {
-    const partition = makePartition({
-      variables: { APP_ENV: "production", DB_HOST: "acme-db-1" },
-    });
-    const env = makeEnvironment({
-      name: "staging",
-      variables: { APP_ENV: "staging", LOG_LEVEL: "debug" },
-    });
-
     healthChecker.willReturn(HEALTHY);
-    const result = await testDeploy(agent, { variables: { LOG_LEVEL: "error" } }, partition, env);
+    const result = await testDeploy(agent, artifactStore, environmentStore, partitionStore, {
+      partitionVars: { APP_ENV: "production", DB_HOST: "acme-db-1" },
+      envName: "staging",
+      envVars: { APP_ENV: "staging", LOG_LEVEL: "debug" },
+      variables: { LOG_LEVEL: "error" },
+    });
 
     const entries = diary.getByDeployment(result.id);
 
@@ -237,7 +208,7 @@ describe("Decision Diary — entry specificity", () => {
       }
     }
 
-    // Pipeline plan must reference the actual operation and version
+    // Pipeline plan must reference the actual artifact and version
     const planEntries = findDecisions(entries, "pipeline");
     expect(planEntries[0].reasoning).toContain("web-app");
     expect(planEntries[0].reasoning).toContain("2.0.0");
@@ -247,7 +218,7 @@ describe("Decision Diary — entry specificity", () => {
   it("failure entries include actionable recommendations", async () => {
     healthChecker.willReturn(CONN_REFUSED, CONN_REFUSED);
 
-    const result = await testDeploy(agent, {});
+    const result = await testDeploy(agent, artifactStore, environmentStore, partitionStore);
 
     expect(result.status).toBe("failed");
 
@@ -261,15 +232,12 @@ describe("Decision Diary — entry specificity", () => {
   });
 
   it("variable conflict entries name the specific variables involved", async () => {
-    const partition = makePartition({
-      variables: { LOG_LEVEL: "error", APP_ENV: "production" },
-    });
-    const env = makeEnvironment({
-      variables: { LOG_LEVEL: "warn", APP_ENV: "production" },
-    });
-
     healthChecker.willReturn(HEALTHY);
-    const result = await testDeploy(agent, { variables: { LOG_LEVEL: "debug" } }, partition, env);
+    const result = await testDeploy(agent, artifactStore, environmentStore, partitionStore, {
+      partitionVars: { LOG_LEVEL: "error", APP_ENV: "production" },
+      envVars: { LOG_LEVEL: "warn", APP_ENV: "production" },
+      variables: { LOG_LEVEL: "debug" },
+    });
 
     const entries = diary.getByDeployment(result.id);
     const conflictEntries = findDecisions(entries, "conflict");
@@ -291,71 +259,73 @@ describe("Decision Diary — entry specificity", () => {
 
 describe("Decision Diary — orchestration completeness", () => {
   let diary: DecisionDebrief;
-  let deployments: InMemoryDeploymentStore;
   let healthChecker: MockHealthChecker;
   let agent: CommandAgent;
+  let artifactStore: ArtifactStore;
+  let environmentStore: EnvironmentStore;
+  let partitionStore: PartitionStore;
 
   beforeEach(() => {
     diary = new DecisionDebrief();
-    deployments = new InMemoryDeploymentStore();
     healthChecker = new MockHealthChecker();
-    agent = new CommandAgent(diary, deployments, new OrderStore(), healthChecker, {
-      healthCheckBackoffMs: 1,
-      executionDelayMs: 1,
-    });
+    const ctx = createTestAgent(diary, healthChecker);
+    agent = ctx.agent;
+    artifactStore = ctx.artifactStore;
+    environmentStore = ctx.environmentStore;
+    partitionStore = ctx.partitionStore;
   });
 
   it("successful deployment produces entries for every pipeline step", async () => {
     healthChecker.willReturn(HEALTHY);
 
-    const result = await testDeploy(agent, {});
+    const result = await testDeploy(agent, artifactStore, environmentStore, partitionStore);
 
     const entries = diary.getByDeployment(result.id);
     const types = entries.map((e) => e.decisionType);
 
+    expect(types).toContain("artifact-analysis");
     expect(types).toContain("pipeline-plan");
+    expect(types).toContain("plan-generation");
+    expect(types).toContain("plan-approval");
     expect(types).toContain("configuration-resolved");
     expect(types).toContain("health-check");
-    expect(types).toContain("deployment-execution");
-    expect(types).toContain("deployment-verification");
     expect(types).toContain("deployment-completion");
   });
 
   it("failed deployment produces entries up to the failure plus the failure entry", async () => {
     healthChecker.willReturn(CONN_REFUSED, CONN_REFUSED);
 
-    const result = await testDeploy(agent, {});
+    const result = await testDeploy(agent, artifactStore, environmentStore, partitionStore);
 
     const entries = diary.getByDeployment(result.id);
     const types = entries.map((e) => e.decisionType);
 
-    // Should have plan, config, health check (retry), and failure
+    // Should have artifact analysis, plan, config, health check (retry), and failure
+    expect(types).toContain("artifact-analysis");
     expect(types).toContain("pipeline-plan");
     expect(types).toContain("configuration-resolved");
     expect(types).toContain("health-check");
     expect(types).toContain("deployment-failure");
 
-    // Should NOT have execution or verification (pipeline aborted)
-    expect(types).not.toContain("deployment-execution");
-    expect(types).not.toContain("deployment-verification");
+    // Should NOT have completion (pipeline aborted at health check)
     expect(types).not.toContain("deployment-completion");
   });
 
   it("variable conflict deployment produces variable-conflict entries", async () => {
-    const partition = makePartition({
-      variables: { DB_HOST: "prod-db.internal" },
-    });
-    const env = makeEnvironment({
-      id: "env-staging",
-      name: "staging",
-      variables: { DB_HOST: "staging-db.internal" },
-    });
-    const op = makeOperation({ environmentIds: ["env-staging"] });
-
     healthChecker.willReturn(HEALTHY);
 
-    const { trigger, order } = makeOrderAndTrigger(agent, { partition, environment: env, operation: op });
-    const result = await agent.triggerDeployment(trigger, partition, env, op, order);
+    const artifact = seedArtifact(artifactStore);
+    const partition = partitionStore.create("Acme Corp", { DB_HOST: "prod-db.internal" });
+    const env = environmentStore.create("staging", { DB_HOST: "staging-db.internal" });
+
+    const trigger = {
+      artifactId: artifact.id,
+      artifactVersionId: "2.0.0",
+      partitionId: partition.id,
+      environmentId: env.id,
+      triggeredBy: "user" as const,
+    };
+    const result = await agent.triggerDeployment(trigger);
 
     const entries = diary.getByDeployment(result.id);
     const types = entries.map((e) => e.decisionType);
@@ -383,12 +353,11 @@ describe("Decision Diary — orchestration completeness", () => {
       "plan-rejection",
       "rollback-execution",
       "cross-system-context",
-      "order-created",
     ];
 
     healthChecker.willReturn(HEALTHY);
 
-    await testDeploy(agent, {});
+    await testDeploy(agent, artifactStore, environmentStore, partitionStore);
 
     const entries = diary.getRecent(100);
     for (const entry of entries) {
@@ -403,25 +372,27 @@ describe("Decision Diary — orchestration completeness", () => {
 
 describe("Decision Diary — retrieval dimensions", () => {
   let diary: DecisionDebrief;
-  let deployments: InMemoryDeploymentStore;
   let healthChecker: MockHealthChecker;
   let agent: CommandAgent;
+  let artifactStore: ArtifactStore;
+  let environmentStore: EnvironmentStore;
+  let partitionStore: PartitionStore;
 
   beforeEach(() => {
     diary = new DecisionDebrief();
-    deployments = new InMemoryDeploymentStore();
     healthChecker = new MockHealthChecker();
-    agent = new CommandAgent(diary, deployments, new OrderStore(), healthChecker, {
-      healthCheckBackoffMs: 1,
-      executionDelayMs: 1,
-    });
+    const ctx = createTestAgent(diary, healthChecker);
+    agent = ctx.agent;
+    artifactStore = ctx.artifactStore;
+    environmentStore = ctx.environmentStore;
+    partitionStore = ctx.partitionStore;
   });
 
   it("retrieval by deployment — returns only entries for the specified deployment", async () => {
     healthChecker.willReturn(HEALTHY, HEALTHY);
 
-    const result1 = await testDeploy(agent, { version: "1.0.0" });
-    const result2 = await testDeploy(agent, { version: "2.0.0" });
+    const result1 = await testDeploy(agent, artifactStore, environmentStore, partitionStore, { version: "1.0.0" });
+    const result2 = await testDeploy(agent, artifactStore, environmentStore, partitionStore, { version: "2.0.0" });
 
     const entries1 = diary.getByDeployment(result1.id);
     const entries2 = diary.getByDeployment(result2.id);
@@ -442,20 +413,34 @@ describe("Decision Diary — retrieval dimensions", () => {
   it("retrieval by partition — returns only entries for the specified partition", async () => {
     healthChecker.willReturn(HEALTHY, HEALTHY);
 
-    await testDeploy(agent, { partitionId: "partition-a" }, makePartition({ id: "partition-a", name: "Partition A" }));
-    await testDeploy(agent, { partitionId: "partition-b" }, makePartition({ id: "partition-b", name: "Partition B" }));
+    // Create two partitions and deploy to each
+    const partA = partitionStore.create("Partition A");
+    const partB = partitionStore.create("Partition B");
+    const envA = environmentStore.create("production-a");
+    const envB = environmentStore.create("production-b");
+    const artifactA = seedArtifact(artifactStore, "app-a");
+    const artifactB = seedArtifact(artifactStore, "app-b");
 
-    const entriesA = diary.getByPartition("partition-a");
-    const entriesB = diary.getByPartition("partition-b");
+    await agent.triggerDeployment({
+      artifactId: artifactA.id, artifactVersionId: "1.0.0",
+      partitionId: partA.id, environmentId: envA.id, triggeredBy: "user",
+    });
+    await agent.triggerDeployment({
+      artifactId: artifactB.id, artifactVersionId: "1.0.0",
+      partitionId: partB.id, environmentId: envB.id, triggeredBy: "user",
+    });
+
+    const entriesA = diary.getByPartition(partA.id);
+    const entriesB = diary.getByPartition(partB.id);
 
     expect(entriesA.length).toBeGreaterThanOrEqual(5);
     expect(entriesB.length).toBeGreaterThanOrEqual(5);
 
     for (const e of entriesA) {
-      expect(e.partitionId).toBe("partition-a");
+      expect(e.partitionId).toBe(partA.id);
     }
     for (const e of entriesB) {
-      expect(e.partitionId).toBe("partition-b");
+      expect(e.partitionId).toBe(partB.id);
     }
 
     // No overlap
@@ -470,8 +455,8 @@ describe("Decision Diary — retrieval dimensions", () => {
     healthChecker.willReturn(HEALTHY, CONN_REFUSED, CONN_REFUSED);
 
     // One success, one failure
-    await testDeploy(agent, { version: "1.0.0" });
-    await testDeploy(agent, { version: "2.0.0" });
+    await testDeploy(agent, artifactStore, environmentStore, partitionStore, { version: "1.0.0" });
+    await testDeploy(agent, artifactStore, environmentStore, partitionStore, { version: "2.0.0" });
 
     const planEntries = diary.getByType("pipeline-plan");
     const healthEntries = diary.getByType("health-check");
@@ -499,7 +484,7 @@ describe("Decision Diary — retrieval dimensions", () => {
     const before = new Date();
 
     healthChecker.willReturn(HEALTHY);
-    await testDeploy(agent, {});
+    await testDeploy(agent, artifactStore, environmentStore, partitionStore);
 
     const after = new Date();
 
@@ -522,7 +507,7 @@ describe("Decision Diary — retrieval dimensions", () => {
     const before = new Date();
 
     healthChecker.willReturn(HEALTHY);
-    await testDeploy(agent, {});
+    await testDeploy(agent, artifactStore, environmentStore, partitionStore);
 
     const after = new Date();
     const entries = diary.getByTimeRange(before, after);
@@ -570,7 +555,7 @@ describe("PersistentDecisionDebrief — SQLite backing store", () => {
       decisionType: "pipeline-plan",
       decision: "Planned deployment pipeline: resolve → execute → verify",
       reasoning: "Standard three-step pipeline for web-app v1.0.0 to production.",
-      context: { operationId: "web-app", version: "1.0.0" },
+      context: { artifactId: "web-app", version: "1.0.0" },
     });
 
     diary.close();
@@ -584,7 +569,7 @@ describe("PersistentDecisionDebrief — SQLite backing store", () => {
     expect(retrieved!.partitionId).toBe("partition-1");
     expect(retrieved!.deploymentId).toBe("deploy-1");
     expect(retrieved!.decisionType).toBe("pipeline-plan");
-    expect(retrieved!.context).toEqual({ operationId: "web-app", version: "1.0.0" });
+    expect(retrieved!.context).toEqual({ artifactId: "web-app", version: "1.0.0" });
     diary2.close();
   });
 
@@ -690,12 +675,6 @@ describe("PersistentDecisionDebrief — SQLite backing store", () => {
   });
 
   it("retrieval by time range works correctly", () => {
-    const t1 = new Date("2026-01-01T00:00:00Z");
-    const t2 = new Date("2026-01-02T00:00:00Z");
-    const t3 = new Date("2026-01-03T00:00:00Z");
-
-    // Record entries — timestamps are set by the diary, so we record
-    // and check the actual timestamps
     const before = new Date();
     diary.record({
       partitionId: "t1",
@@ -720,6 +699,8 @@ describe("PersistentDecisionDebrief — SQLite backing store", () => {
     expect(current).toHaveLength(2);
 
     // Past window should find nothing
+    const t1 = new Date("2026-01-01T00:00:00Z");
+    const t2 = new Date("2026-01-02T00:00:00Z");
     const past = diary.getByTimeRange(t1, t2);
     expect(past).toHaveLength(0);
   });
@@ -778,9 +759,11 @@ describe("PersistentDecisionDebrief — SQLite backing store", () => {
 describe("PersistentDecisionDebrief — integration with CommandAgent", () => {
   let dbPath: string;
   let diary: PersistentDecisionDebrief;
-  let deployments: InMemoryDeploymentStore;
   let healthChecker: MockHealthChecker;
   let agent: CommandAgent;
+  let artifactStore: ArtifactStore;
+  let environmentStore: EnvironmentStore;
+  let partitionStore: PartitionStore;
 
   beforeEach(() => {
     dbPath = path.join(
@@ -788,12 +771,12 @@ describe("PersistentDecisionDebrief — integration with CommandAgent", () => {
       `deploystack-agent-test-${Date.now()}-${Math.random().toString(36).slice(2)}.db`,
     );
     diary = new PersistentDecisionDebrief(dbPath);
-    deployments = new InMemoryDeploymentStore();
     healthChecker = new MockHealthChecker();
-    agent = new CommandAgent(diary, deployments, new OrderStore(), healthChecker, {
-      healthCheckBackoffMs: 1,
-      executionDelayMs: 1,
-    });
+    const ctx = createTestAgent(diary as any, healthChecker);
+    agent = ctx.agent;
+    artifactStore = ctx.artifactStore;
+    environmentStore = ctx.environmentStore;
+    partitionStore = ctx.partitionStore;
   });
 
   afterEach(() => {
@@ -810,7 +793,9 @@ describe("PersistentDecisionDebrief — integration with CommandAgent", () => {
   it("agent decisions persist to SQLite and survive reconnection", async () => {
     healthChecker.willReturn(HEALTHY);
 
-    const result = await testDeploy(agent, {}, makePartition({ name: "Acme Corp" }));
+    const result = await testDeploy(agent, artifactStore, environmentStore, partitionStore, {
+      partitionName: "Acme Corp",
+    });
 
     expect(result.status).toBe("succeeded");
 
@@ -825,13 +810,12 @@ describe("PersistentDecisionDebrief — integration with CommandAgent", () => {
     const entriesAfter = diary2.getByDeployment(result.id);
     expect(entriesAfter).toHaveLength(entriesBefore.length);
 
-    // Verify all decision types from the pipeline are present
+    // Verify key decision types from the pipeline are present
     const types = entriesAfter.map((e) => e.decisionType);
+    expect(types).toContain("artifact-analysis");
     expect(types).toContain("pipeline-plan");
     expect(types).toContain("configuration-resolved");
     expect(types).toContain("health-check");
-    expect(types).toContain("deployment-execution");
-    expect(types).toContain("deployment-verification");
     expect(types).toContain("deployment-completion");
 
     diary2.close();
@@ -841,8 +825,21 @@ describe("PersistentDecisionDebrief — integration with CommandAgent", () => {
     healthChecker.willReturn(HEALTHY, HEALTHY);
 
     // Two deployments for different partitions
-    const result1 = await testDeploy(agent, { partitionId: "acme" }, makePartition({ id: "acme", name: "Acme Corp" }));
-    const result2 = await testDeploy(agent, { partitionId: "beta" }, makePartition({ id: "beta", name: "Beta Inc" }));
+    const partA = partitionStore.create("Acme Corp");
+    const partB = partitionStore.create("Beta Inc");
+    const envA = environmentStore.create("prod-a");
+    const envB = environmentStore.create("prod-b");
+    const artA = seedArtifact(artifactStore, "app-a");
+    const artB = seedArtifact(artifactStore, "app-b");
+
+    const result1 = await agent.triggerDeployment({
+      artifactId: artA.id, artifactVersionId: "1.0.0",
+      partitionId: partA.id, environmentId: envA.id, triggeredBy: "user",
+    });
+    const result2 = await agent.triggerDeployment({
+      artifactId: artB.id, artifactVersionId: "1.0.0",
+      partitionId: partB.id, environmentId: envB.id, triggeredBy: "user",
+    });
 
     // By deployment
     const acmeEntries = diary.getByDeployment(result1.id);
@@ -850,9 +847,9 @@ describe("PersistentDecisionDebrief — integration with CommandAgent", () => {
     expect(acmeEntries.length).toBeGreaterThanOrEqual(5);
     expect(betaEntries.length).toBeGreaterThanOrEqual(5);
 
-    // By partition — includes deployment entries plus order-created snapshot entry
-    const acmePartitionEntries = diary.getByPartition("acme");
-    const betaPartitionEntries = diary.getByPartition("beta");
+    // By partition — all entries for each partition
+    const acmePartitionEntries = diary.getByPartition(partA.id);
+    const betaPartitionEntries = diary.getByPartition(partB.id);
     expect(acmePartitionEntries.length).toBeGreaterThanOrEqual(acmeEntries.length);
     expect(betaPartitionEntries.length).toBeGreaterThanOrEqual(betaEntries.length);
 

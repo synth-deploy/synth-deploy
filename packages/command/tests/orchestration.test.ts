@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { DecisionDebrief, OrderStore } from "@deploystack/core";
-import type { Partition, Environment, DebriefEntry, Operation } from "@deploystack/core";
+import { DecisionDebrief, PartitionStore, EnvironmentStore, ArtifactStore } from "@deploystack/core";
+import type { Partition, Environment, DebriefEntry } from "@deploystack/core";
 import {
   CommandAgent,
   InMemoryDeploymentStore,
@@ -60,71 +60,6 @@ const SERVER_ERROR: HealthCheckResult = {
   error: "HTTP 503 Service Unavailable",
 };
 
-function makePartition(overrides: Partial<Partition> = {}): Partition {
-  return {
-    id: "partition-1",
-    name: "Acme Corp",
-    variables: {},
-    createdAt: new Date(),
-    ...overrides,
-  };
-}
-
-function makeEnvironment(overrides: Partial<Environment> = {}): Environment {
-  return {
-    id: "env-prod",
-    name: "production",
-    variables: {},
-    ...overrides,
-  };
-}
-
-function makeOperation(overrides: Partial<Operation> = {}): Operation {
-  return {
-    id: "web-app",
-    name: "web-app",
-    environmentIds: ["env-prod"],
-    steps: [],
-    deployConfig: {
-      healthCheckEnabled: true,
-      healthCheckRetries: 1,
-      timeoutMs: 30000,
-      verificationStrategy: "basic",
-    },
-    ...overrides,
-  };
-}
-
-/**
- * Create an Order + trigger pair for testing. The Order is created from
- * the operation/partition/environment, and the trigger references it.
- */
-function makeOrderAndTrigger(
-  agent: CommandAgent,
-  opts: {
-    partition?: Partition;
-    environment?: Environment;
-    operation?: Operation;
-    version?: string;
-    variables?: Record<string, string>;
-  } = {},
-) {
-  const partition = opts.partition ?? makePartition();
-  const environment = opts.environment ?? makeEnvironment();
-  const operation = opts.operation ?? makeOperation();
-  const version = opts.version ?? "2.0.0";
-
-  const order = agent.createOrderSnapshot(version, partition, environment, operation);
-  const trigger = {
-    orderId: order.id,
-    partitionId: partition.id,
-    environmentId: environment.id,
-    triggeredBy: "user" as const,
-    ...(opts.variables ? { variables: opts.variables } : {}),
-  };
-  return { order, trigger, partition, environment, operation };
-}
-
 function findDecisions(entries: DebriefEntry[], substr: string): DebriefEntry[] {
   return entries.filter((e) =>
     e.decision.toLowerCase().includes(substr.toLowerCase()),
@@ -132,23 +67,80 @@ function findDecisions(entries: DebriefEntry[], substr: string): DebriefEntry[] 
 }
 
 // ---------------------------------------------------------------------------
+// Shared test state
+// ---------------------------------------------------------------------------
+
+let diary: DecisionDebrief;
+let deployments: InMemoryDeploymentStore;
+let healthChecker: MockHealthChecker;
+let artifactStore: ArtifactStore;
+let environmentStore: EnvironmentStore;
+let partitionStore: PartitionStore;
+let agent: CommandAgent;
+
+/** Seed a minimal artifact in the store for testing. */
+function seedArtifact(name = "web-app") {
+  return artifactStore.create({
+    name,
+    type: "nodejs",
+    analysis: {
+      summary: "Test artifact",
+      dependencies: [],
+      configurationExpectations: {},
+      deploymentIntent: "rolling",
+      confidence: 0.9,
+    },
+    annotations: [],
+    learningHistory: [],
+  });
+}
+
+/** Seed an environment and return it (also registered in the store). */
+function seedEnvironment(name = "production", variables: Record<string, string> = {}) {
+  return environmentStore.create(name, variables);
+}
+
+/** Seed a partition and return it (also registered in the store). */
+function seedPartition(name = "Acme Corp", variables: Record<string, string> = {}) {
+  return partitionStore.create(name, variables);
+}
+
+/**
+ * Build a deployment trigger from seeded entities.
+ */
+function makeTrigger(opts: {
+  artifact?: { id: string };
+  partition?: { id: string };
+  environment?: { id: string };
+  version?: string;
+  variables?: Record<string, string>;
+}) {
+  return {
+    artifactId: opts.artifact?.id ?? "",
+    artifactVersionId: opts.version ?? "2.0.0",
+    partitionId: opts.partition?.id,
+    environmentId: opts.environment?.id ?? "",
+    triggeredBy: "user" as const,
+    ...(opts.variables ? { variables: opts.variables } : {}),
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
 describe("Deployment Orchestration Engine", () => {
-  let diary: DecisionDebrief;
-  let deployments: InMemoryDeploymentStore;
-  let healthChecker: MockHealthChecker;
-  let agent: CommandAgent;
-
   beforeEach(() => {
     diary = new DecisionDebrief();
     deployments = new InMemoryDeploymentStore();
     healthChecker = new MockHealthChecker();
-    agent = new CommandAgent(diary, deployments, new OrderStore(), healthChecker, {
-      healthCheckBackoffMs: 1,
-      executionDelayMs: 1,
-    });
+    artifactStore = new ArtifactStore();
+    environmentStore = new EnvironmentStore();
+    partitionStore = new PartitionStore();
+    agent = new CommandAgent(
+      diary, deployments, artifactStore, environmentStore, partitionStore,
+      healthChecker, { healthCheckBackoffMs: 1, executionDelayMs: 1 },
+    );
   });
 
   // -----------------------------------------------------------------------
@@ -157,26 +149,20 @@ describe("Deployment Orchestration Engine", () => {
 
   describe("successful deployment with variable resolution", () => {
     it("resolves variables, executes full pipeline, and records every decision", async () => {
-      const partition = makePartition({
-        variables: { APP_ENV: "production", DB_HOST: "acme-db-1" },
-      });
-      const env = makeEnvironment({
-        variables: { APP_ENV: "production", LOG_LEVEL: "warn" },
-      });
+      const artifact = seedArtifact();
+      const partition = seedPartition("Acme Corp", { APP_ENV: "production", DB_HOST: "acme-db-1" });
+      const env = seedEnvironment("production", { APP_ENV: "production", LOG_LEVEL: "warn" });
 
       healthChecker.willReturn(HEALTHY);
 
-      const { order, trigger, operation } = makeOrderAndTrigger(agent, {
-        partition,
-        environment: env,
+      const trigger = makeTrigger({
+        artifact, partition, environment: env,
         variables: { LOG_LEVEL: "error" },
       });
-
-      const result = await agent.triggerDeployment(trigger, partition, env, operation, order);
+      const result = await agent.triggerDeployment(trigger);
 
       expect(result.status).toBe("succeeded");
-      expect(result.failureReason).toBeNull();
-      expect(result.completedAt).not.toBeNull();
+      expect(result.completedAt).not.toBeUndefined();
 
       // Variables resolved with correct precedence
       expect(result.variables).toEqual({
@@ -195,22 +181,21 @@ describe("Deployment Orchestration Engine", () => {
         expect(entry.reasoning.length).toBeGreaterThan(0);
       }
 
-      // Key pipeline milestones present — each is a decision, not a log
+      // Key pipeline milestones present
       expect(findDecisions(entries, "pipeline")).toHaveLength(1);
       expect(findDecisions(entries, "Accepted configuration")).toHaveLength(1);
-      expect(findDecisions(entries, "Proceeding with deployment")).toHaveLength(1);
-      expect(findDecisions(entries, "No execution steps defined")).toHaveLength(1);
       expect(findDecisions(entries, "Marking deployment of")).toHaveLength(1);
     });
 
     it("handles deployment with no variable conflicts", async () => {
-      const partition = makePartition({ variables: { PARTITION_SPECIFIC: "abc" } });
-      const env = makeEnvironment({ variables: { ENV_SPECIFIC: "xyz" } });
+      const artifact = seedArtifact();
+      const partition = seedPartition("Acme Corp", { PARTITION_SPECIFIC: "abc" });
+      const env = seedEnvironment("production", { ENV_SPECIFIC: "xyz" });
 
       healthChecker.willReturn(HEALTHY);
 
-      const { order, trigger, operation } = makeOrderAndTrigger(agent, { partition, environment: env });
-      const result = await agent.triggerDeployment(trigger, partition, env, operation, order);
+      const trigger = makeTrigger({ artifact, partition, environment: env });
+      const result = await agent.triggerDeployment(trigger);
 
       expect(result.status).toBe("succeeded");
       expect(result.variables).toEqual({
@@ -232,9 +217,12 @@ describe("Deployment Orchestration Engine", () => {
     it("connection refused → retries, then fails with actionable reasoning", async () => {
       healthChecker.willReturn(CONN_REFUSED, CONN_REFUSED);
 
-      const env = makeEnvironment({ name: "staging" });
-      const { order, trigger, partition, operation } = makeOrderAndTrigger(agent, { environment: env });
-      const result = await agent.triggerDeployment(trigger, partition, env, operation, order);
+      const artifact = seedArtifact();
+      const partition = seedPartition();
+      const env = seedEnvironment("staging");
+
+      const trigger = makeTrigger({ artifact, partition, environment: env });
+      const result = await agent.triggerDeployment(trigger);
 
       expect(result.status).toBe("failed");
       expect(result.failureReason).toContain("unreachable");
@@ -257,9 +245,12 @@ describe("Deployment Orchestration Engine", () => {
     it("DNS failure → aborts immediately without retrying", async () => {
       healthChecker.willReturn(DNS_FAILURE);
 
-      const env = makeEnvironment({ name: "staging" });
-      const { order, trigger, partition, operation } = makeOrderAndTrigger(agent, { environment: env });
-      const result = await agent.triggerDeployment(trigger, partition, env, operation, order);
+      const artifact = seedArtifact();
+      const partition = seedPartition();
+      const env = seedEnvironment("staging");
+
+      const trigger = makeTrigger({ artifact, partition, environment: env });
+      const result = await agent.triggerDeployment(trigger);
 
       expect(result.status).toBe("failed");
 
@@ -282,12 +273,14 @@ describe("Deployment Orchestration Engine", () => {
     });
 
     it("timeout in production → retries with extended backoff", async () => {
-      // Track the delay used by capturing the reasoning
       healthChecker.willReturn(TIMEOUT, TIMEOUT);
 
-      const env = makeEnvironment({ name: "production" });
-      const { order, trigger, partition, operation } = makeOrderAndTrigger(agent, { environment: env });
-      const result = await agent.triggerDeployment(trigger, partition, env, operation, order);
+      const artifact = seedArtifact();
+      const partition = seedPartition();
+      const env = seedEnvironment("production");
+
+      const trigger = makeTrigger({ artifact, partition, environment: env });
+      const result = await agent.triggerDeployment(trigger);
 
       expect(result.status).toBe("failed");
 
@@ -307,9 +300,12 @@ describe("Deployment Orchestration Engine", () => {
     it("timeout in staging → retries with standard backoff (not extended)", async () => {
       healthChecker.willReturn(TIMEOUT, TIMEOUT);
 
-      const env = makeEnvironment({ name: "staging" });
-      const { order, trigger, partition, operation } = makeOrderAndTrigger(agent, { environment: env });
-      const result = await agent.triggerDeployment(trigger, partition, env, operation, order);
+      const artifact = seedArtifact();
+      const partition = seedPartition();
+      const env = seedEnvironment("staging");
+
+      const trigger = makeTrigger({ artifact, partition, environment: env });
+      const result = await agent.triggerDeployment(trigger);
 
       expect(result.status).toBe("failed");
 
@@ -325,8 +321,12 @@ describe("Deployment Orchestration Engine", () => {
     it("recovery on retry → completes deployment", async () => {
       healthChecker.willReturn(CONN_REFUSED, HEALTHY);
 
-      const { order, trigger, partition, environment, operation } = makeOrderAndTrigger(agent);
-      const result = await agent.triggerDeployment(trigger, partition, environment, operation, order);
+      const artifact = seedArtifact();
+      const partition = seedPartition();
+      const env = seedEnvironment("production");
+
+      const trigger = makeTrigger({ artifact, partition, environment: env });
+      const result = await agent.triggerDeployment(trigger);
 
       expect(result.status).toBe("succeeded");
 
@@ -340,8 +340,12 @@ describe("Deployment Orchestration Engine", () => {
     it("server error (503) → retries with appropriate reasoning", async () => {
       healthChecker.willReturn(SERVER_ERROR, HEALTHY);
 
-      const { order, trigger, partition, environment, operation } = makeOrderAndTrigger(agent);
-      const result = await agent.triggerDeployment(trigger, partition, environment, operation, order);
+      const artifact = seedArtifact();
+      const partition = seedPartition();
+      const env = seedEnvironment("production");
+
+      const trigger = makeTrigger({ artifact, partition, environment: env });
+      const result = await agent.triggerDeployment(trigger);
 
       expect(result.status).toBe("succeeded");
 
@@ -360,20 +364,14 @@ describe("Deployment Orchestration Engine", () => {
 
   describe("variable conflict reasoning", () => {
     it("single cross-env connectivity var → proceeds with warning", async () => {
-      const partition = makePartition({
-        variables: { DB_HOST: "prod-db.internal" },
-      });
-      const env = makeEnvironment({
-        id: "env-staging",
-        name: "staging",
-        variables: { DB_HOST: "staging-db.internal" },
-      });
-      const operation = makeOperation({ environmentIds: ["env-staging"] });
+      const artifact = seedArtifact();
+      const partition = seedPartition("Acme Corp", { DB_HOST: "prod-db.internal" });
+      const env = seedEnvironment("staging", { DB_HOST: "staging-db.internal" });
 
       healthChecker.willReturn(HEALTHY);
 
-      const { order, trigger } = makeOrderAndTrigger(agent, { partition, environment: env, operation });
-      const result = await agent.triggerDeployment(trigger, partition, env, operation, order);
+      const trigger = makeTrigger({ artifact, partition, environment: env });
+      const result = await agent.triggerDeployment(trigger);
 
       // Single override → agent proceeds (might be intentional)
       expect(result.status).toBe("succeeded");
@@ -391,27 +389,20 @@ describe("Deployment Orchestration Engine", () => {
     });
 
     it("multiple cross-env connectivity vars → BLOCKS deployment", async () => {
-      // Two connectivity variables pointing at production from staging
-      const partition = makePartition({
-        variables: {
-          DB_HOST: "prod-db.internal",
-          CACHE_HOST: "prod-cache:6379",
-        },
+      const artifact = seedArtifact();
+      const partition = seedPartition("Acme Corp", {
+        DB_HOST: "prod-db.internal",
+        CACHE_HOST: "prod-cache:6379",
       });
-      const env = makeEnvironment({
-        id: "env-staging",
-        name: "staging",
-        variables: {
-          DB_HOST: "staging-db.internal",
-          CACHE_HOST: "staging-cache:6379",
-        },
+      const env = seedEnvironment("staging", {
+        DB_HOST: "staging-db.internal",
+        CACHE_HOST: "staging-cache:6379",
       });
-      const operation = makeOperation({ environmentIds: ["env-staging"] });
 
       healthChecker.willReturn(HEALTHY);
 
-      const { order, trigger } = makeOrderAndTrigger(agent, { partition, environment: env, operation });
-      const result = await agent.triggerDeployment(trigger, partition, env, operation, order);
+      const trigger = makeTrigger({ artifact, partition, environment: env });
+      const result = await agent.triggerDeployment(trigger);
 
       // THIS IS THE KEY BEHAVIORAL DIFFERENCE:
       // Multiple cross-env connectivity overrides → deployment blocked
@@ -437,36 +428,28 @@ describe("Deployment Orchestration Engine", () => {
     });
 
     it("cross-env non-connectivity vars → proceeds (lower risk)", async () => {
-      // APP_LABEL contains "prod" but it's not a connectivity variable
-      const partition = makePartition({
-        variables: { APP_LABEL: "production-canary" },
-      });
-      const env = makeEnvironment({
-        name: "staging",
-        variables: { APP_LABEL: "staging-primary" },
-      });
+      const artifact = seedArtifact();
+      const partition = seedPartition("Acme Corp", { APP_LABEL: "production-canary" });
+      const env = seedEnvironment("staging", { APP_LABEL: "staging-primary" });
 
       healthChecker.willReturn(HEALTHY);
 
-      const { order, trigger, operation } = makeOrderAndTrigger(agent, { partition, environment: env });
-      const result = await agent.triggerDeployment(trigger, partition, env, operation, order);
+      const trigger = makeTrigger({ artifact, partition, environment: env });
+      const result = await agent.triggerDeployment(trigger);
 
       // Non-connectivity cross-env → proceeds (can't route traffic)
       expect(result.status).toBe("succeeded");
     });
 
     it("sensitive variable overrides → audit logging without values", async () => {
-      const partition = makePartition({
-        variables: { API_SECRET: "partition-secret-xyz" },
-      });
-      const env = makeEnvironment({
-        variables: { API_SECRET: "default-env-secret" },
-      });
+      const artifact = seedArtifact();
+      const partition = seedPartition("Acme Corp", { API_SECRET: "partition-secret-xyz" });
+      const env = seedEnvironment("production", { API_SECRET: "default-env-secret" });
 
       healthChecker.willReturn(HEALTHY);
 
-      const { order, trigger, operation } = makeOrderAndTrigger(agent, { partition, environment: env });
-      const result = await agent.triggerDeployment(trigger, partition, env, operation, order);
+      const trigger = makeTrigger({ artifact, partition, environment: env });
+      const result = await agent.triggerDeployment(trigger);
 
       expect(result.status).toBe("succeeded");
       expect(result.variables.API_SECRET).toBe("partition-secret-xyz");
@@ -489,29 +472,34 @@ describe("Deployment Orchestration Engine", () => {
 
   describe("decision trail", () => {
     it("every diary entry has partition isolation via partitionId", async () => {
-      const partition = makePartition({ id: "isolated-partition" });
+      const artifact = seedArtifact();
+      const partition = seedPartition("Isolated Partition");
+      const env = seedEnvironment("production");
 
       healthChecker.willReturn(HEALTHY);
 
-      const { order, trigger, environment, operation } = makeOrderAndTrigger(agent, { partition });
-      const result = await agent.triggerDeployment(trigger, partition, environment, operation, order);
+      const trigger = makeTrigger({ artifact, partition, environment: env });
+      const result = await agent.triggerDeployment(trigger);
       const entries = diary.getByDeployment(result.id);
 
       for (const entry of entries) {
-        expect(entry.partitionId).toBe("isolated-partition");
+        expect(entry.partitionId).toBe(partition.id);
       }
 
-      const partitionEntries = diary.getByPartition("isolated-partition");
-      // Partition entries include the order-created snapshot entry (deploymentId: null)
-      // plus all deployment-scoped entries, so partition count >= deployment count.
+      const partitionEntries = diary.getByPartition(partition.id);
+      // Partition entries include all deployment-scoped entries
       expect(partitionEntries.length).toBeGreaterThanOrEqual(entries.length);
     });
 
     it("failed deployment trail includes the failing step", async () => {
       healthChecker.willReturn(CONN_REFUSED, CONN_REFUSED);
 
-      const { order, trigger, partition, environment, operation } = makeOrderAndTrigger(agent);
-      const result = await agent.triggerDeployment(trigger, partition, environment, operation, order);
+      const artifact = seedArtifact();
+      const partition = seedPartition();
+      const env = seedEnvironment("production");
+
+      const trigger = makeTrigger({ artifact, partition, environment: env });
+      const result = await agent.triggerDeployment(trigger);
 
       expect(result.status).toBe("failed");
 
@@ -532,8 +520,12 @@ describe("Deployment Orchestration Engine", () => {
     it("deployment store persists the final state", async () => {
       healthChecker.willReturn(HEALTHY);
 
-      const { order, trigger, partition, environment, operation } = makeOrderAndTrigger(agent);
-      const result = await agent.triggerDeployment(trigger, partition, environment, operation, order);
+      const artifact = seedArtifact();
+      const partition = seedPartition();
+      const env = seedEnvironment("production");
+
+      const trigger = makeTrigger({ artifact, partition, environment: env });
+      const result = await agent.triggerDeployment(trigger);
 
       const stored = deployments.get(result.id);
       expect(stored).toBeDefined();

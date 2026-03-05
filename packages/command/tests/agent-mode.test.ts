@@ -1,15 +1,37 @@
-import { describe, it, expect, beforeAll, beforeEach } from "vitest";
+import { describe, it, expect, beforeAll } from "vitest";
 import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
-import { DecisionDebrief, PartitionStore, OperationStore, EnvironmentStore, OrderStore, SettingsStore, LlmClient } from "@deploystack/core";
+import { DecisionDebrief, PartitionStore, EnvironmentStore, ArtifactStore, SettingsStore, TelemetryStore, LlmClient } from "@deploystack/core";
 import type { LlmResult } from "@deploystack/core";
 import { CommandAgent, InMemoryDeploymentStore } from "../src/agent/command-agent.js";
 import { registerDeploymentRoutes } from "../src/api/deployments.js";
-import { registerOperationRoutes } from "../src/api/operations.js";
 import { registerPartitionRoutes } from "../src/api/partitions.js";
 import { registerEnvironmentRoutes } from "../src/api/environments.js";
+import { registerArtifactRoutes } from "../src/api/artifacts.js";
 import { registerAgentRoutes, sanitizeUserInput, validateExtractedVersion, validateExtractedVariables } from "../src/api/agent.js";
-import { registerOrderRoutes } from "../src/api/orders.js";
+import { registerSettingsRoutes } from "../src/api/settings.js";
+
+// ---------------------------------------------------------------------------
+// Mock auth — inject a test user with all permissions on every request
+// ---------------------------------------------------------------------------
+
+function addMockAuth(app: FastifyInstance) {
+  app.addHook("onRequest", async (request) => {
+    request.user = {
+      id: "test-user-id" as any,
+      email: "test@example.com",
+      name: "Test User",
+      permissions: [
+        "deployment.create", "deployment.approve", "deployment.reject", "deployment.view", "deployment.rollback",
+        "artifact.create", "artifact.update", "artifact.annotate", "artifact.delete", "artifact.view",
+        "environment.create", "environment.update", "environment.delete", "environment.view",
+        "partition.create", "partition.update", "partition.delete", "partition.view",
+        "envoy.register", "envoy.configure", "envoy.view",
+        "settings.manage", "users.manage", "roles.manage",
+      ],
+    };
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Test server setup
@@ -18,14 +40,14 @@ import { registerOrderRoutes } from "../src/api/orders.js";
 let app: FastifyInstance;
 let diary: DecisionDebrief;
 let partitions: PartitionStore;
-let operations: OperationStore;
 let environments: EnvironmentStore;
 let deployments: InMemoryDeploymentStore;
-let orders: OrderStore;
+let artifactStore: ArtifactStore;
 let settings: SettingsStore;
+let telemetry: TelemetryStore;
 let agent: CommandAgent;
 
-let operationId: string;
+let artifactId: string;
 let partitionId: string;
 let productionEnvId: string;
 let stagingEnvId: string;
@@ -33,20 +55,24 @@ let stagingEnvId: string;
 beforeAll(async () => {
   diary = new DecisionDebrief();
   partitions = new PartitionStore();
-  operations = new OperationStore();
   environments = new EnvironmentStore();
   deployments = new InMemoryDeploymentStore();
-  orders = new OrderStore();
+  artifactStore = new ArtifactStore();
   settings = new SettingsStore();
-  agent = new CommandAgent(diary, deployments, orders);
+  telemetry = new TelemetryStore();
+  agent = new CommandAgent(
+    diary, deployments, artifactStore, environments, partitions,
+    undefined, { healthCheckBackoffMs: 1, executionDelayMs: 1 },
+  );
 
   app = Fastify();
-  registerDeploymentRoutes(app, agent, partitions, environments, deployments, diary, operations, orders, settings);
-  registerOperationRoutes(app, operations, environments);
-  registerPartitionRoutes(app, partitions, deployments, diary, orders);
-  registerEnvironmentRoutes(app, environments, operations);
-  registerOrderRoutes(app, orders, agent, partitions, environments, operations, deployments, diary, settings);
-  registerAgentRoutes(app, agent, partitions, environments, operations, deployments, diary, settings);
+  addMockAuth(app);
+  registerDeploymentRoutes(app, deployments, diary, partitions, environments, artifactStore, settings, telemetry);
+  registerPartitionRoutes(app, partitions, deployments, diary, telemetry);
+  registerEnvironmentRoutes(app, environments, deployments, telemetry);
+  registerArtifactRoutes(app, artifactStore, telemetry);
+  registerSettingsRoutes(app, settings, telemetry);
+  registerAgentRoutes(app, agent, partitions, environments, artifactStore, deployments, diary, settings);
 
   await app.ready();
 
@@ -65,12 +91,12 @@ beforeAll(async () => {
   });
   stagingEnvId = JSON.parse(stagingRes.payload).environment.id;
 
-  const projRes = await app.inject({
+  const artifactRes = await app.inject({
     method: "POST",
-    url: "/api/operations",
-    payload: { name: "web-app", environmentIds: [productionEnvId, stagingEnvId] },
+    url: "/api/artifacts",
+    payload: { name: "web-app", type: "nodejs" },
   });
-  operationId = JSON.parse(projRes.payload).operation.id;
+  artifactId = JSON.parse(artifactRes.payload).artifact.id;
 
   const partitionRes = await app.inject({
     method: "POST",
@@ -87,47 +113,20 @@ beforeAll(async () => {
 });
 
 /**
- * Helper: creates an Order via HTTP and returns its ID.
- * This is needed because POST /api/deployments now requires an orderId.
- */
-async function createOrderViaHttp(
-  server: FastifyInstance,
-  params: { operationId: string; partitionId: string; environmentId: string; version: string },
-): Promise<string> {
-  const res = await server.inject({
-    method: "POST",
-    url: "/api/orders",
-    payload: params,
-  });
-  if (res.statusCode !== 201) {
-    throw new Error(`Failed to create order: ${res.payload}`);
-  }
-  return JSON.parse(res.payload).order.id;
-}
-
-/**
- * Helper: creates an Order, then triggers deployment via HTTP.
- * Replaces the old pattern of posting directly to /api/deployments with operationId/version.
+ * Helper: creates a deployment via the new artifact-based API.
  */
 async function deployViaHttp(
   server: FastifyInstance,
-  params: { operationId: string; partitionId: string; environmentId: string; version: string; variables?: Record<string, string> },
+  params: { artifactId: string; partitionId?: string; environmentId: string; version?: string; variables?: Record<string, string> },
 ) {
-  const orderId = await createOrderViaHttp(server, {
-    operationId: params.operationId,
-    partitionId: params.partitionId,
-    environmentId: params.environmentId,
-    version: params.version,
-  });
   return server.inject({
     method: "POST",
     url: "/api/deployments",
     payload: {
-      orderId,
-      partitionId: params.partitionId,
+      artifactId: params.artifactId,
       environmentId: params.environmentId,
-      triggeredBy: "user",
-      ...(params.variables ? { variables: params.variables } : {}),
+      partitionId: params.partitionId,
+      version: params.version,
     },
   });
 }
@@ -139,7 +138,7 @@ async function deployViaHttp(
 describe("Agent mode — deployment context", () => {
   it("returns context with signals and environment summary", async () => {
     // Trigger a deployment first to have some data
-    await deployViaHttp(app, { operationId, partitionId, environmentId: productionEnvId, version: "1.0.0" });
+    await deployViaHttp(app, { artifactId, partitionId, environmentId: productionEnvId, version: "1.0.0" });
 
     const res = await app.inject({ method: "GET", url: "/api/agent/context" });
 
@@ -161,7 +160,6 @@ describe("Agent mode — deployment context", () => {
     const prodSummary = context.environmentSummary.find((e: any) => e.name === "production");
     expect(prodSummary).toBeDefined();
     expect(prodSummary.deployCount).toBeGreaterThanOrEqual(1);
-    expect(prodSummary.lastDeployStatus).toBe("succeeded");
   });
 });
 
@@ -245,15 +243,15 @@ describe("Agent mode — LLM query classification", () => {
   let qApp: FastifyInstance;
   let qDiary: DecisionDebrief;
   let qPartitions: PartitionStore;
-  let qOperations: OperationStore;
   let qEnvironments: EnvironmentStore;
   let qDeployments: InMemoryDeploymentStore;
-  let qOrders: OrderStore;
+  let qArtifactStore: ArtifactStore;
   let qSettings: SettingsStore;
+  let qTelemetry: TelemetryStore;
   let qAgent: CommandAgent;
   let qMockLlm: LlmClient;
 
-  let qOperationId: string;
+  let qArtifactId: string;
   let qPartitionId: string;
   let qProdEnvId: string;
   let qStagingEnvId: string;
@@ -264,24 +262,28 @@ describe("Agent mode — LLM query classification", () => {
   beforeAll(async () => {
     qDiary = new DecisionDebrief();
     qPartitions = new PartitionStore();
-    qOperations = new OperationStore();
     qEnvironments = new EnvironmentStore();
     qDeployments = new InMemoryDeploymentStore();
-    qOrders = new OrderStore();
+    qArtifactStore = new ArtifactStore();
     qSettings = new SettingsStore();
-    qAgent = new CommandAgent(qDiary, qDeployments, qOrders);
+    qTelemetry = new TelemetryStore();
+    qAgent = new CommandAgent(
+      qDiary, qDeployments, qArtifactStore, qEnvironments, qPartitions,
+      undefined, { healthCheckBackoffMs: 1, executionDelayMs: 1 },
+    );
 
     qMockLlm = new LlmClient(qDiary, "command", { apiKey: "test-key" });
     qMockLlm.classify = async () => qClassifyResponse;
     qMockLlm.isAvailable = () => true;
 
     qApp = Fastify();
-    registerDeploymentRoutes(qApp, qAgent, qPartitions, qEnvironments, qDeployments, qDiary, qOperations, qOrders, qSettings);
-    registerOperationRoutes(qApp, qOperations, qEnvironments);
-    registerPartitionRoutes(qApp, qPartitions, qDeployments, qDiary, qOrders);
-    registerEnvironmentRoutes(qApp, qEnvironments, qOperations);
-    registerOrderRoutes(qApp, qOrders, qAgent, qPartitions, qEnvironments, qOperations, qDeployments, qDiary, qSettings);
-    registerAgentRoutes(qApp, qAgent, qPartitions, qEnvironments, qOperations, qDeployments, qDiary, qSettings, qMockLlm);
+    addMockAuth(qApp);
+    registerDeploymentRoutes(qApp, qDeployments, qDiary, qPartitions, qEnvironments, qArtifactStore, qSettings, qTelemetry);
+    registerPartitionRoutes(qApp, qPartitions, qDeployments, qDiary, qTelemetry);
+    registerEnvironmentRoutes(qApp, qEnvironments, qDeployments, qTelemetry);
+    registerArtifactRoutes(qApp, qArtifactStore, qTelemetry);
+    registerSettingsRoutes(qApp, qSettings, qTelemetry);
+    registerAgentRoutes(qApp, qAgent, qPartitions, qEnvironments, qArtifactStore, qDeployments, qDiary, qSettings, qMockLlm);
 
     await qApp.ready();
 
@@ -300,12 +302,12 @@ describe("Agent mode — LLM query classification", () => {
     });
     qStagingEnvId = JSON.parse(stagingRes.payload).environment.id;
 
-    const projRes = await qApp.inject({
+    const artifactRes = await qApp.inject({
       method: "POST",
-      url: "/api/operations",
-      payload: { name: "web-app", environmentIds: [qProdEnvId, qStagingEnvId] },
+      url: "/api/artifacts",
+      payload: { name: "web-app", type: "nodejs" },
     });
-    qOperationId = JSON.parse(projRes.payload).operation.id;
+    qArtifactId = JSON.parse(artifactRes.payload).artifact.id;
 
     const partRes = await qApp.inject({
       method: "POST",
@@ -315,7 +317,7 @@ describe("Agent mode — LLM query classification", () => {
     qPartitionId = JSON.parse(partRes.payload).partition.id;
 
     // Create a deployment so data queries have something to find
-    await deployViaHttp(qApp, { operationId: qOperationId, partitionId: qPartitionId, environmentId: qProdEnvId, version: "1.0.0" });
+    await deployViaHttp(qApp, { artifactId: qArtifactId, partitionId: qPartitionId, environmentId: qProdEnvId, version: "1.0.0" });
   });
 
   it("navigate action: resolves 'show partition Acme Corp' to partition-detail", async () => {

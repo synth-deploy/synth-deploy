@@ -4,19 +4,40 @@ import type { FastifyInstance } from "fastify";
 import {
   DecisionDebrief,
   PartitionStore,
-  OperationStore,
   EnvironmentStore,
-  OrderStore,
+  ArtifactStore,
   SettingsStore,
+  TelemetryStore,
 } from "@deploystack/core";
 import { CommandAgent, InMemoryDeploymentStore } from "../src/agent/command-agent.js";
 import { registerPartitionRoutes } from "../src/api/partitions.js";
-import { registerOperationRoutes } from "../src/api/operations.js";
 import { registerEnvironmentRoutes } from "../src/api/environments.js";
 import { registerSettingsRoutes } from "../src/api/settings.js";
-import { registerOrderRoutes } from "../src/api/orders.js";
 import { registerDeploymentRoutes } from "../src/api/deployments.js";
+import { registerArtifactRoutes } from "../src/api/artifacts.js";
 import { registerHealthRoutes } from "../src/api/health.js";
+
+// ---------------------------------------------------------------------------
+// Mock auth — inject a test user with all permissions on every request
+// ---------------------------------------------------------------------------
+
+function addMockAuth(app: FastifyInstance) {
+  app.addHook("onRequest", async (request) => {
+    request.user = {
+      id: "test-user-id" as any,
+      email: "test@example.com",
+      name: "Test User",
+      permissions: [
+        "deployment.create", "deployment.approve", "deployment.reject", "deployment.view", "deployment.rollback",
+        "artifact.create", "artifact.update", "artifact.annotate", "artifact.delete", "artifact.view",
+        "environment.create", "environment.update", "environment.delete", "environment.view",
+        "partition.create", "partition.update", "partition.delete", "partition.view",
+        "envoy.register", "envoy.configure", "envoy.view",
+        "settings.manage", "users.manage", "roles.manage",
+      ],
+    };
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Shared test server factory
@@ -26,75 +47,58 @@ interface TestContext {
   app: FastifyInstance;
   diary: DecisionDebrief;
   partitions: PartitionStore;
-  operations: OperationStore;
   environments: EnvironmentStore;
   deployments: InMemoryDeploymentStore;
-  orders: OrderStore;
+  artifactStore: ArtifactStore;
   settings: SettingsStore;
+  telemetry: TelemetryStore;
   agent: CommandAgent;
 }
 
 async function createTestServer(): Promise<TestContext> {
   const diary = new DecisionDebrief();
   const partitions = new PartitionStore();
-  const operations = new OperationStore();
   const environments = new EnvironmentStore();
   const deployments = new InMemoryDeploymentStore();
-  const orders = new OrderStore();
+  const artifactStore = new ArtifactStore();
   const settings = new SettingsStore();
+  const telemetry = new TelemetryStore();
   // Do NOT pass settings as settingsReader to CommandAgent — with Envoy-only
   // enforcement (#115), a settingsReader triggers Envoy delegation which needs
   // a real Envoy. Tests use the local execution path (no settingsReader).
-  const agent = new CommandAgent(diary, deployments, orders, undefined, {
-    healthCheckBackoffMs: 1,
-    executionDelayMs: 1,
-  });
+  const agent = new CommandAgent(
+    diary, deployments, artifactStore, environments, partitions,
+    undefined, { healthCheckBackoffMs: 1, executionDelayMs: 1 },
+  );
 
   const app = Fastify();
-  registerPartitionRoutes(app, partitions, deployments, diary, orders);
-  registerOperationRoutes(app, operations, environments);
-  registerEnvironmentRoutes(app, environments, operations);
-  registerSettingsRoutes(app, settings);
-  registerOrderRoutes(app, orders, agent, partitions, environments, operations, deployments, diary, settings);
-  registerDeploymentRoutes(app, agent, partitions, environments, deployments, diary, operations, orders, settings);
+  addMockAuth(app);
+  registerPartitionRoutes(app, partitions, deployments, diary, telemetry);
+  registerEnvironmentRoutes(app, environments, deployments, telemetry);
+  registerSettingsRoutes(app, settings, telemetry);
+  registerDeploymentRoutes(app, deployments, diary, partitions, environments, artifactStore, settings, telemetry);
+  registerArtifactRoutes(app, artifactStore, telemetry);
   registerHealthRoutes(app);
 
   await app.ready();
-  return { app, diary, partitions, operations, environments, deployments, orders, settings, agent };
+  return { app, diary, partitions, environments, deployments, artifactStore, settings, telemetry, agent };
 }
 
 /**
- * Helper: creates an Order via HTTP, then triggers deployment.
- * Replaces the old pattern of posting directly to /api/deployments with operationId/version.
+ * Helper: creates a deployment via the new artifact-based API.
  */
 async function deployViaHttp(
   server: FastifyInstance,
-  params: { operationId: string; partitionId: string; environmentId: string; version: string; variables?: Record<string, string> },
+  params: { artifactId: string; partitionId?: string; environmentId: string; version?: string },
 ) {
-  const orderRes = await server.inject({
-    method: "POST",
-    url: "/api/orders",
-    payload: {
-      operationId: params.operationId,
-      partitionId: params.partitionId,
-      environmentId: params.environmentId,
-      version: params.version,
-    },
-  });
-  if (orderRes.statusCode !== 201) {
-    throw new Error(`Failed to create order: ${orderRes.payload}`);
-  }
-  const orderId = JSON.parse(orderRes.payload).order.id;
-
   return server.inject({
     method: "POST",
     url: "/api/deployments",
     payload: {
-      orderId,
-      partitionId: params.partitionId,
+      artifactId: params.artifactId,
       environmentId: params.environmentId,
-      triggeredBy: "user",
-      ...(params.variables ? { variables: params.variables } : {}),
+      partitionId: params.partitionId,
+      version: params.version,
     },
   });
 }
@@ -377,594 +381,6 @@ describe("Partition Routes", () => {
 });
 
 // ===========================================================================
-// Operation Routes
-// ===========================================================================
-
-describe("Operation Routes", () => {
-  let ctx: TestContext;
-
-  beforeEach(async () => {
-    ctx = await createTestServer();
-  });
-
-  // --- POST /api/operations ---
-
-  describe("POST /api/operations", () => {
-    it("creates an operation and returns 201", async () => {
-      const res = await ctx.app.inject({
-        method: "POST",
-        url: "/api/operations",
-        payload: { name: "web-app" },
-      });
-
-      expect(res.statusCode).toBe(201);
-      const body = JSON.parse(res.payload);
-      expect(body.operation).toBeDefined();
-      expect(body.operation.name).toBe("web-app");
-      expect(body.operation.environmentIds).toEqual([]);
-      expect(body.operation.steps).toEqual([]);
-      expect(body.operation.deployConfig).toBeDefined();
-    });
-
-    it("creates an operation with environment IDs", async () => {
-      const env = ctx.environments.create("production");
-
-      const res = await ctx.app.inject({
-        method: "POST",
-        url: "/api/operations",
-        payload: { name: "web-app", environmentIds: [env.id] },
-      });
-
-      expect(res.statusCode).toBe(201);
-      const body = JSON.parse(res.payload);
-      expect(body.operation.environmentIds).toEqual([env.id]);
-    });
-
-    it("returns 404 when environment ID does not exist", async () => {
-      const res = await ctx.app.inject({
-        method: "POST",
-        url: "/api/operations",
-        payload: { name: "web-app", environmentIds: ["nonexistent"] },
-      });
-
-      expect(res.statusCode).toBe(404);
-      const body = JSON.parse(res.payload);
-      expect(body.error).toContain("Environment not found");
-    });
-
-    it("returns 400 for missing name", async () => {
-      const res = await ctx.app.inject({
-        method: "POST",
-        url: "/api/operations",
-        payload: {},
-      });
-
-      expect(res.statusCode).toBe(400);
-    });
-
-    it("returns 400 for empty name", async () => {
-      const res = await ctx.app.inject({
-        method: "POST",
-        url: "/api/operations",
-        payload: { name: "" },
-      });
-
-      expect(res.statusCode).toBe(400);
-    });
-  });
-
-  // --- GET /api/operations ---
-
-  describe("GET /api/operations", () => {
-    it("returns empty list when no operations exist", async () => {
-      const res = await ctx.app.inject({
-        method: "GET",
-        url: "/api/operations",
-      });
-
-      expect(res.statusCode).toBe(200);
-      const body = JSON.parse(res.payload);
-      expect(body.operations).toEqual([]);
-    });
-
-    it("returns all operations", async () => {
-      ctx.operations.create("op-1");
-      ctx.operations.create("op-2");
-
-      const res = await ctx.app.inject({
-        method: "GET",
-        url: "/api/operations",
-      });
-
-      expect(res.statusCode).toBe(200);
-      const body = JSON.parse(res.payload);
-      expect(body.operations).toHaveLength(2);
-    });
-  });
-
-  // --- GET /api/operations/:id ---
-
-  describe("GET /api/operations/:id", () => {
-    it("returns an operation with environment details", async () => {
-      const env = ctx.environments.create("production");
-      const op = ctx.operations.create("web-app", [env.id]);
-
-      const res = await ctx.app.inject({
-        method: "GET",
-        url: `/api/operations/${op.id}`,
-      });
-
-      expect(res.statusCode).toBe(200);
-      const body = JSON.parse(res.payload);
-      expect(body.operation.id).toBe(op.id);
-      expect(body.operation.name).toBe("web-app");
-      expect(body.environments).toHaveLength(1);
-      expect(body.environments[0].id).toBe(env.id);
-    });
-
-    it("returns 404 for non-existent operation", async () => {
-      const res = await ctx.app.inject({
-        method: "GET",
-        url: "/api/operations/does-not-exist",
-      });
-
-      expect(res.statusCode).toBe(404);
-      const body = JSON.parse(res.payload);
-      expect(body.error).toBe("Operation not found");
-    });
-  });
-
-  // --- PUT /api/operations/:id ---
-
-  describe("PUT /api/operations/:id", () => {
-    it("updates operation name", async () => {
-      const op = ctx.operations.create("old-name");
-
-      const res = await ctx.app.inject({
-        method: "PUT",
-        url: `/api/operations/${op.id}`,
-        payload: { name: "new-name" },
-      });
-
-      expect(res.statusCode).toBe(200);
-      const body = JSON.parse(res.payload);
-      expect(body.operation.name).toBe("new-name");
-    });
-
-    it("returns 404 for non-existent operation", async () => {
-      const res = await ctx.app.inject({
-        method: "PUT",
-        url: "/api/operations/does-not-exist",
-        payload: { name: "irrelevant" },
-      });
-
-      expect(res.statusCode).toBe(404);
-    });
-
-    it("returns 400 for invalid input", async () => {
-      const op = ctx.operations.create("valid");
-
-      const res = await ctx.app.inject({
-        method: "PUT",
-        url: `/api/operations/${op.id}`,
-        payload: { name: "" },
-      });
-
-      expect(res.statusCode).toBe(400);
-    });
-  });
-
-  // --- DELETE /api/operations/:id ---
-
-  describe("DELETE /api/operations/:id", () => {
-    it("deletes an existing operation", async () => {
-      const op = ctx.operations.create("to-delete");
-
-      const res = await ctx.app.inject({
-        method: "DELETE",
-        url: `/api/operations/${op.id}`,
-      });
-
-      expect(res.statusCode).toBe(200);
-      const body = JSON.parse(res.payload);
-      expect(body.deleted).toBe(true);
-      expect(ctx.operations.get(op.id)).toBeUndefined();
-    });
-
-    it("returns 404 for non-existent operation", async () => {
-      const res = await ctx.app.inject({
-        method: "DELETE",
-        url: "/api/operations/does-not-exist",
-      });
-
-      expect(res.statusCode).toBe(404);
-    });
-  });
-
-  // --- POST /api/operations/:id/environments ---
-
-  describe("POST /api/operations/:id/environments", () => {
-    it("adds an environment to an operation", async () => {
-      const env = ctx.environments.create("staging");
-      const op = ctx.operations.create("web-app");
-
-      const res = await ctx.app.inject({
-        method: "POST",
-        url: `/api/operations/${op.id}/environments`,
-        payload: { environmentId: env.id },
-      });
-
-      expect(res.statusCode).toBe(200);
-      const body = JSON.parse(res.payload);
-      expect(body.operation.environmentIds).toContain(env.id);
-    });
-
-    it("returns 404 when environment does not exist", async () => {
-      const op = ctx.operations.create("web-app");
-
-      const res = await ctx.app.inject({
-        method: "POST",
-        url: `/api/operations/${op.id}/environments`,
-        payload: { environmentId: "nonexistent" },
-      });
-
-      expect(res.statusCode).toBe(404);
-      const body = JSON.parse(res.payload);
-      expect(body.error).toContain("Environment not found");
-    });
-
-    it("returns 404 when operation does not exist", async () => {
-      const env = ctx.environments.create("staging");
-
-      const res = await ctx.app.inject({
-        method: "POST",
-        url: "/api/operations/nonexistent/environments",
-        payload: { environmentId: env.id },
-      });
-
-      expect(res.statusCode).toBe(404);
-    });
-
-    it("returns 400 for invalid input", async () => {
-      const op = ctx.operations.create("web-app");
-
-      const res = await ctx.app.inject({
-        method: "POST",
-        url: `/api/operations/${op.id}/environments`,
-        payload: {},
-      });
-
-      expect(res.statusCode).toBe(400);
-    });
-  });
-
-  // --- DELETE /api/operations/:id/environments/:envId ---
-
-  describe("DELETE /api/operations/:id/environments/:envId", () => {
-    it("removes an environment from an operation", async () => {
-      const env = ctx.environments.create("staging");
-      const op = ctx.operations.create("web-app", [env.id]);
-
-      const res = await ctx.app.inject({
-        method: "DELETE",
-        url: `/api/operations/${op.id}/environments/${env.id}`,
-      });
-
-      expect(res.statusCode).toBe(200);
-      const body = JSON.parse(res.payload);
-      expect(body.operation.environmentIds).not.toContain(env.id);
-    });
-
-    it("returns 404 when operation does not exist", async () => {
-      const res = await ctx.app.inject({
-        method: "DELETE",
-        url: "/api/operations/nonexistent/environments/some-env",
-      });
-
-      expect(res.statusCode).toBe(404);
-    });
-  });
-
-  // --- Steps CRUD ---
-
-  describe("Steps CRUD", () => {
-    it("GET /api/operations/:id/steps returns steps for an operation", async () => {
-      const op = ctx.operations.create("web-app");
-
-      const res = await ctx.app.inject({
-        method: "GET",
-        url: `/api/operations/${op.id}/steps`,
-      });
-
-      expect(res.statusCode).toBe(200);
-      const body = JSON.parse(res.payload);
-      expect(body.steps).toEqual([]);
-    });
-
-    it("GET /api/operations/:id/steps returns 404 for non-existent operation", async () => {
-      const res = await ctx.app.inject({
-        method: "GET",
-        url: "/api/operations/nonexistent/steps",
-      });
-
-      expect(res.statusCode).toBe(404);
-    });
-
-    it("POST /api/operations/:id/steps creates a step and returns 201", async () => {
-      const op = ctx.operations.create("web-app");
-
-      const res = await ctx.app.inject({
-        method: "POST",
-        url: `/api/operations/${op.id}/steps`,
-        payload: {
-          name: "Install deps",
-          type: "pre-deploy",
-          command: "npm ci",
-        },
-      });
-
-      expect(res.statusCode).toBe(201);
-      const body = JSON.parse(res.payload);
-      expect(body.step.name).toBe("Install deps");
-      expect(body.step.type).toBe("pre-deploy");
-      expect(body.step.command).toBe("npm ci");
-      expect(body.step.id).toBeDefined();
-      expect(body.step.order).toBeDefined();
-    });
-
-    it("POST /api/operations/:id/steps returns 404 for non-existent operation", async () => {
-      const res = await ctx.app.inject({
-        method: "POST",
-        url: "/api/operations/nonexistent/steps",
-        payload: {
-          name: "Install",
-          type: "pre-deploy",
-          command: "npm ci",
-        },
-      });
-
-      expect(res.statusCode).toBe(404);
-    });
-
-    it("POST /api/operations/:id/steps returns 400 for invalid step type", async () => {
-      const op = ctx.operations.create("web-app");
-
-      const res = await ctx.app.inject({
-        method: "POST",
-        url: `/api/operations/${op.id}/steps`,
-        payload: {
-          name: "Bad Step",
-          type: "invalid-type",
-          command: "echo hi",
-        },
-      });
-
-      expect(res.statusCode).toBe(400);
-    });
-
-    it("POST /api/operations/:id/steps returns 400 for missing required fields", async () => {
-      const op = ctx.operations.create("web-app");
-
-      const res = await ctx.app.inject({
-        method: "POST",
-        url: `/api/operations/${op.id}/steps`,
-        payload: { name: "Missing fields" },
-      });
-
-      expect(res.statusCode).toBe(400);
-    });
-
-    it("PUT /api/operations/:id/steps/:stepId updates a step", async () => {
-      const op = ctx.operations.create("web-app");
-      ctx.operations.addStep(op.id, {
-        id: "step-1",
-        name: "Old Name",
-        type: "pre-deploy",
-        command: "old-cmd",
-        order: 0,
-      });
-
-      const res = await ctx.app.inject({
-        method: "PUT",
-        url: `/api/operations/${op.id}/steps/step-1`,
-        payload: { name: "New Name", command: "new-cmd" },
-      });
-
-      expect(res.statusCode).toBe(200);
-      const body = JSON.parse(res.payload);
-      expect(body.step.name).toBe("New Name");
-      expect(body.step.command).toBe("new-cmd");
-    });
-
-    it("PUT /api/operations/:id/steps/:stepId returns 404 for non-existent operation", async () => {
-      const res = await ctx.app.inject({
-        method: "PUT",
-        url: "/api/operations/nonexistent/steps/step-1",
-        payload: { name: "Irrelevant" },
-      });
-
-      expect(res.statusCode).toBe(404);
-    });
-
-    it("PUT /api/operations/:id/steps/:stepId returns 404 for non-existent step", async () => {
-      const op = ctx.operations.create("web-app");
-
-      const res = await ctx.app.inject({
-        method: "PUT",
-        url: `/api/operations/${op.id}/steps/nonexistent`,
-        payload: { name: "Irrelevant" },
-      });
-
-      expect(res.statusCode).toBe(404);
-    });
-
-    it("DELETE /api/operations/:id/steps/:stepId deletes a step", async () => {
-      const op = ctx.operations.create("web-app");
-      ctx.operations.addStep(op.id, {
-        id: "step-to-delete",
-        name: "Step",
-        type: "pre-deploy",
-        command: "echo",
-        order: 0,
-      });
-
-      const res = await ctx.app.inject({
-        method: "DELETE",
-        url: `/api/operations/${op.id}/steps/step-to-delete`,
-      });
-
-      expect(res.statusCode).toBe(200);
-      const body = JSON.parse(res.payload);
-      expect(body.deleted).toBe(true);
-    });
-
-    it("DELETE /api/operations/:id/steps/:stepId returns 404 for non-existent", async () => {
-      const res = await ctx.app.inject({
-        method: "DELETE",
-        url: "/api/operations/nonexistent/steps/nonexistent",
-      });
-
-      expect(res.statusCode).toBe(404);
-    });
-
-    it("POST /api/operations/:id/steps/reorder reorders steps", async () => {
-      const op = ctx.operations.create("web-app");
-      ctx.operations.addStep(op.id, {
-        id: "step-a",
-        name: "A",
-        type: "pre-deploy",
-        command: "a",
-        order: 0,
-      });
-      ctx.operations.addStep(op.id, {
-        id: "step-b",
-        name: "B",
-        type: "post-deploy",
-        command: "b",
-        order: 1,
-      });
-
-      const res = await ctx.app.inject({
-        method: "POST",
-        url: `/api/operations/${op.id}/steps/reorder`,
-        payload: { stepIds: ["step-b", "step-a"] },
-      });
-
-      expect(res.statusCode).toBe(200);
-      const body = JSON.parse(res.payload);
-      expect(body.steps[0].id).toBe("step-b");
-      expect(body.steps[1].id).toBe("step-a");
-    });
-
-    it("POST /api/operations/:id/steps/reorder returns 404 for non-existent operation", async () => {
-      const res = await ctx.app.inject({
-        method: "POST",
-        url: "/api/operations/nonexistent/steps/reorder",
-        payload: { stepIds: ["step-a"] },
-      });
-
-      expect(res.statusCode).toBe(404);
-    });
-
-    it("POST /api/operations/:id/steps/reorder returns 400 for invalid step IDs", async () => {
-      const op = ctx.operations.create("web-app");
-
-      const res = await ctx.app.inject({
-        method: "POST",
-        url: `/api/operations/${op.id}/steps/reorder`,
-        payload: { stepIds: ["nonexistent"] },
-      });
-
-      expect(res.statusCode).toBe(400);
-      const body = JSON.parse(res.payload);
-      expect(body.error).toContain("Step not found");
-    });
-
-    it("POST /api/operations/:id/steps/reorder returns 400 for invalid input", async () => {
-      const op = ctx.operations.create("web-app");
-
-      const res = await ctx.app.inject({
-        method: "POST",
-        url: `/api/operations/${op.id}/steps/reorder`,
-        payload: { stepIds: [] },
-      });
-
-      expect(res.statusCode).toBe(400);
-    });
-  });
-
-  // --- Deploy Config ---
-
-  describe("Deploy Config", () => {
-    it("GET /api/operations/:id/deploy-config returns deploy config", async () => {
-      const op = ctx.operations.create("web-app");
-
-      const res = await ctx.app.inject({
-        method: "GET",
-        url: `/api/operations/${op.id}/deploy-config`,
-      });
-
-      expect(res.statusCode).toBe(200);
-      const body = JSON.parse(res.payload);
-      expect(body.deployConfig).toBeDefined();
-      expect(body.deployConfig.healthCheckEnabled).toBe(true);
-      expect(body.deployConfig.verificationStrategy).toBe("basic");
-    });
-
-    it("GET /api/operations/:id/deploy-config returns 404 for non-existent operation", async () => {
-      const res = await ctx.app.inject({
-        method: "GET",
-        url: "/api/operations/nonexistent/deploy-config",
-      });
-
-      expect(res.statusCode).toBe(404);
-    });
-
-    it("PUT /api/operations/:id/deploy-config updates deploy config", async () => {
-      const op = ctx.operations.create("web-app");
-
-      const res = await ctx.app.inject({
-        method: "PUT",
-        url: `/api/operations/${op.id}/deploy-config`,
-        payload: {
-          healthCheckEnabled: false,
-          timeoutMs: 60000,
-          verificationStrategy: "full",
-        },
-      });
-
-      expect(res.statusCode).toBe(200);
-      const body = JSON.parse(res.payload);
-      expect(body.deployConfig.healthCheckEnabled).toBe(false);
-      expect(body.deployConfig.timeoutMs).toBe(60000);
-      expect(body.deployConfig.verificationStrategy).toBe("full");
-    });
-
-    it("PUT /api/operations/:id/deploy-config returns 404 for non-existent operation", async () => {
-      const res = await ctx.app.inject({
-        method: "PUT",
-        url: "/api/operations/nonexistent/deploy-config",
-        payload: { healthCheckEnabled: false },
-      });
-
-      expect(res.statusCode).toBe(404);
-    });
-
-    it("PUT /api/operations/:id/deploy-config returns 400 for invalid config", async () => {
-      const op = ctx.operations.create("web-app");
-
-      const res = await ctx.app.inject({
-        method: "PUT",
-        url: `/api/operations/${op.id}/deploy-config`,
-        payload: { verificationStrategy: "invalid-strategy" },
-      });
-
-      expect(res.statusCode).toBe(400);
-    });
-  });
-});
-
-// ===========================================================================
 // Environment Routes
 // ===========================================================================
 
@@ -1143,7 +559,7 @@ describe("Environment Routes", () => {
   // --- DELETE /api/environments/:id ---
 
   describe("DELETE /api/environments/:id", () => {
-    it("deletes an environment not linked to any operations", async () => {
+    it("deletes an environment with no deployments", async () => {
       const env = ctx.environments.create("to-delete");
 
       const res = await ctx.app.inject({
@@ -1166,9 +582,22 @@ describe("Environment Routes", () => {
       expect(res.statusCode).toBe(404);
     });
 
-    it("returns 409 when environment is linked to operations", async () => {
+    it("returns 409 when environment has deployments", async () => {
       const env = ctx.environments.create("production");
-      ctx.operations.create("web-app", [env.id]);
+      const artifact = ctx.artifactStore.create({
+        name: "web-app",
+        type: "nodejs",
+        analysis: { summary: "test", dependencies: [], configurationExpectations: {}, deploymentIntent: "rolling", confidence: 0.9 },
+        annotations: [],
+        learningHistory: [],
+      });
+
+      // Create a deployment linked to this environment
+      await deployViaHttp(ctx.app, {
+        artifactId: artifact.id,
+        environmentId: env.id,
+        version: "1.0.0",
+      });
 
       const res = await ctx.app.inject({
         method: "DELETE",
@@ -1177,8 +606,7 @@ describe("Environment Routes", () => {
 
       expect(res.statusCode).toBe(409);
       const body = JSON.parse(res.payload);
-      expect(body.error).toContain("linked to");
-      expect(body.linkedOperations).toHaveLength(1);
+      expect(body.error).toContain("deployment");
     });
   });
 });
@@ -1313,326 +741,6 @@ describe("Settings Routes", () => {
 });
 
 // ===========================================================================
-// Order Routes
-// ===========================================================================
-
-describe("Order Routes", () => {
-  let ctx: TestContext;
-
-  beforeEach(async () => {
-    ctx = await createTestServer();
-  });
-
-  // --- POST /api/orders ---
-
-  describe("POST /api/orders", () => {
-    it("creates an order and returns 201", async () => {
-      const env = ctx.environments.create("production", { APP_ENV: "production" });
-      const partition = ctx.partitions.create("Acme", { DB_HOST: "acme-db" });
-      const op = ctx.operations.create("web-app", [env.id]);
-
-      const res = await ctx.app.inject({
-        method: "POST",
-        url: "/api/orders",
-        payload: {
-          operationId: op.id,
-          partitionId: partition.id,
-          environmentId: env.id,
-          version: "1.0.0",
-        },
-      });
-
-      expect(res.statusCode).toBe(201);
-      const body = JSON.parse(res.payload);
-      expect(body.order).toBeDefined();
-      expect(body.order.operationId).toBe(op.id);
-      expect(body.order.partitionId).toBe(partition.id);
-      expect(body.order.version).toBe("1.0.0");
-      // Variables should be resolved (env + partition)
-      expect(body.order.variables.APP_ENV).toBe("production");
-      expect(body.order.variables.DB_HOST).toBe("acme-db");
-    });
-
-    it("returns 400 for missing required fields", async () => {
-      const res = await ctx.app.inject({
-        method: "POST",
-        url: "/api/orders",
-        payload: {},
-      });
-
-      expect(res.statusCode).toBe(400);
-    });
-
-    it("returns 404 when operation does not exist", async () => {
-      const partition = ctx.partitions.create("Acme");
-
-      const res = await ctx.app.inject({
-        method: "POST",
-        url: "/api/orders",
-        payload: {
-          operationId: "nonexistent",
-          partitionId: partition.id,
-          environmentId: "env-id",
-          version: "1.0.0",
-        },
-      });
-
-      expect(res.statusCode).toBe(404);
-      const body = JSON.parse(res.payload);
-      expect(body.error).toContain("Operation not found");
-    });
-
-    it("returns 404 when partition does not exist", async () => {
-      const op = ctx.operations.create("web-app");
-
-      const res = await ctx.app.inject({
-        method: "POST",
-        url: "/api/orders",
-        payload: {
-          operationId: op.id,
-          partitionId: "nonexistent",
-          environmentId: "env-id",
-          version: "1.0.0",
-        },
-      });
-
-      expect(res.statusCode).toBe(404);
-      const body = JSON.parse(res.payload);
-      expect(body.error).toContain("Partition not found");
-    });
-
-    it("returns 404 when environment does not exist (environments enabled)", async () => {
-      const partition = ctx.partitions.create("Acme");
-      const op = ctx.operations.create("web-app");
-
-      const res = await ctx.app.inject({
-        method: "POST",
-        url: "/api/orders",
-        payload: {
-          operationId: op.id,
-          partitionId: partition.id,
-          environmentId: "nonexistent",
-          version: "1.0.0",
-        },
-      });
-
-      expect(res.statusCode).toBe(404);
-      const body = JSON.parse(res.payload);
-      expect(body.error).toContain("Environment not found");
-    });
-
-    it("returns 400 when environments are enabled but environmentId is missing", async () => {
-      const partition = ctx.partitions.create("Acme");
-      const op = ctx.operations.create("web-app");
-
-      const res = await ctx.app.inject({
-        method: "POST",
-        url: "/api/orders",
-        payload: {
-          operationId: op.id,
-          partitionId: partition.id,
-          version: "1.0.0",
-        },
-      });
-
-      expect(res.statusCode).toBe(400);
-      const body = JSON.parse(res.payload);
-      expect(body.error).toContain("environmentId");
-    });
-
-    it("creates an order without environment when environments are disabled", async () => {
-      // Disable environments
-      ctx.settings.update({ environmentsEnabled: false });
-
-      const partition = ctx.partitions.create("Acme", { DB_HOST: "acme-db" });
-      const op = ctx.operations.create("web-app");
-
-      const res = await ctx.app.inject({
-        method: "POST",
-        url: "/api/orders",
-        payload: {
-          operationId: op.id,
-          partitionId: partition.id,
-          version: "1.0.0",
-        },
-      });
-
-      expect(res.statusCode).toBe(201);
-      const body = JSON.parse(res.payload);
-      expect(body.order.variables.DB_HOST).toBe("acme-db");
-    });
-  });
-
-  // --- GET /api/orders ---
-
-  describe("GET /api/orders", () => {
-    it("returns empty list when no orders exist", async () => {
-      const res = await ctx.app.inject({
-        method: "GET",
-        url: "/api/orders",
-      });
-
-      expect(res.statusCode).toBe(200);
-      const body = JSON.parse(res.payload);
-      expect(body.orders).toEqual([]);
-    });
-
-    it("returns all orders", async () => {
-      // Create prerequisite data and an order
-      const env = ctx.environments.create("production");
-      const partition = ctx.partitions.create("Acme");
-      const op = ctx.operations.create("web-app", [env.id]);
-
-      ctx.orders.create({
-        operationId: op.id,
-        operationName: op.name,
-        partitionId: partition.id,
-        environmentId: env.id,
-        environmentName: env.name,
-        version: "1.0.0",
-        steps: [],
-        deployConfig: op.deployConfig,
-        variables: {},
-      });
-
-      const res = await ctx.app.inject({
-        method: "GET",
-        url: "/api/orders",
-      });
-
-      expect(res.statusCode).toBe(200);
-      const body = JSON.parse(res.payload);
-      expect(body.orders).toHaveLength(1);
-    });
-
-    it("filters orders by operationId", async () => {
-      const env = ctx.environments.create("production");
-      const partition = ctx.partitions.create("Acme");
-      const op1 = ctx.operations.create("web-app");
-      const op2 = ctx.operations.create("api-service");
-
-      ctx.orders.create({
-        operationId: op1.id,
-        operationName: op1.name,
-        partitionId: partition.id,
-        environmentId: env.id,
-        environmentName: env.name,
-        version: "1.0.0",
-        steps: [],
-        deployConfig: op1.deployConfig,
-        variables: {},
-      });
-      ctx.orders.create({
-        operationId: op2.id,
-        operationName: op2.name,
-        partitionId: partition.id,
-        environmentId: env.id,
-        environmentName: env.name,
-        version: "1.0.0",
-        steps: [],
-        deployConfig: op2.deployConfig,
-        variables: {},
-      });
-
-      const res = await ctx.app.inject({
-        method: "GET",
-        url: `/api/orders?operationId=${op1.id}`,
-      });
-
-      expect(res.statusCode).toBe(200);
-      const body = JSON.parse(res.payload);
-      expect(body.orders).toHaveLength(1);
-      expect(body.orders[0].operationId).toBe(op1.id);
-    });
-
-    it("filters orders by partitionId", async () => {
-      const env = ctx.environments.create("production");
-      const p1 = ctx.partitions.create("Acme");
-      const p2 = ctx.partitions.create("Beta");
-      const op = ctx.operations.create("web-app");
-
-      ctx.orders.create({
-        operationId: op.id,
-        operationName: op.name,
-        partitionId: p1.id,
-        environmentId: env.id,
-        environmentName: env.name,
-        version: "1.0.0",
-        steps: [],
-        deployConfig: op.deployConfig,
-        variables: {},
-      });
-      ctx.orders.create({
-        operationId: op.id,
-        operationName: op.name,
-        partitionId: p2.id,
-        environmentId: env.id,
-        environmentName: env.name,
-        version: "1.0.0",
-        steps: [],
-        deployConfig: op.deployConfig,
-        variables: {},
-      });
-
-      const res = await ctx.app.inject({
-        method: "GET",
-        url: `/api/orders?partitionId=${p1.id}`,
-      });
-
-      expect(res.statusCode).toBe(200);
-      const body = JSON.parse(res.payload);
-      expect(body.orders).toHaveLength(1);
-      expect(body.orders[0].partitionId).toBe(p1.id);
-    });
-  });
-
-  // --- GET /api/orders/:id ---
-
-  describe("GET /api/orders/:id", () => {
-    it("returns an order by ID with related deployments", async () => {
-      const env = ctx.environments.create("production");
-      const partition = ctx.partitions.create("Acme");
-      const op = ctx.operations.create("web-app");
-
-      const order = ctx.orders.create({
-        operationId: op.id,
-        operationName: op.name,
-        partitionId: partition.id,
-        environmentId: env.id,
-        environmentName: env.name,
-        version: "1.0.0",
-        steps: [],
-        deployConfig: op.deployConfig,
-        variables: {},
-      });
-
-      const res = await ctx.app.inject({
-        method: "GET",
-        url: `/api/orders/${order.id}`,
-      });
-
-      expect(res.statusCode).toBe(200);
-      const body = JSON.parse(res.payload);
-      expect(body.order).toBeDefined();
-      expect(body.order.id).toBe(order.id);
-      expect(body.deployments).toBeDefined();
-      expect(Array.isArray(body.deployments)).toBe(true);
-    });
-
-    it("returns 404 for non-existent order", async () => {
-      const res = await ctx.app.inject({
-        method: "GET",
-        url: "/api/orders/does-not-exist",
-      });
-
-      expect(res.statusCode).toBe(404);
-      const body = JSON.parse(res.payload);
-      expect(body.error).toBe("Order not found");
-    });
-  });
-});
-
-// ===========================================================================
 // Deployment Routes
 // ===========================================================================
 
@@ -1643,16 +751,28 @@ describe("Deployment Routes", () => {
     ctx = await createTestServer();
   });
 
+  /** Helper: create artifact in the store and return its ID */
+  function seedArtifact(name = "web-app"): string {
+    const artifact = ctx.artifactStore.create({
+      name,
+      type: "nodejs",
+      analysis: { summary: "test", dependencies: [], configurationExpectations: {}, deploymentIntent: "rolling", confidence: 0.9 },
+      annotations: [],
+      learningHistory: [],
+    });
+    return artifact.id;
+  }
+
   // --- POST /api/deployments ---
 
   describe("POST /api/deployments", () => {
-    it("triggers a deployment and returns 201", async () => {
+    it("creates a deployment and returns 201", async () => {
       const env = ctx.environments.create("production", { APP_ENV: "production" });
       const partition = ctx.partitions.create("Acme", { DB_HOST: "acme-db" });
-      const op = ctx.operations.create("web-app", [env.id]);
+      const artifactId = seedArtifact();
 
       const res = await deployViaHttp(ctx.app, {
-        operationId: op.id,
+        artifactId,
         partitionId: partition.id,
         environmentId: env.id,
         version: "1.0.0",
@@ -1661,11 +781,9 @@ describe("Deployment Routes", () => {
       expect(res.statusCode).toBe(201);
       const body = JSON.parse(res.payload);
       expect(body.deployment).toBeDefined();
-      expect(body.deployment.operationId).toBe(op.id);
+      expect(body.deployment.artifactId).toBe(artifactId);
       expect(body.deployment.partitionId).toBe(partition.id);
       expect(body.deployment.version).toBe("1.0.0");
-      expect(body.debrief).toBeDefined();
-      expect(Array.isArray(body.debrief)).toBe(true);
     });
 
     it("returns 400 for invalid trigger", async () => {
@@ -1676,20 +794,34 @@ describe("Deployment Routes", () => {
       });
 
       expect(res.statusCode).toBe(400);
-      const body = JSON.parse(res.payload);
-      expect(body.error).toContain("Invalid");
     });
 
-    it("returns 404 when order does not exist", async () => {
-      const partition = ctx.partitions.create("Acme");
+    it("returns 404 when artifact does not exist", async () => {
+      const env = ctx.environments.create("production");
 
       const res = await ctx.app.inject({
         method: "POST",
         url: "/api/deployments",
         payload: {
-          orderId: "nonexistent-order",
-          partitionId: partition.id,
-          environmentId: "env-id",
+          artifactId: "nonexistent-artifact",
+          environmentId: env.id,
+          version: "1.0.0",
+        },
+      });
+
+      expect(res.statusCode).toBe(404);
+    });
+
+    it("returns 404 when environment does not exist", async () => {
+      const artifactId = seedArtifact();
+
+      const res = await ctx.app.inject({
+        method: "POST",
+        url: "/api/deployments",
+        payload: {
+          artifactId,
+          environmentId: "nonexistent",
+          version: "1.0.0",
         },
       });
 
@@ -1698,43 +830,20 @@ describe("Deployment Routes", () => {
 
     it("returns 404 when partition does not exist", async () => {
       const env = ctx.environments.create("production");
-      const partition = ctx.partitions.create("Acme");
-      const op = ctx.operations.create("web-app", [env.id]);
-
-      // Create a valid order, but reference a non-existent partition in the trigger
-      const orderRes = await ctx.app.inject({
-        method: "POST",
-        url: "/api/orders",
-        payload: { operationId: op.id, partitionId: partition.id, environmentId: env.id, version: "1.0.0" },
-      });
-      const orderId = JSON.parse(orderRes.payload).order.id;
+      const artifactId = seedArtifact();
 
       const res = await ctx.app.inject({
         method: "POST",
         url: "/api/deployments",
         payload: {
-          orderId,
-          partitionId: "nonexistent",
+          artifactId,
           environmentId: env.id,
+          partitionId: "nonexistent",
+          version: "1.0.0",
         },
       });
 
       expect(res.statusCode).toBe(404);
-    });
-
-    it("succeeds when environments are disabled", async () => {
-      ctx.settings.update({ environmentsEnabled: false });
-      const partition = ctx.partitions.create("Acme");
-      const op = ctx.operations.create("web-app");
-
-      const res = await deployViaHttp(ctx.app, {
-        operationId: op.id,
-        partitionId: partition.id,
-        environmentId: "",
-        version: "1.0.0",
-      });
-
-      expect(res.statusCode).toBe(201);
     });
   });
 
@@ -1752,13 +861,13 @@ describe("Deployment Routes", () => {
       expect(body.deployments).toEqual([]);
     });
 
-    it("returns deployments after triggering one", async () => {
+    it("returns deployments after creating one", async () => {
       const env = ctx.environments.create("production");
       const partition = ctx.partitions.create("Acme");
-      const op = ctx.operations.create("web-app", [env.id]);
+      const artifactId = seedArtifact();
 
       await deployViaHttp(ctx.app, {
-        operationId: op.id,
+        artifactId,
         partitionId: partition.id,
         environmentId: env.id,
         version: "1.0.0",
@@ -1778,16 +887,16 @@ describe("Deployment Routes", () => {
       const env = ctx.environments.create("production");
       const p1 = ctx.partitions.create("Acme");
       const p2 = ctx.partitions.create("Beta");
-      const op = ctx.operations.create("web-app", [env.id]);
+      const artifactId = seedArtifact();
 
       await deployViaHttp(ctx.app, {
-        operationId: op.id,
+        artifactId,
         partitionId: p1.id,
         environmentId: env.id,
         version: "1.0.0",
       });
       await deployViaHttp(ctx.app, {
-        operationId: op.id,
+        artifactId,
         partitionId: p2.id,
         environmentId: env.id,
         version: "1.0.0",
@@ -1803,6 +912,36 @@ describe("Deployment Routes", () => {
       expect(body.deployments).toHaveLength(1);
       expect(body.deployments[0].partitionId).toBe(p1.id);
     });
+
+    it("filters deployments by artifactId", async () => {
+      const env = ctx.environments.create("production");
+      const partition = ctx.partitions.create("Acme");
+      const art1 = seedArtifact("web-app");
+      const art2 = seedArtifact("api-service");
+
+      await deployViaHttp(ctx.app, {
+        artifactId: art1,
+        partitionId: partition.id,
+        environmentId: env.id,
+        version: "1.0.0",
+      });
+      await deployViaHttp(ctx.app, {
+        artifactId: art2,
+        partitionId: partition.id,
+        environmentId: env.id,
+        version: "1.0.0",
+      });
+
+      const res = await ctx.app.inject({
+        method: "GET",
+        url: `/api/deployments?artifactId=${art1}`,
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.payload);
+      expect(body.deployments).toHaveLength(1);
+      expect(body.deployments[0].artifactId).toBe(art1);
+    });
   });
 
   // --- GET /api/deployments/:id ---
@@ -1811,10 +950,10 @@ describe("Deployment Routes", () => {
     it("returns a deployment with debrief entries", async () => {
       const env = ctx.environments.create("production");
       const partition = ctx.partitions.create("Acme");
-      const op = ctx.operations.create("web-app", [env.id]);
+      const artifactId = seedArtifact();
 
       const triggerRes = await deployViaHttp(ctx.app, {
-        operationId: op.id,
+        artifactId,
         partitionId: partition.id,
         environmentId: env.id,
         version: "1.0.0",
@@ -1851,10 +990,10 @@ describe("Deployment Routes", () => {
     it("returns a postmortem for a deployment", async () => {
       const env = ctx.environments.create("production");
       const partition = ctx.partitions.create("Acme");
-      const op = ctx.operations.create("web-app", [env.id]);
+      const artifactId = seedArtifact();
 
       const triggerRes = await deployViaHttp(ctx.app, {
-        operationId: op.id,
+        artifactId,
         partitionId: partition.id,
         environmentId: env.id,
         version: "1.0.0",
@@ -1881,40 +1020,6 @@ describe("Deployment Routes", () => {
     });
   });
 
-  // --- GET /api/operations/:operationId/deployments ---
-
-  describe("GET /api/operations/:operationId/deployments", () => {
-    it("returns deployments filtered by operation", async () => {
-      const env = ctx.environments.create("production");
-      const partition = ctx.partitions.create("Acme");
-      const op1 = ctx.operations.create("web-app", [env.id]);
-      const op2 = ctx.operations.create("api-service", [env.id]);
-
-      await deployViaHttp(ctx.app, {
-        operationId: op1.id,
-        partitionId: partition.id,
-        environmentId: env.id,
-        version: "1.0.0",
-      });
-      await deployViaHttp(ctx.app, {
-        operationId: op2.id,
-        partitionId: partition.id,
-        environmentId: env.id,
-        version: "1.0.0",
-      });
-
-      const res = await ctx.app.inject({
-        method: "GET",
-        url: `/api/operations/${op1.id}/deployments`,
-      });
-
-      expect(res.statusCode).toBe(200);
-      const body = JSON.parse(res.payload);
-      expect(body.deployments).toHaveLength(1);
-      expect(body.deployments[0].operationId).toBe(op1.id);
-    });
-  });
-
   // --- GET /api/debrief ---
 
   describe("GET /api/debrief", () => {
@@ -1922,10 +1027,10 @@ describe("Deployment Routes", () => {
       // Trigger a deployment to generate debrief entries
       const env = ctx.environments.create("production");
       const partition = ctx.partitions.create("Acme");
-      const op = ctx.operations.create("web-app", [env.id]);
+      const artifactId = seedArtifact();
 
       await deployViaHttp(ctx.app, {
-        operationId: op.id,
+        artifactId,
         partitionId: partition.id,
         environmentId: env.id,
         version: "1.0.0",
@@ -1939,17 +1044,15 @@ describe("Deployment Routes", () => {
       expect(res.statusCode).toBe(200);
       const body = JSON.parse(res.payload);
       expect(body.entries).toBeDefined();
-      expect(body.entries.length).toBeGreaterThan(0);
     });
 
     it("respects limit parameter", async () => {
-      // Generate a few entries
       const env = ctx.environments.create("production");
       const partition = ctx.partitions.create("Acme");
-      const op = ctx.operations.create("web-app", [env.id]);
+      const artifactId = seedArtifact();
 
       await deployViaHttp(ctx.app, {
-        operationId: op.id,
+        artifactId,
         partitionId: partition.id,
         environmentId: env.id,
         version: "1.0.0",
@@ -1969,16 +1072,16 @@ describe("Deployment Routes", () => {
       const env = ctx.environments.create("production");
       const p1 = ctx.partitions.create("Acme");
       const p2 = ctx.partitions.create("Beta");
-      const op = ctx.operations.create("web-app", [env.id]);
+      const artifactId = seedArtifact();
 
       await deployViaHttp(ctx.app, {
-        operationId: op.id,
+        artifactId,
         partitionId: p1.id,
         environmentId: env.id,
         version: "1.0.0",
       });
       await deployViaHttp(ctx.app, {
-        operationId: op.id,
+        artifactId,
         partitionId: p2.id,
         environmentId: env.id,
         version: "1.0.0",
@@ -1994,6 +1097,119 @@ describe("Deployment Routes", () => {
       for (const entry of body.entries) {
         expect(entry.partitionId).toBe(p1.id);
       }
+    });
+  });
+});
+
+// ===========================================================================
+// Artifact Routes
+// ===========================================================================
+
+describe("Artifact Routes", () => {
+  let ctx: TestContext;
+
+  beforeEach(async () => {
+    ctx = await createTestServer();
+  });
+
+  describe("POST /api/artifacts", () => {
+    it("creates an artifact and returns 201", async () => {
+      const res = await ctx.app.inject({
+        method: "POST",
+        url: "/api/artifacts",
+        payload: { name: "web-app", type: "nodejs" },
+      });
+
+      expect(res.statusCode).toBe(201);
+      const body = JSON.parse(res.payload);
+      expect(body.artifact).toBeDefined();
+      expect(body.artifact.name).toBe("web-app");
+      expect(body.artifact.type).toBe("nodejs");
+      expect(body.artifact.id).toBeDefined();
+    });
+
+    it("returns 400 for missing name", async () => {
+      const res = await ctx.app.inject({
+        method: "POST",
+        url: "/api/artifacts",
+        payload: { type: "nodejs" },
+      });
+
+      expect(res.statusCode).toBe(400);
+    });
+
+    it("returns 400 for missing type", async () => {
+      const res = await ctx.app.inject({
+        method: "POST",
+        url: "/api/artifacts",
+        payload: { name: "web-app" },
+      });
+
+      expect(res.statusCode).toBe(400);
+    });
+  });
+
+  describe("GET /api/artifacts", () => {
+    it("returns empty list when no artifacts exist", async () => {
+      const res = await ctx.app.inject({
+        method: "GET",
+        url: "/api/artifacts",
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.payload);
+      expect(body.artifacts).toEqual([]);
+    });
+
+    it("returns all artifacts", async () => {
+      ctx.artifactStore.create({
+        name: "web-app", type: "nodejs",
+        analysis: { summary: "test", dependencies: [], configurationExpectations: {}, deploymentIntent: "rolling", confidence: 0.9 },
+        annotations: [], learningHistory: [],
+      });
+      ctx.artifactStore.create({
+        name: "api-service", type: "docker",
+        analysis: { summary: "test", dependencies: [], configurationExpectations: {}, deploymentIntent: "blue-green", confidence: 0.8 },
+        annotations: [], learningHistory: [],
+      });
+
+      const res = await ctx.app.inject({
+        method: "GET",
+        url: "/api/artifacts",
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.payload);
+      expect(body.artifacts).toHaveLength(2);
+    });
+  });
+
+  describe("GET /api/artifacts/:id", () => {
+    it("returns a specific artifact", async () => {
+      const artifact = ctx.artifactStore.create({
+        name: "web-app", type: "nodejs",
+        analysis: { summary: "test", dependencies: [], configurationExpectations: {}, deploymentIntent: "rolling", confidence: 0.9 },
+        annotations: [], learningHistory: [],
+      });
+
+      const res = await ctx.app.inject({
+        method: "GET",
+        url: `/api/artifacts/${artifact.id}`,
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.payload);
+      expect(body.artifact.id).toBe(artifact.id);
+      expect(body.artifact.name).toBe("web-app");
+    });
+
+    it("returns 404 for non-existent artifact", async () => {
+      const res = await ctx.app.inject({
+        method: "GET",
+        url: "/api/artifacts/does-not-exist",
+      });
+
+      expect(res.statusCode).toBe(404);
     });
   });
 });

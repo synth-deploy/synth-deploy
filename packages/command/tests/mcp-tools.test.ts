@@ -1,13 +1,12 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import {
   DecisionDebrief,
   PartitionStore,
-  OperationStore,
   EnvironmentStore,
-  OrderStore,
+  ArtifactStore,
   SettingsStore,
 } from "@deploystack/core";
-import type { Partition, Environment, Operation, Order, Deployment } from "@deploystack/core";
+import type { Partition, Environment, Artifact } from "@deploystack/core";
 import { CommandAgent, InMemoryDeploymentStore } from "../src/agent/command-agent.js";
 import { registerTools } from "../src/mcp/tools.js";
 
@@ -41,23 +40,21 @@ class FakeMcpServer {
 let mcp: FakeMcpServer;
 let partitions: PartitionStore;
 let environments: EnvironmentStore;
-let operations: OperationStore;
+let artifactStore: ArtifactStore;
 let deployments: InMemoryDeploymentStore;
-let orders: OrderStore;
 let settings: SettingsStore;
 let agent: CommandAgent;
 
 let partition: Partition;
 let environment: Environment;
-let operation: Operation;
+let artifact: Artifact;
 
 beforeEach(() => {
   mcp = new FakeMcpServer();
   partitions = new PartitionStore();
   environments = new EnvironmentStore();
-  operations = new OperationStore();
+  artifactStore = new ArtifactStore();
   deployments = new InMemoryDeploymentStore();
-  orders = new OrderStore();
   settings = new SettingsStore();
   // Clear the default envoy URL so triggerDeployment does not try to reach
   // a real Envoy service during tests.
@@ -65,7 +62,9 @@ beforeEach(() => {
   agent = new CommandAgent(
     new DecisionDebrief(),
     deployments,
-    orders,
+    artifactStore,
+    environments,
+    partitions,
     undefined,
     { healthCheckBackoffMs: 1, executionDelayMs: 1 },
     settings,
@@ -73,7 +72,19 @@ beforeEach(() => {
 
   partition = partitions.create("test-partition");
   environment = environments.create("staging");
-  operation = operations.create("web-app", [environment.id]);
+  artifact = artifactStore.create({
+    name: "web-app",
+    type: "nodejs",
+    analysis: {
+      summary: "test artifact",
+      dependencies: [],
+      configurationExpectations: {},
+      deploymentIntent: "rolling",
+      confidence: 0.9,
+    },
+    annotations: [],
+    learningHistory: [],
+  });
 
   // Register tools under test
   registerTools(
@@ -82,7 +93,7 @@ beforeEach(() => {
     partitions,
     environments,
     deployments,
-    operations,
+    artifactStore,
   );
 });
 
@@ -93,7 +104,7 @@ beforeEach(() => {
 describe("trigger-deployment", () => {
   it("succeeds with valid params and returns deployment info", async () => {
     const result = await mcp.call("trigger-deployment", {
-      operationId: operation.id,
+      artifactId: artifact.id,
       partitionId: partition.id,
       environmentId: environment.id,
       version: "1.0.0",
@@ -104,7 +115,6 @@ describe("trigger-deployment", () => {
 
     const payload = JSON.parse(result.content[0].text);
     expect(payload.deploymentId).toBeDefined();
-    expect(payload.orderId).toBeDefined();
     expect(payload.status).toBeDefined();
     expect(payload.version).toBe("1.0.0");
     expect(typeof payload.debriefEntries).toBe("number");
@@ -112,7 +122,7 @@ describe("trigger-deployment", () => {
 
   it("returns error when partition is missing", async () => {
     const result = await mcp.call("trigger-deployment", {
-      operationId: operation.id,
+      artifactId: artifact.id,
       partitionId: "nonexistent-partition",
       environmentId: environment.id,
       version: "1.0.0",
@@ -125,7 +135,7 @@ describe("trigger-deployment", () => {
 
   it("returns error when environment is missing", async () => {
     const result = await mcp.call("trigger-deployment", {
-      operationId: operation.id,
+      artifactId: artifact.id,
       partitionId: partition.id,
       environmentId: "nonexistent-env",
       version: "1.0.0",
@@ -136,22 +146,22 @@ describe("trigger-deployment", () => {
     expect(result.content[0].text).toContain("nonexistent-env");
   });
 
-  it("returns error when operation is missing", async () => {
+  it("returns error when artifact is missing", async () => {
     const result = await mcp.call("trigger-deployment", {
-      operationId: "nonexistent-op",
+      artifactId: "nonexistent-artifact",
       partitionId: partition.id,
       environmentId: environment.id,
       version: "1.0.0",
     });
 
     expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain("Operation not found");
-    expect(result.content[0].text).toContain("nonexistent-op");
+    expect(result.content[0].text).toContain("Artifact not found");
+    expect(result.content[0].text).toContain("nonexistent-artifact");
   });
 
   it("passes optional variables through to the deployment", async () => {
     const result = await mcp.call("trigger-deployment", {
-      operationId: operation.id,
+      artifactId: artifact.id,
       partitionId: partition.id,
       environmentId: environment.id,
       version: "2.0.0",
@@ -175,7 +185,7 @@ describe("get-deployment-status", () => {
   it("returns deployment details for an existing deployment", async () => {
     // First trigger a deployment to get a valid ID
     const triggerResult = await mcp.call("trigger-deployment", {
-      operationId: operation.id,
+      artifactId: artifact.id,
       partitionId: partition.id,
       environmentId: environment.id,
       version: "1.0.0",

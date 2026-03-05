@@ -2,9 +2,11 @@ import { describe, it, expect, beforeEach } from "vitest";
 import {
   DecisionDebrief,
   PartitionManager,
-  OrderStore,
+  PartitionStore,
+  EnvironmentStore,
+  ArtifactStore,
 } from "@deploystack/core";
-import type { Environment, DebriefEntry, Operation, Partition } from "@deploystack/core";
+import type { Environment, DebriefEntry } from "@deploystack/core";
 import {
   CommandAgent,
   InMemoryDeploymentStore,
@@ -51,50 +53,81 @@ function makeEnvironment(overrides: Partial<Environment> = {}): Environment {
   };
 }
 
-function makeOperation(overrides: Partial<Operation> = {}): Operation {
-  return {
-    id: "web-app",
-    name: "web-app",
-    environmentIds: ["env-prod"],
-    steps: [],
-    deployConfig: {
-      healthCheckEnabled: true,
-      healthCheckRetries: 1,
-      timeoutMs: 30000,
-      verificationStrategy: "basic",
-    },
-    ...overrides,
-  };
-}
-
 function findDecisions(entries: DebriefEntry[], substr: string): DebriefEntry[] {
   return entries.filter((e) =>
     e.decision.toLowerCase().includes(substr.toLowerCase()),
   );
 }
 
+// Shared stores for CommandAgent
+let artifactStore: ArtifactStore;
+let envStore: EnvironmentStore;
+let partStore: PartitionStore;
+
+/** Insert a partition into the store with a specific ID (bypassing UUID generation). */
+function forceInsertPartition(id: string, name: string, variables: Record<string, string>) {
+  if (partStore.get(id)) return;
+  (partStore as any).partitions.set(id, { id, name, variables, createdAt: new Date() });
+}
+
+/** Insert an environment into the store with a specific ID. */
+function forceInsertEnvironment(id: string, name: string, variables: Record<string, string>) {
+  if (envStore.get(id)) return;
+  (envStore as any).environments.set(id, { id, name, variables });
+}
+
+/** Seed a minimal artifact and return it. */
+function getOrCreateArtifact() {
+  const existing = artifactStore.list();
+  if (existing.length > 0) return existing[0];
+  return artifactStore.create({
+    name: "web-app",
+    type: "nodejs",
+    analysis: {
+      summary: "Test artifact",
+      dependencies: [],
+      configurationExpectations: {},
+      deploymentIntent: "rolling",
+      confidence: 0.9,
+    },
+    annotations: [],
+    learningHistory: [],
+  });
+}
+
 /**
- * Test convenience: creates an Order snapshot and triggers deployment in one call.
- * Works with PartitionManager containers (uses .toPartition()) or raw Partition objects.
+ * Deploy via CommandAgent using a PartitionContainer (from PartitionManager).
+ * Ensures all entities are registered in the agent's stores before triggering.
  */
 async function testDeployWithPartition(
   agent: CommandAgent,
-  partitionLike: { id: string; toPartition: () => Partition },
+  partitionLike: { id: string; toPartition: () => { id: string; name: string; variables: Record<string, string> } },
   env: Environment,
-  operation: Operation,
   version = "1.0.0",
   variables?: Record<string, string>,
 ) {
   const partition = partitionLike.toPartition();
-  const order = agent.createOrderSnapshot(version, partition, env, operation);
+
+  // Sync PartitionManager's partition into the agent's PartitionStore
+  forceInsertPartition(partition.id, partition.name, partition.variables);
+  if (partStore.get(partition.id)) {
+    partStore.setVariables(partition.id, partition.variables);
+  }
+
+  // Sync environment into the agent's EnvironmentStore
+  forceInsertEnvironment(env.id, env.name, env.variables);
+
+  const artifact = getOrCreateArtifact();
+
   const trigger = {
-    orderId: order.id,
+    artifactId: artifact.id,
+    artifactVersionId: version,
     partitionId: partition.id,
     environmentId: env.id,
     triggeredBy: "user" as const,
     ...(variables ? { variables } : {}),
   };
-  return agent.triggerDeployment(trigger, partition, env, operation, order);
+  return agent.triggerDeployment(trigger);
 }
 
 // ---------------------------------------------------------------------------
@@ -112,10 +145,13 @@ describe("Partition Isolation", () => {
     diary = new DecisionDebrief();
     deployments = new InMemoryDeploymentStore();
     healthChecker = new MockHealthChecker();
-    agent = new CommandAgent(diary, deployments, new OrderStore(), healthChecker, {
-      healthCheckBackoffMs: 1,
-      executionDelayMs: 1,
-    });
+    artifactStore = new ArtifactStore();
+    envStore = new EnvironmentStore();
+    partStore = new PartitionStore();
+    agent = new CommandAgent(
+      diary, deployments, artifactStore, envStore, partStore,
+      healthChecker, { healthCheckBackoffMs: 1, executionDelayMs: 1 },
+    );
     manager = new PartitionManager(deployments, diary);
   });
 
@@ -174,7 +210,7 @@ describe("Partition Isolation", () => {
       const env = makeEnvironment();
 
       // Deploy to Partition A
-      const resultA = await testDeployWithPartition(agent, partitionA, env, makeOperation());
+      const resultA = await testDeployWithPartition(agent, partitionA, env);
       expect(resultA.status).toBe("succeeded");
 
       // Partition A sees its deployment
@@ -190,7 +226,7 @@ describe("Partition Isolation", () => {
       const partitionB = manager.createPartition("Beta Inc");
       const env = makeEnvironment();
 
-      const resultA = await testDeployWithPartition(agent, partitionA, env, makeOperation());
+      const resultA = await testDeployWithPartition(agent, partitionA, env);
 
       // Partition A can access by ID
       expect(partitionA.getDeployment(resultA.id)).toBeDefined();
@@ -207,10 +243,10 @@ describe("Partition Isolation", () => {
 
       // Deploy 3 times to A, 2 times to B
       for (let i = 0; i < 3; i++) {
-        await testDeployWithPartition(agent, partitionA, env, makeOperation(), `a-${i}`);
+        await testDeployWithPartition(agent, partitionA, env, `a-${i}`);
       }
       for (let i = 0; i < 2; i++) {
-        await testDeployWithPartition(agent, partitionB, env, makeOperation(), `b-${i}`);
+        await testDeployWithPartition(agent, partitionB, env, `b-${i}`);
       }
 
       expect(partitionA.getDeployments()).toHaveLength(3);
@@ -237,7 +273,7 @@ describe("Partition Isolation", () => {
       const partitionB = manager.createPartition("Beta Inc");
       const env = makeEnvironment();
 
-      await testDeployWithPartition(agent, partitionA, env, makeOperation());
+      await testDeployWithPartition(agent, partitionA, env);
 
       // A has diary entries
       const entriesA = partitionA.getDebriefEntries();
@@ -265,11 +301,11 @@ describe("Partition Isolation", () => {
 
       // Partition A: deployment fails (health check fails)
       healthChecker.willReturn(CONN_REFUSED, CONN_REFUSED);
-      const resultA = await testDeployWithPartition(agent, partitionA, env, makeOperation());
+      const resultA = await testDeployWithPartition(agent, partitionA, env);
       expect(resultA.status).toBe("failed");
 
       // Partition B: deployment succeeds — A's failure had no effect
-      const resultB = await testDeployWithPartition(agent, partitionB, env, makeOperation());
+      const resultB = await testDeployWithPartition(agent, partitionB, env);
       expect(resultB.status).toBe("succeeded");
 
       // Each partition sees only their own result
@@ -287,10 +323,10 @@ describe("Partition Isolation", () => {
 
       // A fails
       healthChecker.willReturn(CONN_REFUSED, CONN_REFUSED);
-      await testDeployWithPartition(agent, partitionA, env, makeOperation());
+      await testDeployWithPartition(agent, partitionA, env);
 
       // B succeeds
-      await testDeployWithPartition(agent, partitionB, env, makeOperation());
+      await testDeployWithPartition(agent, partitionB, env);
 
       // A has failure entries
       const failEntries = findDecisions(
@@ -545,10 +581,13 @@ describe("Precedence Recording in Decision Diary", () => {
     diary = new DecisionDebrief();
     deployments = new InMemoryDeploymentStore();
     healthChecker = new MockHealthChecker();
-    agent = new CommandAgent(diary, deployments, new OrderStore(), healthChecker, {
-      healthCheckBackoffMs: 1,
-      executionDelayMs: 1,
-    });
+    artifactStore = new ArtifactStore();
+    envStore = new EnvironmentStore();
+    partStore = new PartitionStore();
+    agent = new CommandAgent(
+      diary, deployments, artifactStore, envStore, partStore,
+      healthChecker, { healthCheckBackoffMs: 1, executionDelayMs: 1 },
+    );
     manager = new PartitionManager(deployments, diary);
   });
 
@@ -564,7 +603,6 @@ describe("Precedence Recording in Decision Diary", () => {
       agent,
       partition,
       env,
-      makeOperation(),
       "1.0.0",
       { LOG_LEVEL: "debug" },
     );
@@ -599,10 +637,13 @@ describe("Scale: 50 Partitions", () => {
     diary = new DecisionDebrief();
     deployments = new InMemoryDeploymentStore();
     healthChecker = new MockHealthChecker();
-    agent = new CommandAgent(diary, deployments, new OrderStore(), healthChecker, {
-      healthCheckBackoffMs: 1,
-      executionDelayMs: 1,
-    });
+    artifactStore = new ArtifactStore();
+    envStore = new EnvironmentStore();
+    partStore = new PartitionStore();
+    agent = new CommandAgent(
+      diary, deployments, artifactStore, envStore, partStore,
+      healthChecker, { healthCheckBackoffMs: 1, executionDelayMs: 1 },
+    );
     manager = new PartitionManager(deployments, diary);
   });
 
@@ -647,7 +688,7 @@ describe("Scale: 50 Partitions", () => {
     const start = performance.now();
     const results = await Promise.all(
       partitions.map((partition) =>
-        testDeployWithPartition(agent, partition, env, makeOperation()),
+        testDeployWithPartition(agent, partition, env),
       ),
     );
     const elapsed = performance.now() - start;
@@ -716,7 +757,7 @@ describe("Scale: 50 Partitions", () => {
     // Deploy to all 50
     await Promise.all(
       partitions.map((partition) =>
-        testDeployWithPartition(agent, partition, env, makeOperation()),
+        testDeployWithPartition(agent, partition, env),
       ),
     );
 

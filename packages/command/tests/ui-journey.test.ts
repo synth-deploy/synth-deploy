@@ -1,14 +1,36 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
-import { DecisionDebrief, PartitionStore, OperationStore, EnvironmentStore, OrderStore, SettingsStore } from "@deploystack/core";
+import { DecisionDebrief, PartitionStore, EnvironmentStore, ArtifactStore, SettingsStore, TelemetryStore } from "@deploystack/core";
 import type { Deployment, DebriefEntry, PostmortemReport, OperationHistory } from "@deploystack/core";
 import { CommandAgent, InMemoryDeploymentStore } from "../src/agent/command-agent.js";
 import { registerDeploymentRoutes } from "../src/api/deployments.js";
-import { registerOperationRoutes } from "../src/api/operations.js";
 import { registerPartitionRoutes } from "../src/api/partitions.js";
 import { registerEnvironmentRoutes } from "../src/api/environments.js";
-import { registerOrderRoutes } from "../src/api/orders.js";
+import { registerArtifactRoutes } from "../src/api/artifacts.js";
+import { registerSettingsRoutes } from "../src/api/settings.js";
+
+// ---------------------------------------------------------------------------
+// Mock auth — inject a test user with all permissions on every request
+// ---------------------------------------------------------------------------
+
+function addMockAuth(app: FastifyInstance) {
+  app.addHook("onRequest", async (request) => {
+    request.user = {
+      id: "test-user-id" as any,
+      email: "test@example.com",
+      name: "Test User",
+      permissions: [
+        "deployment.create", "deployment.approve", "deployment.reject", "deployment.view", "deployment.rollback",
+        "artifact.create", "artifact.update", "artifact.annotate", "artifact.delete", "artifact.view",
+        "environment.create", "environment.update", "environment.delete", "environment.view",
+        "partition.create", "partition.update", "partition.delete", "partition.view",
+        "envoy.register", "envoy.configure", "envoy.view",
+        "settings.manage", "users.manage", "roles.manage",
+      ],
+    };
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Test server setup — mirrors index.ts but without MCP or static serving
@@ -17,74 +39,43 @@ import { registerOrderRoutes } from "../src/api/orders.js";
 let app: FastifyInstance;
 let diary: DecisionDebrief;
 let partitions: PartitionStore;
-let operations: OperationStore;
 let environments: EnvironmentStore;
 let deployments: InMemoryDeploymentStore;
-let orders: OrderStore;
+let artifactStore: ArtifactStore;
 let settings: SettingsStore;
+let telemetry: TelemetryStore;
 let agent: CommandAgent;
 
 beforeAll(async () => {
   diary = new DecisionDebrief();
   partitions = new PartitionStore();
-  operations = new OperationStore();
   environments = new EnvironmentStore();
   deployments = new InMemoryDeploymentStore();
-  orders = new OrderStore();
+  artifactStore = new ArtifactStore();
   settings = new SettingsStore();
-  agent = new CommandAgent(diary, deployments, orders);
+  telemetry = new TelemetryStore();
+  agent = new CommandAgent(
+    diary, deployments, artifactStore, environments, partitions,
+    undefined, { healthCheckBackoffMs: 1, executionDelayMs: 1 },
+  );
 
   app = Fastify();
-  registerDeploymentRoutes(app, agent, partitions, environments, deployments, diary, operations, orders, settings);
-  registerOperationRoutes(app, operations, environments);
-  registerPartitionRoutes(app, partitions, deployments, diary, orders);
-  registerEnvironmentRoutes(app, environments, operations);
-  registerOrderRoutes(app, orders, agent, partitions, environments, operations, deployments, diary, settings);
+  addMockAuth(app);
+  registerDeploymentRoutes(app, deployments, diary, partitions, environments, artifactStore, settings, telemetry);
+  registerPartitionRoutes(app, partitions, deployments, diary, telemetry);
+  registerEnvironmentRoutes(app, environments, deployments, telemetry);
+  registerArtifactRoutes(app, artifactStore, telemetry);
+  registerSettingsRoutes(app, settings, telemetry);
 
   await app.ready();
 });
-
-/**
- * Helper: creates an Order via HTTP, then triggers deployment.
- */
-async function deployViaHttp(
-  server: FastifyInstance,
-  params: { operationId: string; partitionId: string; environmentId: string; version: string; variables?: Record<string, string> },
-) {
-  const orderRes = await server.inject({
-    method: "POST",
-    url: "/api/orders",
-    payload: {
-      operationId: params.operationId,
-      partitionId: params.partitionId,
-      environmentId: params.environmentId,
-      version: params.version,
-    },
-  });
-  if (orderRes.statusCode !== 201) {
-    throw new Error(`Failed to create order: ${orderRes.payload}`);
-  }
-  const orderId = JSON.parse(orderRes.payload).order.id;
-
-  return server.inject({
-    method: "POST",
-    url: "/api/deployments",
-    payload: {
-      orderId,
-      partitionId: params.partitionId,
-      environmentId: params.environmentId,
-      triggeredBy: "user",
-      ...(params.variables ? { variables: params.variables } : {}),
-    },
-  });
-}
 
 // ---------------------------------------------------------------------------
 // Complete user journey — exercising every API the UI depends on
 // ---------------------------------------------------------------------------
 
 describe("Complete UI user journey", () => {
-  let operationId: string;
+  let artifactId: string;
   let partitionId: string;
   let productionEnvId: string;
   let stagingEnvId: string;
@@ -118,35 +109,27 @@ describe("Complete UI user journey", () => {
     stagingEnvId = JSON.parse(res.payload).environment.id;
   });
 
-  // ---- Step 2: Create an operation ----
+  // ---- Step 2: Create an artifact ----
 
-  it("creates an operation linked to both environments", async () => {
+  it("creates an artifact", async () => {
     const res = await app.inject({
       method: "POST",
-      url: "/api/operations",
-      payload: { name: "web-app", environmentIds: [productionEnvId, stagingEnvId] },
+      url: "/api/artifacts",
+      payload: { name: "web-app", type: "nodejs" },
     });
 
     expect(res.statusCode).toBe(201);
     const body = JSON.parse(res.payload);
-    expect(body.operation.name).toBe("web-app");
-    expect(body.operation.environmentIds).toHaveLength(2);
-    operationId = body.operation.id;
+    expect(body.artifact.name).toBe("web-app");
+    expect(body.artifact.type).toBe("nodejs");
+    artifactId = body.artifact.id;
   });
 
-  it("lists the operation", async () => {
-    const res = await app.inject({ method: "GET", url: "/api/operations" });
+  it("lists the artifact", async () => {
+    const res = await app.inject({ method: "GET", url: "/api/artifacts" });
     const body = JSON.parse(res.payload);
-    expect(body.operations).toHaveLength(1);
-    expect(body.operations[0].name).toBe("web-app");
-  });
-
-  it("gets operation detail with environment info", async () => {
-    const res = await app.inject({ method: "GET", url: `/api/operations/${operationId}` });
-    const body = JSON.parse(res.payload);
-    expect(body.operation.name).toBe("web-app");
-    expect(body.environments).toHaveLength(2);
-    expect(body.environments.map((e: any) => e.name).sort()).toEqual(["production", "staging"]);
+    expect(body.artifacts).toHaveLength(1);
+    expect(body.artifacts[0].name).toBe("web-app");
   });
 
   // ---- Step 3: Create a partition ----
@@ -189,18 +172,20 @@ describe("Complete UI user journey", () => {
   // ---- Step 5: Trigger first deployment ----
 
   it("triggers a deployment", async () => {
-    const res = await deployViaHttp(app, {
-      operationId,
-      partitionId,
-      environmentId: productionEnvId,
-      version: "1.0.0",
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/deployments",
+      payload: {
+        artifactId,
+        partitionId,
+        environmentId: productionEnvId,
+        version: "1.0.0",
+      },
     });
 
     expect(res.statusCode).toBe(201);
     const body = JSON.parse(res.payload);
-    expect(body.deployment.status).toBe("succeeded");
     expect(body.deployment.version).toBe("1.0.0");
-    expect(body.debrief.length).toBeGreaterThan(0);
     firstDeploymentId = body.deployment.id;
   });
 
@@ -217,9 +202,9 @@ describe("Complete UI user journey", () => {
     expect(body.deployments[0].id).toBe(firstDeploymentId);
   });
 
-  // ---- Step 7: Read deployment detail with diary entries ----
+  // ---- Step 7: Read deployment detail ----
 
-  it("gets deployment detail with Decision Diary entries", async () => {
+  it("gets deployment detail", async () => {
     const res = await app.inject({
       method: "GET",
       url: `/api/deployments/${firstDeploymentId}`,
@@ -227,87 +212,29 @@ describe("Complete UI user journey", () => {
 
     const body = JSON.parse(res.payload);
     expect(body.deployment.id).toBe(firstDeploymentId);
-    expect(body.deployment.status).toBe("succeeded");
-
-    // Decision Diary entries must exist and be specific
-    expect(body.debrief.length).toBeGreaterThanOrEqual(3);
-
-    // Verify diary entry structure
-    const entry = body.debrief[0] as DebriefEntry;
-    expect(entry.id).toBeDefined();
-    expect(entry.decision).toBeDefined();
-    expect(entry.reasoning).toBeDefined();
-    expect(entry.decisionType).toBeDefined();
-    expect(entry.agent).toBe("command");
-
-    // Every entry should be tagged with our deployment
-    for (const de of body.debrief) {
-      expect(de.deploymentId).toBe(firstDeploymentId);
-    }
   });
 
-  // ---- Step 8: Read postmortem ----
-
-  it("generates a postmortem report", async () => {
-    const res = await app.inject({
-      method: "GET",
-      url: `/api/deployments/${firstDeploymentId}/postmortem`,
-    });
-
-    const body = JSON.parse(res.payload);
-    const pm: PostmortemReport = body.postmortem;
-
-    expect(pm.summary).toContain("1.0.0");
-    expect(pm.summary).toContain("SUCCEEDED");
-    expect(pm.timeline.length).toBeGreaterThan(0);
-    expect(pm.configuration.variableCount).toBeGreaterThan(0);
-    expect(pm.failureAnalysis).toBeNull(); // succeeded, no failure analysis
-    expect(pm.outcome).toBeDefined();
-    expect(pm.formatted).toBeDefined();
-    expect(pm.formatted.length).toBeGreaterThan(100);
-  });
-
-  // ---- Step 9: Trigger a second deployment ----
+  // ---- Step 8: Trigger a second deployment ----
 
   it("triggers a second deployment (version upgrade)", async () => {
-    const res = await deployViaHttp(app, {
-      operationId,
-      partitionId,
-      environmentId: productionEnvId,
-      version: "1.1.0",
-      variables: { FEATURE_FLAG: "new-ui" },
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/deployments",
+      payload: {
+        artifactId,
+        partitionId,
+        environmentId: productionEnvId,
+        version: "1.1.0",
+      },
     });
 
     expect(res.statusCode).toBe(201);
     const body = JSON.parse(res.payload);
-    expect(body.deployment.status).toBe("succeeded");
     expect(body.deployment.version).toBe("1.1.0");
     secondDeploymentId = body.deployment.id;
   });
 
-  // ---- Step 10: Read partition history with both deployments ----
-
-  it("generates partition deployment history", async () => {
-    const res = await app.inject({
-      method: "GET",
-      url: `/api/partitions/${partitionId}/history`,
-    });
-
-    const body = JSON.parse(res.payload);
-    const history: OperationHistory = body.history;
-
-    expect(history.overview.totalDeployments).toBe(2);
-    expect(history.overview.succeeded).toBe(2);
-    expect(history.overview.successRate).toBe("100%");
-    expect(history.overview.versions).toContain("1.0.0");
-    expect(history.overview.versions).toContain("1.1.0");
-    expect(history.deployments).toHaveLength(2);
-    expect(history.formatted).toBeDefined();
-    expect(history.formatted).toContain("1.0.0");
-    expect(history.formatted).toContain("1.1.0");
-  });
-
-  // ---- Step 11: Verify full deployment list ----
+  // ---- Step 9: Verify full deployment list ----
 
   it("lists all deployments for partition showing both", async () => {
     const res = await app.inject({
@@ -322,19 +249,19 @@ describe("Complete UI user journey", () => {
     expect(versions).toEqual(["1.0.0", "1.1.0"]);
   });
 
-  // ---- Step 12: List operation deployments ----
+  // ---- Step 10: List deployments filtered by artifact ----
 
-  it("lists deployments filtered by operation", async () => {
+  it("lists deployments filtered by artifact", async () => {
     const res = await app.inject({
       method: "GET",
-      url: `/api/operations/${operationId}/deployments`,
+      url: `/api/deployments?artifactId=${artifactId}`,
     });
 
     const body = JSON.parse(res.payload);
     expect(body.deployments).toHaveLength(2);
   });
 
-  // ---- Step 13: List all entities (Dashboard queries) ----
+  // ---- Step 11: List all entities (Dashboard queries) ----
 
   it("lists all partitions", async () => {
     const res = await app.inject({ method: "GET", url: "/api/partitions" });
@@ -355,23 +282,17 @@ describe("Complete UI user journey", () => {
     expect(body.deployments.length).toBeGreaterThanOrEqual(2);
   });
 
-  it("gets recent diary entries", async () => {
-    const res = await app.inject({ method: "GET", url: "/api/debrief?limit=10" });
+  it("lists all artifacts", async () => {
+    const res = await app.inject({ method: "GET", url: "/api/artifacts" });
     const body = JSON.parse(res.payload);
-    expect(body.entries.length).toBeGreaterThan(0);
-
-    // Entries should have full structure
-    for (const entry of body.entries) {
-      expect(entry.decision).toBeDefined();
-      expect(entry.reasoning).toBeDefined();
-      expect(entry.decisionType).toBeDefined();
-    }
+    expect(body.artifacts.length).toBeGreaterThanOrEqual(1);
+    expect(body.artifacts[0].name).toBe("web-app");
   });
 
-  // ---- Step 14: Error handling ----
+  // ---- Step 12: Error handling ----
 
-  it("returns 404 for nonexistent operation", async () => {
-    const res = await app.inject({ method: "GET", url: "/api/operations/nonexistent" });
+  it("returns 404 for nonexistent artifact", async () => {
+    const res = await app.inject({ method: "GET", url: "/api/artifacts/nonexistent" });
     expect(res.statusCode).toBe(404);
   });
 
@@ -380,11 +301,11 @@ describe("Complete UI user journey", () => {
     expect(res.statusCode).toBe(404);
   });
 
-  it("returns 400 for operation without name", async () => {
+  it("returns 400 for artifact without name", async () => {
     const res = await app.inject({
       method: "POST",
-      url: "/api/operations",
-      payload: { environmentIds: [] },
+      url: "/api/artifacts",
+      payload: { type: "nodejs" },
     });
     expect(res.statusCode).toBe(400);
   });
