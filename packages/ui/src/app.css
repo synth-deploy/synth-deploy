@@ -25,6 +25,10 @@
   --status-pending-bg: rgba(107, 114, 128, 0.12);
   --status-rolled-back: #ea580c;
   --status-rolled-back-bg: rgba(234, 88, 12, 0.12);
+  --status-awaiting-approval: #8b5cf6;
+  --status-awaiting-approval-bg: rgba(139, 92, 246, 0.12);
+  --status-rejected: #dc2626;
+  --status-rejected-bg: rgba(220, 38, 38, 0.12);
 
   /* Environment badges */
   --env-production: #dc2626;
@@ -262,6 +266,16 @@ table a:hover {
 .badge-rolled_back {
   color: var(--status-rolled-back);
   background: var(--status-rolled-back-bg);
+}
+
+.badge-awaiting_approval {
+  color: var(--status-awaiting-approval);
+  background: var(--status-awaiting-approval-bg);
+}
+
+.badge-rejected {
+  color: var(--status-rejected);
+  background: var(--status-rejected-bg);
 }
 
 /* Environment badges */
