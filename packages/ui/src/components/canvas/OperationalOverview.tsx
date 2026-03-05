@@ -1024,8 +1024,8 @@ function NormalState({ stats: _stats }: { stats: SystemState["stats"] }) {
             className="v2-artifact-card"
             onClick={() =>
               pushPanel({
-                type: "deployment-authoring",
-                title: "Deploy",
+                type: "artifact-detail",
+                title: art.name,
                 params: { artifactId: art.id },
               })
             }

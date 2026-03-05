@@ -14,6 +14,7 @@ import EnvoyRegistryPanel from "./canvas/EnvoyRegistryPanel.js";
 import EnvoyDetailPanel from "./canvas/EnvoyDetailPanel.js";
 import SettingsPanel from "./canvas/SettingsPanel.js";
 import ArtifactCatalogPanel from "./canvas/ArtifactCatalogPanel.js";
+import ArtifactDetailPanel from "./canvas/ArtifactDetailPanel.js";
 import ErrorBoundary from "./ErrorBoundary.js";
 
 export default function AgentCanvas() {
@@ -131,6 +132,15 @@ export default function AgentCanvas() {
 
       case "artifact-catalog":
         return <ArtifactCatalogPanel key={panel.id} title={panel.title} />;
+
+      case "artifact-detail":
+        return (
+          <ArtifactDetailPanel
+            key={panel.id}
+            artifactId={params.artifactId}
+            title={panel.title}
+          />
+        );
 
       case "settings":
         return <SettingsPanel key={panel.id} title={panel.title} />;
