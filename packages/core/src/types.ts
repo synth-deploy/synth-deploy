@@ -18,7 +18,9 @@ export type RoleId = string & { readonly __brand: "RoleId" };
 export const DeploymentStatus = z.enum([
   "pending",
   "planning",
+  "awaiting_approval",
   "approved",
+  "rejected",
   "running",
   "succeeded",
   "failed",
@@ -68,6 +70,20 @@ export interface ExecutedStep {
   error?: string;
 }
 
+// --- Deployment Enrichment (cross-system context) ---
+
+export interface DeploymentEnrichment {
+  recentDeploymentsToEnv: number;
+  previouslyRolledBack: boolean;
+  conflictingDeployments: string[];
+  lastDeploymentToEnv?: {
+    id: string;
+    status: string;
+    version: string;
+    completedAt?: Date;
+  };
+}
+
 // --- Deployment (unified lifecycle) ---
 
 export interface Deployment {
@@ -85,6 +101,7 @@ export interface Deployment {
   executionRecord?: ExecutionRecord;
   approvedBy?: string;
   approvedAt?: Date;
+  enrichment?: DeploymentEnrichment;
   debriefEntryIds: DebriefEntryId[];
   createdAt: Date;
   completedAt?: Date;
@@ -115,6 +132,7 @@ export const DecisionType = z.enum([
   "plan-rejection",
   "rollback-execution",
   "cross-system-context",
+  "plan-modification",
 ]);
 export type DecisionType = z.infer<typeof DecisionType>;
 
@@ -381,6 +399,7 @@ export type TelemetryAction =
   | "deployment.created"
   | "deployment.approved"
   | "deployment.rejected"
+  | "deployment.modified"
   | "artifact.created"
   | "artifact.annotated"
   | "partition.created"

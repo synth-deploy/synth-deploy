@@ -15,6 +15,7 @@ export type {
   PlannedStep,
   ExecutionRecord,
   ExecutedStep,
+  DeploymentEnrichment,
   Deployment,
   AgentType,
   DecisionType,

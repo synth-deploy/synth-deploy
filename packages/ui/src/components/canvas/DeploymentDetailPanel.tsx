@@ -23,6 +23,7 @@ const decisionTypeColors: Record<string, string> = {
   "plan-rejection": "#dc2626",
   "rollback-execution": "#dc2626",
   "cross-system-context": "#14b8a6",
+  "plan-modification": "#8b5cf6",
 };
 
 // ---------------------------------------------------------------------------
@@ -354,6 +355,23 @@ export default function DeploymentDetailPanel({ deploymentId, title }: Props) {
           <span className={`badge badge-${deployment.status}`}>{deployment.status}</span>
           <span className="canvas-deploy-version">{deployment.version}</span>
         </div>
+
+        {/* Review Plan action for awaiting_approval */}
+        {deployment.status === "awaiting_approval" && (
+          <div style={{ marginBottom: 12 }}>
+            <button
+              className="v2-btn v2-btn-primary"
+              onClick={() => pushPanel({
+                type: "plan-review",
+                title: `Review Plan`,
+                params: { id: deployment.id },
+              })}
+              style={{ fontSize: 13 }}
+            >
+              Review Plan
+            </button>
+          </div>
+        )}
 
         <div className="canvas-deploy-meta">
           <span>Artifact: {artName}</span>

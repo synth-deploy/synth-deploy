@@ -238,6 +238,17 @@ export const RejectDeploymentSchema = z.object({
   reason: z.string().min(1),
 });
 
+export const ModifyDeploymentPlanSchema = z.object({
+  steps: z.array(z.object({
+    description: z.string().min(1),
+    action: z.string().min(1),
+    target: z.string().min(1),
+    reversible: z.boolean(),
+    rollbackAction: z.string().optional(),
+  })).min(1, "Plan must contain at least one step"),
+  reason: z.string().min(1),
+});
+
 export const DeploymentListQuerySchema = z.object({
   partitionId: z.string().optional(),
   artifactId: z.string().optional(),

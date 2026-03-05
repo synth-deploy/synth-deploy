@@ -6,6 +6,7 @@ import {
   CreateDeploymentSchema,
   ApproveDeploymentSchema,
   RejectDeploymentSchema,
+  ModifyDeploymentPlanSchema,
   DeploymentListQuerySchema,
   DebriefQuerySchema,
   ProgressEventSchema,
@@ -124,8 +125,8 @@ export function registerDeploymentRoutes(
         return reply.status(400).send({ error: parsed.error.message });
       }
 
-      if (deployment.status !== "pending") {
-        return reply.status(409).send({ error: `Cannot approve deployment in "${deployment.status}" status` });
+      if ((deployment.status as string) !== "awaiting_approval") {
+        return reply.status(409).send({ error: `Cannot approve deployment in "${deployment.status}" status — must be "awaiting_approval"` });
       }
 
       // Transition deployment status
@@ -170,8 +171,8 @@ export function registerDeploymentRoutes(
         return reply.status(400).send({ error: parsed.error.message });
       }
 
-      if (deployment.status !== "pending") {
-        return reply.status(409).send({ error: `Cannot reject deployment in "${deployment.status}" status` });
+      if ((deployment.status as string) !== "awaiting_approval") {
+        return reply.status(409).send({ error: `Cannot reject deployment in "${deployment.status}" status — must be "awaiting_approval"` });
       }
 
       // Transition deployment status
@@ -194,6 +195,127 @@ export function registerDeploymentRoutes(
       telemetry.record({ actor, action: "deployment.rejected", target: { type: "deployment", id: deployment.id }, details: { reason: parsed.data.reason } });
 
       return { deployment, rejected: true };
+    },
+  );
+
+  // Modify a deployment plan (user edits steps before approval)
+  app.post<{ Params: { id: string } }>(
+    "/api/deployments/:id/modify",
+    { preHandler: [requirePermission("deployment.approve")] },
+    async (request, reply) => {
+      const deployment = deployments.get(request.params.id);
+      if (!deployment) {
+        return reply.status(404).send({ error: "Deployment not found" });
+      }
+
+      const parsed = ModifyDeploymentPlanSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.status(400).send({ error: parsed.error.message });
+      }
+
+      if ((deployment.status as string) !== "awaiting_approval") {
+        return reply.status(409).send({ error: `Cannot modify deployment in "${deployment.status}" status — must be "awaiting_approval"` });
+      }
+
+      if (!deployment.plan) {
+        return reply.status(409).send({ error: "Deployment has no plan to modify" });
+      }
+
+      // Store the previous plan diff for audit trail
+      const previousStepSummary = deployment.plan.steps.map((s) => s.description).join("; ");
+
+      // Apply modifications
+      deployment.plan = {
+        ...deployment.plan,
+        steps: parsed.data.steps,
+        diffFromPreviousPlan: `Modified from: ${previousStepSummary}`,
+      };
+      deployments.save(deployment);
+
+      const actor = (request.user?.email) ?? "anonymous";
+
+      // Record modification in debrief
+      debrief.record({
+        partitionId: deployment.partitionId ?? null,
+        deploymentId: deployment.id,
+        agent: "command",
+        decisionType: "plan-modification" as Parameters<typeof debrief.record>[0]["decisionType"],
+        decision: `Deployment plan modified by ${actor}`,
+        reasoning: parsed.data.reason,
+        context: {
+          modifiedBy: actor,
+          stepCount: parsed.data.steps.length,
+          reason: parsed.data.reason,
+        },
+        actor: request.user?.email,
+      });
+      telemetry.record({
+        actor,
+        action: "deployment.modified" as Parameters<typeof telemetry.record>[0]["action"],
+        target: { type: "deployment", id: deployment.id },
+        details: { reason: parsed.data.reason, stepCount: parsed.data.steps.length },
+      });
+
+      return { deployment, modified: true };
+    },
+  );
+
+  // Get cross-system enrichment context for a deployment
+  app.get<{ Params: { id: string } }>(
+    "/api/deployments/:id/context",
+    { preHandler: [requirePermission("deployment.view")] },
+    async (request, reply) => {
+      const deployment = deployments.get(request.params.id);
+      if (!deployment) {
+        return reply.status(404).send({ error: "Deployment not found" });
+      }
+
+      const now = new Date();
+      const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+
+      // Count recent deployments to the same environment
+      const recentDeploymentsToEnv = deployments.countByEnvironment(
+        deployment.environmentId,
+        twentyFourHoursAgo,
+      );
+
+      // Check if the same artifact version was previously rolled back
+      const previouslyRolledBack = deployment.version
+        ? deployments.findByArtifactVersion(
+            deployment.artifactId,
+            deployment.version,
+            "rolled_back",
+          ).length > 0
+        : false;
+
+      // Check for other in-progress deployments to the same environment
+      const allEnvDeployments = deployments.list().filter(
+        (d) =>
+          d.environmentId === deployment.environmentId &&
+          d.id !== deployment.id &&
+          ((d.status as string) === "running" || (d.status as string) === "approved" || (d.status as string) === "awaiting_approval"),
+      );
+      const conflictingDeployments = allEnvDeployments.map((d) => d.id);
+
+      // Find last deployment to the same environment
+      const lastDeploy = deployments.findLatestByEnvironment(deployment.environmentId);
+      const lastDeploymentToEnv = lastDeploy && lastDeploy.id !== deployment.id
+        ? {
+            id: lastDeploy.id,
+            status: lastDeploy.status,
+            version: lastDeploy.version,
+            completedAt: lastDeploy.completedAt,
+          }
+        : undefined;
+
+      const enrichment = {
+        recentDeploymentsToEnv,
+        previouslyRolledBack,
+        conflictingDeployments,
+        lastDeploymentToEnv,
+      };
+
+      return { enrichment };
     },
   );
 

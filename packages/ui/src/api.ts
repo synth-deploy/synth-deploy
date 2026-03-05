@@ -2,6 +2,8 @@ import type {
   Partition,
   Environment,
   Deployment,
+  DeploymentEnrichment,
+  PlannedStep,
   DebriefEntry,
   PostmortemReport,
   Artifact,
@@ -278,6 +280,22 @@ export async function rejectDeployment(
     method: "POST",
     body: JSON.stringify(data),
   });
+}
+
+export async function modifyDeploymentPlan(
+  id: string,
+  data: { steps: PlannedStep[]; reason: string },
+): Promise<{ deployment: Deployment; modified: boolean }> {
+  return fetchJson(`/api/deployments/${id}/modify`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function getDeploymentEnrichment(
+  id: string,
+): Promise<{ enrichment: DeploymentEnrichment }> {
+  return fetchJson(`/api/deployments/${id}/context`);
 }
 
 // --- Debrief / Reports ---

@@ -15,6 +15,7 @@ import EnvoyDetailPanel from "./canvas/EnvoyDetailPanel.js";
 import SettingsPanel from "./canvas/SettingsPanel.js";
 import ArtifactCatalogPanel from "./canvas/ArtifactCatalogPanel.js";
 import ArtifactDetailPanel from "./canvas/ArtifactDetailPanel.js";
+import PlanReviewPanel from "./canvas/PlanReviewPanel.js";
 import ErrorBoundary from "./ErrorBoundary.js";
 
 export default function AgentCanvas() {
@@ -138,6 +139,15 @@ export default function AgentCanvas() {
           <ArtifactDetailPanel
             key={panel.id}
             artifactId={params.artifactId}
+            title={panel.title}
+          />
+        );
+
+      case "plan-review":
+        return (
+          <PlanReviewPanel
+            key={panel.id}
+            deploymentId={params.id}
             title={panel.title}
           />
         );

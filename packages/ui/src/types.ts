@@ -215,7 +215,7 @@ export interface SecurityBoundary {
 
 // --- Deployment ---
 
-export type DeploymentStatus = "pending" | "planning" | "approved" | "running" | "succeeded" | "failed" | "rolled_back";
+export type DeploymentStatus = "pending" | "planning" | "awaiting_approval" | "approved" | "rejected" | "running" | "succeeded" | "failed" | "rolled_back";
 
 export interface DeploymentPlan {
   steps: PlannedStep[];
@@ -247,6 +247,18 @@ export interface ExecutedStep {
   error?: string;
 }
 
+export interface DeploymentEnrichment {
+  recentDeploymentsToEnv: number;
+  previouslyRolledBack: boolean;
+  conflictingDeployments: string[];
+  lastDeploymentToEnv?: {
+    id: string;
+    status: string;
+    version: string;
+    completedAt?: string;
+  };
+}
+
 export interface Deployment {
   id: string;
   artifactId: string;
@@ -262,6 +274,7 @@ export interface Deployment {
   executionRecord?: ExecutionRecord;
   approvedBy?: string;
   approvedAt?: string;
+  enrichment?: DeploymentEnrichment;
   debriefEntryIds: string[];
   createdAt: string;
   completedAt: string | null;
@@ -288,7 +301,8 @@ export type DecisionType =
   | "plan-approval"
   | "plan-rejection"
   | "rollback-execution"
-  | "cross-system-context";
+  | "cross-system-context"
+  | "plan-modification";
 
 export type AgentType = "command" | "envoy";
 
