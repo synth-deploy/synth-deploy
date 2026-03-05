@@ -318,6 +318,27 @@ export async function getLlmHealth(): Promise<LlmHealthStatus> {
   return fetchJson("/api/health/llm");
 }
 
+export interface CapabilityVerificationResult {
+  task: string;
+  model: string;
+  status: "verified" | "marginal" | "insufficient";
+  explanation: string;
+}
+
+export async function verifyTaskModel(
+  task: string,
+  model: string,
+): Promise<CapabilityVerificationResult> {
+  const data = await fetchJson<{ result: CapabilityVerificationResult }>(
+    "/api/health/llm/verify-task",
+    {
+      method: "POST",
+      body: JSON.stringify({ task, model }),
+    },
+  );
+  return data.result;
+}
+
 // --- Agent Mode ---
 
 export interface ResolvedField {

@@ -225,6 +225,20 @@ const LlmProviderConfigSchema = z.object({
 
 export { LlmProviderConfigSchema };
 
+const TaskModelConfigSchema = z.object({
+  logClassification: z.string().optional(),
+  diagnosticSynthesis: z.string().optional(),
+  postmortemGeneration: z.string().optional(),
+  queryAnswering: z.string().optional(),
+});
+
+export { TaskModelConfigSchema };
+
+export const VerifyTaskModelSchema = z.object({
+  task: z.enum(["logClassification", "diagnosticSynthesis", "postmortemGeneration", "queryAnswering"]),
+  model: z.string().min(1),
+});
+
 export const UpdateSettingsSchema = z.object({
   environmentsEnabled: z.boolean().optional(),
   agent: z.object({
@@ -233,6 +247,7 @@ export const UpdateSettingsSchema = z.object({
     conflictPolicy: z.enum(["permissive", "strict"]).optional(),
     defaultVerificationStrategy: z.enum(["basic", "full", "none"]).optional(),
     llmOverride: LlmProviderConfigSchema.partial().optional(),
+    taskModels: TaskModelConfigSchema.optional(),
   }).optional(),
   deploymentDefaults: z.object({
     defaultDeployConfig: UpdateDeployConfigSchema.optional(),

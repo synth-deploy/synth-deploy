@@ -32,6 +32,9 @@ export type {
   LlmProviderConfig,
   LlmFallbackConfig,
   LlmHealthStatus,
+  TaskModelTask,
+  TaskModelConfig,
+  TaskModelMeta,
   AgentSettings,
   DeploymentDefaults,
   EnvoyEndpointConfig,
@@ -46,6 +49,7 @@ export {
   AgentType as AgentTypeEnum,
   DecisionType as DecisionTypeEnum,
   DEFAULT_APP_SETTINGS,
+  TASK_MODEL_META,
 } from "./types.js";
 export { DecisionDebrief } from "./debrief.js";
 export type { DebriefWriter, DebriefReader, DebriefRecordParams } from "./debrief.js";
@@ -90,8 +94,8 @@ export {
   parseLlmPostmortemResponse,
   POSTMORTEM_SYSTEM_PROMPT,
 } from "./debrief-reader.js";
-export { LlmClient, createOpenAICompatibleAdapter, resolveProviderToSdk, defaultBaseUrlForProvider, buildLlmConfigFromSettings } from "./llm-client.js";
-export type { LlmSdkProvider, LlmProvider as LlmSdkProviderLegacy, LlmConfig, LlmCallParams, LlmResult, LlmProviderAdapter } from "./llm-client.js";
+export { LlmClient, createOpenAICompatibleAdapter, resolveProviderToSdk, defaultBaseUrlForProvider, buildLlmConfigFromSettings, verifyModelCapability } from "./llm-client.js";
+export type { LlmSdkProvider, LlmProvider as LlmSdkProviderLegacy, LlmConfig, LlmCallParams, LlmResult, LlmProviderAdapter, CapabilityVerificationResult } from "./llm-client.js";
 export type {
   PostmortemReport,
   TimelineEntry,

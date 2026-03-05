@@ -1,5 +1,5 @@
 import type { DebriefWriter } from "./debrief.js";
-import type { AgentType, LlmProviderConfig, LlmHealthStatus } from "./types.js";
+import type { AgentType, LlmProviderConfig, LlmHealthStatus, TaskModelConfig, TaskModelTask } from "./types.js";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -24,6 +24,7 @@ export interface LlmConfig {
   classificationModel?: string;
   timeoutMs?: number;
   rateLimitPerMinute?: number;
+  taskModels?: TaskModelConfig;
 }
 
 export interface LlmCallParams {
@@ -179,6 +180,7 @@ export class LlmClient {
   private readonly _classificationModel: string;
   private readonly _timeoutMs: number;
   private readonly _rateLimitPerMinute: number;
+  private readonly _taskModels: TaskModelConfig;
   private _callTimestamps: number[] = [];
   private _lastHealthCheck: LlmHealthStatus | null = null;
 
@@ -211,6 +213,7 @@ export class LlmClient {
       (process.env.DEPLOYSTACK_LLM_RATE_LIMIT
         ? parseInt(process.env.DEPLOYSTACK_LLM_RATE_LIMIT, 10)
         : DEFAULT_RATE_LIMIT_PER_MINUTE);
+    this._taskModels = config.taskModels ?? {};
   }
 
   /**
@@ -308,19 +311,50 @@ export class LlmClient {
   }
 
   /**
-   * Reasoning task — uses the larger model (Sonnet).
+   * Reasoning task — uses the larger model (Sonnet) by default.
    * For synthesis: postmortems, answer generation, diagnostic reports.
+   * An optional `task` parameter routes to a per-task model override if configured.
    */
-  async reason(params: LlmCallParams): Promise<LlmResult> {
-    return this._call(params, this._reasoningModel);
+  async reason(params: LlmCallParams, task?: TaskModelTask): Promise<LlmResult> {
+    const model = this._resolveTaskModel(task) ?? this._reasoningModel;
+    return this._call(params, model);
   }
 
   /**
-   * Classification task — uses the smaller model (Haiku).
+   * Classification task — uses the smaller model (Haiku) by default.
    * For classification: intent parsing, error categorization.
+   * An optional `task` parameter routes to a per-task model override if configured.
    */
-  async classify(params: LlmCallParams): Promise<LlmResult> {
-    return this._call(params, this._classificationModel);
+  async classify(params: LlmCallParams, task?: TaskModelTask): Promise<LlmResult> {
+    const model = this._resolveTaskModel(task) ?? this._classificationModel;
+    return this._call(params, model);
+  }
+
+  /**
+   * Resolves a per-task model override from the TaskModelConfig.
+   * Returns undefined if no override is configured for the given task.
+   */
+  private _resolveTaskModel(task?: TaskModelTask): string | undefined {
+    if (!task) return undefined;
+    const override = this._taskModels[task];
+    return override && override.length > 0 ? override : undefined;
+  }
+
+  /**
+   * Returns the currently configured task model overrides.
+   */
+  getTaskModels(): TaskModelConfig {
+    return { ...this._taskModels };
+  }
+
+  /**
+   * Returns the model that would be used for a given task.
+   * Useful for display and verification purposes.
+   */
+  getModelForTask(task: TaskModelTask): string {
+    return this._resolveTaskModel(task) ?? (
+      task === "logClassification" ? this._classificationModel : this._reasoningModel
+    );
   }
 
   // -------------------------------------------------------------------------
@@ -593,5 +627,121 @@ export function createOpenAICompatibleAdapter(
         };
       },
     },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Capability Verification
+// ---------------------------------------------------------------------------
+
+export interface CapabilityVerificationResult {
+  task: string;
+  model: string;
+  status: "verified" | "marginal" | "insufficient";
+  explanation: string;
+}
+
+/**
+ * Probe prompts per task — lightweight tests that evaluate whether
+ * a model can handle the required output format and reasoning depth.
+ */
+const TASK_PROBE_PROMPTS: Record<TaskModelTask, { system: string; user: string; validator: (text: string) => CapabilityVerificationResult["status"] }> = {
+  logClassification: {
+    system: "You are a log classifier. Respond ONLY with valid JSON.",
+    user: 'Classify this log line into a category. Log: "ERROR 2025-01-15 Connection refused on port 5432". Respond with JSON: {"category": "<string>", "severity": "<string>"}',
+    validator: (text: string) => {
+      try {
+        const parsed = JSON.parse(text.trim());
+        if (parsed.category && parsed.severity) return "verified";
+        return "marginal";
+      } catch {
+        // Check if it contains JSON-like structure even with surrounding text
+        const jsonMatch = text.match(/\{[^}]*"category"[^}]*\}/);
+        if (jsonMatch) return "marginal";
+        return "insufficient";
+      }
+    },
+  },
+  diagnosticSynthesis: {
+    system: "You are a deployment diagnostics expert. Write concise, actionable reports.",
+    user: "Synthesize a one-paragraph diagnostic from these facts: (1) Deploy started at 14:00, (2) Health check failed at 14:02, (3) Port 8080 was already in use. Include root cause and recommendation.",
+    validator: (text: string) => {
+      const lower = text.toLowerCase();
+      const hasRootCause = lower.includes("port") || lower.includes("cause") || lower.includes("conflict");
+      const hasRecommendation = lower.includes("recommend") || lower.includes("should") || lower.includes("fix") || lower.includes("resolve");
+      if (hasRootCause && hasRecommendation && text.length > 50) return "verified";
+      if (hasRootCause || hasRecommendation) return "marginal";
+      return "insufficient";
+    },
+  },
+  postmortemGeneration: {
+    system: "You are a postmortem writer for deployment incidents. Identify causal chains.",
+    user: "Given: (1) v2.4.1 deployed to production, (2) Migration partially applied, (3) /api/v2/users returned 502, (4) Rolled back to v2.4.0. Write a 2-sentence root cause analysis identifying the causal chain.",
+    validator: (text: string) => {
+      const lower = text.toLowerCase();
+      const hasCausality = lower.includes("because") || lower.includes("caused") || lower.includes("led to") || lower.includes("resulted") || lower.includes("due to");
+      const hasMultipleEvents = (lower.includes("migration") || lower.includes("schema")) && (lower.includes("502") || lower.includes("error") || lower.includes("fail"));
+      if (hasCausality && hasMultipleEvents && text.length > 40) return "verified";
+      if (hasCausality || hasMultipleEvents) return "marginal";
+      return "insufficient";
+    },
+  },
+  queryAnswering: {
+    system: "You are a deployment data analyst. Answer questions based on provided data only.",
+    user: 'Data: {"deployments": 15, "succeeded": 12, "failed": 3, "success_rate": "80%"}. Question: What is the deployment success rate and how many failed? Answer in one sentence citing the numbers.',
+    validator: (text: string) => {
+      const has80 = text.includes("80%") || text.includes("80 percent");
+      const has3 = text.includes("3") || text.includes("three");
+      if (has80 && has3) return "verified";
+      if (has80 || has3) return "marginal";
+      return "insufficient";
+    },
+  },
+};
+
+/**
+ * Verifies whether a model is capable of handling a given task
+ * by sending a lightweight probe prompt and evaluating the response.
+ *
+ * This is advisory — it does not block configuration.
+ */
+export async function verifyModelCapability(
+  client: LlmClient,
+  task: TaskModelTask,
+  model: string,
+): Promise<CapabilityVerificationResult> {
+  const probe = TASK_PROBE_PROMPTS[task];
+
+  const result = await client["_call"](
+    {
+      prompt: probe.user,
+      systemPrompt: probe.system,
+      promptSummary: `Capability verification probe for ${task}`,
+      maxTokens: 256,
+    },
+    model,
+  );
+
+  if (!result.ok) {
+    return {
+      task,
+      model,
+      status: "insufficient",
+      explanation: `Model could not be reached: ${result.reason}`,
+    };
+  }
+
+  const status = probe.validator(result.text);
+  const explanations: Record<CapabilityVerificationResult["status"], string> = {
+    verified: `Model produced expected output format and reasoning quality for ${task}.`,
+    marginal: `Model produced partially correct output for ${task}. It may work but results could be inconsistent.`,
+    insufficient: `Model did not produce usable output for ${task}. Consider using a more capable model.`,
+  };
+
+  return {
+    task,
+    model,
+    status,
+    explanation: explanations[status],
   };
 }

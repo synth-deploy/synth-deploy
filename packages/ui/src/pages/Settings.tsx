@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
-import { getSettings, updateSettings, getCommandInfo, getLlmHealth } from "../api.js";
-import type { AppSettings, CommandInfo, ConflictPolicy, LlmProvider, LlmProviderConfig, LlmFallbackConfig } from "../types.js";
+import { getSettings, updateSettings, getCommandInfo, getLlmHealth, verifyTaskModel } from "../api.js";
+import type { AppSettings, CommandInfo, ConflictPolicy, LlmProvider, LlmProviderConfig, LlmFallbackConfig, TaskModelTask, TaskModelConfig, CapabilityVerificationResult } from "../types.js";
+import { TASK_MODEL_META } from "../types.js";
 import DeployConfigEditor from "../components/DeployConfigEditor.js";
 import { useSettings } from "../context/SettingsContext.js";
 
@@ -176,11 +177,95 @@ export default function Settings() {
     updateLlm({ fallbacks });
   }
 
+  // --- Task Model Configuration state ---
+  const [useOneModel, setUseOneModel] = useState(true);
+  const [taskModelSaved, setTaskModelSaved] = useState(false);
+  const [verificationResults, setVerificationResults] = useState<Record<string, CapabilityVerificationResult>>({});
+  const [verifyingTask, setVerifyingTask] = useState<string | null>(null);
+
+  // Initialize useOneModel toggle based on whether any task model overrides exist
+  useEffect(() => {
+    if (settings?.agent?.taskModels) {
+      const tm = settings.agent.taskModels;
+      const hasAny = Object.values(tm).some((v) => v && v.length > 0);
+      if (hasAny) setUseOneModel(false);
+    }
+  }, [settings?.agent?.taskModels]);
+
+  function getTaskModel(task: TaskModelTask): string {
+    return settings?.agent?.taskModels?.[task] ?? "";
+  }
+
+  function updateTaskModel(task: TaskModelTask, model: string) {
+    if (!settings) return;
+    const current = settings.agent.taskModels ?? {};
+    setSettings({
+      ...settings,
+      agent: {
+        ...settings.agent,
+        taskModels: { ...current, [task]: model || undefined },
+      },
+    });
+  }
+
+  async function handleSaveTaskModels() {
+    if (!settings) return;
+    const updated = await updateSettings({
+      agent: { ...settings.agent, taskModels: settings.agent.taskModels },
+    });
+    setSettings(updated);
+    setTaskModelSaved(true);
+    setTimeout(() => setTaskModelSaved(false), 2000);
+  }
+
+  function handleClearTaskModels() {
+    if (!settings) return;
+    setSettings({
+      ...settings,
+      agent: { ...settings.agent, taskModels: undefined },
+    });
+    setUseOneModel(true);
+    setVerificationResults({});
+  }
+
+  async function handleVerifyTask(task: TaskModelTask) {
+    const model = getTaskModel(task);
+    if (!model) return;
+    setVerifyingTask(task);
+    try {
+      const result = await verifyTaskModel(task, model);
+      setVerificationResults((prev) => ({ ...prev, [task]: result }));
+    } catch {
+      setVerificationResults((prev) => ({
+        ...prev,
+        [task]: {
+          task,
+          model,
+          status: "insufficient" as const,
+          explanation: "Verification request failed. Check LLM connection.",
+        },
+      }));
+    } finally {
+      setVerifyingTask(null);
+    }
+  }
+
+  async function handleVerifyAll() {
+    const tasks: TaskModelTask[] = ["logClassification", "diagnosticSynthesis", "postmortemGeneration", "queryAnswering"];
+    for (const task of tasks) {
+      const model = getTaskModel(task);
+      if (model) {
+        await handleVerifyTask(task);
+      }
+    }
+  }
+
   if (loading) return <div className="loading">Loading...</div>;
   if (!settings) return <div className="error-msg">Failed to load settings</div>;
 
   const llmConfig = settings.llm ?? defaultLlmConfig();
   const showBaseUrl = PROVIDERS_WITH_BASE_URL.includes(llmConfig.provider);
+  const TASK_KEYS: TaskModelTask[] = ["logClassification", "diagnosticSynthesis", "postmortemGeneration", "queryAnswering"];
 
   return (
     <div>
@@ -444,6 +529,183 @@ export default function Settings() {
               {llmSaved ? "Saved" : "Save LLM Settings"}
             </button>
           </div>
+        </div>
+      </div>
+
+      {/* Per-Task Model Configuration */}
+      <div className="section">
+        <div className="card">
+          <div className="card-header">
+            <h3>Per-Task Model Configuration</h3>
+          </div>
+
+          <div className="settings-description" style={{ marginBottom: 16 }}>
+            Route different tasks to different models. Lightweight tasks like log
+            classification can use smaller, faster models. Complex tasks like
+            postmortem generation benefit from more capable models.
+          </div>
+
+          <div className="form-group">
+            <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+              <input
+                type="checkbox"
+                checked={useOneModel}
+                onChange={() => {
+                  if (!useOneModel) {
+                    handleClearTaskModels();
+                  } else {
+                    setUseOneModel(false);
+                  }
+                }}
+              />
+              Use one model for all tasks
+            </label>
+            <div className="settings-description">
+              When enabled, all tasks use the reasoning and classification models
+              configured above. Disable to assign specific models per task.
+            </div>
+          </div>
+
+          {!useOneModel && (
+            <>
+              <div style={{ overflowX: "auto", marginTop: 12 }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.9em" }}>
+                  <thead>
+                    <tr style={{ borderBottom: "2px solid var(--border, #e2e8f0)" }}>
+                      <th style={{ textAlign: "left", padding: "8px 12px" }}>Task</th>
+                      <th style={{ textAlign: "left", padding: "8px 12px" }}>
+                        Tier
+                        <span
+                          title="Recommended model capability level for this task"
+                          style={{ cursor: "help", marginLeft: 4, opacity: 0.6 }}
+                        >
+                          (i)
+                        </span>
+                      </th>
+                      <th style={{ textAlign: "left", padding: "8px 12px" }}>
+                        Token Budget
+                        <span
+                          title="Approximate max tokens for typical responses"
+                          style={{ cursor: "help", marginLeft: 4, opacity: 0.6 }}
+                        >
+                          (i)
+                        </span>
+                      </th>
+                      <th style={{ textAlign: "left", padding: "8px 12px" }}>
+                        Reasoning Depth
+                        <span
+                          title="Type of reasoning the task requires"
+                          style={{ cursor: "help", marginLeft: 4, opacity: 0.6 }}
+                        >
+                          (i)
+                        </span>
+                      </th>
+                      <th style={{ textAlign: "left", padding: "8px 12px", minWidth: 200 }}>Model</th>
+                      <th style={{ textAlign: "center", padding: "8px 12px" }}>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {TASK_KEYS.map((task) => {
+                      const meta = TASK_MODEL_META[task];
+                      const result = verificationResults[task];
+                      return (
+                        <tr key={task} style={{ borderBottom: "1px solid var(--border, #e2e8f0)" }}>
+                          <td style={{ padding: "8px 12px", fontWeight: 500 }}>{meta.label}</td>
+                          <td style={{ padding: "8px 12px" }}>
+                            <span
+                              style={{
+                                display: "inline-block",
+                                padding: "2px 8px",
+                                borderRadius: 4,
+                                fontSize: "0.85em",
+                                background: meta.tier === "Lightweight" ? "var(--bg-success, #d4edda)" :
+                                           meta.tier === "Mid-range" ? "var(--bg-warning, #fff3cd)" :
+                                           "var(--bg-info, #d1ecf1)",
+                                color: "var(--text-primary, #333)",
+                              }}
+                            >
+                              {meta.tier}
+                            </span>
+                          </td>
+                          <td style={{ padding: "8px 12px", fontFamily: "monospace", fontSize: "0.85em" }}>{meta.tokenBudget}</td>
+                          <td style={{ padding: "8px 12px", fontSize: "0.85em", color: "var(--text-secondary)" }}>{meta.reasoningDepth}</td>
+                          <td style={{ padding: "8px 12px" }}>
+                            <input
+                              value={getTaskModel(task)}
+                              onChange={(e) => updateTaskModel(task, e.target.value)}
+                              placeholder={task === "logClassification"
+                                ? llmConfig.classificationModel
+                                : llmConfig.reasoningModel}
+                              style={{ width: "100%", fontSize: "0.9em" }}
+                            />
+                          </td>
+                          <td style={{ padding: "8px 12px", textAlign: "center" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 4, justifyContent: "center" }}>
+                              <button
+                                className="btn btn-secondary"
+                                onClick={() => handleVerifyTask(task)}
+                                disabled={!getTaskModel(task) || verifyingTask === task}
+                                style={{ fontSize: "0.8em", padding: "2px 8px" }}
+                              >
+                                {verifyingTask === task ? "..." : "Test"}
+                              </button>
+                              {result && (
+                                <span
+                                  title={result.explanation}
+                                  style={{
+                                    cursor: "help",
+                                    fontSize: "1em",
+                                  }}
+                                >
+                                  {result.status === "verified" ? "\u2705" :
+                                   result.status === "marginal" ? "\u26A0\uFE0F" : "\u274C"}
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Verification results detail */}
+              {Object.keys(verificationResults).length > 0 && (
+                <div style={{ marginTop: 12, padding: 12, background: "var(--bg-secondary, #f8f9fa)", borderRadius: 6, fontSize: "0.85em" }}>
+                  {TASK_KEYS.map((task) => {
+                    const result = verificationResults[task];
+                    if (!result) return null;
+                    return (
+                      <div key={task} style={{ marginBottom: 4 }}>
+                        <span style={{ fontWeight: 500 }}>{TASK_MODEL_META[task].label}:</span>{" "}
+                        <span
+                          className={`status-badge status-${result.status === "verified" ? "succeeded" : result.status === "marginal" ? "pending" : "failed"}`}
+                          style={{ fontSize: "0.9em" }}
+                        >
+                          {result.status}
+                        </span>{" "}
+                        <span style={{ color: "var(--text-secondary)" }}>{result.explanation}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+                <button className="btn btn-primary" onClick={handleSaveTaskModels}>
+                  {taskModelSaved ? "Saved" : "Save Task Models"}
+                </button>
+                <button
+                  className="btn btn-secondary"
+                  onClick={handleVerifyAll}
+                  disabled={verifyingTask !== null || !TASK_KEYS.some((t) => getTaskModel(t))}
+                >
+                  Test All
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
