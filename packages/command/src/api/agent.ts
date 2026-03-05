@@ -3,6 +3,7 @@ import type { IPartitionStore, IEnvironmentStore, IArtifactStore, ISettingsStore
 import type { LlmClient } from "@deploystack/core";
 import type { CommandAgent, DeploymentStore } from "../agent/command-agent.js";
 import type { EnvoyRegistry } from "../agent/envoy-registry.js";
+import { z } from "zod";
 import { QueryRequestSchema } from "./schemas.js";
 
 // ---------------------------------------------------------------------------
@@ -442,19 +443,20 @@ export function registerAgentRoutes(
   // Pre-flight context — deterministic data + LLM editorialization
   // -------------------------------------------------------------------------
 
-  app.post("/api/agent/pre-flight", async (request, reply) => {
-    const body = request.body as {
-      artifactId?: string;
-      environmentId?: string;
-      partitionId?: string;
-      version?: string;
-    };
+  const PreFlightRequestSchema = z.object({
+    artifactId: z.string().min(1),
+    environmentId: z.string().min(1),
+    partitionId: z.string().optional(),
+    version: z.string().optional(),
+  });
 
-    if (!body.artifactId || !body.environmentId) {
-      return reply.status(400).send({ error: "artifactId and environmentId are required" });
+  app.post("/api/agent/pre-flight", async (request, reply) => {
+    const parsed = PreFlightRequestSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: "Invalid input", details: parsed.error.format() });
     }
 
-    const { artifactId, environmentId, partitionId, version } = body;
+    const { artifactId, environmentId, partitionId, version } = parsed.data;
 
     // --- 1. Target health: check envoy health for the environment ---
     let targetHealth: PreFlightContext["targetHealth"] = {
@@ -585,18 +587,20 @@ export function registerAgentRoutes(
 Be directional: say what you recommend, not "here are some data points." Use first person. Be specific.`;
 
       try {
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 15000);
+        const timeout = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("Pre-flight LLM timeout (15s)")), 15000),
+        );
 
-        const llmResult = await llm.reason({
-          prompt: promptParts.join("\n"),
-          systemPrompt,
-          promptSummary: `Pre-flight recommendation for ${artifactName} → ${envName}`,
-          partitionId: partitionId ?? null,
-          maxTokens: 512,
-        });
-
-        clearTimeout(timer);
+        const llmResult = await Promise.race([
+          llm.reason({
+            prompt: promptParts.join("\n"),
+            systemPrompt,
+            promptSummary: `Pre-flight recommendation for ${artifactName} → ${envName}`,
+            partitionId: partitionId ?? null,
+            maxTokens: 512,
+          }),
+          timeout,
+        ]);
 
         if (llmResult.ok) {
           try {
