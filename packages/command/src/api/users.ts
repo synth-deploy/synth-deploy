@@ -11,11 +11,12 @@ import {
   UpdateRoleSchema,
 } from "./schemas.js";
 
-function toPublicUser(user: { id: UserId; email: string; name: string; createdAt: Date; updatedAt: Date }): UserPublic {
+function toPublicUser(user: { id: UserId; email: string; name: string; authSource?: string; externalId?: string; createdAt: Date; updatedAt: Date }): UserPublic {
   return {
     id: user.id,
     email: user.email,
     name: user.name,
+    authSource: (user.authSource as UserPublic["authSource"]) ?? "local",
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
   };

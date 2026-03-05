@@ -27,6 +27,8 @@ import type {
   Permission,
   UserRole,
   Session,
+  IdpProvider,
+  RoleMappingRule,
 } from "./types.js";
 import { DEFAULT_APP_SETTINGS } from "./types.js";
 
@@ -34,7 +36,7 @@ import { DEFAULT_APP_SETTINGS } from "./types.js";
 // Schema version — bump when table definitions change
 // ---------------------------------------------------------------------------
 
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 5;
 
 // ---------------------------------------------------------------------------
 // Safe JSON parse — returns fallback on corruption instead of crashing
@@ -173,9 +175,29 @@ export function openEntityDatabase(dbPath: string): Database.Database {
       email TEXT NOT NULL UNIQUE,
       name TEXT NOT NULL,
       password_hash TEXT NOT NULL,
+      auth_source TEXT DEFAULT 'local',
+      external_id TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS idp_providers (
+      id TEXT PRIMARY KEY,
+      type TEXT NOT NULL,
+      name TEXT NOT NULL,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      config TEXT NOT NULL DEFAULT '{}',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS role_mappings (
+      id TEXT PRIMARY KEY,
+      provider_id TEXT NOT NULL,
+      idp_group TEXT NOT NULL,
+      deploy_stack_role TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_role_mappings_provider ON role_mappings(provider_id);
 
     CREATE TABLE IF NOT EXISTS roles (
       id TEXT PRIMARY KEY,
@@ -203,11 +225,42 @@ export function openEntityDatabase(dbPath: string): Database.Database {
     );
   `);
 
-  // --- Schema version validation ---
+  // --- Schema version validation & migrations ---
   db.exec(`CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL)`);
   const versionRow = db.prepare(`SELECT version FROM schema_version LIMIT 1`).get() as
     | { version: number }
     | undefined;
+
+  // Migrate from v4 to v5: add IdP columns and tables
+  if (versionRow && versionRow.version < 5) {
+    try {
+      db.exec(`ALTER TABLE users ADD COLUMN auth_source TEXT DEFAULT 'local'`);
+    } catch { /* column may already exist */ }
+    try {
+      db.exec(`ALTER TABLE users ADD COLUMN external_id TEXT`);
+    } catch { /* column may already exist */ }
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS idp_providers (
+        id TEXT PRIMARY KEY,
+        type TEXT NOT NULL,
+        name TEXT NOT NULL,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        config TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS role_mappings (
+        id TEXT PRIMARY KEY,
+        provider_id TEXT NOT NULL,
+        idp_group TEXT NOT NULL,
+        deploy_stack_role TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_role_mappings_provider ON role_mappings(provider_id);
+    `);
+    db.prepare(`UPDATE schema_version SET version = ?`).run(5);
+    console.log("[DeployStack] Migrated database schema from v4 to v5 (IdP support)");
+  }
+
   if (!versionRow) {
     db.prepare(`INSERT INTO schema_version (version) VALUES (?)`).run(SCHEMA_VERSION);
   } else if (versionRow.version !== SCHEMA_VERSION) {
@@ -1045,6 +1098,7 @@ export class PersistentUserStore {
     insert: Database.Statement;
     getById: Database.Statement;
     getByEmail: Database.Statement;
+    getByExternalId: Database.Statement;
     list: Database.Statement;
     update: Database.Statement;
     deleteById: Database.Statement;
@@ -1054,14 +1108,15 @@ export class PersistentUserStore {
   constructor(private db: Database.Database) {
     this.stmts = {
       insert: db.prepare(
-        `INSERT INTO users (id, email, name, password_hash, created_at, updated_at)
-         VALUES (@id, @email, @name, @password_hash, @created_at, @updated_at)`,
+        `INSERT INTO users (id, email, name, password_hash, auth_source, external_id, created_at, updated_at)
+         VALUES (@id, @email, @name, @password_hash, @auth_source, @external_id, @created_at, @updated_at)`,
       ),
       getById: db.prepare(`SELECT * FROM users WHERE id = ?`),
       getByEmail: db.prepare(`SELECT * FROM users WHERE email = ?`),
+      getByExternalId: db.prepare(`SELECT * FROM users WHERE external_id = ? AND auth_source = ?`),
       list: db.prepare(`SELECT * FROM users ORDER BY created_at ASC`),
       update: db.prepare(
-        `UPDATE users SET email = @email, name = @name, password_hash = @password_hash, updated_at = @updated_at WHERE id = @id`,
+        `UPDATE users SET email = @email, name = @name, password_hash = @password_hash, auth_source = @auth_source, external_id = @external_id, updated_at = @updated_at WHERE id = @id`,
       ),
       deleteById: db.prepare(`DELETE FROM users WHERE id = ?`),
       count: db.prepare(`SELECT COUNT(*) as cnt FROM users`),
@@ -1074,6 +1129,8 @@ export class PersistentUserStore {
       email: user.email,
       name: user.name,
       password_hash: user.passwordHash,
+      auth_source: user.authSource ?? "local",
+      external_id: user.externalId ?? null,
       created_at: user.createdAt.toISOString(),
       updated_at: user.updatedAt.toISOString(),
     });
@@ -1090,26 +1147,35 @@ export class PersistentUserStore {
     return row ? rowToUser(row) : undefined;
   }
 
+  getByExternalId(externalId: string, provider: string): User | undefined {
+    const row = this.stmts.getByExternalId.get(externalId, provider) as UserRow | undefined;
+    return row ? rowToUser(row) : undefined;
+  }
+
   list(): User[] {
     const rows = this.stmts.list.all() as UserRow[];
     return rows.map(rowToUser);
   }
 
-  update(id: UserId, updates: Partial<Pick<User, "email" | "name" | "passwordHash" | "updatedAt">>): User {
+  update(id: UserId, updates: Partial<Pick<User, "email" | "name" | "passwordHash" | "authSource" | "externalId" | "updatedAt">>): User {
     const user = this.getById(id);
     if (!user) throw new Error(`User not found: ${id}`);
     const newEmail = updates.email ?? user.email;
     const newName = updates.name ?? user.name;
     const newHash = updates.passwordHash ?? user.passwordHash;
+    const newAuthSource = updates.authSource ?? user.authSource ?? "local";
+    const newExternalId = updates.externalId ?? user.externalId ?? null;
     const newUpdatedAt = updates.updatedAt ?? new Date();
     this.stmts.update.run({
       id,
       email: newEmail,
       name: newName,
       password_hash: newHash,
+      auth_source: newAuthSource,
+      external_id: newExternalId,
       updated_at: newUpdatedAt.toISOString(),
     });
-    return { ...user, email: newEmail, name: newName, passwordHash: newHash, updatedAt: newUpdatedAt };
+    return { ...user, email: newEmail, name: newName, passwordHash: newHash, authSource: newAuthSource as User["authSource"], externalId: newExternalId ?? undefined, updatedAt: newUpdatedAt };
   }
 
   delete(id: UserId): void {
@@ -1127,6 +1193,8 @@ interface UserRow {
   email: string;
   name: string;
   password_hash: string;
+  auth_source: string | null;
+  external_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -1137,6 +1205,8 @@ function rowToUser(row: UserRow): User {
     email: row.email,
     name: row.name,
     passwordHash: row.password_hash,
+    authSource: (row.auth_source as User["authSource"]) ?? "local",
+    externalId: row.external_id ?? undefined,
     createdAt: new Date(row.created_at),
     updatedAt: new Date(row.updated_at),
   };
@@ -1409,4 +1479,164 @@ function rowToSession(row: SessionRow): Session {
     expiresAt: new Date(row.expires_at),
     createdAt: new Date(row.created_at),
   };
+}
+
+// ---------------------------------------------------------------------------
+// PersistentIdpProviderStore
+// ---------------------------------------------------------------------------
+
+interface IdpProviderRow {
+  id: string;
+  type: string;
+  name: string;
+  enabled: number;
+  config: string;
+  created_at: string;
+  updated_at: string;
+}
+
+function rowToIdpProvider(row: IdpProviderRow): IdpProvider {
+  return {
+    id: row.id,
+    type: row.type as IdpProvider["type"],
+    name: row.name,
+    enabled: row.enabled === 1,
+    config: JSON.parse(row.config),
+    createdAt: new Date(row.created_at),
+    updatedAt: new Date(row.updated_at),
+  };
+}
+
+export class PersistentIdpProviderStore {
+  private stmts: {
+    insert: Database.Statement;
+    getById: Database.Statement;
+    list: Database.Statement;
+    update: Database.Statement;
+    deleteById: Database.Statement;
+  };
+
+  constructor(private db: Database.Database) {
+    this.stmts = {
+      insert: db.prepare(
+        `INSERT INTO idp_providers (id, type, name, enabled, config, created_at, updated_at)
+         VALUES (@id, @type, @name, @enabled, @config, @created_at, @updated_at)`,
+      ),
+      getById: db.prepare(`SELECT * FROM idp_providers WHERE id = ?`),
+      list: db.prepare(`SELECT * FROM idp_providers ORDER BY created_at ASC`),
+      update: db.prepare(
+        `UPDATE idp_providers SET name = @name, enabled = @enabled, config = @config, updated_at = @updated_at WHERE id = @id`,
+      ),
+      deleteById: db.prepare(`DELETE FROM idp_providers WHERE id = ?`),
+    };
+  }
+
+  create(provider: IdpProvider): IdpProvider {
+    this.stmts.insert.run({
+      id: provider.id,
+      type: provider.type,
+      name: provider.name,
+      enabled: provider.enabled ? 1 : 0,
+      config: JSON.stringify(provider.config),
+      created_at: provider.createdAt.toISOString(),
+      updated_at: provider.updatedAt.toISOString(),
+    });
+    return structuredClone(provider);
+  }
+
+  getById(id: string): IdpProvider | undefined {
+    const row = this.stmts.getById.get(id) as IdpProviderRow | undefined;
+    return row ? rowToIdpProvider(row) : undefined;
+  }
+
+  list(): IdpProvider[] {
+    const rows = this.stmts.list.all() as IdpProviderRow[];
+    return rows.map(rowToIdpProvider);
+  }
+
+  update(id: string, updates: Partial<Pick<IdpProvider, "name" | "enabled" | "config" | "updatedAt">>): IdpProvider {
+    const existing = this.getById(id);
+    if (!existing) throw new Error(`IdP provider not found: ${id}`);
+    const newName = updates.name ?? existing.name;
+    const newEnabled = updates.enabled ?? existing.enabled;
+    const newConfig = updates.config ?? existing.config;
+    const newUpdatedAt = updates.updatedAt ?? new Date();
+    this.stmts.update.run({
+      id,
+      name: newName,
+      enabled: newEnabled ? 1 : 0,
+      config: JSON.stringify(newConfig),
+      updated_at: newUpdatedAt.toISOString(),
+    });
+    return { ...existing, name: newName, enabled: newEnabled, config: newConfig, updatedAt: newUpdatedAt };
+  }
+
+  delete(id: string): void {
+    this.stmts.deleteById.run(id);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// PersistentRoleMappingStore
+// ---------------------------------------------------------------------------
+
+interface RoleMappingRow {
+  id: string;
+  provider_id: string;
+  idp_group: string;
+  deploy_stack_role: string;
+}
+
+function rowToRoleMapping(row: RoleMappingRow): RoleMappingRule {
+  return {
+    id: row.id,
+    providerId: row.provider_id,
+    idpGroup: row.idp_group,
+    deployStackRole: row.deploy_stack_role,
+  };
+}
+
+export class PersistentRoleMappingStore {
+  private stmts: {
+    insert: Database.Statement;
+    getById: Database.Statement;
+    listByProvider: Database.Statement;
+    deleteById: Database.Statement;
+  };
+
+  constructor(private db: Database.Database) {
+    this.stmts = {
+      insert: db.prepare(
+        `INSERT INTO role_mappings (id, provider_id, idp_group, deploy_stack_role)
+         VALUES (@id, @provider_id, @idp_group, @deploy_stack_role)`,
+      ),
+      getById: db.prepare(`SELECT * FROM role_mappings WHERE id = ?`),
+      listByProvider: db.prepare(`SELECT * FROM role_mappings WHERE provider_id = ?`),
+      deleteById: db.prepare(`DELETE FROM role_mappings WHERE id = ?`),
+    };
+  }
+
+  create(rule: RoleMappingRule): RoleMappingRule {
+    this.stmts.insert.run({
+      id: rule.id,
+      provider_id: rule.providerId,
+      idp_group: rule.idpGroup,
+      deploy_stack_role: rule.deployStackRole,
+    });
+    return structuredClone(rule);
+  }
+
+  getById(id: string): RoleMappingRule | undefined {
+    const row = this.stmts.getById.get(id) as RoleMappingRow | undefined;
+    return row ? rowToRoleMapping(row) : undefined;
+  }
+
+  listByProvider(providerId: string): RoleMappingRule[] {
+    const rows = this.stmts.listByProvider.all(providerId) as RoleMappingRow[];
+    return rows.map(rowToRoleMapping);
+  }
+
+  delete(id: string): void {
+    this.stmts.deleteById.run(id);
+  }
 }

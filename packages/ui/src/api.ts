@@ -529,3 +529,69 @@ export async function getEnvoyHealth(id: string): Promise<EnvoyRegistryEntry> {
   const data = await fetchJson<{ envoy: EnvoyRegistryEntry }>(`/api/envoys/${id}/health`);
   return data.envoy;
 }
+
+// --- Identity Providers ---
+
+import type { IdpProvider, RoleMappingRule, IdpProviderPublic } from "./types.js";
+
+export async function listIdpProviders(): Promise<IdpProvider[]> {
+  const data = await fetchJson<{ providers: IdpProvider[] }>("/api/idp/providers");
+  return data.providers;
+}
+
+export async function createIdpProvider(params: {
+  type: string;
+  name: string;
+  enabled?: boolean;
+  config: Record<string, unknown>;
+}): Promise<IdpProvider> {
+  const data = await fetchJson<{ provider: IdpProvider }>("/api/idp/providers", {
+    method: "POST",
+    body: JSON.stringify(params),
+  });
+  return data.provider;
+}
+
+export async function updateIdpProvider(
+  id: string,
+  updates: { name?: string; enabled?: boolean; config?: Record<string, unknown> },
+): Promise<IdpProvider> {
+  const data = await fetchJson<{ provider: IdpProvider }>(`/api/idp/providers/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(updates),
+  });
+  return data.provider;
+}
+
+export async function deleteIdpProvider(id: string): Promise<void> {
+  await fetchJson(`/api/idp/providers/${id}`, { method: "DELETE" });
+}
+
+export async function testIdpProvider(id: string): Promise<{ success: boolean; error?: string }> {
+  return fetchJson(`/api/idp/providers/${id}/test`, { method: "POST" });
+}
+
+export async function listRoleMappings(providerId: string): Promise<RoleMappingRule[]> {
+  const data = await fetchJson<{ mappings: RoleMappingRule[] }>(`/api/idp/providers/${providerId}/mappings`);
+  return data.mappings;
+}
+
+export async function createRoleMapping(
+  providerId: string,
+  params: { idpGroup: string; deployStackRole: string },
+): Promise<RoleMappingRule> {
+  const data = await fetchJson<{ mapping: RoleMappingRule }>(`/api/idp/providers/${providerId}/mappings`, {
+    method: "POST",
+    body: JSON.stringify(params),
+  });
+  return data.mapping;
+}
+
+export async function deleteRoleMapping(id: string): Promise<void> {
+  await fetchJson(`/api/idp/mappings/${id}`, { method: "DELETE" });
+}
+
+export async function listEnabledAuthProviders(): Promise<IdpProviderPublic[]> {
+  const data = await fetchJson<{ providers: IdpProviderPublic[] }>("/api/auth/providers");
+  return data.providers;
+}

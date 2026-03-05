@@ -55,6 +55,12 @@ export type {
   UserRole,
   Session,
   UserPublic,
+  AuthSource,
+  IdpProviderType,
+  IdpProvider,
+  IdpUser,
+  RoleMappingRule,
+  OidcConfig,
 } from "./types.js";
 
 export {
@@ -84,6 +90,8 @@ export type {
   IRoleStore,
   IUserRoleStore,
   ISessionStore,
+  IIdpProviderStore,
+  IRoleMappingStore,
 } from "./store-interfaces.js";
 export {
   openEntityDatabase,
@@ -98,6 +106,8 @@ export {
   PersistentRoleStore,
   PersistentUserRoleStore,
   PersistentSessionStore,
+  PersistentIdpProviderStore,
+  PersistentRoleMappingStore,
 } from "./persistent-stores.js";
 export { ArtifactStore } from "./artifact-store.js";
 export { SecurityBoundaryStore } from "./security-boundary-store.js";
@@ -106,6 +116,8 @@ export { UserStore } from "./user-store.js";
 export { RoleStore } from "./role-store.js";
 export { UserRoleStore } from "./user-role-store.js";
 export { SessionStore } from "./session-store.js";
+export { IdpProviderStore } from "./idp-provider-store.js";
+export { RoleMappingStore } from "./role-mapping-store.js";
 export { PartitionContainer } from "./partition-container.js";
 export type {
   PrecedenceEntry,

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { getSettings, updateSettings, getCommandInfo, verifyTaskModel } from "../../api.js";
-import type { AppSettings, CommandInfo, ConflictPolicy, McpServerConfig, TaskModelTask, CapabilityVerificationResult } from "../../types.js";
+import { getSettings, updateSettings, getCommandInfo, verifyTaskModel, listIdpProviders, createIdpProvider, updateIdpProvider, deleteIdpProvider, testIdpProvider, listRoleMappings, createRoleMapping, deleteRoleMapping } from "../../api.js";
+import type { AppSettings, CommandInfo, ConflictPolicy, McpServerConfig, TaskModelTask, CapabilityVerificationResult, IdpProvider, RoleMappingRule } from "../../types.js";
 import { TASK_MODEL_META } from "../../types.js";
 import { useSettings } from "../../context/SettingsContext.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
@@ -30,6 +30,22 @@ export default function SettingsPanel({ title }: Props) {
   const [verificationResults, setVerificationResults] = useState<Record<string, CapabilityVerificationResult>>({});
   const [verifyingTask, setVerifyingTask] = useState<string | null>(null);
 
+  // --- IdP state ---
+  const [idpProviders, setIdpProviders] = useState<IdpProvider[]>([]);
+  const [idpShowForm, setIdpShowForm] = useState(false);
+  const [idpNewName, setIdpNewName] = useState("");
+  const [idpNewIssuerUrl, setIdpNewIssuerUrl] = useState("");
+  const [idpNewClientId, setIdpNewClientId] = useState("");
+  const [idpNewClientSecret, setIdpNewClientSecret] = useState("");
+  const [idpNewScopes, setIdpNewScopes] = useState("openid profile email");
+  const [idpNewGroupsClaim, setIdpNewGroupsClaim] = useState("groups");
+  const [idpTesting, setIdpTesting] = useState<string | null>(null);
+  const [idpTestResults, setIdpTestResults] = useState<Record<string, { success: boolean; error?: string }>>({});
+  const [idpMappings, setIdpMappings] = useState<Record<string, RoleMappingRule[]>>({});
+  const [idpMappingNewGroup, setIdpMappingNewGroup] = useState("");
+  const [idpMappingNewRole, setIdpMappingNewRole] = useState("");
+  const [idpMappingProviderId, setIdpMappingProviderId] = useState<string | null>(null);
+
   useEffect(() => {
     Promise.all([getSettings(), getCommandInfo()])
       .then(([s, info]) => {
@@ -42,6 +58,8 @@ export default function SettingsPanel({ title }: Props) {
         setLoading(false);
       })
       .catch(() => setLoading(false));
+    // Load IdP providers
+    listIdpProviders().then(setIdpProviders).catch(() => {});
   }, []);
 
   async function handleSaveAgent() {
@@ -193,6 +211,88 @@ export default function SettingsPanel({ title }: Props) {
     } finally {
       setVerifyingTask(null);
     }
+  }
+
+  // --- IdP handlers ---
+
+  async function handleAddIdpProvider() {
+    if (!idpNewName || !idpNewIssuerUrl || !idpNewClientId || !idpNewClientSecret) return;
+    const provider = await createIdpProvider({
+      type: "oidc",
+      name: idpNewName,
+      enabled: true,
+      config: {
+        issuerUrl: idpNewIssuerUrl,
+        clientId: idpNewClientId,
+        clientSecret: idpNewClientSecret,
+        scopes: idpNewScopes.split(/\s+/).filter(Boolean),
+        groupsClaim: idpNewGroupsClaim || "groups",
+      },
+    });
+    setIdpProviders([...idpProviders, provider]);
+    setIdpNewName("");
+    setIdpNewIssuerUrl("");
+    setIdpNewClientId("");
+    setIdpNewClientSecret("");
+    setIdpNewScopes("openid profile email");
+    setIdpNewGroupsClaim("groups");
+    setIdpShowForm(false);
+  }
+
+  async function handleToggleIdpProvider(id: string, enabled: boolean) {
+    const updated = await updateIdpProvider(id, { enabled });
+    setIdpProviders(idpProviders.map((p) => (p.id === id ? updated : p)));
+  }
+
+  async function handleDeleteIdpProvider(id: string) {
+    await deleteIdpProvider(id);
+    setIdpProviders(idpProviders.filter((p) => p.id !== id));
+  }
+
+  async function handleTestIdpProvider(id: string) {
+    setIdpTesting(id);
+    try {
+      const result = await testIdpProvider(id);
+      setIdpTestResults((prev) => ({ ...prev, [id]: result }));
+    } catch {
+      setIdpTestResults((prev) => ({ ...prev, [id]: { success: false, error: "Test request failed" } }));
+    } finally {
+      setIdpTesting(null);
+    }
+  }
+
+  async function handleLoadMappings(providerId: string) {
+    if (idpMappingProviderId === providerId) {
+      setIdpMappingProviderId(null);
+      return;
+    }
+    const mappings = await listRoleMappings(providerId);
+    setIdpMappings((prev) => ({ ...prev, [providerId]: mappings }));
+    setIdpMappingProviderId(providerId);
+    setIdpMappingNewGroup("");
+    setIdpMappingNewRole("");
+  }
+
+  async function handleAddRoleMapping(providerId: string) {
+    if (!idpMappingNewGroup || !idpMappingNewRole) return;
+    const mapping = await createRoleMapping(providerId, {
+      idpGroup: idpMappingNewGroup,
+      deployStackRole: idpMappingNewRole,
+    });
+    setIdpMappings((prev) => ({
+      ...prev,
+      [providerId]: [...(prev[providerId] ?? []), mapping],
+    }));
+    setIdpMappingNewGroup("");
+    setIdpMappingNewRole("");
+  }
+
+  async function handleDeleteRoleMapping(providerId: string, mappingId: string) {
+    await deleteRoleMapping(mappingId);
+    setIdpMappings((prev) => ({
+      ...prev,
+      [providerId]: (prev[providerId] ?? []).filter((m) => m.id !== mappingId),
+    }));
   }
 
   if (loading) return <CanvasPanelHost title={title}><div className="loading">Loading...</div></CanvasPanelHost>;
@@ -672,6 +772,208 @@ export default function SettingsPanel({ title }: Props) {
             <button className="btn btn-primary" onClick={handleSaveMcpServers}>
               {mcpSaved ? "Saved" : "Save MCP Servers"}
             </button>
+          </div>
+        </div>
+
+        {/* Identity Providers */}
+        <div className="section">
+          <div className="card">
+            <div className="card-header">
+              <h3>Identity Providers</h3>
+            </div>
+            <div className="settings-description" style={{ marginBottom: 12 }}>
+              Configure SSO providers for your team. Users can sign in via configured identity providers
+              instead of local credentials.
+            </div>
+
+            {idpProviders.length > 0 && (
+              <div style={{ marginBottom: 16 }}>
+                {idpProviders.map((provider) => {
+                  const testResult = idpTestResults[provider.id];
+                  return (
+                    <div key={provider.id} style={{ padding: "12px 0", borderBottom: "1px solid var(--border-color, #e2e8f0)" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontWeight: 500 }}>{provider.name}</div>
+                          <div style={{ fontSize: "0.85em", opacity: 0.7 }}>
+                            {provider.type.toUpperCase()} — {(provider.config.issuerUrl as string) || "No issuer URL"}
+                          </div>
+                        </div>
+                        <span
+                          className={`status-badge status-${provider.enabled ? "succeeded" : "failed"}`}
+                          style={{ fontSize: "0.8em" }}
+                        >
+                          {provider.enabled ? "Enabled" : "Disabled"}
+                        </span>
+                        <label style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer", fontSize: "0.85em" }}>
+                          <input
+                            type="checkbox"
+                            checked={provider.enabled}
+                            onChange={(e) => handleToggleIdpProvider(provider.id, e.target.checked)}
+                          />
+                        </label>
+                        <button
+                          className="btn"
+                          onClick={() => handleTestIdpProvider(provider.id)}
+                          disabled={idpTesting === provider.id}
+                          style={{ padding: "4px 8px", fontSize: "0.85em" }}
+                        >
+                          {idpTesting === provider.id ? "..." : "Test"}
+                        </button>
+                        <button
+                          className="btn"
+                          onClick={() => handleLoadMappings(provider.id)}
+                          style={{ padding: "4px 8px", fontSize: "0.85em" }}
+                        >
+                          {idpMappingProviderId === provider.id ? "Hide Mappings" : "Mappings"}
+                        </button>
+                        <button
+                          className="btn"
+                          onClick={() => handleDeleteIdpProvider(provider.id)}
+                          style={{ padding: "4px 8px", fontSize: "0.85em" }}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                      {testResult && (
+                        <div style={{ marginTop: 4, fontSize: "0.85em", color: testResult.success ? "var(--color-success, #22c55e)" : "var(--color-error, #ef4444)" }}>
+                          {testResult.success ? "Connection successful" : `Connection failed: ${testResult.error}`}
+                        </div>
+                      )}
+
+                      {/* Role Mappings */}
+                      {idpMappingProviderId === provider.id && (
+                        <div style={{ marginTop: 12, paddingLeft: 16, borderLeft: "2px solid var(--border-color, #e2e8f0)" }}>
+                          <div style={{ fontWeight: 500, fontSize: "0.9em", marginBottom: 8 }}>Role Mappings</div>
+                          {(idpMappings[provider.id] ?? []).length > 0 && (
+                            <div style={{ marginBottom: 8 }}>
+                              {(idpMappings[provider.id] ?? []).map((mapping) => (
+                                <div
+                                  key={mapping.id}
+                                  style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0", fontSize: "0.85em" }}
+                                >
+                                  <span style={{ flex: 1 }}>
+                                    <strong>{mapping.idpGroup}</strong> &rarr; {mapping.deployStackRole}
+                                  </span>
+                                  <button
+                                    className="btn"
+                                    onClick={() => handleDeleteRoleMapping(provider.id, mapping.id)}
+                                    style={{ padding: "2px 6px", fontSize: "0.8em" }}
+                                  >
+                                    Remove
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                            <input
+                              value={idpMappingNewGroup}
+                              onChange={(e) => setIdpMappingNewGroup(e.target.value)}
+                              placeholder="IdP Group"
+                              style={{ maxWidth: 180, fontSize: "0.85em" }}
+                            />
+                            <input
+                              value={idpMappingNewRole}
+                              onChange={(e) => setIdpMappingNewRole(e.target.value)}
+                              placeholder="DeployStack Role"
+                              style={{ maxWidth: 180, fontSize: "0.85em" }}
+                            />
+                            <button
+                              className="btn"
+                              onClick={() => handleAddRoleMapping(provider.id)}
+                              disabled={!idpMappingNewGroup || !idpMappingNewRole}
+                              style={{ padding: "4px 8px", fontSize: "0.85em" }}
+                            >
+                              Add
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {idpShowForm ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label>Provider Name</label>
+                  <input
+                    value={idpNewName}
+                    onChange={(e) => setIdpNewName(e.target.value)}
+                    placeholder="e.g. Okta, Auth0, Azure AD"
+                    style={{ maxWidth: 300 }}
+                  />
+                </div>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label>Issuer URL</label>
+                  <input
+                    value={idpNewIssuerUrl}
+                    onChange={(e) => setIdpNewIssuerUrl(e.target.value)}
+                    placeholder="https://login.example.com"
+                    style={{ maxWidth: 400 }}
+                  />
+                </div>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label>Client ID</label>
+                  <input
+                    value={idpNewClientId}
+                    onChange={(e) => setIdpNewClientId(e.target.value)}
+                    placeholder="client-id"
+                    style={{ maxWidth: 400 }}
+                  />
+                </div>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label>Client Secret</label>
+                  <input
+                    type="password"
+                    value={idpNewClientSecret}
+                    onChange={(e) => setIdpNewClientSecret(e.target.value)}
+                    placeholder="client-secret"
+                    style={{ maxWidth: 400 }}
+                  />
+                </div>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label>Scopes</label>
+                  <input
+                    value={idpNewScopes}
+                    onChange={(e) => setIdpNewScopes(e.target.value)}
+                    placeholder="openid profile email"
+                    style={{ maxWidth: 400 }}
+                  />
+                </div>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label>Groups Claim</label>
+                  <input
+                    value={idpNewGroupsClaim}
+                    onChange={(e) => setIdpNewGroupsClaim(e.target.value)}
+                    placeholder="groups"
+                    style={{ maxWidth: 300 }}
+                  />
+                  <div className="settings-description">
+                    The JWT claim that contains the user's group memberships for role mapping.
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button
+                    className="btn btn-primary"
+                    onClick={handleAddIdpProvider}
+                    disabled={!idpNewName || !idpNewIssuerUrl || !idpNewClientId || !idpNewClientSecret}
+                  >
+                    Add Provider
+                  </button>
+                  <button className="btn" onClick={() => setIdpShowForm(false)}>
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button className="btn" onClick={() => setIdpShowForm(true)}>
+                Add Identity Provider
+              </button>
+            )}
           </div>
         </div>
       </div>

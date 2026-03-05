@@ -50,6 +50,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     async function checkAuth() {
       try {
+        // Check for OIDC callback tokens in URL
+        const params = new URLSearchParams(window.location.search);
+        const oidcToken = params.get("oidc_token");
+        const oidcRefresh = params.get("oidc_refresh");
+        if (oidcToken && oidcRefresh) {
+          // Clean the URL
+          window.history.replaceState({}, "", window.location.pathname);
+          setToken(oidcToken);
+          setRefreshTokenState(oidcRefresh);
+          setAuthToken(oidcToken);
+          sessionStorage.setItem("deploystack_refresh_token", oidcRefresh);
+
+          const me = await authMe();
+          setUser(me.user);
+          setPermissions(me.permissions);
+          setLoading(false);
+          return;
+        }
+
         // Check if system needs first-user setup
         const status = await authStatus();
         if (status.needsSetup) {

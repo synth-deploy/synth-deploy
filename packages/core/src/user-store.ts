@@ -30,11 +30,20 @@ export class UserStore implements IUserStore {
     return undefined;
   }
 
+  getByExternalId(externalId: string, provider: string): User | undefined {
+    for (const user of this.users.values()) {
+      if (user.externalId === externalId && user.authSource === provider) {
+        return structuredClone(user);
+      }
+    }
+    return undefined;
+  }
+
   list(): User[] {
     return [...this.users.values()].map((u) => structuredClone(u));
   }
 
-  update(id: UserId, updates: Partial<Pick<User, "email" | "name" | "passwordHash" | "updatedAt">>): User {
+  update(id: UserId, updates: Partial<Pick<User, "email" | "name" | "passwordHash" | "authSource" | "externalId" | "updatedAt">>): User {
     const user = this.users.get(id);
     if (!user) throw new Error(`User not found: ${id}`);
     if (updates.email !== undefined) {
@@ -46,6 +55,8 @@ export class UserStore implements IUserStore {
     }
     if (updates.name !== undefined) user.name = updates.name;
     if (updates.passwordHash !== undefined) user.passwordHash = updates.passwordHash;
+    if (updates.authSource !== undefined) user.authSource = updates.authSource;
+    if (updates.externalId !== undefined) user.externalId = updates.externalId;
     if (updates.updatedAt !== undefined) user.updatedAt = updates.updatedAt;
     return structuredClone(user);
   }

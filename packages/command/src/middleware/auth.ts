@@ -15,7 +15,8 @@ declare module "fastify" {
   }
 }
 
-const EXEMPT_ROUTES = ["/health", "/api/health", "/api/auth/login", "/api/auth/register", "/api/auth/refresh", "/api/auth/status"];
+const EXEMPT_ROUTES = ["/health", "/api/health", "/api/auth/login", "/api/auth/register", "/api/auth/refresh", "/api/auth/status", "/api/auth/providers"];
+const EXEMPT_PREFIXES = ["/api/auth/oidc/", "/api/auth/callback/oidc/"];
 
 /**
  * Registers JWT-based authentication middleware on a Fastify instance.
@@ -34,6 +35,8 @@ export function registerAuthMiddleware(
   app.addHook("onRequest", async (request: FastifyRequest, reply: FastifyReply) => {
     // Skip exempt routes
     if (EXEMPT_ROUTES.some((r) => request.url.startsWith(r))) return;
+    // Skip OIDC auth routes (dynamic paths)
+    if (EXEMPT_PREFIXES.some((p) => request.url.startsWith(p))) return;
     // Also skip static file serving (non-API routes)
     if (!request.url.startsWith("/api/") && request.url !== "/mcp") return;
 

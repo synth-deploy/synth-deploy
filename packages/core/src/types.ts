@@ -445,13 +445,46 @@ export type Permission =
   | "envoy.register" | "envoy.configure" | "envoy.view"
   | "settings.manage" | "users.manage" | "roles.manage";
 
+export type AuthSource = "local" | "oidc" | "saml" | "ldap";
+
 export interface User {
   id: UserId;
   email: string;
   name: string;
   passwordHash: string; // bcrypt — never sent to frontend
+  authSource?: AuthSource;
+  externalId?: string;
   createdAt: Date;
   updatedAt: Date;
+}
+
+// --- Identity Provider types ---
+
+export type IdpProviderType = "oidc" | "saml" | "ldap";
+
+export interface IdpProvider {
+  id: string;
+  type: IdpProviderType;
+  name: string;
+  enabled: boolean;
+  config: Record<string, unknown>; // type-specific config
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface IdpUser {
+  externalId: string;
+  email: string;
+  displayName: string;
+  groups: string[];
+  provider: string;
+}
+
+export interface RoleMappingRule {
+  id: string;
+  providerId: string;
+  idpGroup: string;
+  deployStackRole: string;
 }
 
 export interface Role {
@@ -478,4 +511,14 @@ export interface Session {
   createdAt: Date;
 }
 
-export type UserPublic = Omit<User, "passwordHash">;
+export type UserPublic = Omit<User, "passwordHash" | "externalId">;
+
+// --- OIDC-specific config ---
+
+export interface OidcConfig {
+  issuerUrl: string;
+  clientId: string;
+  clientSecret: string;
+  scopes: string[];
+  groupsClaim: string;
+}

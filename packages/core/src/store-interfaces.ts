@@ -26,6 +26,8 @@ import type {
   Permission,
   UserRole,
   Session,
+  IdpProvider,
+  RoleMappingRule,
 } from "./types.js";
 
 export interface IPartitionStore {
@@ -102,7 +104,8 @@ export interface IUserStore {
   getById(id: UserId): User | undefined;
   getByEmail(email: string): User | undefined;
   list(): User[];
-  update(id: UserId, updates: Partial<Pick<User, "email" | "name" | "passwordHash" | "updatedAt">>): User;
+  getByExternalId(externalId: string, provider: string): User | undefined;
+  update(id: UserId, updates: Partial<Pick<User, "email" | "name" | "passwordHash" | "authSource" | "externalId" | "updatedAt">>): User;
   delete(id: UserId): void;
   count(): number;
 }
@@ -131,4 +134,21 @@ export interface ISessionStore {
   deleteByToken(token: string): void;
   deleteByUserId(userId: UserId): void;
   deleteExpired(): void;
+}
+
+// --- IdP store interfaces ---
+
+export interface IIdpProviderStore {
+  create(provider: IdpProvider): IdpProvider;
+  getById(id: string): IdpProvider | undefined;
+  list(): IdpProvider[];
+  update(id: string, updates: Partial<Pick<IdpProvider, "name" | "enabled" | "config" | "updatedAt">>): IdpProvider;
+  delete(id: string): void;
+}
+
+export interface IRoleMappingStore {
+  create(rule: RoleMappingRule): RoleMappingRule;
+  getById(id: string): RoleMappingRule | undefined;
+  listByProvider(providerId: string): RoleMappingRule[];
+  delete(id: string): void;
 }

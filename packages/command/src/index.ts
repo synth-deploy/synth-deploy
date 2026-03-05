@@ -7,7 +7,7 @@ import fastifyCors from "@fastify/cors";
 import rateLimit from "@fastify/rate-limit";
 import fastifyStatic from "@fastify/static";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { PersistentDecisionDebrief, openEntityDatabase, PersistentPartitionStore, PersistentEnvironmentStore, PersistentSettingsStore, PersistentDeploymentStore, PersistentArtifactStore, PersistentSecurityBoundaryStore, PersistentTelemetryStore, PersistentUserStore, PersistentRoleStore, PersistentUserRoleStore, PersistentSessionStore, LlmClient } from "@deploystack/core";
+import { PersistentDecisionDebrief, openEntityDatabase, PersistentPartitionStore, PersistentEnvironmentStore, PersistentSettingsStore, PersistentDeploymentStore, PersistentArtifactStore, PersistentSecurityBoundaryStore, PersistentTelemetryStore, PersistentUserStore, PersistentRoleStore, PersistentUserRoleStore, PersistentSessionStore, PersistentIdpProviderStore, PersistentRoleMappingStore, LlmClient } from "@deploystack/core";
 import type { Deployment, Artifact, ArtifactVersion, SecurityBoundary, Permission, RoleId } from "@deploystack/core";
 import { CommandAgent } from "./agent/command-agent.js";
 import { EnvoyHealthChecker } from "./agent/health-checker.js";
@@ -29,6 +29,7 @@ import { registerSystemRoutes } from "./api/system.js";
 import { registerAuthMiddleware } from "./middleware/auth.js";
 import { registerAuthRoutes } from "./api/auth.js";
 import { registerUserRoutes } from "./api/users.js";
+import { registerIdpRoutes } from "./api/idp.js";
 import { startStaleDeploymentScanner } from "./agent/stale-deployment-detector.js";
 import { startRetentionScanner } from "./agent/debrief-retention.js";
 import { ProgressEventStore } from "./api/progress-event-store.js";
@@ -51,6 +52,8 @@ const userStore = new PersistentUserStore(entityDb);
 const roleStore = new PersistentRoleStore(entityDb);
 const userRoleStore = new PersistentUserRoleStore(entityDb, roleStore);
 const sessionStore = new PersistentSessionStore(entityDb);
+const idpProviderStore = new PersistentIdpProviderStore(entityDb);
+const roleMappingStore = new PersistentRoleMappingStore(entityDb);
 const envoyRegistry = new EnvoyRegistry();
 
 // --- JWT secret ---
@@ -553,6 +556,7 @@ registerEnvoyRoutes(app, settings, envoyRegistry, telemetryStore);
 registerSystemRoutes(app, deployments, artifactStore, environments, partitions, envoyRegistry);
 registerAuthRoutes(app, userStore, roleStore, userRoleStore, sessionStore, jwtSecret);
 registerUserRoutes(app, userStore, roleStore, userRoleStore);
+registerIdpRoutes(app, idpProviderStore, roleMappingStore, userStore, roleStore, userRoleStore, sessionStore, jwtSecret);
 
 // --- Serve UI static files if built ---
 

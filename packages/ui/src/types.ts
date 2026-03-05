@@ -347,3 +347,30 @@ export interface PostmortemReport {
   outcome: string;
   formatted: string;
 }
+
+// --- Identity Provider ---
+
+export type IdpProviderType = "oidc" | "saml" | "ldap";
+
+export interface IdpProvider {
+  id: string;
+  type: IdpProviderType;
+  name: string;
+  enabled: boolean;
+  config: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RoleMappingRule {
+  id: string;
+  providerId: string;
+  idpGroup: string;
+  deployStackRole: string;
+}
+
+export interface IdpProviderPublic {
+  id: string;
+  type: IdpProviderType;
+  name: string;
+}
