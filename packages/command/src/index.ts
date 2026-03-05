@@ -25,6 +25,7 @@ import { registerSettingsRoutes } from "./api/settings.js";
 import { registerTelemetryRoutes } from "./api/telemetry.js";
 import { registerEnvoyRoutes } from "./api/envoys.js";
 import { EnvoyRegistry } from "./agent/envoy-registry.js";
+import { EnvoyClient } from "./agent/envoy-client.js";
 import { registerSystemRoutes } from "./api/system.js";
 import { registerAuthMiddleware } from "./middleware/auth.js";
 import { registerAuthRoutes } from "./api/auth.js";
@@ -52,7 +53,8 @@ const userStore = new PersistentUserStore(entityDb);
 const roleStore = new PersistentRoleStore(entityDb);
 const userRoleStore = new PersistentUserRoleStore(entityDb, roleStore);
 const sessionStore = new PersistentSessionStore(entityDb);
-const idpProviderStore = new PersistentIdpProviderStore(entityDb);
+const idpEncryptionSecret = process.env.DEPLOYSTACK_JWT_SECRET ?? process.env.DEPLOYSTACK_ENCRYPTION_KEY ?? "deploystack-default-key";
+const idpProviderStore = new PersistentIdpProviderStore(entityDb, idpEncryptionSecret);
 const roleMappingStore = new PersistentRoleMappingStore(entityDb);
 const envoyRegistry = new EnvoyRegistry();
 
@@ -543,7 +545,8 @@ registerHealthRoutes(app, {
   llmClient: llm,
 });
 const progressStore = new ProgressEventStore();
-registerDeploymentRoutes(app, deployments, debrief, partitions, environments, artifactStore, settings, telemetryStore, progressStore);
+const defaultEnvoyClient = new EnvoyClient(settings.get().envoy.url, settings.get().envoy.timeoutMs);
+registerDeploymentRoutes(app, deployments, debrief, partitions, environments, artifactStore, settings, telemetryStore, progressStore, defaultEnvoyClient);
 registerEnvoyReportRoutes(app, debrief, deployments);
 registerArtifactRoutes(app, artifactStore, telemetryStore);
 registerSecurityBoundaryRoutes(app, securityBoundaryStore, telemetryStore);

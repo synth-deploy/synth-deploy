@@ -3,6 +3,7 @@ import { getSettings, updateSettings, getCommandInfo, verifyTaskModel, listIdpPr
 import type { AppSettings, CommandInfo, ConflictPolicy, McpServerConfig, TaskModelTask, CapabilityVerificationResult, IdpProvider, RoleMappingRule } from "../../types.js";
 import { TASK_MODEL_META } from "../../types.js";
 import { useSettings } from "../../context/SettingsContext.js";
+import { useAuth } from "../../context/AuthContext.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
 
 interface Props {
@@ -11,6 +12,8 @@ interface Props {
 
 export default function SettingsPanel({ title }: Props) {
   const { refresh: refreshGlobalSettings } = useSettings();
+  const { permissions } = useAuth();
+  const canManageSettings = permissions.includes("settings.manage");
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [commandInfo, setCommandInfo] = useState<CommandInfo | null>(null);
   const [loading, setLoading] = useState(true);
@@ -775,7 +778,8 @@ export default function SettingsPanel({ title }: Props) {
           </div>
         </div>
 
-        {/* Identity Providers */}
+        {/* Identity Providers (admin only) */}
+        {canManageSettings && (
         <div className="section">
           <div className="card">
             <div className="card-header">
@@ -976,6 +980,7 @@ export default function SettingsPanel({ title }: Props) {
             )}
           </div>
         </div>
+        )}
       </div>
     </CanvasPanelHost>
   );

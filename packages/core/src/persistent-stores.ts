@@ -1495,13 +1495,66 @@ interface IdpProviderRow {
   updated_at: string;
 }
 
-function rowToIdpProvider(row: IdpProviderRow): IdpProvider {
+// ---------------------------------------------------------------------------
+// Config encryption — AES-256-GCM for client secrets at rest
+// ---------------------------------------------------------------------------
+
+function deriveEncryptionKey(secret: string): Buffer {
+  return crypto.pbkdf2Sync(secret, "deploystack-idp-config", 100_000, 32, "sha256");
+}
+
+function encryptValue(plaintext: string, key: Buffer): string {
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
+  const encrypted = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  // Format: base64(iv):base64(tag):base64(encrypted)
+  return `${iv.toString("base64")}:${tag.toString("base64")}:${encrypted.toString("base64")}`;
+}
+
+function decryptValue(ciphertext: string, key: Buffer): string {
+  const parts = ciphertext.split(":");
+  if (parts.length !== 3) {
+    // Not encrypted (legacy plaintext value) — return as-is
+    return ciphertext;
+  }
+  const iv = Buffer.from(parts[0], "base64");
+  const tag = Buffer.from(parts[1], "base64");
+  const encrypted = Buffer.from(parts[2], "base64");
+  const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv);
+  decipher.setAuthTag(tag);
+  return decipher.update(encrypted) + decipher.final("utf8");
+}
+
+function encryptConfigSecrets(config: Record<string, unknown>, key: Buffer): Record<string, unknown> {
+  const result = { ...config };
+  if (typeof result.clientSecret === "string" && result.clientSecret.length > 0) {
+    result.clientSecret = encryptValue(result.clientSecret, key);
+    result.__secretEncrypted = true;
+  }
+  return result;
+}
+
+function decryptConfigSecrets(config: Record<string, unknown>, key: Buffer): Record<string, unknown> {
+  const result = { ...config };
+  if (result.__secretEncrypted && typeof result.clientSecret === "string") {
+    result.clientSecret = decryptValue(result.clientSecret, key);
+    delete result.__secretEncrypted;
+  }
+  return result;
+}
+
+function rowToIdpProvider(row: IdpProviderRow, encryptionKey?: Buffer): IdpProvider {
+  let config = JSON.parse(row.config);
+  if (encryptionKey) {
+    config = decryptConfigSecrets(config, encryptionKey);
+  }
   return {
     id: row.id,
     type: row.type as IdpProvider["type"],
     name: row.name,
     enabled: row.enabled === 1,
-    config: JSON.parse(row.config),
+    config,
     createdAt: new Date(row.created_at),
     updatedAt: new Date(row.updated_at),
   };
@@ -1515,8 +1568,12 @@ export class PersistentIdpProviderStore {
     update: Database.Statement;
     deleteById: Database.Statement;
   };
+  private encryptionKey: Buffer | undefined;
 
-  constructor(private db: Database.Database) {
+  constructor(private db: Database.Database, encryptionSecret?: string) {
+    if (encryptionSecret) {
+      this.encryptionKey = deriveEncryptionKey(encryptionSecret);
+    }
     this.stmts = {
       insert: db.prepare(
         `INSERT INTO idp_providers (id, type, name, enabled, config, created_at, updated_at)
@@ -1532,12 +1589,15 @@ export class PersistentIdpProviderStore {
   }
 
   create(provider: IdpProvider): IdpProvider {
+    const configForStorage = this.encryptionKey
+      ? encryptConfigSecrets(provider.config as Record<string, unknown>, this.encryptionKey)
+      : provider.config;
     this.stmts.insert.run({
       id: provider.id,
       type: provider.type,
       name: provider.name,
       enabled: provider.enabled ? 1 : 0,
-      config: JSON.stringify(provider.config),
+      config: JSON.stringify(configForStorage),
       created_at: provider.createdAt.toISOString(),
       updated_at: provider.updatedAt.toISOString(),
     });
@@ -1546,12 +1606,12 @@ export class PersistentIdpProviderStore {
 
   getById(id: string): IdpProvider | undefined {
     const row = this.stmts.getById.get(id) as IdpProviderRow | undefined;
-    return row ? rowToIdpProvider(row) : undefined;
+    return row ? rowToIdpProvider(row, this.encryptionKey) : undefined;
   }
 
   list(): IdpProvider[] {
     const rows = this.stmts.list.all() as IdpProviderRow[];
-    return rows.map(rowToIdpProvider);
+    return rows.map((r) => rowToIdpProvider(r, this.encryptionKey));
   }
 
   update(id: string, updates: Partial<Pick<IdpProvider, "name" | "enabled" | "config" | "updatedAt">>): IdpProvider {
@@ -1561,11 +1621,14 @@ export class PersistentIdpProviderStore {
     const newEnabled = updates.enabled ?? existing.enabled;
     const newConfig = updates.config ?? existing.config;
     const newUpdatedAt = updates.updatedAt ?? new Date();
+    const configForStorage = this.encryptionKey
+      ? encryptConfigSecrets(newConfig as Record<string, unknown>, this.encryptionKey)
+      : newConfig;
     this.stmts.update.run({
       id,
       name: newName,
       enabled: newEnabled ? 1 : 0,
-      config: JSON.stringify(newConfig),
+      config: JSON.stringify(configForStorage),
       updated_at: newUpdatedAt.toISOString(),
     });
     return { ...existing, name: newName, enabled: newEnabled, config: newConfig, updatedAt: newUpdatedAt };
