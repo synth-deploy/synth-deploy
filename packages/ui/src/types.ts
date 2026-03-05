@@ -274,11 +274,21 @@ export interface Deployment {
   executionRecord?: ExecutionRecord;
   approvedBy?: string;
   approvedAt?: string;
+  rejectionReason?: string;
   enrichment?: DeploymentEnrichment;
+  recommendation?: DeploymentRecommendation;
   debriefEntryIds: string[];
   createdAt: string;
   completedAt: string | null;
   failureReason: string | null;
+}
+
+export type RecommendationVerdict = "proceed" | "caution" | "hold";
+
+export interface DeploymentRecommendation {
+  verdict: RecommendationVerdict;
+  summary: string;
+  factors: string[];
 }
 
 // --- Debrief ---

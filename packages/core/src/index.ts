@@ -16,6 +16,8 @@ export type {
   ExecutionRecord,
   ExecutedStep,
   DeploymentEnrichment,
+  RecommendationVerdict,
+  DeploymentRecommendation,
   Deployment,
   AgentType,
   DecisionType,

@@ -270,6 +270,30 @@ export class EnvoyAgent {
   }
 
   /**
+   * Validate plan steps against security boundaries without executing.
+   * Used by Command to verify user-modified plans are feasible.
+   */
+  async validatePlanSteps(
+    steps: PlannedStep[],
+    boundaries: SecurityBoundary[] = [],
+  ): Promise<{
+    valid: boolean;
+    violations: Array<{ step: string; reason: string }>;
+  }> {
+    await this.executorReady;
+
+    const result = new BoundaryValidator().validatePlan(steps, boundaries);
+
+    return {
+      valid: result.allowed,
+      violations: result.violations.map((v) => ({
+        step: v.step.description,
+        reason: v.reason ?? "Violates security boundary",
+      })),
+    };
+  }
+
+  /**
    * Execute a deployment on this machine.
    *
    * Pipeline:

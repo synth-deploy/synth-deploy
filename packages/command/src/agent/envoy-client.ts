@@ -2,7 +2,7 @@ import type {
   ServiceHealthChecker,
   HealthCheckResult,
 } from "./health-checker.js";
-import type { DecisionType } from "@deploystack/core";
+import type { DecisionType, DeploymentPlan, PlannedStep, SecurityBoundary } from "@deploystack/core";
 
 // ---------------------------------------------------------------------------
 // Types — Envoy API responses
@@ -186,6 +186,48 @@ export class EnvoyClient {
     );
 
     return (await response.json()) as EnvoyDeployResult;
+  }
+
+  /**
+   * Dispatch an approved plan to the Envoy for deterministic execution.
+   */
+  async executeApprovedPlan(params: {
+    deploymentId: string;
+    plan: DeploymentPlan;
+    rollbackPlan: DeploymentPlan;
+    artifactType: string;
+    artifactName: string;
+    environmentId: string;
+    progressCallbackUrl?: string;
+  }): Promise<EnvoyDeployResult> {
+    const response = await fetchWithRetry(
+      `${this.baseUrl}/execute`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(params),
+      },
+      this.timeoutMs * 6, // execution may take longer
+    );
+
+    return (await response.json()) as EnvoyDeployResult;
+  }
+
+  /**
+   * Validate a modified plan against the Envoy's security boundaries.
+   */
+  async validatePlan(steps: PlannedStep[]): Promise<{ valid: boolean; violations: Array<{ step: string; reason: string }> }> {
+    const response = await fetchWithRetry(
+      `${this.baseUrl}/validate-plan`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ steps }),
+      },
+      this.timeoutMs,
+    );
+
+    return (await response.json()) as { valid: boolean; violations: Array<{ step: string; reason: string }> };
   }
 }
 

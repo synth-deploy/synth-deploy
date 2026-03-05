@@ -84,6 +84,16 @@ export interface DeploymentEnrichment {
   };
 }
 
+// --- Deployment Recommendation (combined command + envoy) ---
+
+export type RecommendationVerdict = "proceed" | "caution" | "hold";
+
+export interface DeploymentRecommendation {
+  verdict: RecommendationVerdict;
+  summary: string;
+  factors: string[];
+}
+
 // --- Deployment (unified lifecycle) ---
 
 export interface Deployment {
@@ -101,7 +111,9 @@ export interface Deployment {
   executionRecord?: ExecutionRecord;
   approvedBy?: string;
   approvedAt?: Date;
+  rejectionReason?: string;
   enrichment?: DeploymentEnrichment;
+  recommendation?: DeploymentRecommendation;
   debriefEntryIds: DebriefEntryId[];
   createdAt: Date;
   completedAt?: Date;

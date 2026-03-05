@@ -12,6 +12,7 @@ import {
 import type {
   Deployment,
   DeploymentEnrichment,
+  DeploymentRecommendation,
   PlannedStep,
   DebriefEntry,
   Environment,
@@ -34,6 +35,7 @@ export default function PlanReviewPanel({ deploymentId, title }: Props) {
   const [deployment, setDeployment] = useState<Deployment | null>(null);
   const [debrief, setDebrief] = useState<DebriefEntry[]>([]);
   const [enrichment, setEnrichment] = useState<DeploymentEnrichment | null>(null);
+  const [recommendation, setRecommendation] = useState<DeploymentRecommendation | null>(null);
   const [environments, setEnvironments] = useState<Environment[]>([]);
   const [artifacts, setArtifacts] = useState<Artifact[]>([]);
   const [partitions, setPartitions] = useState<Partition[]>([]);
@@ -58,6 +60,7 @@ export default function PlanReviewPanel({ deploymentId, title }: Props) {
       setDeployment(result.deployment);
       setDebrief(result.debrief);
       setEnrichment(ctx.enrichment);
+      setRecommendation(ctx.recommendation ?? result.deployment.recommendation ?? null);
       setEnvironments(e);
       setArtifacts(a);
       setPartitions(p);
@@ -280,6 +283,52 @@ export default function PlanReviewPanel({ deploymentId, title }: Props) {
             <h3 className="canvas-section-title">Reasoning</h3>
             <div style={{ fontSize: 13, color: "var(--agent-text-muted)", lineHeight: 1.5 }}>
               {plan.reasoning}
+            </div>
+          </div>
+        )}
+
+        {/* Combined recommendation */}
+        {recommendation && (
+          <div className="canvas-section">
+            <h3 className="canvas-section-title">Recommendation</h3>
+            <div style={{
+              padding: "10px 14px",
+              background: recommendation.verdict === "proceed"
+                ? "rgba(22, 163, 74, 0.12)"
+                : recommendation.verdict === "caution"
+                ? "rgba(245, 158, 11, 0.12)"
+                : "rgba(220, 38, 38, 0.12)",
+              border: `1px solid ${
+                recommendation.verdict === "proceed"
+                  ? "rgba(22, 163, 74, 0.3)"
+                  : recommendation.verdict === "caution"
+                  ? "rgba(245, 158, 11, 0.3)"
+                  : "rgba(220, 38, 38, 0.3)"
+              }`,
+              borderRadius: 6,
+            }}>
+              <div style={{
+                fontSize: 14,
+                fontWeight: 600,
+                color: recommendation.verdict === "proceed"
+                  ? "#16a34a"
+                  : recommendation.verdict === "caution"
+                  ? "#f59e0b"
+                  : "#dc2626",
+                marginBottom: 4,
+              }}>
+                {recommendation.verdict === "proceed" ? "Proceed" : recommendation.verdict === "caution" ? "Proceed with Caution" : "Hold"}
+              </div>
+              <div style={{ fontSize: 13, color: "var(--agent-text-muted)", marginBottom: 6 }}>
+                {recommendation.summary}
+              </div>
+              {recommendation.factors.length > 0 && (
+                <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, color: "var(--agent-text-muted)" }}>
+                  {recommendation.factors.map((f, i) => (
+                    <li key={i}>{f}</li>
+                  ))}
+                </ul>
+              )}
             </div>
           </div>
         )}

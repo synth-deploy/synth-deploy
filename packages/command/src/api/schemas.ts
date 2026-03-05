@@ -249,6 +249,31 @@ export const ModifyDeploymentPlanSchema = z.object({
   reason: z.string().min(1),
 });
 
+export const SubmitPlanSchema = z.object({
+  plan: z.object({
+    steps: z.array(z.object({
+      description: z.string().min(1),
+      action: z.string().min(1),
+      target: z.string().min(1),
+      reversible: z.boolean(),
+      rollbackAction: z.string().optional(),
+    })).min(1),
+    reasoning: z.string().min(1),
+    diffFromCurrent: z.string().optional(),
+    diffFromPreviousPlan: z.string().optional(),
+  }),
+  rollbackPlan: z.object({
+    steps: z.array(z.object({
+      description: z.string().min(1),
+      action: z.string().min(1),
+      target: z.string().min(1),
+      reversible: z.boolean(),
+      rollbackAction: z.string().optional(),
+    })),
+    reasoning: z.string().min(1),
+  }),
+});
+
 export const DeploymentListQuerySchema = z.object({
   partitionId: z.string().optional(),
   artifactId: z.string().optional(),

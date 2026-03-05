@@ -1,17 +1,19 @@
 import type { FastifyInstance } from "fastify";
 import { generatePostmortem } from "@deploystack/core";
-import type { IPartitionStore, IEnvironmentStore, IArtifactStore, ISettingsStore, IDeploymentStore, ITelemetryStore, DebriefWriter, DebriefReader } from "@deploystack/core";
+import type { IPartitionStore, IEnvironmentStore, IArtifactStore, ISettingsStore, IDeploymentStore, ITelemetryStore, DebriefWriter, DebriefReader, DeploymentEnrichment, RecommendationVerdict } from "@deploystack/core";
 import { requirePermission } from "../middleware/permissions.js";
 import {
   CreateDeploymentSchema,
   ApproveDeploymentSchema,
   RejectDeploymentSchema,
   ModifyDeploymentPlanSchema,
+  SubmitPlanSchema,
   DeploymentListQuerySchema,
   DebriefQuerySchema,
   ProgressEventSchema,
 } from "./schemas.js";
 import type { ProgressEventStore } from "./progress-event-store.js";
+import type { EnvoyClient } from "../agent/envoy-client.js";
 
 /**
  * REST API routes for deployments. These are the traditional (non-MCP) interface
@@ -27,6 +29,7 @@ export function registerDeploymentRoutes(
   settings: ISettingsStore,
   telemetry: ITelemetryStore,
   progressStore?: ProgressEventStore,
+  envoyClient?: EnvoyClient,
 ): void {
   // Create a deployment (plan phase)
   app.post("/api/deployments", { preHandler: [requirePermission("deployment.create")] }, async (request, reply) => {
@@ -110,6 +113,47 @@ export function registerDeploymentRoutes(
     return { deployments: list };
   });
 
+  // Submit a plan from envoy — transitions deployment to awaiting_approval
+  app.post<{ Params: { id: string } }>(
+    "/api/deployments/:id/plan",
+    async (request, reply) => {
+      const deployment = deployments.get(request.params.id);
+      if (!deployment) {
+        return reply.status(404).send({ error: "Deployment not found" });
+      }
+
+      const parsed = SubmitPlanSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.status(400).send({ error: "Invalid plan submission", details: parsed.error.format() });
+      }
+
+      if ((deployment.status as string) !== "pending" && (deployment.status as string) !== "planning") {
+        return reply.status(409).send({ error: `Cannot submit plan for deployment in "${deployment.status}" status` });
+      }
+
+      deployment.plan = parsed.data.plan;
+      deployment.rollbackPlan = parsed.data.rollbackPlan;
+      deployment.status = "awaiting_approval" as typeof deployment.status;
+
+      // Generate recommendation from enrichment context
+      deployment.recommendation = computeRecommendation(deployment, deployments);
+
+      deployments.save(deployment);
+
+      debrief.record({
+        partitionId: deployment.partitionId ?? null,
+        deploymentId: deployment.id,
+        agent: "envoy",
+        decisionType: "plan-generation" as Parameters<typeof debrief.record>[0]["decisionType"],
+        decision: `Deployment plan submitted with ${parsed.data.plan.steps.length} steps`,
+        reasoning: parsed.data.plan.reasoning,
+        context: { stepCount: parsed.data.plan.steps.length },
+      });
+
+      return reply.status(200).send({ deployment });
+    },
+  );
+
   // Approve a deployment plan
   app.post<{ Params: { id: string } }>(
     "/api/deployments/:id/approve",
@@ -152,6 +196,42 @@ export function registerDeploymentRoutes(
       });
       telemetry.record({ actor, action: "deployment.approved", target: { type: "deployment", id: deployment.id }, details: { modifications: parsed.data.modifications } });
 
+      // Dispatch approved plan to envoy for execution
+      if (envoyClient && deployment.plan && deployment.rollbackPlan) {
+        const artifact = artifactStore.get(deployment.artifactId);
+        const commandUrl = settings.get().envoy?.url ?? "http://localhost:3000";
+        const progressCallbackUrl = `${commandUrl.replace(/:\d+$/, `:${3000}`)}/api/deployments/${deployment.id}/progress`;
+
+        deployment.status = "running" as typeof deployment.status;
+        deployments.save(deployment);
+
+        // Fire-and-forget: execution runs async, progress comes via callback
+        envoyClient.executeApprovedPlan({
+          deploymentId: deployment.id,
+          plan: deployment.plan,
+          rollbackPlan: deployment.rollbackPlan,
+          artifactType: artifact?.type ?? "unknown",
+          artifactName: artifact?.name ?? "unknown",
+          environmentId: deployment.environmentId,
+          progressCallbackUrl,
+        }).catch((err) => {
+          // Execution dispatch failed — record failure
+          deployment.status = "failed" as typeof deployment.status;
+          deployment.failureReason = err instanceof Error ? err.message : "Execution dispatch failed";
+          deployments.save(deployment);
+
+          debrief.record({
+            partitionId: deployment.partitionId ?? null,
+            deploymentId: deployment.id,
+            agent: "command",
+            decisionType: "deployment-failure" as Parameters<typeof debrief.record>[0]["decisionType"],
+            decision: "Failed to dispatch approved plan to envoy",
+            reasoning: deployment.failureReason!,
+            context: { error: deployment.failureReason },
+          });
+        });
+      }
+
       return { deployment, approved: true };
     },
   );
@@ -175,8 +255,9 @@ export function registerDeploymentRoutes(
         return reply.status(409).send({ error: `Cannot reject deployment in "${deployment.status}" status — must be "awaiting_approval"` });
       }
 
-      // Transition deployment status
+      // Transition deployment status and store rejection reason
       deployment.status = "rejected" as typeof deployment.status;
+      deployment.rejectionReason = parsed.data.reason;
       deployments.save(deployment);
 
       const actor = (request.user?.email) ?? "anonymous";
@@ -221,14 +302,50 @@ export function registerDeploymentRoutes(
         return reply.status(409).send({ error: "Deployment has no plan to modify" });
       }
 
-      // Store the previous plan diff for audit trail
-      const previousStepSummary = deployment.plan.steps.map((s) => s.description).join("; ");
+      // Validate modified plan with envoy if available
+      if (envoyClient) {
+        try {
+          const validation = await envoyClient.validatePlan(parsed.data.steps);
+          if (!validation.valid) {
+            return reply.status(422).send({
+              error: "Modified plan failed envoy validation",
+              violations: validation.violations,
+            });
+          }
+        } catch {
+          // Envoy unreachable — proceed without validation but note it
+        }
+      }
+
+      // Build structured diff: what changed between old and new steps
+      const oldSteps = deployment.plan.steps;
+      const newSteps = parsed.data.steps;
+      const diffLines: string[] = [];
+      const maxLen = Math.max(oldSteps.length, newSteps.length);
+      for (let i = 0; i < maxLen; i++) {
+        const old = oldSteps[i];
+        const cur = newSteps[i];
+        if (!old) {
+          diffLines.push(`+ Step ${i + 1} (added): ${cur.action} ${cur.target} — ${cur.description}`);
+        } else if (!cur) {
+          diffLines.push(`- Step ${i + 1} (removed): ${old.action} ${old.target} — ${old.description}`);
+        } else if (old.action !== cur.action || old.target !== cur.target || old.description !== cur.description) {
+          diffLines.push(`~ Step ${i + 1} (changed): ${old.action} ${old.target} → ${cur.action} ${cur.target}`);
+          if (old.description !== cur.description) {
+            diffLines.push(`  was: ${old.description}`);
+            diffLines.push(`  now: ${cur.description}`);
+          }
+        }
+      }
+      const diffFromPreviousPlan = diffLines.length > 0
+        ? diffLines.join("\n")
+        : "Steps reordered or metadata changed (actions and targets unchanged)";
 
       // Apply modifications
       deployment.plan = {
         ...deployment.plan,
         steps: parsed.data.steps,
-        diffFromPreviousPlan: `Modified from: ${previousStepSummary}`,
+        diffFromPreviousPlan,
       };
       deployments.save(deployment);
 
@@ -308,14 +425,17 @@ export function registerDeploymentRoutes(
           }
         : undefined;
 
-      const enrichment = {
+      const enrichment: DeploymentEnrichment = {
         recentDeploymentsToEnv,
         previouslyRolledBack,
         conflictingDeployments,
         lastDeploymentToEnv,
       };
 
-      return { enrichment };
+      return {
+        enrichment,
+        recommendation: deployment.recommendation ?? computeRecommendation(deployment, deployments),
+      };
     },
   );
 
@@ -449,4 +569,74 @@ export function registerDeploymentRoutes(
       await reply;
     },
   );
+}
+
+// ---------------------------------------------------------------------------
+// Recommendation engine — synthesizes enrichment context into a verdict
+// ---------------------------------------------------------------------------
+
+function computeRecommendation(
+  deployment: import("@deploystack/core").Deployment,
+  store: IDeploymentStore,
+): import("@deploystack/core").DeploymentRecommendation {
+  const factors: string[] = [];
+  let verdict: RecommendationVerdict = "proceed";
+
+  const now = new Date();
+  const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+
+  // Check for previously rolled-back version
+  if (deployment.version) {
+    const rolledBack = store.findByArtifactVersion(
+      deployment.artifactId,
+      deployment.version,
+      "rolled_back",
+    );
+    if (rolledBack.length > 0) {
+      verdict = "caution";
+      factors.push("This artifact version was previously rolled back");
+    }
+  }
+
+  // Check for conflicting deployments
+  const conflicting = store.list().filter(
+    (d) =>
+      d.environmentId === deployment.environmentId &&
+      d.id !== deployment.id &&
+      ((d.status as string) === "running" || (d.status as string) === "approved"),
+  );
+  if (conflicting.length > 0) {
+    verdict = "hold";
+    factors.push(`${conflicting.length} other deployment(s) in progress for this environment`);
+  }
+
+  // Check deployment frequency
+  const recentCount = store.countByEnvironment(deployment.environmentId, twentyFourHoursAgo);
+  if (recentCount > 5) {
+    if (verdict === "proceed") verdict = "caution";
+    factors.push(`High deployment frequency: ${recentCount} deployments in the last 24h`);
+  }
+
+  // Check last deployment status
+  const lastDeploy = store.findLatestByEnvironment(deployment.environmentId);
+  if (lastDeploy && lastDeploy.id !== deployment.id) {
+    if ((lastDeploy.status as string) === "failed" || (lastDeploy.status as string) === "rolled_back") {
+      if (verdict === "proceed") verdict = "caution";
+      factors.push(`Last deployment to this environment ${lastDeploy.status}`);
+    } else if ((lastDeploy.status as string) === "succeeded") {
+      factors.push("Last deployment to this environment succeeded");
+    }
+  }
+
+  if (factors.length === 0) {
+    factors.push("No risk factors detected — target is stable");
+  }
+
+  const summaryMap: Record<RecommendationVerdict, string> = {
+    proceed: "Proceed — no conflicting deployments, target environment is stable",
+    caution: "Proceed with caution — review risk factors before greenlighting",
+    hold: "Hold — resolve conflicting deployments before proceeding",
+  };
+
+  return { verdict, summary: summaryMap[verdict], factors };
 }

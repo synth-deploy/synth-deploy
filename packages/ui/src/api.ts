@@ -3,6 +3,7 @@ import type {
   Environment,
   Deployment,
   DeploymentEnrichment,
+  DeploymentRecommendation,
   PlannedStep,
   DebriefEntry,
   PostmortemReport,
@@ -294,7 +295,7 @@ export async function modifyDeploymentPlan(
 
 export async function getDeploymentEnrichment(
   id: string,
-): Promise<{ enrichment: DeploymentEnrichment }> {
+): Promise<{ enrichment: DeploymentEnrichment; recommendation?: DeploymentRecommendation }> {
   return fetchJson(`/api/deployments/${id}/context`);
 }
 

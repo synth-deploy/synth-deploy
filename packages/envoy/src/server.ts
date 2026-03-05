@@ -201,6 +201,19 @@ export function createEnvoyServer(
     return reply.status(result.success ? 200 : 500).send(result);
   });
 
+  // -- Validate plan (boundary check only, no execution) ---------------------
+
+  app.post("/validate-plan", async (request, reply) => {
+    const body = request.body as { steps?: unknown; boundaries?: unknown };
+    if (!body?.steps || !Array.isArray(body.steps)) {
+      return reply.status(400).send({ error: "Request must include steps array" });
+    }
+
+    const boundaries = Array.isArray(body.boundaries) ? body.boundaries : [];
+    const result = await agent.validatePlanSteps(body.steps, boundaries);
+    return reply.status(200).send(result);
+  });
+
   // -- Status -----------------------------------------------------------------
 
   app.get("/status", async () => {
