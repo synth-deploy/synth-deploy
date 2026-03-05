@@ -534,3 +534,168 @@ export interface OidcConfig {
   scopes: string[];
   groupsClaim: string;
 }
+
+// --- Fleet Deployment (large-scale orchestration) ---
+
+export interface FleetDeployment {
+  id: string;
+  artifactId: string;
+  artifactVersionId: string;
+  environmentId: string;
+  envoyFilter?: string[];
+  rolloutConfig: RolloutConfig;
+  representativeEnvoyIds: string[];
+  representativePlanId?: string;
+  status: FleetDeploymentStatus;
+  validationResult?: FleetValidationResult;
+  progress: FleetProgress;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export type FleetDeploymentStatus =
+  | "selecting_representatives"
+  | "planning"
+  | "awaiting_approval"
+  | "validating"
+  | "executing"
+  | "paused"
+  | "completed"
+  | "failed"
+  | "rolled_back";
+
+export interface RolloutConfig {
+  strategy: "all-at-once" | "batched" | "canary";
+  batchSize?: number;
+  batchPercent?: number;
+  pauseBetweenBatches: boolean;
+  haltOnFailureCount: number;
+  healthCheckWaitMs: number;
+}
+
+export interface FleetValidationResult {
+  total: number;
+  validated: number;
+  failed: number;
+  results: EnvoyValidationResult[];
+}
+
+export interface EnvoyValidationResult {
+  envoyId: string;
+  envoyName: string;
+  validated: boolean;
+  issues?: string[];
+}
+
+export interface FleetProgress {
+  totalEnvoys: number;
+  validated: number;
+  executing: number;
+  succeeded: number;
+  failed: number;
+  pending: number;
+  currentBatch?: number;
+  totalBatches?: number;
+}
+
+// --- Artifact Intake ---
+
+export type IntakeChannelType = "webhook" | "registry" | "api" | "manual";
+
+export interface IntakeChannel {
+  id: string;
+  type: IntakeChannelType;
+  name: string;
+  enabled: boolean;
+  config: Record<string, unknown>;
+  authToken?: string;
+  lastPolledAt?: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface WebhookConfig {
+  source: "github-actions" | "azure-devops" | "jenkins" | "gitlab-ci" | "circleci" | "generic";
+  secretToken: string;
+}
+
+export interface RegistryConfig {
+  type: "docker" | "npm" | "nuget";
+  url: string;
+  credentials?: { username: string; password: string };
+  trackedImages?: string[];
+  trackedPackages?: string[];
+  pollIntervalMs: number;
+}
+
+export interface IntakeEvent {
+  id: string;
+  channelId: string;
+  artifactId?: string;
+  status: "received" | "processing" | "completed" | "failed";
+  payload: Record<string, unknown>;
+  error?: string;
+  createdAt: Date;
+  processedAt?: Date;
+}
+
+// --- Deployment Graphs ---
+
+export interface DeploymentGraph {
+  id: string;
+  name: string;
+  partitionId?: string;
+  nodes: DeploymentGraphNode[];
+  edges: DeploymentGraphEdge[];
+  status: DeploymentGraphStatus;
+  approvalMode: "per-node" | "graph";
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export type DeploymentGraphStatus =
+  | "draft"
+  | "planning"
+  | "awaiting_approval"
+  | "executing"
+  | "completed"
+  | "failed"
+  | "rolled_back";
+
+export interface DeploymentGraphNode {
+  id: string;
+  artifactId: string;
+  envoyId: string;
+  outputBindings?: OutputBinding[];
+  inputBindings?: InputBinding[];
+  deploymentId?: string;
+  status:
+    | "pending"
+    | "planning"
+    | "awaiting_approval"
+    | "executing"
+    | "completed"
+    | "failed";
+}
+
+export interface DeploymentGraphEdge {
+  from: string;
+  to: string;
+  type: "depends_on" | "data_flow";
+  dataBinding?: { outputName: string; inputVariable: string };
+}
+
+export interface OutputBinding {
+  name: string;
+  source: "plan_step_output" | "manual";
+  stepIndex?: number;
+  outputKey?: string;
+  value?: string;
+}
+
+export interface InputBinding {
+  variable: string;
+  sourceNodeId: string;
+  sourceOutputName: string;
+  resolvedValue?: string;
+}

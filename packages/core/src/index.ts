@@ -63,6 +63,23 @@ export type {
   IdpUser,
   RoleMappingRule,
   OidcConfig,
+  FleetDeployment,
+  FleetDeploymentStatus,
+  RolloutConfig,
+  FleetValidationResult,
+  EnvoyValidationResult,
+  FleetProgress,
+  IntakeChannelType,
+  IntakeChannel,
+  WebhookConfig,
+  RegistryConfig,
+  IntakeEvent,
+  DeploymentGraph,
+  DeploymentGraphStatus,
+  DeploymentGraphNode,
+  DeploymentGraphEdge,
+  OutputBinding,
+  InputBinding,
 } from "./types.js";
 
 export {

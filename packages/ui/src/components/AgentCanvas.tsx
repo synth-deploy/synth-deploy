@@ -16,6 +16,8 @@ import SettingsPanel from "./canvas/SettingsPanel.js";
 import ArtifactCatalogPanel from "./canvas/ArtifactCatalogPanel.js";
 import ArtifactDetailPanel from "./canvas/ArtifactDetailPanel.js";
 import PlanReviewPanel from "./canvas/PlanReviewPanel.js";
+import FleetDeploymentPanel from "./canvas/FleetDeploymentPanel.js";
+import DeploymentGraphPanel from "./canvas/DeploymentGraphPanel.js";
 import ErrorBoundary from "./ErrorBoundary.js";
 
 export default function AgentCanvas() {
@@ -148,6 +150,24 @@ export default function AgentCanvas() {
           <PlanReviewPanel
             key={panel.id}
             deploymentId={params.id}
+            title={panel.title}
+          />
+        );
+
+      case "fleet-deployment":
+        return (
+          <FleetDeploymentPanel
+            key={panel.id}
+            fleetDeploymentId={params.id}
+            title={panel.title}
+          />
+        );
+
+      case "deployment-graph":
+        return (
+          <DeploymentGraphPanel
+            key={panel.id}
+            graphId={params.id}
             title={panel.title}
           />
         );

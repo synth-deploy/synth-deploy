@@ -384,3 +384,30 @@ export interface IdpProviderPublic {
   type: IdpProviderType;
   name: string;
 }
+
+// --- Artifact Intake ---
+
+export type IntakeChannelType = "webhook" | "registry" | "api" | "manual";
+
+export interface IntakeChannel {
+  id: string;
+  type: IntakeChannelType;
+  name: string;
+  enabled: boolean;
+  config: Record<string, unknown>;
+  authToken?: string;
+  lastPolledAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface IntakeEvent {
+  id: string;
+  channelId: string;
+  artifactId?: string;
+  status: "received" | "processing" | "completed" | "failed";
+  payload: Record<string, unknown>;
+  error?: string;
+  createdAt: string;
+  processedAt?: string;
+}

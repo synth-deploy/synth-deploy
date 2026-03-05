@@ -533,7 +533,7 @@ export async function getEnvoyHealth(id: string): Promise<EnvoyRegistryEntry> {
 
 // --- Identity Providers ---
 
-import type { IdpProvider, RoleMappingRule, IdpProviderPublic } from "./types.js";
+import type { IdpProvider, RoleMappingRule, IdpProviderPublic, IntakeChannel, IntakeEvent } from "./types.js";
 
 export async function listIdpProviders(): Promise<IdpProvider[]> {
   const data = await fetchJson<{ providers: IdpProvider[] }>("/api/idp/providers");
@@ -618,4 +618,168 @@ export async function ldapLogin(
     method: "POST",
     body: JSON.stringify({ username, password }),
   });
+}
+
+// --- Fleet Deployments ---
+
+export interface FleetProgress {
+  totalEnvoys: number;
+  validated: number;
+  executing: number;
+  succeeded: number;
+  failed: number;
+  pending: number;
+  currentBatch?: number;
+  totalBatches?: number;
+}
+
+export interface EnvoyValidationResult {
+  envoyId: string;
+  envoyName: string;
+  validated: boolean;
+  issues?: string[];
+}
+
+export interface FleetValidationResult {
+  total: number;
+  validated: number;
+  failed: number;
+  results: EnvoyValidationResult[];
+}
+
+export interface RolloutConfig {
+  strategy: "all-at-once" | "batched" | "canary";
+  batchSize?: number;
+  batchPercent?: number;
+  pauseBetweenBatches: boolean;
+  haltOnFailureCount: number;
+  healthCheckWaitMs: number;
+}
+
+export type FleetDeploymentStatus =
+  | "selecting_representatives"
+  | "planning"
+  | "awaiting_approval"
+  | "validating"
+  | "executing"
+  | "validated"
+  | "paused"
+  | "completed"
+  | "failed"
+  | "rolled_back";
+
+export interface FleetDeployment {
+  id: string;
+  artifactId: string;
+  artifactVersionId: string;
+  environmentId: string;
+  envoyFilter?: string[];
+  rolloutConfig: RolloutConfig;
+  representativeEnvoyIds: string[];
+  representativePlanId?: string;
+  status: FleetDeploymentStatus;
+  validationResult?: FleetValidationResult;
+  progress: FleetProgress;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export async function listFleetDeployments(): Promise<FleetDeployment[]> {
+  const data = await fetchJson<{ fleetDeployments: FleetDeployment[] }>("/api/fleet-deployments");
+  return data.fleetDeployments;
+}
+
+export async function getFleetDeployment(id: string): Promise<FleetDeployment> {
+  const data = await fetchJson<{ fleetDeployment: FleetDeployment }>(`/api/fleet-deployments/${id}`);
+  return data.fleetDeployment;
+}
+
+export async function createFleetDeployment(params: {
+  artifactId: string;
+  environmentId: string;
+  artifactVersionId?: string;
+  envoyFilter?: string[];
+  rolloutConfig?: Partial<RolloutConfig>;
+}): Promise<FleetDeployment> {
+  const data = await fetchJson<{ fleetDeployment: FleetDeployment }>("/api/fleet-deployments", {
+    method: "POST",
+    body: JSON.stringify(params),
+  });
+  return data.fleetDeployment;
+}
+
+export async function approveFleetDeployment(id: string): Promise<FleetDeployment> {
+  const data = await fetchJson<{ fleetDeployment: FleetDeployment }>(`/api/fleet-deployments/${id}/approve`, {
+    method: "POST",
+  });
+  return data.fleetDeployment;
+}
+
+export async function executeFleetDeployment(id: string): Promise<FleetDeployment> {
+  const data = await fetchJson<{ fleetDeployment: FleetDeployment }>(`/api/fleet-deployments/${id}/execute`, {
+    method: "POST",
+  });
+  return data.fleetDeployment;
+}
+
+export async function pauseFleetDeployment(id: string): Promise<FleetDeployment> {
+  const data = await fetchJson<{ fleetDeployment: FleetDeployment }>(`/api/fleet-deployments/${id}/pause`, {
+    method: "POST",
+  });
+  return data.fleetDeployment;
+}
+
+export async function resumeFleetDeployment(id: string): Promise<FleetDeployment> {
+  const data = await fetchJson<{ fleetDeployment: FleetDeployment }>(`/api/fleet-deployments/${id}/resume`, {
+    method: "POST",
+  });
+  return data.fleetDeployment;
+}
+
+// --- Artifact Intake ---
+
+export async function listIntakeChannels(): Promise<IntakeChannel[]> {
+  const data = await fetchJson<{ channels: IntakeChannel[] }>("/api/intake/channels");
+  return data.channels;
+}
+
+export async function createIntakeChannel(params: {
+  type: string;
+  name: string;
+  enabled?: boolean;
+  config: Record<string, unknown>;
+}): Promise<IntakeChannel> {
+  const data = await fetchJson<{ channel: IntakeChannel }>("/api/intake/channels", {
+    method: "POST",
+    body: JSON.stringify(params),
+  });
+  return data.channel;
+}
+
+export async function updateIntakeChannel(
+  id: string,
+  updates: { name?: string; enabled?: boolean; config?: Record<string, unknown> },
+): Promise<IntakeChannel> {
+  const data = await fetchJson<{ channel: IntakeChannel }>(`/api/intake/channels/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(updates),
+  });
+  return data.channel;
+}
+
+export async function deleteIntakeChannel(id: string): Promise<void> {
+  await fetchJson(`/api/intake/channels/${id}`, { method: "DELETE" });
+}
+
+export async function testIntakeChannel(id: string): Promise<{ success: boolean; error?: string; status?: number }> {
+  return fetchJson(`/api/intake/channels/${id}/test`, { method: "POST" });
+}
+
+export async function listIntakeEvents(params?: { channelId?: string; limit?: number }): Promise<IntakeEvent[]> {
+  const qs = new URLSearchParams();
+  if (params?.channelId) qs.set("channelId", params.channelId);
+  if (params?.limit) qs.set("limit", String(params.limit));
+  const query = qs.toString();
+  const data = await fetchJson<{ events: IntakeEvent[] }>(`/api/intake/events${query ? `?${query}` : ""}`);
+  return data.events;
 }

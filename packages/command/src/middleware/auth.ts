@@ -16,7 +16,7 @@ declare module "fastify" {
 }
 
 const EXEMPT_ROUTES = ["/health", "/api/health", "/api/auth/login", "/api/auth/register", "/api/auth/refresh", "/api/auth/status", "/api/auth/providers"];
-const EXEMPT_PREFIXES = ["/api/auth/oidc/", "/api/auth/callback/oidc/", "/api/auth/saml/", "/api/auth/callback/saml/", "/api/auth/ldap/"];
+const EXEMPT_PREFIXES = ["/api/auth/oidc/", "/api/auth/callback/oidc/", "/api/auth/saml/", "/api/auth/callback/saml/", "/api/auth/ldap/", "/api/intake/webhook/"];
 
 /**
  * Registers JWT-based authentication middleware on a Fastify instance.

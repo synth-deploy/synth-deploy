@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { getSettings, updateSettings, getCommandInfo, verifyTaskModel, listIdpProviders, createIdpProvider, updateIdpProvider, deleteIdpProvider, testIdpProvider, listRoleMappings, createRoleMapping, deleteRoleMapping, testLdapUser } from "../../api.js";
-import type { AppSettings, CommandInfo, ConflictPolicy, McpServerConfig, TaskModelTask, CapabilityVerificationResult, IdpProvider, RoleMappingRule } from "../../types.js";
+import { getSettings, updateSettings, getCommandInfo, verifyTaskModel, listIdpProviders, createIdpProvider, updateIdpProvider, deleteIdpProvider, testIdpProvider, listRoleMappings, createRoleMapping, deleteRoleMapping, testLdapUser, listIntakeChannels, createIntakeChannel, updateIntakeChannel, deleteIntakeChannel, testIntakeChannel } from "../../api.js";
+import type { AppSettings, CommandInfo, ConflictPolicy, McpServerConfig, TaskModelTask, CapabilityVerificationResult, IdpProvider, RoleMappingRule, IntakeChannel } from "../../types.js";
 import { TASK_MODEL_META } from "../../types.js";
 import { useSettings } from "../../context/SettingsContext.js";
 import { useAuth } from "../../context/AuthContext.js";
@@ -71,6 +71,24 @@ export default function SettingsPanel({ title }: Props) {
   const [idpMappingNewRole, setIdpMappingNewRole] = useState("");
   const [idpMappingProviderId, setIdpMappingProviderId] = useState<string | null>(null);
 
+  // --- Intake state ---
+  const [intakeChannels, setIntakeChannels] = useState<IntakeChannel[]>([]);
+  const [intakeShowForm, setIntakeShowForm] = useState(false);
+  const [intakeNewType, setIntakeNewType] = useState<"webhook" | "registry">("webhook");
+  const [intakeNewName, setIntakeNewName] = useState("");
+  // Webhook fields
+  const [intakeNewWebhookSource, setIntakeNewWebhookSource] = useState<string>("github-actions");
+  // Registry fields
+  const [intakeNewRegistryType, setIntakeNewRegistryType] = useState<"docker" | "npm" | "nuget">("docker");
+  const [intakeNewRegistryUrl, setIntakeNewRegistryUrl] = useState("");
+  const [intakeNewRegistryUsername, setIntakeNewRegistryUsername] = useState("");
+  const [intakeNewRegistryPassword, setIntakeNewRegistryPassword] = useState("");
+  const [intakeNewTrackedItems, setIntakeNewTrackedItems] = useState("");
+  const [intakeNewPollInterval, setIntakeNewPollInterval] = useState("300000");
+  const [intakeTesting, setIntakeTesting] = useState<string | null>(null);
+  const [intakeTestResults, setIntakeTestResults] = useState<Record<string, { success: boolean; error?: string }>>({});
+  const [intakeCreatedToken, setIntakeCreatedToken] = useState<string | null>(null);
+
   useEffect(() => {
     Promise.all([getSettings(), getCommandInfo()])
       .then(([s, info]) => {
@@ -85,6 +103,8 @@ export default function SettingsPanel({ title }: Props) {
       .catch(() => setLoading(false));
     // Load IdP providers
     listIdpProviders().then(setIdpProviders).catch(() => {});
+    // Load intake channels
+    listIntakeChannels().then(setIntakeChannels).catch(() => {});
   }, []);
 
   async function handleSaveAgent() {
@@ -379,6 +399,74 @@ export default function SettingsPanel({ title }: Props) {
       ...prev,
       [providerId]: (prev[providerId] ?? []).filter((m) => m.id !== mappingId),
     }));
+  }
+
+  // --- Intake handlers ---
+
+  async function handleAddIntakeChannel() {
+    const config: Record<string, unknown> = {};
+
+    if (intakeNewType === "webhook") {
+      config.source = intakeNewWebhookSource;
+    } else {
+      config.type = intakeNewRegistryType;
+      config.url = intakeNewRegistryUrl;
+      if (intakeNewRegistryUsername) {
+        config.credentials = { username: intakeNewRegistryUsername, password: intakeNewRegistryPassword };
+      }
+      const items = intakeNewTrackedItems.split(",").map((s) => s.trim()).filter(Boolean);
+      if (intakeNewRegistryType === "docker") {
+        config.trackedImages = items;
+      } else {
+        config.trackedPackages = items;
+      }
+      config.pollIntervalMs = parseInt(intakeNewPollInterval, 10) || 300000;
+    }
+
+    const channel = await createIntakeChannel({
+      type: intakeNewType,
+      name: intakeNewName,
+      enabled: true,
+      config,
+    });
+
+    // Show the auth token once on creation
+    if (channel.authToken) {
+      setIntakeCreatedToken(channel.authToken);
+    }
+
+    setIntakeChannels((prev) => [...prev, channel]);
+    setIntakeShowForm(false);
+    setIntakeNewName("");
+    setIntakeNewWebhookSource("github-actions");
+    setIntakeNewRegistryType("docker");
+    setIntakeNewRegistryUrl("");
+    setIntakeNewRegistryUsername("");
+    setIntakeNewRegistryPassword("");
+    setIntakeNewTrackedItems("");
+    setIntakeNewPollInterval("300000");
+  }
+
+  async function handleToggleIntakeChannel(id: string, enabled: boolean) {
+    const updated = await updateIntakeChannel(id, { enabled });
+    setIntakeChannels((prev) => prev.map((ch) => (ch.id === id ? updated : ch)));
+  }
+
+  async function handleDeleteIntakeChannel(id: string) {
+    await deleteIntakeChannel(id);
+    setIntakeChannels((prev) => prev.filter((ch) => ch.id !== id));
+  }
+
+  async function handleTestIntakeChannel(id: string) {
+    setIntakeTesting(id);
+    try {
+      const result = await testIntakeChannel(id);
+      setIntakeTestResults((prev) => ({ ...prev, [id]: result }));
+    } catch (err) {
+      setIntakeTestResults((prev) => ({ ...prev, [id]: { success: false, error: err instanceof Error ? err.message : "Test failed" } }));
+    } finally {
+      setIntakeTesting(null);
+    }
   }
 
   if (loading) return <CanvasPanelHost title={title}><div className="loading">Loading...</div></CanvasPanelHost>;
@@ -1306,6 +1394,265 @@ export default function SettingsPanel({ title }: Props) {
             ) : (
               <button className="btn" onClick={() => setIdpShowForm(true)}>
                 Add Identity Provider
+              </button>
+            )}
+          </div>
+        </div>
+        )}
+
+        {/* Artifact Intake Channels (admin only) */}
+        {canManageSettings && (
+        <div className="section">
+          <div className="card">
+            <div className="card-header">
+              <h3>Artifact Intake Channels</h3>
+            </div>
+            <div className="settings-description" style={{ marginBottom: 12 }}>
+              Configure CI/CD webhook receivers and registry pollers to automatically ingest new artifact versions.
+            </div>
+
+            {/* Created token banner */}
+            {intakeCreatedToken && (
+              <div style={{ padding: 12, marginBottom: 12, background: "var(--color-warning-bg, #fef3c7)", borderRadius: 6, fontSize: "0.9em" }}>
+                <strong>Channel Auth Token (shown once):</strong>
+                <code style={{ display: "block", marginTop: 4, padding: 6, background: "var(--bg-color, #fff)", borderRadius: 4, wordBreak: "break-all" }}>
+                  {intakeCreatedToken}
+                </code>
+                <div style={{ marginTop: 4, fontSize: "0.85em", opacity: 0.8 }}>
+                  Use this token as a query parameter <code>?token=...</code> or header <code>X-Intake-Token</code> when sending webhooks.
+                </div>
+                <button
+                  className="btn"
+                  onClick={() => setIntakeCreatedToken(null)}
+                  style={{ marginTop: 8, padding: "4px 8px", fontSize: "0.85em" }}
+                >
+                  Dismiss
+                </button>
+              </div>
+            )}
+
+            {intakeChannels.length > 0 && (
+              <div style={{ marginBottom: 16 }}>
+                {intakeChannels.map((channel) => {
+                  const testResult = intakeTestResults[channel.id];
+                  const webhookUrl = channel.type === "webhook"
+                    ? `${window.location.origin}/api/intake/webhook/${channel.id}`
+                    : null;
+                  return (
+                    <div key={channel.id} style={{ padding: "12px 0", borderBottom: "1px solid var(--border-color, #e2e8f0)" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontWeight: 500 }}>{channel.name}</div>
+                          <div style={{ fontSize: "0.85em", opacity: 0.7 }}>
+                            <span
+                              style={{
+                                display: "inline-block",
+                                padding: "1px 6px",
+                                borderRadius: 4,
+                                fontSize: "0.8em",
+                                fontWeight: 600,
+                                background: channel.type === "webhook" ? "var(--color-info-bg, #dbeafe)" : "var(--color-success-bg, #dcfce7)",
+                                color: channel.type === "webhook" ? "var(--color-info, #2563eb)" : "var(--color-success, #16a34a)",
+                                marginRight: 6,
+                              }}
+                            >
+                              {channel.type.toUpperCase()}
+                            </span>
+                            {channel.type === "webhook" && (channel.config.source as string || "generic")}
+                            {channel.type === "registry" && `${(channel.config.type as string || "").toUpperCase()} - ${channel.config.url as string || ""}`}
+                          </div>
+                          {webhookUrl && (
+                            <div style={{ fontSize: "0.8em", opacity: 0.5, marginTop: 2, wordBreak: "break-all" }}>
+                              POST {webhookUrl}
+                            </div>
+                          )}
+                        </div>
+                        <span
+                          className={`status-badge status-${channel.enabled ? "succeeded" : "failed"}`}
+                          style={{ fontSize: "0.8em" }}
+                        >
+                          {channel.enabled ? "Enabled" : "Disabled"}
+                        </span>
+                        <label style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer", fontSize: "0.85em" }}>
+                          <input
+                            type="checkbox"
+                            checked={channel.enabled}
+                            onChange={(e) => handleToggleIntakeChannel(channel.id, e.target.checked)}
+                          />
+                        </label>
+                        {channel.type === "registry" && (
+                          <button
+                            className="btn"
+                            onClick={() => handleTestIntakeChannel(channel.id)}
+                            disabled={intakeTesting === channel.id}
+                            style={{ padding: "4px 8px", fontSize: "0.85em" }}
+                          >
+                            {intakeTesting === channel.id ? "..." : "Test"}
+                          </button>
+                        )}
+                        <button
+                          className="btn"
+                          onClick={() => handleDeleteIntakeChannel(channel.id)}
+                          style={{ padding: "4px 8px", fontSize: "0.85em" }}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                      {testResult && (
+                        <div style={{ marginTop: 4, fontSize: "0.85em", color: testResult.success ? "var(--color-success, #22c55e)" : "var(--color-error, #ef4444)" }}>
+                          {testResult.success ? "Connection successful" : `Connection failed: ${testResult.error}`}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {intakeShowForm ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label>Channel Type</label>
+                  <select
+                    value={intakeNewType}
+                    onChange={(e) => setIntakeNewType(e.target.value as "webhook" | "registry")}
+                    style={{ maxWidth: 300 }}
+                  >
+                    <option value="webhook">Webhook (CI/CD)</option>
+                    <option value="registry">Registry Poll</option>
+                  </select>
+                </div>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label>Channel Name</label>
+                  <input
+                    value={intakeNewName}
+                    onChange={(e) => setIntakeNewName(e.target.value)}
+                    placeholder="e.g. Production CI, Docker Hub"
+                    style={{ maxWidth: 300 }}
+                  />
+                </div>
+
+                {intakeNewType === "webhook" && (
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label>CI/CD Source</label>
+                    <select
+                      value={intakeNewWebhookSource}
+                      onChange={(e) => setIntakeNewWebhookSource(e.target.value)}
+                      style={{ maxWidth: 300 }}
+                    >
+                      <option value="github-actions">GitHub Actions</option>
+                      <option value="azure-devops">Azure DevOps</option>
+                      <option value="jenkins">Jenkins</option>
+                      <option value="gitlab-ci">GitLab CI</option>
+                      <option value="circleci">CircleCI</option>
+                      <option value="generic">Generic</option>
+                    </select>
+                    <div className="settings-description">
+                      Select the CI/CD platform. A unique webhook URL and auth token will be generated.
+                    </div>
+                  </div>
+                )}
+
+                {intakeNewType === "registry" && (
+                  <>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label>Registry Type</label>
+                      <select
+                        value={intakeNewRegistryType}
+                        onChange={(e) => setIntakeNewRegistryType(e.target.value as "docker" | "npm" | "nuget")}
+                        style={{ maxWidth: 300 }}
+                      >
+                        <option value="docker">Docker Registry</option>
+                        <option value="npm">npm Registry</option>
+                        <option value="nuget">NuGet Feed</option>
+                      </select>
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label>Registry URL</label>
+                      <input
+                        value={intakeNewRegistryUrl}
+                        onChange={(e) => setIntakeNewRegistryUrl(e.target.value)}
+                        placeholder={
+                          intakeNewRegistryType === "docker"
+                            ? "https://registry.example.com"
+                            : intakeNewRegistryType === "npm"
+                            ? "https://registry.npmjs.org"
+                            : "https://api.nuget.org/v3"
+                        }
+                        style={{ maxWidth: 400 }}
+                      />
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label>Username (optional)</label>
+                      <input
+                        value={intakeNewRegistryUsername}
+                        onChange={(e) => setIntakeNewRegistryUsername(e.target.value)}
+                        placeholder="Registry username"
+                        style={{ maxWidth: 300 }}
+                      />
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label>Password (optional)</label>
+                      <input
+                        type="password"
+                        value={intakeNewRegistryPassword}
+                        onChange={(e) => setIntakeNewRegistryPassword(e.target.value)}
+                        placeholder="Registry password"
+                        style={{ maxWidth: 300 }}
+                      />
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label>{intakeNewRegistryType === "docker" ? "Tracked Images" : "Tracked Packages"}</label>
+                      <input
+                        value={intakeNewTrackedItems}
+                        onChange={(e) => setIntakeNewTrackedItems(e.target.value)}
+                        placeholder={
+                          intakeNewRegistryType === "docker"
+                            ? "myapp, myorg/api-service"
+                            : "@myorg/package, another-pkg"
+                        }
+                        style={{ maxWidth: 400 }}
+                      />
+                      <div className="settings-description">
+                        Comma-separated list of {intakeNewRegistryType === "docker" ? "image names" : "package names"} to watch for new versions.
+                      </div>
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label>Poll Interval (ms)</label>
+                      <input
+                        type="number"
+                        value={intakeNewPollInterval}
+                        onChange={(e) => setIntakeNewPollInterval(e.target.value)}
+                        placeholder="300000"
+                        style={{ maxWidth: 200 }}
+                      />
+                      <div className="settings-description">
+                        How often to check for new versions. Default: 300000 (5 minutes).
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button
+                    className="btn btn-primary"
+                    onClick={handleAddIntakeChannel}
+                    disabled={
+                      !intakeNewName || (
+                        intakeNewType === "registry" && !intakeNewRegistryUrl
+                      )
+                    }
+                  >
+                    Add Channel
+                  </button>
+                  <button className="btn" onClick={() => setIntakeShowForm(false)}>
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button className="btn" onClick={() => setIntakeShowForm(true)}>
+                Add Intake Channel
               </button>
             )}
           </div>

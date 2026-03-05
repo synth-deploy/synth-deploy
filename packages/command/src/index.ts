@@ -35,6 +35,13 @@ import { registerIdpRoutes } from "./api/idp.js";
 import { startStaleDeploymentScanner } from "./agent/stale-deployment-detector.js";
 import { startRetentionScanner } from "./agent/debrief-retention.js";
 import { ProgressEventStore } from "./api/progress-event-store.js";
+import { registerFleetRoutes } from "./api/fleet.js";
+import { FleetDeploymentStore, FleetExecutor } from "./fleet/index.js";
+import { IntakeChannelStore, IntakeEventStore, IntakeProcessor, RegistryPoller } from "./intake/index.js";
+import { registerIntakeRoutes } from "./api/intake.js";
+import { ArtifactAnalyzer } from "./artifact-analyzer.js";
+import { DeploymentGraphStore, GraphInferenceEngine } from "./graph/index.js";
+import { registerGraphRoutes } from "./api/graph.js";
 
 // --- Bootstrap shared state ---
 
@@ -577,6 +584,41 @@ registerAuthRoutes(app, userStore, roleStore, userRoleStore, sessionStore, jwtSe
 registerUserRoutes(app, userStore, roleStore, userRoleStore);
 registerIdpRoutes(app, idpProviderStore, roleMappingStore, userStore, roleStore, userRoleStore, sessionStore, jwtSecret, { hasDedicatedEncryptionKey });
 
+// Fleet (large-scale) deployment orchestration
+const fleetStore = new FleetDeploymentStore();
+const fleetExecutor = new FleetExecutor(envoyRegistry, (url, token) => new EnvoyClient(url));
+registerFleetRoutes(app, fleetStore, envoyRegistry, deployments, fleetExecutor, debrief);
+
+// --- Deployment Graph Orchestration ---
+
+const graphStore = new DeploymentGraphStore();
+const graphInferenceEngine = new GraphInferenceEngine(llm, artifactStore);
+registerGraphRoutes(app, graphStore, graphInferenceEngine, envoyRegistry, artifactStore);
+
+// --- Artifact Intake Pipeline ---
+
+const intakeChannelStore = new IntakeChannelStore();
+const intakeEventStore = new IntakeEventStore();
+const artifactAnalyzer = new ArtifactAnalyzer({ llm, debrief });
+const intakeProcessor = new IntakeProcessor(artifactStore, artifactAnalyzer);
+const registryPoller = new RegistryPoller(async (channelId, payload) => {
+  const event = intakeEventStore.create({ channelId, status: "processing", payload: payload as unknown as Record<string, unknown> });
+  try {
+    const result = await intakeProcessor.process(payload, channelId);
+    intakeEventStore.update(event.id, { status: "completed", artifactId: result.artifactId, processedAt: new Date() });
+  } catch (err) {
+    intakeEventStore.update(event.id, { status: "failed", error: err instanceof Error ? err.message : "Processing failed", processedAt: new Date() });
+  }
+});
+registerIntakeRoutes(app, intakeChannelStore, intakeEventStore, intakeProcessor, registryPoller, artifactStore);
+
+// Start polling for any pre-existing enabled registry channels
+for (const ch of intakeChannelStore.list()) {
+  if (ch.type === "registry" && ch.enabled) {
+    registryPoller.startPolling(ch);
+  }
+}
+
 // --- Serve UI static files if built ---
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -679,6 +721,7 @@ const stopRetentionScanner = startRetentionScanner(debrief);
 app.addHook("onClose", async () => {
   stopStaleScanner();
   stopRetentionScanner();
+  registryPoller.stopAll();
   clearInterval(mcpCleanupInterval);
   await mcpClientManager.disconnectAll();
   debrief.close();
