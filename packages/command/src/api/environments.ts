@@ -1,11 +1,12 @@
 import type { FastifyInstance } from "fastify";
-import type { IEnvironmentStore, IOperationStore } from "@deploystack/core";
+import type { IEnvironmentStore, IOperationStore, ITelemetryStore } from "@deploystack/core";
 import { CreateEnvironmentSchema, UpdateEnvironmentSchema } from "./schemas.js";
 
 export function registerEnvironmentRoutes(
   app: FastifyInstance,
   environments: IEnvironmentStore,
   operations: IOperationStore,
+  telemetry: ITelemetryStore,
 ): void {
   // List all environments
   app.get("/api/environments", async () => {
@@ -20,6 +21,7 @@ export function registerEnvironmentRoutes(
     }
 
     const environment = environments.create(parsed.data.name.trim(), parsed.data.variables ?? {});
+    telemetry.record({ actor: "anonymous", action: "environment.created", target: { type: "environment", id: environment.id }, details: { name: parsed.data.name } });
     return reply.status(201).send({ environment });
   });
 
@@ -49,6 +51,7 @@ export function registerEnvironmentRoutes(
           name: parsed.data.name?.trim(),
           variables: parsed.data.variables,
         });
+        telemetry.record({ actor: "anonymous", action: "environment.updated", target: { type: "environment", id: request.params.id }, details: { name: parsed.data.name } });
         return { environment };
       } catch (err) {
         if (err instanceof Error && err.message.toLowerCase().includes("not found")) {

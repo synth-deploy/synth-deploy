@@ -41,6 +41,8 @@ export type {
   CoBrandingConfig,
   McpServerConfig,
   AppSettings,
+  TelemetryEvent,
+  TelemetryAction,
 } from "./types.js";
 
 export {
@@ -65,6 +67,7 @@ export type {
   ISecurityBoundaryStore,
   IDeploymentStore,
   ISettingsStore,
+  ITelemetryStore,
 } from "./store-interfaces.js";
 export {
   openEntityDatabase,
@@ -74,9 +77,11 @@ export {
   PersistentSettingsStore,
   PersistentArtifactStore,
   PersistentSecurityBoundaryStore,
+  PersistentTelemetryStore,
 } from "./persistent-stores.js";
 export { ArtifactStore } from "./artifact-store.js";
 export { SecurityBoundaryStore } from "./security-boundary-store.js";
+export { TelemetryStore } from "./telemetry-store.js";
 export { PartitionContainer } from "./partition-container.js";
 export type {
   PrecedenceEntry,

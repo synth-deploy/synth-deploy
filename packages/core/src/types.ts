@@ -340,6 +340,34 @@ export interface AppSettings {
   llm?: LlmProviderConfig;
 }
 
+// --- Telemetry ---
+
+export interface TelemetryEvent {
+  id: string;
+  timestamp: Date;
+  actor: string;
+  action: TelemetryAction;
+  target: { type: string; id: string };
+  details: Record<string, unknown>;
+}
+
+export type TelemetryAction =
+  | "deployment.created"
+  | "deployment.approved"
+  | "deployment.rejected"
+  | "artifact.created"
+  | "artifact.annotated"
+  | "partition.created"
+  | "partition.variables.updated"
+  | "environment.created"
+  | "environment.updated"
+  | "settings.updated"
+  | "envoy.registered"
+  | "security-boundary.updated"
+  | "agent.pre-flight.generated"
+  | "agent.recommendation.followed"
+  | "agent.recommendation.overridden";
+
 export const DEFAULT_APP_SETTINGS: AppSettings = {
   environmentsEnabled: true,
   agent: {

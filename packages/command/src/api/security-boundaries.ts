@@ -1,11 +1,12 @@
 import crypto from "node:crypto";
 import type { FastifyInstance } from "fastify";
-import type { ISecurityBoundaryStore } from "@deploystack/core";
+import type { ISecurityBoundaryStore, ITelemetryStore } from "@deploystack/core";
 import { SetSecurityBoundariesSchema } from "./schemas.js";
 
 export function registerSecurityBoundaryRoutes(
   app: FastifyInstance,
   securityBoundaryStore: ISecurityBoundaryStore,
+  telemetry: ITelemetryStore,
 ): void {
   // Get boundaries for envoy
   app.get<{ Params: { envoyId: string } }>(
@@ -33,6 +34,7 @@ export function registerSecurityBoundaryRoutes(
       }));
 
       securityBoundaryStore.set(request.params.envoyId, boundaries);
+      telemetry.record({ actor: "anonymous", action: "security-boundary.updated", target: { type: "envoy", id: request.params.envoyId }, details: { boundaryCount: boundaries.length } });
       return { boundaries };
     },
   );

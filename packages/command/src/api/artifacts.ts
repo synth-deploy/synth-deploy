@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import type { IArtifactStore } from "@deploystack/core";
+import type { IArtifactStore, ITelemetryStore } from "@deploystack/core";
 import {
   CreateArtifactSchema,
   AddAnnotationSchema,
@@ -9,6 +9,7 @@ import {
 export function registerArtifactRoutes(
   app: FastifyInstance,
   artifactStore: IArtifactStore,
+  telemetry: ITelemetryStore,
 ): void {
   // List all artifacts
   app.get("/api/artifacts", async () => {
@@ -36,6 +37,7 @@ export function registerArtifactRoutes(
       learningHistory: [],
     });
 
+    telemetry.record({ actor: "anonymous", action: "artifact.created", target: { type: "artifact", id: artifact.id }, details: { name: parsed.data.name, type: parsed.data.type } });
     return reply.status(201).send({ artifact });
   });
 
@@ -102,6 +104,7 @@ export function registerArtifactRoutes(
         annotatedAt: new Date(),
       });
 
+      telemetry.record({ actor: "anonymous", action: "artifact.annotated", target: { type: "artifact", id: request.params.id }, details: { field: parsed.data.field } });
       return reply.status(201).send({ artifact: updated });
     },
   );

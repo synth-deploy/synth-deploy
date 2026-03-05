@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import type { ISettingsStore, AppSettings, LlmProviderConfig } from "@deploystack/core";
+import type { ISettingsStore, ITelemetryStore, AppSettings, LlmProviderConfig } from "@deploystack/core";
 import { UpdateSettingsSchema } from "./schemas.js";
 
 /**
@@ -51,6 +51,7 @@ function stripApiKeyFromConfig(
 export function registerSettingsRoutes(
   app: FastifyInstance,
   settings: ISettingsStore,
+  telemetry: ITelemetryStore,
 ): void {
   // Get all settings
   app.get("/api/settings", async () => {
@@ -71,6 +72,7 @@ export function registerSettingsRoutes(
     }
 
     const updated = settings.update(data as Partial<AppSettings>);
+    telemetry.record({ actor: "anonymous", action: "settings.updated", target: { type: "settings", id: "app" }, details: { fields: Object.keys(parsed.data) } });
     return { settings: sanitizeLlmSettings(updated) };
   });
 

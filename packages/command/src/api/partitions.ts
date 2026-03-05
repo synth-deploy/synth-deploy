@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import type { IPartitionStore, DebriefReader, DebriefWriter, IOrderStore } from "@deploystack/core";
+import type { IPartitionStore, ITelemetryStore, DebriefReader, DebriefWriter, IOrderStore } from "@deploystack/core";
 import { generateOperationHistory } from "@deploystack/core";
 import type { DeploymentStore } from "../agent/command-agent.js";
 import { CreatePartitionSchema, UpdatePartitionSchema, SetVariablesSchema } from "./schemas.js";
@@ -10,6 +10,7 @@ export function registerPartitionRoutes(
   deployments: DeploymentStore,
   debrief: DebriefReader & DebriefWriter,
   orders: IOrderStore,
+  telemetry: ITelemetryStore,
 ): void {
   // List all partitions
   app.get("/api/partitions", async () => {
@@ -24,6 +25,7 @@ export function registerPartitionRoutes(
     }
 
     const partition = partitions.create(parsed.data.name.trim(), parsed.data.variables ?? {});
+    telemetry.record({ actor: "anonymous", action: "partition.created", target: { type: "partition", id: partition.id }, details: { name: parsed.data.name } });
     return reply.status(201).send({ partition });
   });
 
@@ -114,6 +116,7 @@ export function registerPartitionRoutes(
 
       try {
         const partition = partitions.setVariables(request.params.id, parsed.data.variables);
+        telemetry.record({ actor: "anonymous", action: "partition.variables.updated", target: { type: "partition", id: request.params.id }, details: { variableCount: Object.keys(parsed.data.variables).length } });
         return { partition };
       } catch (err) {
         if (err instanceof Error && err.message.toLowerCase().includes("not found")) {

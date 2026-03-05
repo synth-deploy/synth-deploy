@@ -7,7 +7,7 @@ import fastifyCors from "@fastify/cors";
 import rateLimit from "@fastify/rate-limit";
 import fastifyStatic from "@fastify/static";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { PersistentDecisionDebrief, openEntityDatabase, PersistentPartitionStore, PersistentOperationStore, PersistentEnvironmentStore, PersistentSettingsStore, PersistentDeploymentStore, PersistentOrderStore, PersistentStepTypeStore, PersistentArtifactStore, PersistentSecurityBoundaryStore, LlmClient, DEFAULT_DEPLOY_CONFIG } from "@deploystack/core";
+import { PersistentDecisionDebrief, openEntityDatabase, PersistentPartitionStore, PersistentOperationStore, PersistentEnvironmentStore, PersistentSettingsStore, PersistentDeploymentStore, PersistentOrderStore, PersistentStepTypeStore, PersistentArtifactStore, PersistentSecurityBoundaryStore, PersistentTelemetryStore, LlmClient, DEFAULT_DEPLOY_CONFIG } from "@deploystack/core";
 import type { Deployment, DeploymentStep, DeployConfig, Artifact, ArtifactVersion, SecurityBoundary } from "@deploystack/core";
 import { CommandAgent } from "./agent/command-agent.js";
 import { EnvoyHealthChecker } from "./agent/health-checker.js";
@@ -22,6 +22,7 @@ import { registerPartitionRoutes } from "./api/partitions.js";
 import { registerEnvironmentRoutes } from "./api/environments.js";
 import { registerAgentRoutes } from "./api/agent.js";
 import { registerSettingsRoutes } from "./api/settings.js";
+import { registerTelemetryRoutes } from "./api/telemetry.js";
 import { registerEnvoyRoutes } from "./api/envoys.js";
 import { EnvoyRegistry } from "./agent/envoy-registry.js";
 import { registerAuthMiddleware } from "./middleware/auth.js";
@@ -44,6 +45,7 @@ const orders = new PersistentOrderStore(entityDb);
 const stepTypeStore = new PersistentStepTypeStore(entityDb);
 const artifactStore = new PersistentArtifactStore(entityDb);
 const securityBoundaryStore = new PersistentSecurityBoundaryStore(entityDb);
+const telemetryStore = new PersistentTelemetryStore(entityDb);
 const envoyRegistry = new EnvoyRegistry();
 const envoyUrl = settings.get().envoy?.url;
 const healthChecker = envoyUrl ? new EnvoyHealthChecker(envoyUrl) : undefined;
@@ -532,14 +534,15 @@ registerHealthRoutes(app, {
   mcpServers: settings.get().mcpServers,
   llmClient: llm,
 });
-registerDeploymentRoutes(app, deployments, debrief, partitions, environments, artifactStore, settings);
+registerDeploymentRoutes(app, deployments, debrief, partitions, environments, artifactStore, settings, telemetryStore);
 registerEnvoyReportRoutes(app, debrief, deployments);
-registerArtifactRoutes(app, artifactStore);
-registerSecurityBoundaryRoutes(app, securityBoundaryStore);
-registerPartitionRoutes(app, partitions, deployments, debrief, orders);
-registerEnvironmentRoutes(app, environments, operations);
+registerArtifactRoutes(app, artifactStore, telemetryStore);
+registerSecurityBoundaryRoutes(app, securityBoundaryStore, telemetryStore);
+registerPartitionRoutes(app, partitions, deployments, debrief, orders, telemetryStore);
+registerEnvironmentRoutes(app, environments, operations, telemetryStore);
 registerAgentRoutes(app, agent, partitions, environments, operations, deployments, debrief, settings, llm);
-registerSettingsRoutes(app, settings);
+registerSettingsRoutes(app, settings, telemetryStore);
+registerTelemetryRoutes(app, telemetryStore);
 registerEnvoyRoutes(app, settings, envoyRegistry);
 
 // --- Serve UI static files if built ---

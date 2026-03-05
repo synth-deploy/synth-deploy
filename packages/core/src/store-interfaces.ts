@@ -17,6 +17,8 @@ import type {
   ArtifactVersion,
   SecurityBoundary,
   EnvoyId,
+  TelemetryEvent,
+  TelemetryAction,
 } from "./types.js";
 
 export interface IPartitionStore {
@@ -67,4 +69,17 @@ export interface IDeploymentStore {
 export interface ISettingsStore {
   get(): AppSettings;
   update(partial: Partial<AppSettings>): AppSettings;
+}
+
+export interface ITelemetryStore {
+  record(event: Omit<TelemetryEvent, "id" | "timestamp">): TelemetryEvent;
+  query(filters: {
+    actor?: string;
+    action?: TelemetryAction;
+    from?: Date;
+    to?: Date;
+    limit?: number;
+    offset?: number;
+  }): TelemetryEvent[];
+  count(filters?: { actor?: string; action?: TelemetryAction; from?: Date; to?: Date }): number;
 }

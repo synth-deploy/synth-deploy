@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { generatePostmortem } from "@deploystack/core";
-import type { IPartitionStore, IEnvironmentStore, IArtifactStore, ISettingsStore, IDeploymentStore, DebriefWriter, DebriefReader } from "@deploystack/core";
+import type { IPartitionStore, IEnvironmentStore, IArtifactStore, ISettingsStore, IDeploymentStore, ITelemetryStore, DebriefWriter, DebriefReader } from "@deploystack/core";
 import {
   CreateDeploymentSchema,
   ApproveDeploymentSchema,
@@ -21,6 +21,7 @@ export function registerDeploymentRoutes(
   environments: IEnvironmentStore,
   artifactStore: IArtifactStore,
   settings: ISettingsStore,
+  telemetry: ITelemetryStore,
 ): void {
   // Create a deployment (plan phase)
   app.post("/api/deployments", async (request, reply) => {
@@ -69,6 +70,7 @@ export function registerDeploymentRoutes(
     };
 
     deployments.save(deployment);
+    telemetry.record({ actor: "anonymous", action: "deployment.created", target: { type: "deployment", id: deployment.id }, details: { artifactId, environmentId, partitionId } });
 
     return reply.status(201).send({ deployment });
   });
@@ -129,6 +131,7 @@ export function registerDeploymentRoutes(
           : "Approved without modifications",
         context: { approvedBy: parsed.data.approvedBy },
       });
+      telemetry.record({ actor: parsed.data.approvedBy, action: "deployment.approved", target: { type: "deployment", id: deployment.id }, details: { modifications: parsed.data.modifications } });
 
       return { deployment, approved: true };
     },
@@ -158,6 +161,7 @@ export function registerDeploymentRoutes(
         reasoning: parsed.data.reason,
         context: { reason: parsed.data.reason },
       });
+      telemetry.record({ actor: "anonymous", action: "deployment.rejected", target: { type: "deployment", id: deployment.id }, details: { reason: parsed.data.reason } });
 
       return { deployment, rejected: true };
     },

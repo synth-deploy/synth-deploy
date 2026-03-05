@@ -18,6 +18,8 @@ import type {
   SecurityBoundary,
   SecurityBoundaryType,
   EnvoyId,
+  TelemetryEvent,
+  TelemetryAction,
 } from "./types.js";
 import { DEFAULT_APP_SETTINGS } from "./types.js";
 
@@ -25,7 +27,7 @@ import { DEFAULT_APP_SETTINGS } from "./types.js";
 // Schema version — bump when table definitions change
 // ---------------------------------------------------------------------------
 
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 
 // ---------------------------------------------------------------------------
 // Safe JSON parse — returns fallback on corruption instead of crashing
@@ -145,6 +147,19 @@ export function openEntityDatabase(dbPath: string): Database.Database {
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS telemetry_events (
+      id TEXT PRIMARY KEY,
+      timestamp TEXT NOT NULL,
+      actor TEXT NOT NULL,
+      action TEXT NOT NULL,
+      target_type TEXT NOT NULL,
+      target_id TEXT NOT NULL,
+      details TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_telemetry_timestamp ON telemetry_events(timestamp);
+    CREATE INDEX IF NOT EXISTS idx_telemetry_actor ON telemetry_events(actor);
+    CREATE INDEX IF NOT EXISTS idx_telemetry_action ON telemetry_events(action);
   `);
 
   // --- Schema version validation ---
@@ -835,5 +850,99 @@ function rowToSecurityBoundary(row: SecurityBoundaryRow): SecurityBoundary {
     envoyId: row.envoy_id,
     boundaryType: row.boundary_type as SecurityBoundaryType,
     config: safeJsonParse(row.config, {}, { table: "envoy_security_boundaries", rowId: row.id, column: "config" }),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Persistent Telemetry Store
+// ---------------------------------------------------------------------------
+
+import type { ITelemetryStore } from "./store-interfaces.js";
+
+export class PersistentTelemetryStore implements ITelemetryStore {
+  private insertStmt: Database.Statement;
+
+  constructor(private db: Database.Database) {
+    this.insertStmt = db.prepare(
+      `INSERT INTO telemetry_events (id, timestamp, actor, action, target_type, target_id, details)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    );
+  }
+
+  record(event: Omit<TelemetryEvent, "id" | "timestamp">): TelemetryEvent {
+    const id = crypto.randomUUID();
+    const timestamp = new Date();
+    this.insertStmt.run(
+      id,
+      timestamp.toISOString(),
+      event.actor,
+      event.action,
+      event.target.type,
+      event.target.id,
+      JSON.stringify(event.details),
+    );
+    return { id, timestamp, ...event };
+  }
+
+  query(filters: {
+    actor?: string;
+    action?: TelemetryAction;
+    from?: Date;
+    to?: Date;
+    limit?: number;
+    offset?: number;
+  }): TelemetryEvent[] {
+    const conditions: string[] = [];
+    const params: unknown[] = [];
+
+    if (filters.actor) { conditions.push("actor = ?"); params.push(filters.actor); }
+    if (filters.action) { conditions.push("action = ?"); params.push(filters.action); }
+    if (filters.from) { conditions.push("timestamp >= ?"); params.push(filters.from.toISOString()); }
+    if (filters.to) { conditions.push("timestamp <= ?"); params.push(filters.to.toISOString()); }
+
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+    const limit = filters.limit ?? 100;
+    const offset = filters.offset ?? 0;
+
+    const rows = this.db.prepare(
+      `SELECT * FROM telemetry_events ${where} ORDER BY timestamp DESC LIMIT ? OFFSET ?`,
+    ).all(...params, limit, offset) as TelemetryRow[];
+
+    return rows.map(rowToTelemetryEvent);
+  }
+
+  count(filters?: { actor?: string; action?: TelemetryAction; from?: Date; to?: Date }): number {
+    if (!filters) {
+      return (this.db.prepare("SELECT COUNT(*) as count FROM telemetry_events").get() as { count: number }).count;
+    }
+    const conditions: string[] = [];
+    const params: unknown[] = [];
+    if (filters.actor) { conditions.push("actor = ?"); params.push(filters.actor); }
+    if (filters.action) { conditions.push("action = ?"); params.push(filters.action); }
+    if (filters.from) { conditions.push("timestamp >= ?"); params.push(filters.from.toISOString()); }
+    if (filters.to) { conditions.push("timestamp <= ?"); params.push(filters.to.toISOString()); }
+    const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+    return (this.db.prepare(`SELECT COUNT(*) as count FROM telemetry_events ${where}`).all(...params)[0] as { count: number }).count;
+  }
+}
+
+interface TelemetryRow {
+  id: string;
+  timestamp: string;
+  actor: string;
+  action: string;
+  target_type: string;
+  target_id: string;
+  details: string | null;
+}
+
+function rowToTelemetryEvent(row: TelemetryRow): TelemetryEvent {
+  return {
+    id: row.id,
+    timestamp: new Date(row.timestamp),
+    actor: row.actor,
+    action: row.action as TelemetryAction,
+    target: { type: row.target_type, id: row.target_id },
+    details: safeJsonParse(row.details ?? "{}", {}, { table: "telemetry_events", rowId: row.id, column: "details" }),
   };
 }

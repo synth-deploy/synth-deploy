@@ -240,6 +240,17 @@ export const DebriefQuerySchema = z.object({
   decisionType: z.string().optional(),
 });
 
+// --- Telemetry ---
+
+export const TelemetryQuerySchema = z.object({
+  actor: z.string().optional(),
+  action: z.string().optional(),
+  from: z.string().optional(),
+  to: z.string().optional(),
+  limit: z.coerce.number().int().positive().max(200).optional(),
+  offset: z.coerce.number().int().nonnegative().optional(),
+});
+
 // --- Agent ---
 
 export const QueryRequestSchema = z.object({
