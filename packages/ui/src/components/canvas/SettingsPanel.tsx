@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { getSettings, updateSettings, getCommandInfo, verifyTaskModel, listIdpProviders, createIdpProvider, updateIdpProvider, deleteIdpProvider, testIdpProvider, listRoleMappings, createRoleMapping, deleteRoleMapping } from "../../api.js";
+import { getSettings, updateSettings, getCommandInfo, verifyTaskModel, listIdpProviders, createIdpProvider, updateIdpProvider, deleteIdpProvider, testIdpProvider, listRoleMappings, createRoleMapping, deleteRoleMapping, testLdapUser } from "../../api.js";
 import type { AppSettings, CommandInfo, ConflictPolicy, McpServerConfig, TaskModelTask, CapabilityVerificationResult, IdpProvider, RoleMappingRule } from "../../types.js";
 import { TASK_MODEL_META } from "../../types.js";
 import { useSettings } from "../../context/SettingsContext.js";
@@ -36,12 +36,34 @@ export default function SettingsPanel({ title }: Props) {
   // --- IdP state ---
   const [idpProviders, setIdpProviders] = useState<IdpProvider[]>([]);
   const [idpShowForm, setIdpShowForm] = useState(false);
+  const [idpNewType, setIdpNewType] = useState<"oidc" | "saml" | "ldap">("oidc");
   const [idpNewName, setIdpNewName] = useState("");
+  // OIDC fields
   const [idpNewIssuerUrl, setIdpNewIssuerUrl] = useState("");
   const [idpNewClientId, setIdpNewClientId] = useState("");
   const [idpNewClientSecret, setIdpNewClientSecret] = useState("");
   const [idpNewScopes, setIdpNewScopes] = useState("openid profile email");
   const [idpNewGroupsClaim, setIdpNewGroupsClaim] = useState("groups");
+  // SAML fields
+  const [idpNewEntryPoint, setIdpNewEntryPoint] = useState("");
+  const [idpNewSamlIssuer, setIdpNewSamlIssuer] = useState("");
+  const [idpNewSamlCert, setIdpNewSamlCert] = useState("");
+  const [idpNewSignatureAlgorithm, setIdpNewSignatureAlgorithm] = useState<"sha256" | "sha512">("sha256");
+  const [idpNewGroupsAttribute, setIdpNewGroupsAttribute] = useState("memberOf");
+  // LDAP fields
+  const [idpNewLdapUrl, setIdpNewLdapUrl] = useState("");
+  const [idpNewLdapBindDn, setIdpNewLdapBindDn] = useState("");
+  const [idpNewLdapBindCredential, setIdpNewLdapBindCredential] = useState("");
+  const [idpNewLdapSearchBase, setIdpNewLdapSearchBase] = useState("");
+  const [idpNewLdapSearchFilter, setIdpNewLdapSearchFilter] = useState("(sAMAccountName={{username}})");
+  const [idpNewLdapGroupSearchBase, setIdpNewLdapGroupSearchBase] = useState("");
+  const [idpNewLdapGroupSearchFilter, setIdpNewLdapGroupSearchFilter] = useState("(member={{dn}})");
+  const [idpNewLdapUseTls, setIdpNewLdapUseTls] = useState(true);
+  const [idpNewLdapTlsCaPath, setIdpNewLdapTlsCaPath] = useState("");
+  // LDAP test user
+  const [ldapTestUsername, setLdapTestUsername] = useState<Record<string, string>>({});
+  const [ldapTestUserResults, setLdapTestUserResults] = useState<Record<string, { found: boolean; userDn?: string; email?: string; displayName?: string; error?: string }>>({});
+  const [ldapTestingUser, setLdapTestingUser] = useState<string | null>(null);
   const [idpTesting, setIdpTesting] = useState<string | null>(null);
   const [idpTestResults, setIdpTestResults] = useState<Record<string, { success: boolean; error?: string }>>({});
   const [idpMappings, setIdpMappings] = useState<Record<string, RoleMappingRule[]>>({});
@@ -219,27 +241,88 @@ export default function SettingsPanel({ title }: Props) {
   // --- IdP handlers ---
 
   async function handleAddIdpProvider() {
-    if (!idpNewName || !idpNewIssuerUrl || !idpNewClientId || !idpNewClientSecret) return;
-    const provider = await createIdpProvider({
-      type: "oidc",
-      name: idpNewName,
-      enabled: true,
-      config: {
+    if (!idpNewName) return;
+
+    let config: Record<string, unknown>;
+
+    if (idpNewType === "saml") {
+      if (!idpNewEntryPoint || !idpNewSamlIssuer || !idpNewSamlCert) return;
+      config = {
+        entryPoint: idpNewEntryPoint,
+        issuer: idpNewSamlIssuer,
+        cert: idpNewSamlCert,
+        callbackUrl: "", // will be computed server-side from request
+        signatureAlgorithm: idpNewSignatureAlgorithm,
+        groupsAttribute: idpNewGroupsAttribute || "memberOf",
+      };
+    } else if (idpNewType === "ldap") {
+      if (!idpNewLdapUrl || !idpNewLdapBindDn || !idpNewLdapBindCredential || !idpNewLdapSearchBase || !idpNewLdapGroupSearchBase) return;
+      config = {
+        url: idpNewLdapUrl,
+        bindDn: idpNewLdapBindDn,
+        bindCredential: idpNewLdapBindCredential,
+        searchBase: idpNewLdapSearchBase,
+        searchFilter: idpNewLdapSearchFilter || "(sAMAccountName={{username}})",
+        groupSearchBase: idpNewLdapGroupSearchBase,
+        groupSearchFilter: idpNewLdapGroupSearchFilter || "(member={{dn}})",
+        useTls: idpNewLdapUseTls,
+        ...(idpNewLdapTlsCaPath ? { tlsCaPath: idpNewLdapTlsCaPath } : {}),
+      };
+    } else {
+      if (!idpNewIssuerUrl || !idpNewClientId || !idpNewClientSecret) return;
+      config = {
         issuerUrl: idpNewIssuerUrl,
         clientId: idpNewClientId,
         clientSecret: idpNewClientSecret,
         scopes: idpNewScopes.split(/\s+/).filter(Boolean),
         groupsClaim: idpNewGroupsClaim || "groups",
-      },
+      };
+    }
+
+    const provider = await createIdpProvider({
+      type: idpNewType,
+      name: idpNewName,
+      enabled: true,
+      config,
     });
     setIdpProviders([...idpProviders, provider]);
+    // Reset all fields
     setIdpNewName("");
+    setIdpNewType("oidc");
     setIdpNewIssuerUrl("");
     setIdpNewClientId("");
     setIdpNewClientSecret("");
     setIdpNewScopes("openid profile email");
     setIdpNewGroupsClaim("groups");
+    setIdpNewEntryPoint("");
+    setIdpNewSamlIssuer("");
+    setIdpNewSamlCert("");
+    setIdpNewSignatureAlgorithm("sha256");
+    setIdpNewGroupsAttribute("memberOf");
+    setIdpNewLdapUrl("");
+    setIdpNewLdapBindDn("");
+    setIdpNewLdapBindCredential("");
+    setIdpNewLdapSearchBase("");
+    setIdpNewLdapSearchFilter("(sAMAccountName={{username}})");
+    setIdpNewLdapGroupSearchBase("");
+    setIdpNewLdapGroupSearchFilter("(member={{dn}})");
+    setIdpNewLdapUseTls(true);
+    setIdpNewLdapTlsCaPath("");
     setIdpShowForm(false);
+  }
+
+  async function handleTestLdapUser(providerId: string) {
+    const username = ldapTestUsername[providerId];
+    if (!username) return;
+    setLdapTestingUser(providerId);
+    try {
+      const result = await testLdapUser(providerId, username);
+      setLdapTestUserResults((prev) => ({ ...prev, [providerId]: result }));
+    } catch {
+      setLdapTestUserResults((prev) => ({ ...prev, [providerId]: { found: false, error: "Test request failed" } }));
+    } finally {
+      setLdapTestingUser(null);
+    }
   }
 
   async function handleToggleIdpProvider(id: string, enabled: boolean) {
@@ -800,7 +883,13 @@ export default function SettingsPanel({ title }: Props) {
                         <div style={{ flex: 1 }}>
                           <div style={{ fontWeight: 500 }}>{provider.name}</div>
                           <div style={{ fontSize: "0.85em", opacity: 0.7 }}>
-                            {provider.type.toUpperCase()} — {(provider.config.issuerUrl as string) || "No issuer URL"}
+                            {provider.type.toUpperCase()} — {
+                              provider.type === "saml"
+                                ? (provider.config.entryPoint as string) || "No entry point"
+                                : provider.type === "ldap"
+                                ? (provider.config.url as string) || "No LDAP URL"
+                                : (provider.config.issuerUrl as string) || "No issuer URL"
+                            }
                           </div>
                         </div>
                         <span
@@ -824,6 +913,17 @@ export default function SettingsPanel({ title }: Props) {
                         >
                           {idpTesting === provider.id ? "..." : "Test"}
                         </button>
+                        {provider.type === "saml" && (
+                          <a
+                            href={`/api/auth/saml/${provider.id}/metadata`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="btn"
+                            style={{ padding: "4px 8px", fontSize: "0.85em", textDecoration: "none" }}
+                          >
+                            SP Metadata
+                          </a>
+                        )}
                         <button
                           className="btn"
                           onClick={() => handleLoadMappings(provider.id)}
@@ -842,6 +942,33 @@ export default function SettingsPanel({ title }: Props) {
                       {testResult && (
                         <div style={{ marginTop: 4, fontSize: "0.85em", color: testResult.success ? "var(--color-success, #22c55e)" : "var(--color-error, #ef4444)" }}>
                           {testResult.success ? "Connection successful" : `Connection failed: ${testResult.error}`}
+                        </div>
+                      )}
+
+                      {/* LDAP Test User */}
+                      {provider.type === "ldap" && (
+                        <div style={{ marginTop: 8, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                          <input
+                            value={ldapTestUsername[provider.id] ?? ""}
+                            onChange={(e) => setLdapTestUsername((prev) => ({ ...prev, [provider.id]: e.target.value }))}
+                            placeholder="Test username (e.g. jdoe)"
+                            style={{ maxWidth: 200, fontSize: "0.85em" }}
+                          />
+                          <button
+                            className="btn"
+                            onClick={() => handleTestLdapUser(provider.id)}
+                            disabled={!ldapTestUsername[provider.id] || ldapTestingUser === provider.id}
+                            style={{ padding: "4px 8px", fontSize: "0.85em" }}
+                          >
+                            {ldapTestingUser === provider.id ? "..." : "Test User"}
+                          </button>
+                          {ldapTestUserResults[provider.id] && (
+                            <div style={{ width: "100%", fontSize: "0.85em", marginTop: 4, color: ldapTestUserResults[provider.id].found ? "var(--color-success, #22c55e)" : "var(--color-error, #ef4444)" }}>
+                              {ldapTestUserResults[provider.id].found
+                                ? `Found: ${ldapTestUserResults[provider.id].displayName ?? "unknown"} (${ldapTestUserResults[provider.id].email ?? "no email"}) — DN: ${ldapTestUserResults[provider.id].userDn}`
+                                : `Not found: ${ldapTestUserResults[provider.id].error}`}
+                            </div>
+                          )}
                         </div>
                       )}
 
@@ -903,6 +1030,18 @@ export default function SettingsPanel({ title }: Props) {
             {idpShowForm ? (
               <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
                 <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label>Provider Type</label>
+                  <select
+                    value={idpNewType}
+                    onChange={(e) => setIdpNewType(e.target.value as "oidc" | "saml" | "ldap")}
+                    style={{ maxWidth: 300 }}
+                  >
+                    <option value="oidc">OIDC (OpenID Connect)</option>
+                    <option value="saml">SAML 2.0</option>
+                    <option value="ldap">LDAP / Active Directory</option>
+                  </select>
+                </div>
+                <div className="form-group" style={{ marginBottom: 0 }}>
                   <label>Provider Name</label>
                   <input
                     value={idpNewName}
@@ -911,60 +1050,251 @@ export default function SettingsPanel({ title }: Props) {
                     style={{ maxWidth: 300 }}
                   />
                 </div>
-                <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label>Issuer URL</label>
-                  <input
-                    value={idpNewIssuerUrl}
-                    onChange={(e) => setIdpNewIssuerUrl(e.target.value)}
-                    placeholder="https://login.example.com"
-                    style={{ maxWidth: 400 }}
-                  />
-                </div>
-                <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label>Client ID</label>
-                  <input
-                    value={idpNewClientId}
-                    onChange={(e) => setIdpNewClientId(e.target.value)}
-                    placeholder="client-id"
-                    style={{ maxWidth: 400 }}
-                  />
-                </div>
-                <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label>Client Secret</label>
-                  <input
-                    type="password"
-                    value={idpNewClientSecret}
-                    onChange={(e) => setIdpNewClientSecret(e.target.value)}
-                    placeholder="client-secret"
-                    style={{ maxWidth: 400 }}
-                  />
-                </div>
-                <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label>Scopes</label>
-                  <input
-                    value={idpNewScopes}
-                    onChange={(e) => setIdpNewScopes(e.target.value)}
-                    placeholder="openid profile email"
-                    style={{ maxWidth: 400 }}
-                  />
-                </div>
-                <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label>Groups Claim</label>
-                  <input
-                    value={idpNewGroupsClaim}
-                    onChange={(e) => setIdpNewGroupsClaim(e.target.value)}
-                    placeholder="groups"
-                    style={{ maxWidth: 300 }}
-                  />
-                  <div className="settings-description">
-                    The JWT claim that contains the user's group memberships for role mapping.
-                  </div>
-                </div>
+
+                {idpNewType === "oidc" && (
+                  <>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label>Issuer URL</label>
+                      <input
+                        value={idpNewIssuerUrl}
+                        onChange={(e) => setIdpNewIssuerUrl(e.target.value)}
+                        placeholder="https://login.example.com"
+                        style={{ maxWidth: 400 }}
+                      />
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label>Client ID</label>
+                      <input
+                        value={idpNewClientId}
+                        onChange={(e) => setIdpNewClientId(e.target.value)}
+                        placeholder="client-id"
+                        style={{ maxWidth: 400 }}
+                      />
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label>Client Secret</label>
+                      <input
+                        type="password"
+                        value={idpNewClientSecret}
+                        onChange={(e) => setIdpNewClientSecret(e.target.value)}
+                        placeholder="client-secret"
+                        style={{ maxWidth: 400 }}
+                      />
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label>Scopes</label>
+                      <input
+                        value={idpNewScopes}
+                        onChange={(e) => setIdpNewScopes(e.target.value)}
+                        placeholder="openid profile email"
+                        style={{ maxWidth: 400 }}
+                      />
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label>Groups Claim</label>
+                      <input
+                        value={idpNewGroupsClaim}
+                        onChange={(e) => setIdpNewGroupsClaim(e.target.value)}
+                        placeholder="groups"
+                        style={{ maxWidth: 300 }}
+                      />
+                      <div className="settings-description">
+                        The JWT claim that contains the user's group memberships for role mapping.
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {idpNewType === "saml" && (
+                  <>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label>Entry Point URL</label>
+                      <input
+                        value={idpNewEntryPoint}
+                        onChange={(e) => setIdpNewEntryPoint(e.target.value)}
+                        placeholder="https://idp.example.com/sso/saml"
+                        style={{ maxWidth: 400 }}
+                      />
+                      <div className="settings-description">
+                        The IdP's SSO URL where AuthnRequests are sent.
+                      </div>
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label>Issuer / Entity ID</label>
+                      <input
+                        value={idpNewSamlIssuer}
+                        onChange={(e) => setIdpNewSamlIssuer(e.target.value)}
+                        placeholder="https://deploystack.example.com/sp"
+                        style={{ maxWidth: 400 }}
+                      />
+                      <div className="settings-description">
+                        The Service Provider entity ID that identifies this DeployStack instance to the IdP.
+                      </div>
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label>IdP Certificate (PEM)</label>
+                      <textarea
+                        value={idpNewSamlCert}
+                        onChange={(e) => setIdpNewSamlCert(e.target.value)}
+                        placeholder={"-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----"}
+                        rows={6}
+                        style={{ maxWidth: 500, fontFamily: "monospace", fontSize: "0.85em" }}
+                      />
+                      <div className="settings-description">
+                        The IdP's X.509 signing certificate in PEM format. Used to verify SAML Response signatures.
+                      </div>
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label>Signature Algorithm</label>
+                      <select
+                        value={idpNewSignatureAlgorithm}
+                        onChange={(e) => setIdpNewSignatureAlgorithm(e.target.value as "sha256" | "sha512")}
+                        style={{ maxWidth: 300 }}
+                      >
+                        <option value="sha256">SHA-256</option>
+                        <option value="sha512">SHA-512</option>
+                      </select>
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label>Groups Attribute</label>
+                      <input
+                        value={idpNewGroupsAttribute}
+                        onChange={(e) => setIdpNewGroupsAttribute(e.target.value)}
+                        placeholder="memberOf"
+                        style={{ maxWidth: 300 }}
+                      />
+                      <div className="settings-description">
+                        The SAML attribute that contains the user's group memberships for role mapping.
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {idpNewType === "ldap" && (
+                  <>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label>URL</label>
+                      <input
+                        value={idpNewLdapUrl}
+                        onChange={(e) => setIdpNewLdapUrl(e.target.value)}
+                        placeholder="ldaps://dc.corp.example.com:636"
+                        style={{ maxWidth: 400 }}
+                      />
+                      <div className="settings-description">
+                        The LDAP server URL. Use ldaps:// for TLS or ldap:// for plain (not recommended).
+                      </div>
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label>Bind DN</label>
+                      <input
+                        value={idpNewLdapBindDn}
+                        onChange={(e) => setIdpNewLdapBindDn(e.target.value)}
+                        placeholder="cn=svc-deploystack,ou=ServiceAccounts,dc=corp,dc=example,dc=com"
+                        style={{ maxWidth: 500 }}
+                      />
+                      <div className="settings-description">
+                        The distinguished name of the service account used to search the directory.
+                      </div>
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label>Bind Credential</label>
+                      <input
+                        type="password"
+                        value={idpNewLdapBindCredential}
+                        onChange={(e) => setIdpNewLdapBindCredential(e.target.value)}
+                        placeholder="Service account password"
+                        style={{ maxWidth: 400 }}
+                      />
+                      <div className="settings-description">
+                        Password for the service account. Encrypted at rest.
+                      </div>
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label>Search Base</label>
+                      <input
+                        value={idpNewLdapSearchBase}
+                        onChange={(e) => setIdpNewLdapSearchBase(e.target.value)}
+                        placeholder="ou=Users,dc=corp,dc=example,dc=com"
+                        style={{ maxWidth: 500 }}
+                      />
+                      <div className="settings-description">
+                        The base DN to search for user entries.
+                      </div>
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label>Search Filter</label>
+                      <input
+                        value={idpNewLdapSearchFilter}
+                        onChange={(e) => setIdpNewLdapSearchFilter(e.target.value)}
+                        placeholder="(sAMAccountName={{username}})"
+                        style={{ maxWidth: 500 }}
+                      />
+                      <div className="settings-description">
+                        {"LDAP filter to find users. Use {{username}} as the placeholder for the login username."}
+                      </div>
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label>Group Search Base</label>
+                      <input
+                        value={idpNewLdapGroupSearchBase}
+                        onChange={(e) => setIdpNewLdapGroupSearchBase(e.target.value)}
+                        placeholder="ou=Groups,dc=corp,dc=example,dc=com"
+                        style={{ maxWidth: 500 }}
+                      />
+                      <div className="settings-description">
+                        The base DN to search for group entries.
+                      </div>
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label>Group Search Filter</label>
+                      <input
+                        value={idpNewLdapGroupSearchFilter}
+                        onChange={(e) => setIdpNewLdapGroupSearchFilter(e.target.value)}
+                        placeholder="(member={{dn}})"
+                        style={{ maxWidth: 500 }}
+                      />
+                      <div className="settings-description">
+                        {"LDAP filter to find groups. Use {{dn}} as the placeholder for the user's DN. For AD nested groups, use (member={{dn}}) which is automatically enhanced with the transitive membership matching rule."}
+                      </div>
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+                        <input
+                          type="checkbox"
+                          checked={idpNewLdapUseTls}
+                          onChange={(e) => setIdpNewLdapUseTls(e.target.checked)}
+                        />
+                        Use TLS
+                      </label>
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label>TLS CA Path (optional)</label>
+                      <input
+                        value={idpNewLdapTlsCaPath}
+                        onChange={(e) => setIdpNewLdapTlsCaPath(e.target.value)}
+                        placeholder="/etc/ssl/certs/ldap-ca.pem"
+                        style={{ maxWidth: 400 }}
+                      />
+                      <div className="settings-description">
+                        Path to a custom CA certificate file for verifying the LDAP server's TLS certificate.
+                      </div>
+                    </div>
+                  </>
+                )}
+
                 <div style={{ display: "flex", gap: 8 }}>
                   <button
                     className="btn btn-primary"
                     onClick={handleAddIdpProvider}
-                    disabled={!idpNewName || !idpNewIssuerUrl || !idpNewClientId || !idpNewClientSecret}
+                    disabled={
+                      !idpNewName || (
+                        idpNewType === "oidc"
+                          ? (!idpNewIssuerUrl || !idpNewClientId || !idpNewClientSecret)
+                          : idpNewType === "saml"
+                          ? (!idpNewEntryPoint || !idpNewSamlIssuer || !idpNewSamlCert)
+                          : (!idpNewLdapUrl || !idpNewLdapBindDn || !idpNewLdapBindCredential || !idpNewLdapSearchBase || !idpNewLdapGroupSearchBase)
+                      )
+                    }
                   >
                     Add Provider
                   </button>

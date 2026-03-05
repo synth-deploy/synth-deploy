@@ -596,3 +596,26 @@ export async function listEnabledAuthProviders(): Promise<IdpProviderPublic[]> {
   const data = await fetchJson<{ providers: IdpProviderPublic[] }>("/api/auth/providers");
   return data.providers;
 }
+
+// --- LDAP ---
+
+export async function testLdapUser(
+  providerId: string,
+  username: string,
+): Promise<{ found: boolean; userDn?: string; email?: string; displayName?: string; error?: string }> {
+  return fetchJson(`/api/idp/providers/${providerId}/test-ldap-user`, {
+    method: "POST",
+    body: JSON.stringify({ username }),
+  });
+}
+
+export async function ldapLogin(
+  providerId: string,
+  username: string,
+  password: string,
+): Promise<AuthLoginResult> {
+  return fetchJson(`/api/auth/ldap/${providerId}/login`, {
+    method: "POST",
+    body: JSON.stringify({ username, password }),
+  });
+}

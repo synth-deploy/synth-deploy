@@ -18,6 +18,8 @@ import { generateTokens } from "../middleware/auth.js";
 import { OidcAdapter } from "../auth/idp/oidc.js";
 import { SamlAdapter } from "../auth/idp/saml.js";
 import type { SamlConfig } from "../auth/idp/saml.js";
+import { LdapAdapter } from "../auth/idp/ldap.js";
+import type { LdapConfig } from "../auth/idp/ldap.js";
 import { applyRoleMappings } from "../auth/idp/role-mapping.js";
 import {
   CreateIdpProviderSchema,
@@ -31,11 +33,14 @@ function maskSecret(secret: string): string {
   return secret.slice(0, 4) + "****" + secret.slice(-4);
 }
 
-/** Return a provider with its client secret masked. */
+/** Return a provider with secrets masked. */
 function toPublicProvider(provider: IdpProvider): IdpProvider {
   const config = { ...provider.config };
   if (typeof config.clientSecret === "string") {
     config.clientSecret = maskSecret(config.clientSecret);
+  }
+  if (typeof config.bindCredential === "string") {
+    config.bindCredential = maskSecret(config.bindCredential);
   }
   return { ...provider, config };
 }
@@ -71,6 +76,7 @@ export function registerIdpRoutes(
   const hasDedicatedEncryptionKey = options?.hasDedicatedEncryptionKey ?? false;
   const oidcAdapter = new OidcAdapter();
   const samlAdapter = new SamlAdapter();
+  const ldapAdapter = new LdapAdapter();
 
   // ─── IdP Provider CRUD (admin only) ───────────────────────────────
 
@@ -131,10 +137,13 @@ export function registerIdpRoutes(
     if (parsed.data.name !== undefined) updates.name = parsed.data.name;
     if (parsed.data.enabled !== undefined) updates.enabled = parsed.data.enabled;
     if (parsed.data.config !== undefined) {
-      // If clientSecret is masked (contains ****), preserve the existing one
+      // If clientSecret or bindCredential is masked (contains ****), preserve the existing one
       const newConfig = parsed.data.config as Record<string, unknown>;
       if (typeof newConfig.clientSecret === "string" && newConfig.clientSecret.includes("****")) {
         newConfig.clientSecret = (existing.config as Record<string, unknown>).clientSecret;
+      }
+      if (typeof newConfig.bindCredential === "string" && newConfig.bindCredential.includes("****")) {
+        newConfig.bindCredential = (existing.config as Record<string, unknown>).bindCredential;
       }
       updates.config = newConfig;
     }
@@ -171,6 +180,11 @@ export function registerIdpRoutes(
     if (provider.type === "saml") {
       const result = await samlAdapter.validateConfig(provider.config);
       return { success: result.valid, error: result.error };
+    }
+
+    if (provider.type === "ldap") {
+      const result = await ldapAdapter.testConnection(provider.config as unknown as LdapConfig);
+      return { success: result.success, error: result.error };
     }
 
     return reply.status(400).send({ error: `Test not supported for provider type: ${provider.type}` });
@@ -555,6 +569,149 @@ export function registerIdpRoutes(
       return reply.status(500).send({ error: `Failed to generate SP metadata: ${message}` });
     }
   });
+
+  // ─── LDAP Auth Routes ────────────────────────────────────────────────
+
+  // POST /api/auth/ldap/:providerId/login — username/password login via LDAP
+  app.post<{ Params: { providerId: string } }>(
+    "/api/auth/ldap/:providerId/login",
+    async (request, reply) => {
+      const provider = idpProviderStore.getById(request.params.providerId);
+      if (!provider || !provider.enabled) {
+        return reply.status(404).send({ error: "Identity provider not found or disabled" });
+      }
+      if (provider.type !== "ldap") {
+        return reply.status(400).send({ error: "Provider is not an LDAP provider" });
+      }
+
+      const body = request.body as Record<string, string> | undefined;
+      const username = body?.username;
+      const password = body?.password;
+
+      if (!username || !password) {
+        return reply.status(400).send({ error: "Username and password are required" });
+      }
+
+      const config = provider.config as unknown as LdapConfig;
+
+      // Authenticate against LDAP
+      let idpUser;
+      try {
+        idpUser = await ldapAdapter.authenticate({ username, password, config });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Unknown LDAP error";
+        return reply.status(401).send({ error: `LDAP authentication failed: ${message}` });
+      }
+
+      if (!idpUser.email) {
+        return reply.status(400).send({ error: "LDAP directory did not return an email address for this user" });
+      }
+
+      // Provision or update user (same pattern as OIDC/SAML)
+      let user = userStore.getByExternalId(idpUser.externalId, "ldap");
+      if (!user) {
+        // Check if a local user exists with this email
+        user = userStore.getByEmail(idpUser.email);
+        if (user && user.authSource === "local") {
+          // Link existing local user to LDAP
+          user = userStore.update(user.id, {
+            externalId: idpUser.externalId,
+            authSource: "ldap",
+            name: idpUser.displayName || user.name,
+            updatedAt: new Date(),
+          });
+        } else if (!user) {
+          // Create new user
+          const userId = crypto.randomUUID() as UserId;
+          const now = new Date();
+          user = userStore.create({
+            id: userId,
+            email: idpUser.email,
+            name: idpUser.displayName || idpUser.email,
+            passwordHash: await bcrypt.hash(crypto.randomUUID(), 10), // random password — user authenticates via LDAP
+            authSource: "ldap",
+            externalId: idpUser.externalId,
+            createdAt: now,
+            updatedAt: now,
+          });
+        }
+      } else {
+        // Update existing LDAP user
+        user = userStore.update(user.id, {
+          email: idpUser.email,
+          name: idpUser.displayName || user.name,
+          updatedAt: new Date(),
+        });
+      }
+
+      // Apply role mappings
+      const mappingRules = roleMappingStore.listByProvider(provider.id);
+      const mappedRoleNames = applyRoleMappings(idpUser, mappingRules);
+      if (mappedRoleNames.length > 0) {
+        const roleIds: RoleId[] = [];
+        for (const roleName of mappedRoleNames) {
+          const role = roleStore.getByName(roleName);
+          if (role) roleIds.push(role.id);
+        }
+        if (roleIds.length > 0) {
+          userRoleStore.setRoles(user.id, roleIds, user.id);
+        }
+      }
+
+      // Create session and generate tokens
+      const tokens = await generateTokens(user.id, jwtSecret);
+      const now = new Date();
+      sessionStore.create({
+        id: crypto.randomUUID(),
+        userId: user.id,
+        token: tokens.token,
+        refreshToken: tokens.refreshToken,
+        expiresAt: tokens.expiresAt,
+        createdAt: now,
+      });
+
+      const permissions = userRoleStore.getUserPermissions(user.id);
+
+      return {
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          authSource: user.authSource ?? "ldap",
+          createdAt: user.createdAt,
+          updatedAt: user.updatedAt,
+        },
+        token: tokens.token,
+        refreshToken: tokens.refreshToken,
+        permissions,
+      };
+    },
+  );
+
+  // POST /api/idp/providers/:id/test-ldap-user — test user search (admin only)
+  app.post<{ Params: { id: string } }>(
+    "/api/idp/providers/:id/test-ldap-user",
+    { preHandler: [requirePermission("settings.manage")] },
+    async (request, reply) => {
+      const provider = idpProviderStore.getById(request.params.id);
+      if (!provider) {
+        return reply.status(404).send({ error: "IdP provider not found" });
+      }
+      if (provider.type !== "ldap") {
+        return reply.status(400).send({ error: "Provider is not an LDAP provider" });
+      }
+
+      const body = request.body as Record<string, string> | undefined;
+      const username = body?.username;
+      if (!username) {
+        return reply.status(400).send({ error: "username is required in request body" });
+      }
+
+      const config = provider.config as unknown as LdapConfig;
+      const result = await ldapAdapter.testUser(config, username);
+      return result;
+    },
+  );
 
   // ─── Public: list enabled providers (for login page) ──────────────
 

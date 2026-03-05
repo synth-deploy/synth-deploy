@@ -6,6 +6,7 @@ import Fastify from "fastify";
 import fastifyCors from "@fastify/cors";
 import rateLimit from "@fastify/rate-limit";
 import fastifyStatic from "@fastify/static";
+import fastifyFormBody from "@fastify/formbody";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { PersistentDecisionDebrief, openEntityDatabase, PersistentPartitionStore, PersistentEnvironmentStore, PersistentSettingsStore, PersistentDeploymentStore, PersistentArtifactStore, PersistentSecurityBoundaryStore, PersistentTelemetryStore, PersistentUserStore, PersistentRoleStore, PersistentUserRoleStore, PersistentSessionStore, PersistentIdpProviderStore, PersistentRoleMappingStore, LlmClient } from "@deploystack/core";
 import type { Deployment, Artifact, ArtifactVersion, SecurityBoundary, Permission, RoleId } from "@deploystack/core";
@@ -536,6 +537,9 @@ if (!rawCorsOrigin || rawCorsOrigin.trim() === '') {
 await app.register(fastifyCors, {
   origin: corsOrigin,
 });
+
+// Form body parsing (required for SAML POST callbacks)
+await app.register(fastifyFormBody);
 
 // Rate limiting — configurable via environment variables
 await app.register(rateLimit, {
