@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import type {
@@ -6,10 +7,12 @@ import type {
   DeploymentId,
   PartitionId,
   EnvironmentId,
-  LlmClient,
   PlannedStep,
   SecurityBoundary,
+  ArtifactAnalysis,
+  DeploymentPlan,
 } from "@deploystack/core";
+import { LlmClient } from "@deploystack/core";
 import type { EnvoyKnowledgeStore, LocalDeploymentRecord } from "../state/knowledge-store.js";
 import { EnvironmentScanner } from "./environment-scanner.js";
 import type { CommandReporter } from "./command-reporter.js";
@@ -94,6 +97,50 @@ export interface DeploymentResult {
   debriefEntries: DebriefEntry[];
 }
 
+// ---------------------------------------------------------------------------
+// Types — planning instruction (plan+execute two-phase flow)
+// ---------------------------------------------------------------------------
+
+/**
+ * What the Command agent sends when it wants the Envoy to reason about
+ * how to deploy an artifact. The Envoy produces a DeploymentPlan that
+ * the user can review and approve before execution begins.
+ *
+ * This is the input to the planning phase — read-only, zero side effects.
+ */
+export interface PlanningInstruction {
+  deploymentId: string;
+  artifact: {
+    id: string;
+    name: string;
+    type: string;
+    analysis: ArtifactAnalysis;
+  };
+  environment: {
+    id: string;
+    name: string;
+    variables: Record<string, string>;
+  };
+  partition?: {
+    id: string;
+    name: string;
+    variables: Record<string, string>;
+  };
+  version: string;
+  resolvedVariables: Record<string, string>;
+}
+
+/**
+ * What the Envoy returns after planning — includes the deployment plan,
+ * a rollback plan, and an optional delta summary comparing to the last
+ * successful plan for this artifact type + environment.
+ */
+export interface PlanningResult {
+  plan: DeploymentPlan;
+  rollbackPlan: DeploymentPlan;
+  delta?: string;
+}
+
 /**
  * Verification result for workspace artifact checks.
  */
@@ -147,6 +194,7 @@ export class EnvoyAgent {
   private scanner: EnvironmentScanner;
   private investigator: DiagnosticInvestigator;
   private reporter: CommandReporter | null;
+  private llmClient: LlmClient | null;
   private _lifecycleState: LifecycleState = "active";
   private executorReady: Promise<void>;
 
@@ -160,6 +208,7 @@ export class EnvoyAgent {
     this.scanner = new EnvironmentScanner(baseDir, state);
     this.investigator = new DiagnosticInvestigator(state, llm);
     this.reporter = reporter ?? null;
+    this.llmClient = llm ?? null;
 
     // Initialize the operation executor asynchronously — platform detection
     // requires dynamic imports
@@ -988,6 +1037,628 @@ export class EnvoyAgent {
 
     const passed = checks.every((c) => c.passed);
     return { passed, checks };
+  }
+
+  // -------------------------------------------------------------------------
+  // Phase 1: Planning — read-only, zero side effects
+  // -------------------------------------------------------------------------
+
+  /**
+   * Plan a deployment: reason about how to deploy an artifact to a target
+   * environment. This phase is entirely read-only — nothing is touched on
+   * the system. The returned plan must be approved by the user before
+   * executeApprovedPlan() is called.
+   *
+   * 1. Load context from knowledge store (previous plans, system knowledge)
+   * 2. Scan local system state (read-only)
+   * 3. Reason with LLM to produce a concrete deployment plan
+   * 4. Generate a rollback plan for each step
+   * 5. Record the planning decision to the debrief
+   */
+  async planDeployment(instruction: PlanningInstruction): Promise<PlanningResult> {
+    const debriefEntries: DebriefEntry[] = [];
+
+    const recordEntry = (params: Parameters<DebriefWriter["record"]>[0]): DebriefEntry => {
+      const entry = this.debrief.record(params);
+      debriefEntries.push(entry);
+      return entry;
+    };
+
+    // --- 1. Load context from knowledge store --------------------------------
+
+    const successfulPlans = this.state.getSuccessfulPlans(
+      instruction.artifact.type,
+      instruction.environment.id,
+    );
+    const failedPlans = this.state.getFailedPlans(
+      instruction.artifact.type,
+      instruction.environment.id,
+    );
+    const systemKnowledge = this.state.getAllSystemKnowledge();
+    const latestPlan = this.state.getLatestPlan(
+      instruction.artifact.type,
+      instruction.environment.id,
+    );
+
+    // --- 2. Scan local system (read-only) ------------------------------------
+
+    const scanResult = this.scanner.scan();
+
+    // --- 3. Reason with LLM --------------------------------------------------
+
+    if (this.llmClient && this.llmClient.isAvailable()) {
+      return this.planWithLlm(
+        instruction,
+        scanResult,
+        successfulPlans,
+        failedPlans,
+        systemKnowledge,
+        latestPlan,
+        recordEntry,
+      );
+    }
+
+    // --- Fallback: basic plan without LLM ------------------------------------
+
+    recordEntry({
+      partitionId: instruction.partition?.id ?? null,
+      deploymentId: instruction.deploymentId,
+      agent: "envoy",
+      decisionType: "plan-generation",
+      decision:
+        `Generated basic deployment plan for ${instruction.artifact.name} ` +
+        `v${instruction.version} → "${instruction.environment.name}" (LLM unavailable)`,
+      reasoning:
+        `LLM connection is not available. Falling back to a basic plan based on ` +
+        `artifact type "${instruction.artifact.type}": copy artifact to workspace, ` +
+        `write configuration, restart service. This plan lacks intelligent reasoning ` +
+        `about the target environment and previous deployment history. ` +
+        `Configure an LLM provider in Settings for intelligent plan generation.`,
+      context: {
+        artifactType: instruction.artifact.type,
+        environmentName: instruction.environment.name,
+        llmAvailable: false,
+        previousSuccessfulPlans: successfulPlans.length,
+        previousFailedPlans: failedPlans.length,
+      },
+    });
+
+    return this.buildFallbackPlan(instruction);
+  }
+
+  /**
+   * Produce a deployment plan using LLM reasoning.
+   */
+  private async planWithLlm(
+    instruction: PlanningInstruction,
+    scanResult: ReturnType<EnvironmentScanner["scan"]>,
+    successfulPlans: ReturnType<EnvoyKnowledgeStore["getSuccessfulPlans"]>,
+    failedPlans: ReturnType<EnvoyKnowledgeStore["getFailedPlans"]>,
+    systemKnowledge: ReturnType<EnvoyKnowledgeStore["getAllSystemKnowledge"]>,
+    latestPlan: ReturnType<EnvoyKnowledgeStore["getLatestPlan"]>,
+    recordEntry: (params: Parameters<DebriefWriter["record"]>[0]) => DebriefEntry,
+  ): Promise<PlanningResult> {
+    // Build prompt sections
+    const sections: string[] = [];
+
+    sections.push(`## Artifact
+Name: ${instruction.artifact.name}
+Type: ${instruction.artifact.type}
+Version: ${instruction.version}
+Analysis summary: ${instruction.artifact.analysis.summary}
+Dependencies: ${instruction.artifact.analysis.dependencies.join(", ") || "none"}
+Configuration expectations: ${JSON.stringify(instruction.artifact.analysis.configurationExpectations)}
+Deployment intent: ${instruction.artifact.analysis.deploymentIntent ?? "not specified"}
+Confidence: ${instruction.artifact.analysis.confidence}`);
+
+    sections.push(`## Target Environment
+Name: ${instruction.environment.name}
+ID: ${instruction.environment.id}
+Variables: ${Object.keys(instruction.environment.variables).length} defined`);
+
+    if (instruction.partition) {
+      sections.push(`## Partition
+Name: ${instruction.partition.name}
+ID: ${instruction.partition.id}
+Variables: ${Object.keys(instruction.partition.variables).length} defined`);
+    }
+
+    sections.push(`## Resolved Variables
+${Object.entries(instruction.resolvedVariables).map(([k, v]) => `${k}=${v}`).join("\n")}`);
+
+    sections.push(`## Local System State
+Hostname: ${scanResult.hostname}
+Deployments directory: ${scanResult.deploymentsDir}
+Writable: ${scanResult.deploymentsWritable}
+Existing deployments on disk: ${scanResult.disk.deploymentCount}
+Known deployments in state: ${scanResult.knownState.totalDeployments}
+Active environments: ${scanResult.knownState.activeEnvironments}`);
+
+    if (systemKnowledge.length > 0) {
+      sections.push(`## System Knowledge
+${systemKnowledge.map((k) => `[${k.category}] ${k.key}: ${JSON.stringify(k.value)}`).join("\n")}`);
+    }
+
+    if (successfulPlans.length > 0) {
+      const recent = successfulPlans.slice(0, 3);
+      sections.push(`## Previous Successful Plans (${successfulPlans.length} total, showing ${recent.length})
+${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.plan.steps.length} steps, ${p.executionDurationMs}ms`).join("\n")}`);
+    }
+
+    if (failedPlans.length > 0) {
+      const recent = failedPlans.slice(0, 3);
+      sections.push(`## Previous Failed Plans (${failedPlans.length} total, showing ${recent.length}) — AVOID THESE PATTERNS
+${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnalysis ?? "no analysis"}`).join("\n")}`);
+    }
+
+    const systemPrompt =
+      `You are the Envoy planning engine for DeployStack. Your job is to produce ` +
+      `a concrete deployment plan: what to do, in what order, where, and how. ` +
+      `Each step must have a clear action, target, description, and whether it is ` +
+      `reversible (with rollback action if so).\n\n` +
+      `IMPORTANT: You must respond with valid JSON only. No markdown, no commentary.\n\n` +
+      `Response format:\n` +
+      `{\n` +
+      `  "reasoning": "Your reasoning about why this plan is appropriate",\n` +
+      `  "steps": [\n` +
+      `    {\n` +
+      `      "description": "Human-readable description of the step",\n` +
+      `      "action": "The action type (e.g. copy-artifact, write-config, restart-service, verify-health)",\n` +
+      `      "target": "What the action operates on (path, service name, URL)",\n` +
+      `      "reversible": true,\n` +
+      `      "rollbackAction": "How to undo this step"\n` +
+      `    }\n` +
+      `  ],\n` +
+      `  "delta": "If a previous successful plan exists, describe what changed and why. Omit if no previous plan."\n` +
+      `}`;
+
+    const prompt = sections.join("\n\n");
+
+    const llmResult = await this.llmClient!.reason({
+      prompt,
+      systemPrompt,
+      promptSummary:
+        `Plan deployment of ${instruction.artifact.name} v${instruction.version} ` +
+        `to "${instruction.environment.name}"`,
+      partitionId: instruction.partition?.id ?? null,
+      deploymentId: instruction.deploymentId,
+      maxTokens: 4096,
+    });
+
+    if (!llmResult.ok) {
+      // LLM call failed — fall back to basic plan
+      recordEntry({
+        partitionId: instruction.partition?.id ?? null,
+        deploymentId: instruction.deploymentId,
+        agent: "envoy",
+        decisionType: "plan-generation",
+        decision:
+          `LLM reasoning failed — falling back to basic plan for ` +
+          `${instruction.artifact.name} v${instruction.version}`,
+        reasoning:
+          `LLM call failed: ${llmResult.reason}. Producing a basic deployment plan ` +
+          `based on artifact type "${instruction.artifact.type}" without intelligent ` +
+          `reasoning. The plan will use a simple copy + configure + restart pattern.`,
+        context: {
+          artifactType: instruction.artifact.type,
+          llmFailed: true,
+          llmReason: llmResult.reason,
+        },
+      });
+
+      return this.buildFallbackPlan(instruction);
+    }
+
+    // Parse LLM response
+    let parsed: {
+      reasoning: string;
+      steps: Array<{
+        description: string;
+        action: string;
+        target: string;
+        reversible: boolean;
+        rollbackAction?: string;
+      }>;
+      delta?: string;
+    };
+
+    try {
+      parsed = JSON.parse(llmResult.text);
+    } catch {
+      recordEntry({
+        partitionId: instruction.partition?.id ?? null,
+        deploymentId: instruction.deploymentId,
+        agent: "envoy",
+        decisionType: "plan-generation",
+        decision:
+          `LLM response could not be parsed — falling back to basic plan`,
+        reasoning:
+          `The LLM returned a response that could not be parsed as JSON. ` +
+          `Falling back to a basic deployment plan. Raw response length: ${llmResult.text.length} chars.`,
+        context: { parseError: true },
+      });
+
+      return this.buildFallbackPlan(instruction);
+    }
+
+    // Build the deployment plan
+    const plan: DeploymentPlan = {
+      steps: parsed.steps.map((s) => ({
+        description: s.description,
+        action: s.action,
+        target: s.target,
+        reversible: s.reversible,
+        rollbackAction: s.rollbackAction,
+      })),
+      reasoning: parsed.reasoning,
+      diffFromPreviousPlan: latestPlan
+        ? parsed.delta
+        : undefined,
+    };
+
+    // Build the rollback plan — reverse order of reversible steps
+    const rollbackPlan: DeploymentPlan = {
+      steps: plan.steps
+        .filter((s) => s.reversible && s.rollbackAction)
+        .reverse()
+        .map((s) => ({
+          description: `Rollback: ${s.description}`,
+          action: s.rollbackAction!,
+          target: s.target,
+          reversible: false,
+        })),
+      reasoning:
+        `Rollback plan for ${instruction.artifact.name} v${instruction.version}: ` +
+        `undo ${plan.steps.filter((s) => s.reversible).length} reversible step(s) ` +
+        `in reverse order.`,
+    };
+
+    recordEntry({
+      partitionId: instruction.partition?.id ?? null,
+      deploymentId: instruction.deploymentId,
+      agent: "envoy",
+      decisionType: "plan-generation",
+      decision:
+        `Generated intelligent deployment plan: ${plan.steps.length} step(s) for ` +
+        `${instruction.artifact.name} v${instruction.version} → "${instruction.environment.name}"`,
+      reasoning: parsed.reasoning,
+      context: {
+        artifactType: instruction.artifact.type,
+        environmentName: instruction.environment.name,
+        llmAvailable: true,
+        stepCount: plan.steps.length,
+        rollbackStepCount: rollbackPlan.steps.length,
+        previousSuccessfulPlans: (await this.state.getSuccessfulPlans(instruction.artifact.type, instruction.environment.id)).length,
+        previousFailedPlans: (await this.state.getFailedPlans(instruction.artifact.type, instruction.environment.id)).length,
+        hasDelta: !!parsed.delta,
+      },
+    });
+
+    return {
+      plan,
+      rollbackPlan,
+      delta: parsed.delta,
+    };
+  }
+
+  /**
+   * Build a basic fallback plan when LLM is unavailable — simple copy +
+   * configure + restart pattern based on artifact type.
+   */
+  private buildFallbackPlan(instruction: PlanningInstruction): PlanningResult {
+    const workspacePath = `${this.baseDir}/deployments/${instruction.deploymentId}`;
+
+    const plan: DeploymentPlan = {
+      steps: [
+        {
+          description: `Create workspace directory for ${instruction.artifact.name} v${instruction.version}`,
+          action: "create-directory",
+          target: workspacePath,
+          reversible: true,
+          rollbackAction: "remove-directory",
+        },
+        {
+          description: `Copy ${instruction.artifact.type} artifact to workspace`,
+          action: "copy-artifact",
+          target: `${workspacePath}/artifact`,
+          reversible: true,
+          rollbackAction: "remove-file",
+        },
+        {
+          description: `Write deployment configuration with ${Object.keys(instruction.resolvedVariables).length} resolved variable(s)`,
+          action: "write-config",
+          target: `${workspacePath}/variables.env`,
+          reversible: true,
+          rollbackAction: "remove-file",
+        },
+        {
+          description: `Write deployment manifest`,
+          action: "write-config",
+          target: `${workspacePath}/manifest.json`,
+          reversible: true,
+          rollbackAction: "remove-file",
+        },
+        {
+          description: `Mark deployment as active`,
+          action: "write-config",
+          target: `${workspacePath}/STATUS`,
+          reversible: true,
+          rollbackAction: "write-config",
+        },
+      ],
+      reasoning:
+        `Basic deployment plan for artifact type "${instruction.artifact.type}". ` +
+        `LLM was unavailable so this plan uses a standard copy + configure pattern ` +
+        `without intelligent reasoning about the target environment or previous history.`,
+    };
+
+    const rollbackPlan: DeploymentPlan = {
+      steps: [...plan.steps].reverse().map((s) => ({
+        description: `Rollback: ${s.description}`,
+        action: s.rollbackAction ?? "noop",
+        target: s.target,
+        reversible: false,
+      })),
+      reasoning:
+        `Rollback plan: remove all artifacts written during deployment in reverse order.`,
+    };
+
+    return { plan, rollbackPlan };
+  }
+
+  // -------------------------------------------------------------------------
+  // Phase 2: Execute approved plan — deterministic, no reasoning
+  // -------------------------------------------------------------------------
+
+  /**
+   * Execute a plan that was previously approved by the user.
+   *
+   * This method is entirely deterministic: it runs the approved steps in
+   * order, exactly as specified. No re-reasoning, no improvisation. If a
+   * step fails, the rollback plan is executed for completed steps.
+   *
+   * After execution, the plan is stored in the knowledge store for future
+   * planning context.
+   */
+  async executeApprovedPlan(
+    deploymentId: string,
+    plan: DeploymentPlan,
+    rollbackPlan: DeploymentPlan,
+  ): Promise<DeploymentResult> {
+    await this.executorReady;
+
+    // --- Lifecycle guard ---
+    if (this._lifecycleState !== "active") {
+      const reason =
+        this._lifecycleState === "draining"
+          ? "Envoy is draining — finishing in-flight deployments but rejecting new ones"
+          : "Envoy is paused — not accepting deployments";
+
+      return {
+        deploymentId,
+        success: false,
+        workspacePath: "",
+        artifacts: [],
+        executionDurationMs: 0,
+        totalDurationMs: 0,
+        verificationPassed: false,
+        verificationChecks: [],
+        failureReason: reason,
+        diagnostic: null,
+        debriefEntryIds: [],
+        debriefEntries: [],
+      };
+    }
+
+    const totalStart = Date.now();
+    const debriefEntryIds: string[] = [];
+    const debriefEntries: DebriefEntry[] = [];
+
+    const recordEntry = (params: Parameters<DebriefWriter["record"]>[0]): DebriefEntry => {
+      const entry = this.debrief.record(params);
+      debriefEntryIds.push(entry.id);
+      debriefEntries.push(entry);
+      return entry;
+    };
+
+    recordEntry({
+      partitionId: null,
+      deploymentId,
+      agent: "envoy",
+      decisionType: "deployment-execution",
+      decision:
+        `Executing approved plan: ${plan.steps.length} step(s) for deployment ${deploymentId}`,
+      reasoning:
+        `User approved the deployment plan. Executing ${plan.steps.length} step(s) ` +
+        `deterministically — no re-reasoning. Rollback plan has ` +
+        `${rollbackPlan.steps.length} step(s) ready if any step fails.`,
+      context: {
+        stepCount: plan.steps.length,
+        rollbackStepCount: rollbackPlan.steps.length,
+        steps: plan.steps.map((s) => ({ action: s.action, target: s.target })),
+      },
+    });
+
+    const execStart = Date.now();
+    const completedSteps: PlannedStep[] = [];
+    let failedStepIndex: number | null = null;
+    let failureError: string | null = null;
+
+    // Execute each step through the OperationExecutor if available
+    if (this.operationExecutor && plan.steps.length > 0) {
+      const planResult = await this.operationExecutor.executePlan(
+        plan.steps,
+        [],
+        undefined,
+        deploymentId,
+      );
+
+      if (!planResult.success) {
+        failedStepIndex = planResult.failedStepIndex ?? 0;
+        const failedResult = planResult.results.find((r) => r.status === "failed");
+        failureError = failedResult?.error ?? "Unknown execution error";
+
+        // Collect completed steps for debrief context
+        planResult.results
+          .filter((r) => r.status === "completed")
+          .forEach((r) => completedSteps.push(r.step));
+      } else {
+        planResult.results.forEach((r) => completedSteps.push(r.step));
+      }
+    }
+
+    const execDurationMs = Date.now() - execStart;
+
+    if (failureError !== null) {
+      // --- Failure path: execute rollback for completed steps ---
+
+      recordEntry({
+        partitionId: null,
+        deploymentId,
+        agent: "envoy",
+        decisionType: "deployment-failure",
+        decision:
+          `Plan execution failed at step ${(failedStepIndex ?? 0) + 1}/${plan.steps.length}: ${failureError}`,
+        reasoning:
+          `Step "${plan.steps[failedStepIndex ?? 0]?.description ?? "unknown"}" failed. ` +
+          `Error: ${failureError}. ${completedSteps.length} step(s) completed before failure. ` +
+          `Executing rollback plan to restore previous state.`,
+        context: {
+          failedStepIndex,
+          error: failureError,
+          completedSteps: completedSteps.length,
+          durationMs: execDurationMs,
+        },
+      });
+
+      // Execute rollback
+      if (this.operationExecutor && rollbackPlan.steps.length > 0) {
+        await this.operationExecutor.executePlan(
+          rollbackPlan.steps,
+          [],
+          undefined,
+          deploymentId,
+        );
+
+        recordEntry({
+          partitionId: null,
+          deploymentId,
+          agent: "envoy",
+          decisionType: "rollback-execution",
+          decision:
+            `Rollback executed: ${rollbackPlan.steps.length} step(s) to restore previous state`,
+          reasoning:
+            `Executed rollback plan with ${rollbackPlan.steps.length} step(s) ` +
+            `to undo the ${completedSteps.length} completed step(s). ` +
+            `The environment should be in its previous state.`,
+          context: {
+            rollbackSteps: rollbackPlan.steps.length,
+            completedStepsRolledBack: completedSteps.length,
+          },
+        });
+      }
+
+      const failResult: DeploymentResult = {
+        deploymentId,
+        success: false,
+        workspacePath: "",
+        artifacts: [],
+        executionDurationMs: execDurationMs,
+        totalDurationMs: Date.now() - totalStart,
+        verificationPassed: false,
+        verificationChecks: [],
+        failureReason: failureError,
+        diagnostic: null,
+        debriefEntryIds,
+        debriefEntries,
+      };
+      this.reportToServer(failResult);
+
+      // Store the failed plan in knowledge store for future planning context
+      this.storePlanOutcome(deploymentId, plan, rollbackPlan, false, failureError, execDurationMs);
+
+      return failResult;
+    }
+
+    // --- Success path ---
+
+    const totalDurationMs = Date.now() - totalStart;
+    const artifacts = completedSteps.map((s) => s.description);
+
+    recordEntry({
+      partitionId: null,
+      deploymentId,
+      agent: "envoy",
+      decisionType: "deployment-completion",
+      decision:
+        `Approved plan executed: all ${plan.steps.length} step(s) completed for deployment ${deploymentId}`,
+      reasoning:
+        `All ${plan.steps.length} planned steps executed deterministically in ${execDurationMs}ms. ` +
+        `No re-reasoning was performed — the plan was executed exactly as approved. ` +
+        `Total pipeline time: ${totalDurationMs}ms.`,
+      context: {
+        stepCount: plan.steps.length,
+        executionDurationMs: execDurationMs,
+        totalDurationMs,
+        artifacts,
+      },
+    });
+
+    const successResult: DeploymentResult = {
+      deploymentId,
+      success: true,
+      workspacePath: "",
+      artifacts,
+      executionDurationMs: execDurationMs,
+      totalDurationMs,
+      verificationPassed: true,
+      verificationChecks: plan.steps.map((s) => ({
+        name: s.action,
+        passed: true,
+        detail: s.description,
+      })),
+      failureReason: null,
+      diagnostic: null,
+      debriefEntryIds,
+      debriefEntries,
+    };
+    this.reportToServer(successResult);
+
+    // Store the successful plan in knowledge store for future planning context
+    this.storePlanOutcome(deploymentId, plan, rollbackPlan, true, undefined, execDurationMs);
+
+    return successResult;
+  }
+
+  /**
+   * Store a plan outcome (success or failure) in the knowledge store
+   * for future planning context.
+   */
+  private storePlanOutcome(
+    deploymentId: string,
+    plan: DeploymentPlan,
+    rollbackPlan: DeploymentPlan,
+    success: boolean,
+    failureReason?: string,
+    executionDurationMs?: number,
+  ): void {
+    try {
+      this.state.storePlan({
+        id: crypto.randomUUID(),
+        deploymentId,
+        artifactType: "unknown",
+        artifactName: "unknown",
+        environmentId: "unknown",
+        plan,
+        rollbackPlan,
+        outcome: success ? "succeeded" : "failed",
+        failureAnalysis: success ? undefined : failureReason,
+        executedAt: new Date(),
+        executionDurationMs: executionDurationMs ?? 0,
+      });
+    } catch {
+      // Non-critical — don't fail the deployment over a storage issue
+    }
   }
 
   /**

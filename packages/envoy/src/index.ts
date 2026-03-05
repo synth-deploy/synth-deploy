@@ -224,6 +224,8 @@ export type {
   DeploymentInstruction,
   DeploymentResult,
   ExecutionResult,
+  PlanningInstruction,
+  PlanningResult,
 } from "./agent/envoy-agent.js";
 export { EnvironmentScanner } from "./agent/environment-scanner.js";
 export type { EnvironmentScanResult } from "./agent/environment-scanner.js";
