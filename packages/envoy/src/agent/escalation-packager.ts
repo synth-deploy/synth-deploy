@@ -1,7 +1,7 @@
 import type {
   DebriefEntry,
   DebriefReader,
-} from "@deploystack/core";
+} from "@synth-deploy/core";
 import type {
   EnvoyKnowledgeStore,
   LocalDeploymentRecord,

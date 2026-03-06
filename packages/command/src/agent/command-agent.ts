@@ -9,8 +9,8 @@ import type {
   Artifact,
   AppSettings,
   PartitionId,
-} from "@deploystack/core";
-import type { IArtifactStore, IEnvironmentStore, IPartitionStore } from "@deploystack/core";
+} from "@synth-deploy/core";
+import type { IArtifactStore, IEnvironmentStore, IPartitionStore } from "@synth-deploy/core";
 import type {
   ServiceHealthChecker,
   HealthCheckResult,
@@ -1371,7 +1371,7 @@ export class CommandAgent {
     try {
       // Construct progress callback URL so the envoy can stream execution events back
       const commandPort = parseInt(process.env.PORT ?? "3000", 10);
-      const commandHost = process.env.DEPLOYSTACK_COMMAND_HOST ?? "localhost";
+      const commandHost = process.env.SYNTH_COMMAND_HOST ?? "localhost";
       const progressCallbackUrl = `http://${commandHost}:${commandPort}/api/deployments/${deployment.id}/progress`;
 
       envoyResult = await client.deploy({

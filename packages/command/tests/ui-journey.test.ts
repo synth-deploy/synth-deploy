@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
-import { DecisionDebrief, PartitionStore, EnvironmentStore, ArtifactStore, SettingsStore, TelemetryStore } from "@deploystack/core";
-import type { Deployment, DebriefEntry, PostmortemReport, OperationHistory } from "@deploystack/core";
+import { DecisionDebrief, PartitionStore, EnvironmentStore, ArtifactStore, SettingsStore, TelemetryStore } from "@synth-deploy/core";
+import type { Deployment, DebriefEntry, PostmortemReport, OperationHistory } from "@synth-deploy/core";
 import { CommandAgent, InMemoryDeploymentStore } from "../src/agent/command-agent.js";
 import { registerDeploymentRoutes } from "../src/api/deployments.js";
 import { registerPartitionRoutes } from "../src/api/partitions.js";

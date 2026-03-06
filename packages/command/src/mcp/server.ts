@@ -1,11 +1,11 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { DebriefWriter, DebriefReader, IPartitionStore, IEnvironmentStore, IArtifactStore } from "@deploystack/core";
+import type { DebriefWriter, DebriefReader, IPartitionStore, IEnvironmentStore, IArtifactStore } from "@synth-deploy/core";
 import type { CommandAgent, DeploymentStore } from "../agent/command-agent.js";
 import { registerTools } from "./tools.js";
 import { registerResources } from "./resources.js";
 
 /**
- * Create and configure the MCP server with all DeployStack tools and resources.
+ * Create and configure the MCP server with all Synth tools and resources.
  */
 export function createMcpServer(deps: {
   agent: CommandAgent;

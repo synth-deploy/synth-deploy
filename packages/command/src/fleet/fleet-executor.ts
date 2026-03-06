@@ -5,7 +5,7 @@ import type {
   EnvoyValidationResult,
   DeploymentPlan,
   RolloutConfig,
-} from "@deploystack/core";
+} from "@synth-deploy/core";
 import type { EnvoyRegistry } from "../agent/envoy-registry.js";
 import { EnvoyClient } from "../agent/envoy-client.js";
 

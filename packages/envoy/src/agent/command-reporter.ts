@@ -1,4 +1,4 @@
-import type { DebriefEntry } from "@deploystack/core";
+import type { DebriefEntry } from "@synth-deploy/core";
 import type { DeploymentResult } from "./envoy-agent.js";
 
 // ---------------------------------------------------------------------------

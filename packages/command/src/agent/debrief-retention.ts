@@ -1,11 +1,11 @@
-import type { PersistentDecisionDebrief } from "@deploystack/core";
+import type { PersistentDecisionDebrief } from "@synth-deploy/core";
 
 const DEFAULT_RETENTION_DAYS = Number(
-  process.env.DEPLOYSTACK_DEBRIEF_RETENTION_DAYS ?? 90,
+  process.env.SYNTH_DEBRIEF_RETENTION_DAYS ?? 90,
 );
 
 const DEFAULT_RETENTION_INTERVAL_MS = Number(
-  process.env.DEPLOYSTACK_RETENTION_INTERVAL_MS ?? 24 * 60 * 60 * 1000, // daily
+  process.env.SYNTH_RETENTION_INTERVAL_MS ?? 24 * 60 * 60 * 1000, // daily
 );
 
 /**

@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { DecisionDebrief } from "@deploystack/core";
+import { DecisionDebrief } from "@synth-deploy/core";
 import { InMemoryDeploymentStore } from "../src/agent/command-agent.js";
 import { markStaleDeployments } from "../src/agent/stale-deployment-detector.js";
-import type { Deployment } from "@deploystack/core";
+import type { Deployment } from "@synth-deploy/core";
 
 function makeDeployment(overrides: Partial<Deployment> = {}): Deployment {
   return {

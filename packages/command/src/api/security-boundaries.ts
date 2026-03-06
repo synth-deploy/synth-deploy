@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import type { FastifyInstance } from "fastify";
-import type { ISecurityBoundaryStore, ITelemetryStore } from "@deploystack/core";
+import type { ISecurityBoundaryStore, ITelemetryStore } from "@synth-deploy/core";
 import { SetSecurityBoundariesSchema } from "./schemas.js";
 import { requirePermission } from "../middleware/permissions.js";
 

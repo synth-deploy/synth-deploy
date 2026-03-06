@@ -3,7 +3,7 @@
  * for new versions and emits intake events when new versions are found.
  */
 
-import type { IntakeChannel, RegistryConfig } from "@deploystack/core";
+import type { IntakeChannel, RegistryConfig } from "@synth-deploy/core";
 import type { WebhookPayload } from "./webhook-handlers.js";
 
 export class RegistryPoller {

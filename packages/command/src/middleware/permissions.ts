@@ -1,5 +1,5 @@
 import type { FastifyRequest, FastifyReply } from "fastify";
-import type { Permission } from "@deploystack/core";
+import type { Permission } from "@synth-deploy/core";
 
 /**
  * Returns a Fastify preHandler that checks whether the authenticated user

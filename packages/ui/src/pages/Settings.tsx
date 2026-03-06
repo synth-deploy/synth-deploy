@@ -292,7 +292,7 @@ export default function Settings() {
 
           <div className="settings-description" style={{ marginBottom: 16 }}>
             Synth requires an LLM connection to function. Configure your
-            provider below. API keys are set via the DEPLOYSTACK_LLM_API_KEY
+            provider below. API keys are set via the SYNTH_LLM_API_KEY
             environment variable and are never stored in settings.
           </div>
 
@@ -321,7 +321,7 @@ export default function Settings() {
                 {llmConfig.apiKeyConfigured ? "Key Configured" : "Key Not Set"}
               </span>
               <span style={{ color: "var(--text-secondary)", fontSize: "0.85em" }}>
-                Set via DEPLOYSTACK_LLM_API_KEY environment variable
+                Set via SYNTH_LLM_API_KEY environment variable
               </span>
             </div>
           </div>

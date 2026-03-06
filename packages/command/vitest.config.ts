@@ -15,7 +15,7 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      "@deploystack/core": path.resolve(__dirname, "../core/src/index.ts"),
+      "@synth-deploy/core": path.resolve(__dirname, "../core/src/index.ts"),
     },
   },
 });

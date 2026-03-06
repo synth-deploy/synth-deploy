@@ -11,9 +11,9 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      "@deploystack/core": path.resolve(__dirname, "../packages/core/src/index.ts"),
-      "@deploystack/command": path.resolve(__dirname, "../packages/command/src"),
-      "@deploystack/envoy": path.resolve(__dirname, "../packages/envoy/src"),
+      "@synth-deploy/core": path.resolve(__dirname, "../packages/core/src/index.ts"),
+      "@synth-deploy/command": path.resolve(__dirname, "../packages/command/src"),
+      "@synth-deploy/envoy": path.resolve(__dirname, "../packages/envoy/src"),
     },
   },
 });

@@ -7,8 +7,8 @@ import {
   RoleStore,
   UserRoleStore,
   SessionStore,
-} from "@deploystack/core";
-import type { UserId, RoleId } from "@deploystack/core";
+} from "@synth-deploy/core";
+import type { UserId, RoleId } from "@synth-deploy/core";
 import { registerAuthMiddleware, generateTokens } from "../src/middleware/auth.js";
 
 // ---------------------------------------------------------------------------

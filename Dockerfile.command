@@ -1,4 +1,4 @@
-# DeployStack Command — multi-stage Docker build
+# Synth Command — multi-stage Docker build
 # Orchestration server + UI (port 3000)
 
 # --- Stage 1: Build ---
@@ -53,7 +53,7 @@ RUN groupadd --gid 1000 deploystack && \
 # SQLite data directory
 RUN mkdir -p /data && chown deploystack:deploystack /data
 VOLUME /data
-ENV DEPLOYSTACK_DATA_DIR=/data
+ENV SYNTH_DATA_DIR=/data
 ENV NODE_ENV=production
 
 EXPOSE 3000

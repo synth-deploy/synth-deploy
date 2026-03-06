@@ -14,24 +14,24 @@ import {
   ArtifactStore,
   SettingsStore,
   TelemetryStore,
-} from "@deploystack/core";
+} from "@synth-deploy/core";
 
 // --- Command imports ---
 import {
   CommandAgent,
   InMemoryDeploymentStore,
-} from "@deploystack/command/agent/command-agent.js";
-import { registerDeploymentRoutes } from "@deploystack/command/api/deployments.js";
-import { registerPartitionRoutes } from "@deploystack/command/api/partitions.js";
-import { registerEnvironmentRoutes } from "@deploystack/command/api/environments.js";
-import { registerSettingsRoutes } from "@deploystack/command/api/settings.js";
-import { registerEnvoyReportRoutes } from "@deploystack/command/api/envoy-reports.js";
-import { registerArtifactRoutes } from "@deploystack/command/api/artifacts.js";
+} from "@synth-deploy/command/agent/command-agent.js";
+import { registerDeploymentRoutes } from "@synth-deploy/command/api/deployments.js";
+import { registerPartitionRoutes } from "@synth-deploy/command/api/partitions.js";
+import { registerEnvironmentRoutes } from "@synth-deploy/command/api/environments.js";
+import { registerSettingsRoutes } from "@synth-deploy/command/api/settings.js";
+import { registerEnvoyReportRoutes } from "@synth-deploy/command/api/envoy-reports.js";
+import { registerArtifactRoutes } from "@synth-deploy/command/api/artifacts.js";
 
 // --- Envoy imports ---
-import { EnvoyAgent } from "@deploystack/envoy/agent/envoy-agent.js";
-import { LocalStateStore } from "@deploystack/envoy/state/local-state.js";
-import { createEnvoyServer } from "@deploystack/envoy/server.js";
+import { EnvoyAgent } from "@synth-deploy/envoy/agent/envoy-agent.js";
+import { LocalStateStore } from "@synth-deploy/envoy/state/local-state.js";
+import { createEnvoyServer } from "@synth-deploy/envoy/server.js";
 
 // ==========================================================================
 // Helpers

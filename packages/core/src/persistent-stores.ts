@@ -53,7 +53,7 @@ export function safeJsonParse<T>(
     const where = context
       ? ` (table=${context.table}, row=${context.rowId}, column=${context.column})`
       : "";
-    console.warn(`[DeployStack] Corrupted JSON skipped${where}: ${json.slice(0, 120)}`);
+    console.warn(`[Synth] Corrupted JSON skipped${where}: ${json.slice(0, 120)}`);
     return fallback;
   }
 }
@@ -73,12 +73,12 @@ export function openEntityDatabase(dbPath: string): Database.Database {
     const status = result[0]?.integrity_check ?? "unknown";
     if (status !== "ok") {
       console.warn(
-        `[DeployStack] Database integrity check warning for ${dbPath}: ${status}`,
+        `[Synth] Database integrity check warning for ${dbPath}: ${status}`,
       );
     }
   } catch (err) {
     console.warn(
-      `[DeployStack] Could not run integrity check on ${dbPath}:`,
+      `[Synth] Could not run integrity check on ${dbPath}:`,
       err,
     );
   }
@@ -258,14 +258,14 @@ export function openEntityDatabase(dbPath: string): Database.Database {
       CREATE INDEX IF NOT EXISTS idx_role_mappings_provider ON role_mappings(provider_id);
     `);
     db.prepare(`UPDATE schema_version SET version = ?`).run(5);
-    console.log("[DeployStack] Migrated database schema from v4 to v5 (IdP support)");
+    console.log("[Synth] Migrated database schema from v4 to v5 (IdP support)");
   }
 
   if (!versionRow) {
     db.prepare(`INSERT INTO schema_version (version) VALUES (?)`).run(SCHEMA_VERSION);
   } else if (versionRow.version !== SCHEMA_VERSION) {
     console.warn(
-      `[DeployStack] Schema version mismatch: database has v${versionRow.version}, expected v${SCHEMA_VERSION}`,
+      `[Synth] Schema version mismatch: database has v${versionRow.version}, expected v${SCHEMA_VERSION}`,
     );
   }
 

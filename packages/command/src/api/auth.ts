@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import bcrypt from "bcryptjs";
 import { jwtVerify } from "jose";
-import type { IUserStore, IRoleStore, IUserRoleStore, ISessionStore, UserId, RoleId, UserPublic } from "@deploystack/core";
+import type { IUserStore, IRoleStore, IUserRoleStore, ISessionStore, UserId, RoleId, UserPublic } from "@synth-deploy/core";
 import { generateTokens } from "../middleware/auth.js";
 import { LoginSchema, RegisterSchema, RefreshTokenSchema } from "./schemas.js";
 

@@ -4,7 +4,7 @@ import type {
   DeploymentId,
   PartitionId,
   EnvironmentId,
-} from "@deploystack/core";
+} from "@synth-deploy/core";
 import type {
   EnvoyKnowledgeStore,
   LocalDeploymentRecord,

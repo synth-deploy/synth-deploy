@@ -1,4 +1,4 @@
-import type { FleetDeployment } from "@deploystack/core";
+import type { FleetDeployment } from "@synth-deploy/core";
 
 /**
  * In-memory store for FleetDeployment objects.

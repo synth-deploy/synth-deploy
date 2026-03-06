@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
-import { generatePostmortem } from "@deploystack/core";
-import type { IPartitionStore, IEnvironmentStore, IArtifactStore, ISettingsStore, IDeploymentStore, ITelemetryStore, DebriefWriter, DebriefReader, DeploymentEnrichment, RecommendationVerdict } from "@deploystack/core";
+import { generatePostmortem } from "@synth-deploy/core";
+import type { IPartitionStore, IEnvironmentStore, IArtifactStore, ISettingsStore, IDeploymentStore, ITelemetryStore, DebriefWriter, DebriefReader, DeploymentEnrichment, RecommendationVerdict } from "@synth-deploy/core";
 import { requirePermission } from "../middleware/permissions.js";
 import {
   CreateDeploymentSchema,
@@ -582,9 +582,9 @@ export function registerDeploymentRoutes(
 // ---------------------------------------------------------------------------
 
 function computeRecommendation(
-  deployment: import("@deploystack/core").Deployment,
+  deployment: import("@synth-deploy/core").Deployment,
   store: IDeploymentStore,
-): import("@deploystack/core").DeploymentRecommendation {
+): import("@synth-deploy/core").DeploymentRecommendation {
   const factors: string[] = [];
   let verdict: RecommendationVerdict = "proceed";
 

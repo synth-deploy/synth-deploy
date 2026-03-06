@@ -3,7 +3,7 @@
  * or updates artifacts and versions in the artifact store.
  */
 
-import type { IArtifactStore } from "@deploystack/core";
+import type { IArtifactStore } from "@synth-deploy/core";
 import type { ArtifactAnalyzer } from "../artifact-analyzer.js";
 import type { WebhookPayload } from "./webhook-handlers.js";
 

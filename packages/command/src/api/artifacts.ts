@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import type { IArtifactStore, ITelemetryStore } from "@deploystack/core";
+import type { IArtifactStore, ITelemetryStore } from "@synth-deploy/core";
 import { requirePermission } from "../middleware/permissions.js";
 import {
   CreateArtifactSchema,

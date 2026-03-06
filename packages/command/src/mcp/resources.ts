@@ -1,10 +1,10 @@
 import { ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { DebriefReader } from "@deploystack/core";
+import type { DebriefReader } from "@synth-deploy/core";
 import type { DeploymentStore } from "../agent/command-agent.js";
 
 /**
- * Register MCP resources. These expose DeployStack state to MCP clients
+ * Register MCP resources. These expose Synth state to MCP clients
  * as readable data — Debrief entries, deployment records, etc.
  */
 export function registerResources(

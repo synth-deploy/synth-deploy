@@ -4,13 +4,13 @@
 
 import crypto from "node:crypto";
 import type { FastifyInstance } from "fastify";
-import type { IArtifactStore } from "@deploystack/core";
+import type { IArtifactStore } from "@synth-deploy/core";
 import { requirePermission } from "../middleware/permissions.js";
 import type { IntakeChannelStore, IntakeEventStore } from "../intake/intake-store.js";
 import type { IntakeProcessor } from "../intake/intake-processor.js";
 import type { RegistryPoller } from "../intake/registry-poller.js";
 import { parseWebhook } from "../intake/webhook-handlers.js";
-import type { RegistryConfig } from "@deploystack/core";
+import type { RegistryConfig } from "@synth-deploy/core";
 
 export function registerIntakeRoutes(
   app: FastifyInstance,

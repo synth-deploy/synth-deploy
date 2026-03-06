@@ -5,8 +5,8 @@ import {
   PartitionStore,
   EnvironmentStore,
   ArtifactStore,
-} from "@deploystack/core";
-import type { Environment, DebriefEntry } from "@deploystack/core";
+} from "@synth-deploy/core";
+import type { Environment, DebriefEntry } from "@synth-deploy/core";
 import {
   CommandAgent,
   InMemoryDeploymentStore,

@@ -1,8 +1,8 @@
-import type { IdpUser, RoleMappingRule } from "@deploystack/core";
+import type { IdpUser, RoleMappingRule } from "@synth-deploy/core";
 
 /**
  * Applies role mapping rules to an IdP user's groups.
- * Returns the set of DeployStack role names that should be assigned.
+ * Returns the set of Synth role names that should be assigned.
  *
  * If no mapping rules match any of the user's groups, returns an empty array.
  */

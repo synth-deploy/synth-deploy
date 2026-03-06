@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import type { LlmClient, LlmResult } from "@deploystack/core";
+import type { LlmClient, LlmResult } from "@synth-deploy/core";
 import type { EnvoyKnowledgeStore } from "../state/knowledge-store.js";
 import type { DeploymentInstruction, ExecutionResult } from "./envoy-agent.js";
 

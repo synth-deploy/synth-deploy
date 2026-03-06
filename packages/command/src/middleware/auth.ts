@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { SignJWT, jwtVerify } from "jose";
-import type { IUserStore, IUserRoleStore, ISessionStore, UserId, Permission } from "@deploystack/core";
+import type { IUserStore, IUserRoleStore, ISessionStore, UserId, Permission } from "@synth-deploy/core";
 
 export interface AuthenticatedUser {
   id: UserId;

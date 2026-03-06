@@ -1,4 +1,4 @@
-// Frontend type definitions mirroring @deploystack/core types.
+// Frontend type definitions mirroring @synth-deploy/core types.
 // Dates come as ISO strings from the API.
 
 export type ConflictPolicy = "strict" | "permissive";

@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
-import type { IArtifactStore } from "@deploystack/core";
-import type { DeploymentPlan } from "@deploystack/core";
-import type { DebriefWriter } from "@deploystack/core";
+import type { IArtifactStore } from "@synth-deploy/core";
+import type { DeploymentPlan } from "@synth-deploy/core";
+import type { DebriefWriter } from "@synth-deploy/core";
 import { requirePermission } from "../middleware/permissions.js";
 import type { DeploymentGraphStore } from "../graph/graph-store.js";
 import type { GraphInferenceEngine } from "../graph/graph-inference.js";

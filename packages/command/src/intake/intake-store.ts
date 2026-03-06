@@ -3,7 +3,7 @@
  */
 
 import crypto from "node:crypto";
-import type { IntakeChannel, IntakeEvent } from "@deploystack/core";
+import type { IntakeChannel, IntakeEvent } from "@synth-deploy/core";
 
 // ---------------------------------------------------------------------------
 // IntakeChannelStore

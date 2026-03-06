@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import type { FastifyInstance } from "fastify";
 import type Database from "better-sqlite3";
-import type { LlmClient } from "@deploystack/core";
+import type { LlmClient } from "@synth-deploy/core";
 import { VerifyTaskModelSchema } from "./schemas.js";
 
 interface HealthCheckOptions {
@@ -183,8 +183,8 @@ export function registerHealthRoutes(
     // Lightweight ping to verify the provider is reachable
     let healthy = false;
     try {
-      const apiKey = options?.llmApiKey ?? process.env.DEPLOYSTACK_LLM_API_KEY;
-      const baseUrl = options?.llmBaseUrl ?? process.env.DEPLOYSTACK_LLM_BASE_URL ?? "https://api.anthropic.com";
+      const apiKey = options?.llmApiKey ?? process.env.SYNTH_LLM_API_KEY;
+      const baseUrl = options?.llmBaseUrl ?? process.env.SYNTH_LLM_BASE_URL ?? "https://api.anthropic.com";
       const provider = detectProvider();
 
       if (provider === "anthropic" && apiKey) {
@@ -270,7 +270,7 @@ export function registerHealthRoutes(
 
 // ---------------------------------------------------------------------------
 // Inline task model verification — avoids import issues in worktree builds.
-// The canonical implementation lives in @deploystack/core (verifyModelCapability).
+// The canonical implementation lives in @synth-deploy/core (verifyModelCapability).
 // ---------------------------------------------------------------------------
 
 type TaskModelTask = "logClassification" | "diagnosticSynthesis" | "postmortemGeneration" | "queryAnswering";
@@ -374,5 +374,5 @@ async function runTaskModelVerification(
 }
 
 function detectProvider(): string | undefined {
-  return process.env.DEPLOYSTACK_LLM_PROVIDER ?? "anthropic";
+  return process.env.SYNTH_LLM_PROVIDER ?? "anthropic";
 }

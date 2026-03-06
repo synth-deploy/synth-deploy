@@ -2,7 +2,7 @@ import type {
   DeploymentGraph,
   DeploymentGraphStatus,
   DeploymentGraphNode,
-} from "@deploystack/core";
+} from "@synth-deploy/core";
 
 // ---------------------------------------------------------------------------
 // DeploymentGraphStore — in-memory store for deployment graphs

@@ -1,4 +1,4 @@
-# DeployStack Envoy — multi-stage Docker build
+# Synth Envoy — multi-stage Docker build
 # Deployment agent (port 3001)
 
 # --- Stage 1: Build ---
@@ -50,7 +50,7 @@ RUN groupadd --gid 1000 deploystack && \
 # Deployment workspace directory
 RUN mkdir -p /workspace && chown deploystack:deploystack /workspace
 VOLUME /workspace
-ENV DEPLOYSTACK_COMMAND_URL=http://command:3000
+ENV SYNTH_COMMAND_URL=http://command:3000
 ENV NODE_ENV=production
 
 EXPOSE 3001

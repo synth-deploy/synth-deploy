@@ -56,18 +56,18 @@ jobs:
         run: npm run build
 
       # Core must be published first — command and envoy depend on it.
-      - name: Publish @deploystack/core
-        run: npm publish --workspace=packages/core || echo "::warning::@deploystack/core publish failed or already published"
+      - name: Publish @synth-deploy/core
+        run: npm publish --workspace=packages/core || echo "::warning::@synth-deploy/core publish failed or already published"
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Publish @deploystack/command
-        run: npm publish --workspace=packages/command || echo "::warning::@deploystack/command publish failed or already published"
+      - name: Publish @synth-deploy/command
+        run: npm publish --workspace=packages/command || echo "::warning::@synth-deploy/command publish failed or already published"
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Publish @deploystack/envoy
-        run: npm publish --workspace=packages/envoy || echo "::warning::@deploystack/envoy publish failed or already published"
+      - name: Publish @synth-deploy/envoy
+        run: npm publish --workspace=packages/envoy || echo "::warning::@synth-deploy/envoy publish failed or already published"
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -122,13 +122,13 @@ jobs:
           file: Dockerfile.command
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/deploystack-command:${{ steps.version.outputs.VERSION }}
-            ghcr.io/${{ github.repository_owner }}/deploystack-command:latest
-            deploystack/command:${{ steps.version.outputs.VERSION }}
-            deploystack/command:latest
+            ghcr.io/${{ github.repository_owner }}/synth-command:${{ steps.version.outputs.VERSION }}
+            ghcr.io/${{ github.repository_owner }}/synth-command:latest
+            synth-deploy/command:${{ steps.version.outputs.VERSION }}
+            synth-deploy/command:latest
           labels: |
-            org.opencontainers.image.title=DeployStack Command
-            org.opencontainers.image.description=DeployStack orchestration server with embedded UI
+            org.opencontainers.image.title=Synth
+            org.opencontainers.image.description=Synth orchestration server with embedded UI
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.licenses=MIT
           cache-from: type=gha
@@ -185,13 +185,13 @@ jobs:
           file: Dockerfile.envoy
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/deploystack-envoy:${{ steps.version.outputs.VERSION }}
-            ghcr.io/${{ github.repository_owner }}/deploystack-envoy:latest
-            deploystack/envoy:${{ steps.version.outputs.VERSION }}
-            deploystack/envoy:latest
+            ghcr.io/${{ github.repository_owner }}/synth-envoy:${{ steps.version.outputs.VERSION }}
+            ghcr.io/${{ github.repository_owner }}/synth-envoy:latest
+            synth-deploy/envoy:${{ steps.version.outputs.VERSION }}
+            synth-deploy/envoy:latest
           labels: |
-            org.opencontainers.image.title=DeployStack Envoy
-            org.opencontainers.image.description=DeployStack local deployment agent
+            org.opencontainers.image.title=Synth Envoy
+            org.opencontainers.image.description=Synth local deployment agent
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.licenses=MIT
           cache-from: type=gha

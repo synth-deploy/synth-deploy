@@ -4,8 +4,8 @@ import path from "node:path";
 import os from "node:os";
 import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
-import { DecisionDebrief } from "@deploystack/core";
-import type { DebriefEntry, DebriefWriter } from "@deploystack/core";
+import { DecisionDebrief } from "@synth-deploy/core";
+import type { DebriefEntry, DebriefWriter } from "@synth-deploy/core";
 import { EnvoyAgent } from "../src/agent/envoy-agent.js";
 import type { DeploymentInstruction } from "../src/agent/envoy-agent.js";
 import { LocalStateStore } from "../src/state/local-state.js";
@@ -403,7 +403,7 @@ describe("Envoy→Command bidirectional communication", () => {
   });
 
   it("Envoy without reporter still works (no Command configured)", async () => {
-    // No reporter — simulates DEPLOYSTACK_COMMAND_URL not being set
+    // No reporter — simulates SYNTH_COMMAND_URL not being set
     const agent = new EnvoyAgent(envoyDiary, state, baseDir);
 
     const result = await agent.executeDeployment(

@@ -1,5 +1,5 @@
 {
-  "name": "@deploystack/envoy",
+  "name": "@synth-deploy/envoy",
   "version": "0.1.0",
   "type": "module",
   "publishConfig": {
@@ -7,7 +7,7 @@
   },
   "main": "dist/index.js",
   "bin": {
-    "deploystack-envoy": "./dist/index.js"
+    "synth-envoy": "./dist/index.js"
   },
   "exports": {
     ".": "./dist/index.js",
@@ -22,7 +22,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@deploystack/core": "*",
+    "@synth-deploy/core": "*",
     "better-sqlite3": "^12.6.2",
     "fastify": "^5.0.0",
     "zod": "^3.23.0"

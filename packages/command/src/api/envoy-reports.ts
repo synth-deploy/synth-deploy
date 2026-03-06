@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { DecisionTypeEnum } from "@deploystack/core";
-import type { DebriefWriter, DecisionType } from "@deploystack/core";
+import { DecisionTypeEnum } from "@synth-deploy/core";
+import type { DebriefWriter, DecisionType } from "@synth-deploy/core";
 import type { DeploymentStore } from "../agent/command-agent.js";
 
 // ---------------------------------------------------------------------------

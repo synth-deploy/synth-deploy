@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
-import type { IPartitionStore, ITelemetryStore, DebriefReader, DebriefWriter } from "@deploystack/core";
-import { generateOperationHistory } from "@deploystack/core";
+import type { IPartitionStore, ITelemetryStore, DebriefReader, DebriefWriter } from "@synth-deploy/core";
+import { generateOperationHistory } from "@synth-deploy/core";
 import type { DeploymentStore } from "../agent/command-agent.js";
 import { CreatePartitionSchema, UpdatePartitionSchema, SetVariablesSchema } from "./schemas.js";
 import { requirePermission } from "../middleware/permissions.js";

@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import bcrypt from "bcryptjs";
-import type { IUserStore, IRoleStore, IUserRoleStore, UserId, RoleId, UserPublic, Permission } from "@deploystack/core";
+import type { IUserStore, IRoleStore, IUserRoleStore, UserId, RoleId, UserPublic, Permission } from "@synth-deploy/core";
 import { requirePermission } from "../middleware/permissions.js";
 import {
   CreateUserSchema,

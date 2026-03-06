@@ -3,7 +3,7 @@ import type {
   DeploymentGraphNode,
   DeploymentGraphEdge,
   DeploymentPlan,
-} from "@deploystack/core";
+} from "@synth-deploy/core";
 import type { EnvoyRegistry } from "../agent/envoy-registry.js";
 import type { EnvoyClient, EnvoyDeployResult } from "../agent/envoy-client.js";
 

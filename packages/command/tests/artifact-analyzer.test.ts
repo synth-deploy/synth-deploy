@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { DecisionDebrief } from "@deploystack/core";
+import { DecisionDebrief } from "@synth-deploy/core";
 import { ArtifactAnalyzer, createArtifactAnalyzer } from "../src/artifact-analyzer.js";
 import type { ArtifactInput } from "../src/artifact-analyzer.js";
-import type { LlmClient } from "@deploystack/core";
+import type { LlmClient } from "@synth-deploy/core";
 
 // ---------------------------------------------------------------------------
 // Mock LLM client

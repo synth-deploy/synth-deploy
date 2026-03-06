@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
-import type { IPartitionStore, IEnvironmentStore, IArtifactStore, ISettingsStore, ITelemetryStore, DebriefWriter, DebriefReader, Artifact, Partition, Environment } from "@deploystack/core";
-import type { LlmClient } from "@deploystack/core";
+import type { IPartitionStore, IEnvironmentStore, IArtifactStore, ISettingsStore, ITelemetryStore, DebriefWriter, DebriefReader, Artifact, Partition, Environment } from "@synth-deploy/core";
+import type { LlmClient } from "@synth-deploy/core";
 import type { CommandAgent, DeploymentStore } from "../agent/command-agent.js";
 import type { EnvoyRegistry } from "../agent/envoy-registry.js";
 import { z } from "zod";
@@ -577,7 +577,7 @@ export function registerAgentRoutes(
           : `\nNo cross-system concerns detected.`,
       ].filter(Boolean);
 
-      const systemPrompt = `You are a deployment advisor for DeployStack. Given pre-flight context, you MUST respond with ONLY a JSON object (no markdown, no explanation) with this schema:
+      const systemPrompt = `You are a deployment advisor for Synth. Given pre-flight context, you MUST respond with ONLY a JSON object (no markdown, no explanation) with this schema:
 {
   "action": "proceed" | "wait" | "investigate",
   "reasoning": "<1-2 sentences, directional — 'I recommend proceeding' / 'I'd wait' / 'Investigate first' style>",
@@ -769,7 +769,7 @@ export interface PreFlightContext {
 // ---------------------------------------------------------------------------
 
 function buildQueryClassificationPrompt(): string {
-  return `You are a query classifier for DeployStack's agent canvas. Given a natural language query from a deployment engineer, classify it into one of these actions:
+  return `You are a query classifier for Synth's agent canvas. Given a natural language query from a deployment engineer, classify it into one of these actions:
 
 1. "navigate" — The user wants to see details about a specific entity (e.g., "show partition Alpha", "environment staging")
 2. "data" — The user wants to see a list or filtered view of data (e.g., "what failed", "recent deployments", "deployment history for Alpha")

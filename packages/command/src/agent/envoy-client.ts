@@ -2,7 +2,7 @@ import type {
   ServiceHealthChecker,
   HealthCheckResult,
 } from "./health-checker.js";
-import type { DecisionType, DeploymentPlan, PlannedStep, SecurityBoundary } from "@deploystack/core";
+import type { DecisionType, DeploymentPlan, PlannedStep, SecurityBoundary } from "@synth-deploy/core";
 
 // ---------------------------------------------------------------------------
 // Types — Envoy API responses
@@ -59,7 +59,7 @@ interface RetryOptions {
 }
 
 const DEFAULT_RETRY: RetryOptions = {
-  maxRetries: Number(process.env.DEPLOYSTACK_ENVOY_MAX_RETRIES ?? 3),
+  maxRetries: Number(process.env.SYNTH_ENVOY_MAX_RETRIES ?? 3),
   baseDelayMs: 1000,
   retryableStatuses: new Set([502, 503, 504]),
 };

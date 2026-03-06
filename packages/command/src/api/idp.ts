@@ -12,7 +12,7 @@ import type {
   OidcConfig,
   UserId,
   RoleId,
-} from "@deploystack/core";
+} from "@synth-deploy/core";
 import { requirePermission } from "../middleware/permissions.js";
 import { generateTokens } from "../middleware/auth.js";
 import { OidcAdapter } from "../auth/idp/oidc.js";
@@ -90,7 +90,7 @@ export function registerIdpRoutes(
   app.post("/api/idp/providers", { preHandler: [requirePermission("settings.manage")] }, async (request, reply) => {
     if (!hasDedicatedEncryptionKey) {
       return reply.status(503).send({
-        error: "Encryption key not configured. Set DEPLOYSTACK_ENCRYPTION_KEY environment variable before configuring identity providers.",
+        error: "Encryption key not configured. Set SYNTH_ENCRYPTION_KEY environment variable before configuring identity providers.",
       });
     }
 
@@ -119,7 +119,7 @@ export function registerIdpRoutes(
   app.put<{ Params: { id: string } }>("/api/idp/providers/:id", { preHandler: [requirePermission("settings.manage")] }, async (request, reply) => {
     if (!hasDedicatedEncryptionKey) {
       return reply.status(503).send({
-        error: "Encryption key not configured. Set DEPLOYSTACK_ENCRYPTION_KEY environment variable before configuring identity providers.",
+        error: "Encryption key not configured. Set SYNTH_ENCRYPTION_KEY environment variable before configuring identity providers.",
       });
     }
 

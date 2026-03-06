@@ -1,5 +1,5 @@
 import * as client from "openid-client";
-import type { IdpUser, OidcConfig } from "@deploystack/core";
+import type { IdpUser, OidcConfig } from "@synth-deploy/core";
 import type { IdpAdapter } from "./types.js";
 
 export interface OidcAuthenticateParams {

@@ -153,7 +153,7 @@ export function generatePostmortem(
  * Exported for testability — tests can verify the prompt includes
  * the expected structure without calling the LLM.
  */
-export const POSTMORTEM_SYSTEM_PROMPT = `You are a deployment postmortem analyst for DeployStack. You receive a chronological trail of agent decisions from a deployment and produce a structured postmortem report in JSON format.
+export const POSTMORTEM_SYSTEM_PROMPT = `You are a deployment postmortem analyst for Synth. You receive a chronological trail of agent decisions from a deployment and produce a structured postmortem report in JSON format.
 
 Your analysis must be:
 - Specific to the deployment data provided — never generic

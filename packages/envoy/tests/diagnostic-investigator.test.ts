@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import type { LlmClient, LlmResult, LlmCallParams } from "@deploystack/core";
+import type { LlmClient, LlmResult, LlmCallParams } from "@synth-deploy/core";
 import { DiagnosticInvestigator } from "../src/agent/diagnostic-investigator.js";
 import type { DeploymentInstruction } from "../src/agent/envoy-agent.js";
 import { LocalStateStore } from "../src/state/local-state.js";

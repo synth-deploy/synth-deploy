@@ -6,10 +6,10 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      - deploystack-data:/data
+      - synth-data:/data
     environment:
       - NODE_ENV=production
-      - DEPLOYSTACK_DATA_DIR=/data
+      - SYNTH_DATA_DIR=/data
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
       interval: 30s
@@ -28,7 +28,7 @@ services:
       - envoy-workspace:/workspace
     environment:
       - NODE_ENV=production
-      - DEPLOYSTACK_COMMAND_URL=http://command:3000
+      - SYNTH_COMMAND_URL=http://command:3000
     depends_on:
       command:
         condition: service_healthy
@@ -36,5 +36,5 @@ services:
     cpus: 1.0
 
 volumes:
-  deploystack-data:
+  synth-data:
   envoy-workspace:

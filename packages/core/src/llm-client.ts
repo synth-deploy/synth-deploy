@@ -139,7 +139,7 @@ export function defaultBaseUrlForProvider(
 /**
  * Builds an LlmConfig from a persisted LlmProviderConfig (settings store)
  * with env var fallback. The apiKey is read from the environment variable
- * DEPLOYSTACK_LLM_API_KEY since we never store it in settings.
+ * SYNTH_LLM_API_KEY since we never store it in settings.
  */
 export function buildLlmConfigFromSettings(
   providerConfig?: LlmProviderConfig,
@@ -162,7 +162,7 @@ export function buildLlmConfigFromSettings(
     timeoutMs: providerConfig.timeoutMs,
     rateLimitPerMinute: providerConfig.rateLimitPerMin,
     // API key is always read from env — never stored in settings
-    apiKey: process.env.DEPLOYSTACK_LLM_API_KEY,
+    apiKey: process.env.SYNTH_LLM_API_KEY,
   };
 }
 
@@ -203,29 +203,29 @@ export class LlmClient {
     private readonly _agent: AgentType,
     config: LlmConfig = {},
   ) {
-    this._apiKey = config.apiKey ?? process.env.DEPLOYSTACK_LLM_API_KEY;
+    this._apiKey = config.apiKey ?? process.env.SYNTH_LLM_API_KEY;
     this._provider =
       config.provider ??
-      (process.env.DEPLOYSTACK_LLM_PROVIDER as LlmSdkProvider | undefined) ??
+      (process.env.SYNTH_LLM_PROVIDER as LlmSdkProvider | undefined) ??
       "anthropic";
     this._baseUrl =
-      config.baseUrl ?? process.env.DEPLOYSTACK_LLM_BASE_URL;
+      config.baseUrl ?? process.env.SYNTH_LLM_BASE_URL;
     this._reasoningModel =
       config.reasoningModel ??
       config.model ??
-      process.env.DEPLOYSTACK_LLM_MODEL ??
+      process.env.SYNTH_LLM_MODEL ??
       DEFAULT_REASONING_MODEL;
     this._classificationModel =
-      config.classificationModel ?? process.env.DEPLOYSTACK_LLM_CLASSIFICATION_MODEL ?? DEFAULT_CLASSIFICATION_MODEL;
+      config.classificationModel ?? process.env.SYNTH_LLM_CLASSIFICATION_MODEL ?? DEFAULT_CLASSIFICATION_MODEL;
     this._timeoutMs =
       config.timeoutMs ??
-      (process.env.DEPLOYSTACK_LLM_TIMEOUT_MS
-        ? parseInt(process.env.DEPLOYSTACK_LLM_TIMEOUT_MS, 10)
+      (process.env.SYNTH_LLM_TIMEOUT_MS
+        ? parseInt(process.env.SYNTH_LLM_TIMEOUT_MS, 10)
         : DEFAULT_TIMEOUT_MS);
     this._rateLimitPerMinute =
       config.rateLimitPerMinute ??
-      (process.env.DEPLOYSTACK_LLM_RATE_LIMIT
-        ? parseInt(process.env.DEPLOYSTACK_LLM_RATE_LIMIT, 10)
+      (process.env.SYNTH_LLM_RATE_LIMIT
+        ? parseInt(process.env.SYNTH_LLM_RATE_LIMIT, 10)
         : DEFAULT_RATE_LIMIT_PER_MINUTE);
     this._taskModels = config.taskModels ?? {};
   }
@@ -558,13 +558,13 @@ export class LlmClient {
   private _notConfiguredReason(): string {
     switch (this._provider) {
       case "anthropic":
-        return "LLM not configured — DEPLOYSTACK_LLM_API_KEY not set";
+        return "LLM not configured — SYNTH_LLM_API_KEY not set";
       case "bedrock":
         return "LLM not configured — AWS_REGION not set for Bedrock provider";
       case "vertex":
         return "LLM not configured — CLOUD_ML_REGION and/or ANTHROPIC_VERTEX_PROJECT_ID not set for Vertex provider";
       case "openai-compatible":
-        return "LLM not configured — DEPLOYSTACK_LLM_BASE_URL not set for openai-compatible provider";
+        return "LLM not configured — SYNTH_LLM_BASE_URL not set for openai-compatible provider";
       default:
         return `LLM not configured — unknown provider "${this._provider}"`;
     }

@@ -1,5 +1,5 @@
 {
-  "name": "@deploystack/command",
+  "name": "@synth-deploy/command",
   "version": "0.1.0",
   "type": "module",
   "publishConfig": {
@@ -7,7 +7,7 @@
   },
   "main": "dist/index.js",
   "bin": {
-    "deploystack-command": "./dist/index.js"
+    "synth-command": "./dist/index.js"
   },
   "exports": {
     ".": "./dist/index.js",
@@ -22,7 +22,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@deploystack/core": "*",
+    "@synth-deploy/core": "*",
     "@fastify/cors": "^11.2.0",
     "@fastify/formbody": "^8.0.2",
     "@fastify/rate-limit": "^10.3.0",

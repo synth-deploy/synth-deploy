@@ -91,13 +91,13 @@ export default function LlmGate({ children }: LlmGateProps) {
             <div className="llm-gate-setup-step">
               <span className="llm-gate-step-number">1</span>
               <span>
-                Set <code>DEPLOYSTACK_LLM_API_KEY</code> to your Anthropic API key
+                Set <code>SYNTH_LLM_API_KEY</code> to your Anthropic API key
               </span>
             </div>
             <div className="llm-gate-setup-step">
               <span className="llm-gate-step-number">2</span>
               <span>
-                Optionally set <code>DEPLOYSTACK_LLM_PROVIDER</code> (default: <code>anthropic</code>).
+                Optionally set <code>SYNTH_LLM_PROVIDER</code> (default: <code>anthropic</code>).
                 Supported: <code>anthropic</code>, <code>bedrock</code>, <code>vertex</code>, <code>openai-compatible</code>
               </span>
             </div>

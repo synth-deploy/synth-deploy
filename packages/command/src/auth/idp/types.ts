@@ -1,4 +1,4 @@
-import type { IdpUser } from "@deploystack/core";
+import type { IdpUser } from "@synth-deploy/core";
 
 /**
  * Adapter interface for Identity Provider integrations.

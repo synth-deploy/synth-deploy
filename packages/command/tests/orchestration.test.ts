@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { DecisionDebrief, PartitionStore, EnvironmentStore, ArtifactStore } from "@deploystack/core";
-import type { Partition, Environment, DebriefEntry } from "@deploystack/core";
+import { DecisionDebrief, PartitionStore, EnvironmentStore, ArtifactStore } from "@synth-deploy/core";
+import type { Partition, Environment, DebriefEntry } from "@synth-deploy/core";
 import {
   CommandAgent,
   InMemoryDeploymentStore,

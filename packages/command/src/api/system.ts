@@ -6,7 +6,7 @@ import type {
   IPartitionStore,
   Partition,
   Environment,
-} from "@deploystack/core";
+} from "@synth-deploy/core";
 import type { EnvoyRegistry } from "../agent/envoy-registry.js";
 
 // ---------------------------------------------------------------------------

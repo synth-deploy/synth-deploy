@@ -1,12 +1,12 @@
-import type { DebriefWriter } from "@deploystack/core";
+import type { DebriefWriter } from "@synth-deploy/core";
 import type { DeploymentStore } from "./command-agent.js";
 
 const DEFAULT_STALE_THRESHOLD_MS = Number(
-  process.env.DEPLOYSTACK_STALE_DEPLOYMENT_TIMEOUT_MS ?? 30 * 60 * 1000, // 30 minutes
+  process.env.SYNTH_STALE_DEPLOYMENT_TIMEOUT_MS ?? 30 * 60 * 1000, // 30 minutes
 );
 
 const DEFAULT_SCAN_INTERVAL_MS = Number(
-  process.env.DEPLOYSTACK_STALE_SCAN_INTERVAL_MS ?? 60 * 1000, // 1 minute
+  process.env.SYNTH_STALE_SCAN_INTERVAL_MS ?? 60 * 1000, // 1 minute
 );
 
 /**

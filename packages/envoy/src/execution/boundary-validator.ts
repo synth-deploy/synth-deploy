@@ -2,7 +2,7 @@ import type {
   PlannedStep,
   SecurityBoundary,
   SecurityBoundaryType,
-} from "@deploystack/core";
+} from "@synth-deploy/core";
 
 // ---------------------------------------------------------------------------
 // Types — validation results

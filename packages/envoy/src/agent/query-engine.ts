@@ -2,9 +2,9 @@ import type {
   DebriefEntry,
   DebriefReader,
   DecisionType,
-} from "@deploystack/core";
-import { LlmClient } from "@deploystack/core";
-import type { LlmResult } from "@deploystack/core";
+} from "@synth-deploy/core";
+import { LlmClient } from "@synth-deploy/core";
+import type { LlmResult } from "@synth-deploy/core";
 import type { EnvoyKnowledgeStore, LocalDeploymentRecord, EnvironmentSnapshot } from "../state/knowledge-store.js";
 import type { EnvironmentScanner } from "./environment-scanner.js";
 
@@ -265,7 +265,7 @@ export class QueryEngine {
 
   private buildLlmSystemPrompt(): string {
     return [
-      "You are a DeployStack Envoy — an intelligent deployment agent running on a specific machine.",
+      "You are a Synth Envoy — an intelligent deployment agent running on a specific machine.",
       "Your job is to answer questions from deployment engineers about what happened, what is running,",
       "and what they should know before deploying. Every answer must be grounded in the deployment data",
       "provided. Never speculate beyond the evidence. If the data is insufficient, say exactly what is",

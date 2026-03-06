@@ -8,7 +8,7 @@ import {
   ArtifactStore,
   SettingsStore,
   TelemetryStore,
-} from "@deploystack/core";
+} from "@synth-deploy/core";
 import { CommandAgent, InMemoryDeploymentStore } from "../src/agent/command-agent.js";
 import { registerPartitionRoutes } from "../src/api/partitions.js";
 import { registerEnvironmentRoutes } from "../src/api/environments.js";

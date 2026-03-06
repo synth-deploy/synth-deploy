@@ -8,8 +8,8 @@ import rateLimit from "@fastify/rate-limit";
 import fastifyStatic from "@fastify/static";
 import fastifyFormBody from "@fastify/formbody";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { PersistentDecisionDebrief, openEntityDatabase, PersistentPartitionStore, PersistentEnvironmentStore, PersistentSettingsStore, PersistentDeploymentStore, PersistentArtifactStore, PersistentSecurityBoundaryStore, PersistentTelemetryStore, PersistentUserStore, PersistentRoleStore, PersistentUserRoleStore, PersistentSessionStore, PersistentIdpProviderStore, PersistentRoleMappingStore, LlmClient } from "@deploystack/core";
-import type { Deployment, Artifact, ArtifactVersion, SecurityBoundary, Permission, RoleId } from "@deploystack/core";
+import { PersistentDecisionDebrief, openEntityDatabase, PersistentPartitionStore, PersistentEnvironmentStore, PersistentSettingsStore, PersistentDeploymentStore, PersistentArtifactStore, PersistentSecurityBoundaryStore, PersistentTelemetryStore, PersistentUserStore, PersistentRoleStore, PersistentUserRoleStore, PersistentSessionStore, PersistentIdpProviderStore, PersistentRoleMappingStore, LlmClient } from "@synth-deploy/core";
+import type { Deployment, Artifact, ArtifactVersion, SecurityBoundary, Permission, RoleId } from "@synth-deploy/core";
 import { CommandAgent } from "./agent/command-agent.js";
 import { EnvoyHealthChecker } from "./agent/health-checker.js";
 import { McpClientManager } from "./agent/mcp-client-manager.js";
@@ -45,7 +45,7 @@ import { registerGraphRoutes } from "./api/graph.js";
 
 // --- Bootstrap shared state ---
 
-const DATA_DIR = path.resolve(process.env.DEPLOYSTACK_DATA_DIR ?? "data");
+const DATA_DIR = path.resolve(process.env.SYNTH_DATA_DIR ?? "data");
 mkdirSync(DATA_DIR, { recursive: true });
 
 const debrief = new PersistentDecisionDebrief(path.join(DATA_DIR, "debrief.db"));
@@ -61,31 +61,31 @@ const userStore = new PersistentUserStore(entityDb);
 const roleStore = new PersistentRoleStore(entityDb);
 const userRoleStore = new PersistentUserRoleStore(entityDb, roleStore);
 const sessionStore = new PersistentSessionStore(entityDb);
-const hasDedicatedEncryptionKey = !!process.env.DEPLOYSTACK_ENCRYPTION_KEY;
-const idpEncryptionSecret = process.env.DEPLOYSTACK_ENCRYPTION_KEY ?? process.env.DEPLOYSTACK_JWT_SECRET;
+const hasDedicatedEncryptionKey = !!process.env.SYNTH_ENCRYPTION_KEY;
+const idpEncryptionSecret = process.env.SYNTH_ENCRYPTION_KEY ?? process.env.SYNTH_JWT_SECRET;
 const idpProviderStore = new PersistentIdpProviderStore(entityDb, idpEncryptionSecret);
 const roleMappingStore = new PersistentRoleMappingStore(entityDb);
 
 // Warn if IdP providers exist but no dedicated encryption key is configured
 if (!hasDedicatedEncryptionKey && idpProviderStore.list().length > 0) {
   console.warn(
-    "[DeployStack] WARNING: DEPLOYSTACK_ENCRYPTION_KEY is not set. " +
-    "IdP client secrets are encrypted with DEPLOYSTACK_JWT_SECRET, which means a single compromised key " +
+    "[Synth] WARNING: SYNTH_ENCRYPTION_KEY is not set. " +
+    "IdP client secrets are encrypted with SYNTH_JWT_SECRET, which means a single compromised key " +
     "exposes both session tokens and at-rest IdP credentials. " +
-    "Set DEPLOYSTACK_ENCRYPTION_KEY to a dedicated secret for IdP encryption.",
+    "Set SYNTH_ENCRYPTION_KEY to a dedicated secret for IdP encryption.",
   );
 }
 
 const envoyRegistry = new EnvoyRegistry();
 
 // --- JWT secret ---
-const jwtSecretEnv = process.env.DEPLOYSTACK_JWT_SECRET;
+const jwtSecretEnv = process.env.SYNTH_JWT_SECRET;
 let jwtSecret: Uint8Array;
 if (jwtSecretEnv) {
   jwtSecret = new TextEncoder().encode(jwtSecretEnv);
 } else {
   jwtSecret = crypto.getRandomValues(new Uint8Array(32));
-  console.warn("[DeployStack] DEPLOYSTACK_JWT_SECRET not set — generated random secret (sessions will not survive restarts)");
+  console.warn("[Synth] SYNTH_JWT_SECRET not set — generated random secret (sessions will not survive restarts)");
 }
 
 // --- Seed default roles ---
@@ -136,7 +136,7 @@ if (roleStore.list().length === 0) {
     isBuiltIn: true,
     createdAt: new Date(),
   });
-  console.log("[DeployStack] Seeded default roles: Admin, Deployer, Viewer");
+  console.log("[Synth] Seeded default roles: Admin, Deployer, Viewer");
 }
 const envoyUrl = settings.get().envoy?.url;
 const healthChecker = envoyUrl ? new EnvoyHealthChecker(envoyUrl) : undefined;
@@ -158,7 +158,7 @@ agent.mcpClientManager = mcpClientManager;
 
 // --- Seed demo data so the server is immediately usable ---
 
-if (process.env.DEPLOYSTACK_SEED_DEMO !== 'false' && partitions.list().length === 0) {
+if (process.env.SYNTH_SEED_DEMO !== 'false' && partitions.list().length === 0) {
   function hoursAgo(h: number): Date { return new Date(Date.now() - h * 3600_000); }
 
   // Environments
@@ -513,9 +513,9 @@ if (process.env.DEPLOYSTACK_SEED_DEMO !== 'false' && partitions.list().length ==
     context: { drift: true, driftDetails: "LOG_LEVEL changed outside pipeline" },
   });
 
-  console.log('Demo seed data created (set DEPLOYSTACK_SEED_DEMO=false to disable)');
-} else if (process.env.DEPLOYSTACK_SEED_DEMO === 'false') {
-  console.log('Demo seed data skipped (DEPLOYSTACK_SEED_DEMO=false)');
+  console.log('Demo seed data created (set SYNTH_SEED_DEMO=false to disable)');
+} else if (process.env.SYNTH_SEED_DEMO === 'false') {
+  console.log('Demo seed data skipped (SYNTH_SEED_DEMO=false)');
 } else {
   console.log('Demo seed data skipped (database already populated)');
 }
@@ -528,13 +528,13 @@ const mcp = createMcpServer({ agent, debrief, partitions, environments, deployme
 
 const app = Fastify({ logger: true });
 
-// Configure CORS origin from DEPLOYSTACK_CORS_ORIGIN env var.
+// Configure CORS origin from SYNTH_CORS_ORIGIN env var.
 // If unset: reject all cross-origin (secure default). Single value: string. Comma-separated: string[].
-const rawCorsOrigin = process.env.DEPLOYSTACK_CORS_ORIGIN;
+const rawCorsOrigin = process.env.SYNTH_CORS_ORIGIN;
 let corsOrigin: boolean | string | string[];
 if (!rawCorsOrigin || rawCorsOrigin.trim() === '') {
   corsOrigin = false;
-  console.warn('[DeployStack] DEPLOYSTACK_CORS_ORIGIN is not set — CORS will reject all cross-origin requests. Set it to your UI origin (e.g., http://localhost:5173) for development.');
+  console.warn('[Synth] SYNTH_CORS_ORIGIN is not set — CORS will reject all cross-origin requests. Set it to your UI origin (e.g., http://localhost:5173) for development.');
 } else if (rawCorsOrigin.includes(',')) {
   corsOrigin = rawCorsOrigin.split(',').map((o) => o.trim());
 } else {
@@ -550,8 +550,8 @@ await app.register(fastifyFormBody);
 
 // Rate limiting — configurable via environment variables
 await app.register(rateLimit, {
-  max: Number(process.env.DEPLOYSTACK_RATE_LIMIT_MAX ?? 100),
-  timeWindow: Number(process.env.DEPLOYSTACK_RATE_LIMIT_WINDOW_MS ?? 60_000),
+  max: Number(process.env.SYNTH_RATE_LIMIT_MAX ?? 100),
+  timeWindow: Number(process.env.SYNTH_RATE_LIMIT_WINDOW_MS ?? 60_000),
 });
 
 // Register authentication middleware
@@ -645,7 +645,7 @@ interface McpSession {
   createdAt: number;
 }
 const mcpTransports = new Map<string, McpSession>();
-const MCP_SESSION_TTL_MS = Number(process.env.DEPLOYSTACK_MCP_SESSION_TTL_MS ?? 60 * 60 * 1000);
+const MCP_SESSION_TTL_MS = Number(process.env.SYNTH_MCP_SESSION_TTL_MS ?? 60 * 60 * 1000);
 
 app.post("/mcp", async (request, reply) => {
   const sessionId = (request.headers["mcp-session-id"] as string) ?? undefined;
@@ -695,7 +695,7 @@ app.delete("/mcp", async (request, reply) => {
 });
 
 // Periodic MCP session cleanup (every 10 minutes)
-const MCP_CLEANUP_INTERVAL_MS = Number(process.env.DEPLOYSTACK_MCP_CLEANUP_INTERVAL_MS ?? 10 * 60 * 1000);
+const MCP_CLEANUP_INTERVAL_MS = Number(process.env.SYNTH_MCP_CLEANUP_INTERVAL_MS ?? 10 * 60 * 1000);
 const mcpCleanupInterval = setInterval(async () => {
   const now = Date.now();
   let closed = 0;
@@ -730,7 +730,7 @@ app.addHook("onClose", async () => {
     await session.transport.close();
   }
   mcpTransports.clear();
-  console.log("DeployStack Command shutting down — resources cleaned up");
+  console.log("Synth shutting down — resources cleaned up");
 });
 
 // --- Start ---
@@ -750,13 +750,13 @@ app.listen({ port: PORT, host: HOST }, (err) => {
     ? "Auth:     enabled (JWT)                              "
     : "Auth:     disabled                                   ";
 
-  const seedStatus = process.env.DEPLOYSTACK_SEED_DEMO !== 'false'
+  const seedStatus = process.env.SYNTH_SEED_DEMO !== 'false'
     ? "Seed: 3 partitions, 3 envs, 3 artifacts              \n║        10 deployments, 2 boundaries                  "
-    : "Seed: disabled (DEPLOYSTACK_SEED_DEMO=false)        ";
+    : "Seed: disabled (SYNTH_SEED_DEMO=false)        ";
 
   console.log(`
 ╔══════════════════════════════════════════════════════╗
-║  DeployStack Command v0.1.0                         ║
+║  Synth v0.1.0                         ║
 ║                                                     ║
 ║  REST API:  http://${HOST}:${PORT}/api               ║
 ║  MCP:       http://${HOST}:${PORT}/mcp               ║

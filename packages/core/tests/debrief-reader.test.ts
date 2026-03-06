@@ -359,7 +359,7 @@ describe("generatePostmortemAsync — fallback to heuristic", () => {
       reasonSpy: vi.fn<(params: LlmCallParams) => Promise<LlmResult>>().mockResolvedValue({
         ok: false,
         fallback: true,
-        reason: "LLM not configured — DEPLOYSTACK_LLM_API_KEY not set",
+        reason: "LLM not configured — SYNTH_LLM_API_KEY not set",
       }),
     });
 

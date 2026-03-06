@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import type { IEnvironmentStore, IArtifactStore, ITelemetryStore } from "@deploystack/core";
+import type { IEnvironmentStore, IArtifactStore, ITelemetryStore } from "@synth-deploy/core";
 import { CreateEnvironmentSchema, UpdateEnvironmentSchema } from "./schemas.js";
 import { requirePermission } from "../middleware/permissions.js";
 import type { DeploymentStore } from "../agent/command-agent.js";

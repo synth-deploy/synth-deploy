@@ -2,7 +2,7 @@ import type {
   PlannedStep,
   SecurityBoundary,
   DebriefWriter,
-} from "@deploystack/core";
+} from "@synth-deploy/core";
 import type { DefaultOperationRegistry } from "./operation-registry.js";
 import type { BoundaryValidator } from "./boundary-validator.js";
 import type { Platform } from "./platform.js";

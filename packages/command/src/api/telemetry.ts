@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import type { ITelemetryStore, TelemetryAction } from "@deploystack/core";
+import type { ITelemetryStore, TelemetryAction } from "@synth-deploy/core";
 import { TelemetryQuerySchema } from "./schemas.js";
 import { requirePermission } from "../middleware/permissions.js";
 

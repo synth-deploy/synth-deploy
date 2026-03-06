@@ -1,6 +1,6 @@
-import type { ArtifactAnalysis } from "@deploystack/core";
-import type { LlmClient, LlmResult } from "@deploystack/core";
-import type { DebriefWriter } from "@deploystack/core";
+import type { ArtifactAnalysis } from "@synth-deploy/core";
+import type { LlmClient, LlmResult } from "@synth-deploy/core";
+import type { DebriefWriter } from "@synth-deploy/core";
 import type { PatternStore, PatternMatch, DerivedAnalysis } from "./pattern-store.js";
 
 // ---------------------------------------------------------------------------

@@ -5,8 +5,8 @@ import {
   EnvironmentStore,
   ArtifactStore,
   SettingsStore,
-} from "@deploystack/core";
-import type { Partition, Environment, Artifact } from "@deploystack/core";
+} from "@synth-deploy/core";
+import type { Partition, Environment, Artifact } from "@synth-deploy/core";
 import { CommandAgent, InMemoryDeploymentStore } from "../src/agent/command-agent.js";
 import { registerTools } from "../src/mcp/tools.js";
 

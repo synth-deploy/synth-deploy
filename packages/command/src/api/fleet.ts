@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import type { FastifyInstance } from "fastify";
-import type { Deployment, FleetDeployment, FleetProgress, IDeploymentStore, DebriefWriter } from "@deploystack/core";
+import type { Deployment, FleetDeployment, FleetProgress, IDeploymentStore, DebriefWriter } from "@synth-deploy/core";
 import type { EnvoyRegistry } from "../agent/envoy-registry.js";
 import type { FleetDeploymentStore } from "../fleet/fleet-store.js";
 import type { FleetExecutor, FleetProgressEvent } from "../fleet/fleet-executor.js";

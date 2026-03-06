@@ -10,11 +10,11 @@ import {
   ArtifactStore,
   formatDebriefEntry,
   formatDebriefEntries,
-} from "@deploystack/core";
+} from "@synth-deploy/core";
 import type {
   DebriefEntry,
   DecisionType,
-} from "@deploystack/core";
+} from "@synth-deploy/core";
 import {
   CommandAgent,
   InMemoryDeploymentStore,

@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import type { ISettingsStore, ITelemetryStore, AppSettings, LlmProviderConfig } from "@deploystack/core";
+import type { ISettingsStore, ITelemetryStore, AppSettings, LlmProviderConfig } from "@synth-deploy/core";
 import { UpdateSettingsSchema } from "./schemas.js";
 import { requirePermission } from "../middleware/permissions.js";
 
@@ -16,16 +16,16 @@ function sanitizeLlmSettings(settings: AppSettings): AppSettings {
     delete (sanitized.llm as any)["apiKey"];
     // Ensure apiKeyConfigured reflects whether an env var key is set
     sanitized.llm.apiKeyConfigured =
-      typeof process.env.DEPLOYSTACK_LLM_API_KEY === "string" &&
-      process.env.DEPLOYSTACK_LLM_API_KEY.length > 0;
+      typeof process.env.SYNTH_LLM_API_KEY === "string" &&
+      process.env.SYNTH_LLM_API_KEY.length > 0;
 
     if (sanitized.llm.fallbacks) {
       for (const fb of sanitized.llm.fallbacks) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         delete (fb as any)["apiKey"];
         fb.apiKeyConfigured =
-          typeof process.env.DEPLOYSTACK_LLM_API_KEY === "string" &&
-          process.env.DEPLOYSTACK_LLM_API_KEY.length > 0;
+          typeof process.env.SYNTH_LLM_API_KEY === "string" &&
+          process.env.SYNTH_LLM_API_KEY.length > 0;
       }
     }
   }
@@ -44,8 +44,8 @@ function stripApiKeyFromConfig(
   return {
     ...rest,
     apiKeyConfigured:
-      typeof process.env.DEPLOYSTACK_LLM_API_KEY === "string" &&
-      process.env.DEPLOYSTACK_LLM_API_KEY.length > 0,
+      typeof process.env.SYNTH_LLM_API_KEY === "string" &&
+      process.env.SYNTH_LLM_API_KEY.length > 0,
   };
 }
 

@@ -1,5 +1,5 @@
 import ldap from "ldapjs";
-import type { IdpUser } from "@deploystack/core";
+import type { IdpUser } from "@synth-deploy/core";
 import type { IdpAdapter } from "./types.js";
 
 export interface LdapConfig {

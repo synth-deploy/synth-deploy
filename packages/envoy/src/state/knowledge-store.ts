@@ -3,7 +3,7 @@ import type {
   PartitionId,
   EnvironmentId,
   DeploymentPlan,
-} from "@deploystack/core";
+} from "@synth-deploy/core";
 
 // ---------------------------------------------------------------------------
 // Types — what the Envoy remembers about deployments and its environment

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterAll } from "vitest";
 import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
-import { DecisionDebrief } from "@deploystack/core";
+import { DecisionDebrief } from "@synth-deploy/core";
 import { InMemoryDeploymentStore } from "../src/agent/command-agent.js";
 import { registerEnvoyReportRoutes } from "../src/api/envoy-reports.js";
 

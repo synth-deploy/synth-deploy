@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterAll } from "vitest";
 import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
-import { DecisionDebrief, PartitionStore, TelemetryStore } from "@deploystack/core";
+import { DecisionDebrief, PartitionStore, TelemetryStore } from "@synth-deploy/core";
 import { InMemoryDeploymentStore } from "../src/agent/command-agent.js";
 import { registerPartitionRoutes } from "../src/api/partitions.js";
 

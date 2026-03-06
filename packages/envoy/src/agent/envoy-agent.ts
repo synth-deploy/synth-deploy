@@ -11,8 +11,8 @@ import type {
   SecurityBoundary,
   ArtifactAnalysis,
   DeploymentPlan,
-} from "@deploystack/core";
-import { LlmClient } from "@deploystack/core";
+} from "@synth-deploy/core";
+import { LlmClient } from "@synth-deploy/core";
 import type { EnvoyKnowledgeStore, LocalDeploymentRecord } from "../state/knowledge-store.js";
 import { EnvironmentScanner } from "./environment-scanner.js";
 import type { CommandReporter } from "./command-reporter.js";
@@ -1219,7 +1219,7 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
     }
 
     const systemPrompt =
-      `You are the Envoy planning engine for DeployStack. Your job is to produce ` +
+      `You are the Envoy planning engine for Synth. Your job is to produce ` +
       `a concrete deployment plan: what to do, in what order, where, and how. ` +
       `Each step must have a clear action, target, description, and whether it is ` +
       `reversible (with rollback action if so).\n\n` +

@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import path from "node:path";
 import fs from "node:fs";
-import { DecisionDebrief, LlmClient } from "@deploystack/core";
+import { DecisionDebrief, LlmClient } from "@synth-deploy/core";
 import { EnvoyAgent } from "./agent/envoy-agent.js";
 import { EnvironmentScanner } from "./agent/environment-scanner.js";
 import { QueryEngine } from "./agent/query-engine.js";
@@ -22,7 +22,7 @@ const BASE_DIR = process.env.ENVOY_BASE_DIR ?? path.join(process.cwd(), ".envoy"
 fs.mkdirSync(BASE_DIR, { recursive: true });
 fs.mkdirSync(path.join(BASE_DIR, "deployments"), { recursive: true });
 
-const COMMAND_URL = process.env.DEPLOYSTACK_COMMAND_URL ?? "";
+const COMMAND_URL = process.env.SYNTH_COMMAND_URL ?? "";
 
 const debrief = new DecisionDebrief();
 
@@ -198,7 +198,7 @@ app.listen({ port: PORT, host: HOST }, (err) => {
 
   console.log(`
 ╔══════════════════════════════════════════════════════╗
-║  DeployStack Envoy v0.1.0                         ║
+║  Synth Envoy v0.1.0                         ║
 ║                                                      ║
 ║  Health:  http://${HOST}:${PORT}/health               ║
 ║  Deploy:  POST http://${HOST}:${PORT}/deploy          ║

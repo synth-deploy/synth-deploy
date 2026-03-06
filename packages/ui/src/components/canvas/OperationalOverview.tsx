@@ -343,7 +343,7 @@ function EmptyState({ onComplete }: { onComplete: () => void }) {
                 Install and start an envoy on your target machine. It will connect back to this Synth instance automatically.
               </div>
               <div style={{ marginTop: 12, fontFamily: "var(--font-mono)", fontSize: 12, color: "#63e1be", background: "rgba(0,0,0,0.3)", padding: "8px 12px", borderRadius: 6, wordBreak: "break-all" }}>
-                npx @deploystack/envoy --command-url {window.location.origin}
+                npx @synth-deploy/envoy --command-url {window.location.origin}
               </div>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--agent-text-muted)" }}>
@@ -663,7 +663,7 @@ function NormalState({ stats: _stats }: { stats: SystemState["stats"] }) {
   }
 
   function getDebriefRouting(entry: DebriefEntry): string {
-    if (entry.decisionType === "deployment-failure") return "\u2192 Command";
+    if (entry.decisionType === "deployment-failure") return "\u2192 Synth";
     if (entry.decisionType === "deployment-completion") return "filed";
     return "held";
   }
@@ -691,7 +691,7 @@ function NormalState({ stats: _stats }: { stats: SystemState["stats"] }) {
         )}
       </div>
 
-      {/* Command status card */}
+      {/* Synth status card */}
       <div className="v2-command-card">
         <div className="v2-command-card-glow" />
         <div className="v2-command-card-content">
@@ -1228,14 +1228,14 @@ function NormalState({ stats: _stats }: { stats: SystemState["stats"] }) {
                       {new Date(entry.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false })}
                     </span>
                     <span className="v2-debrief-from">
-                      {entry.agent === "envoy" ? `Envoy \u203A ${partName}` : "Command"}
+                      {entry.agent === "envoy" ? `Envoy \u203A ${partName}` : "Synth"}
                     </span>
                     <span
                       className="v2-debrief-routing"
                       style={{
-                        color: routing === "\u2192 Command" ? "#f87171" : "#6b7280",
-                        background: routing === "\u2192 Command" ? "rgba(248,113,113,0.08)" : "rgba(107,114,128,0.08)",
-                        borderColor: routing === "\u2192 Command" ? "rgba(248,113,113,0.15)" : "rgba(107,114,128,0.1)",
+                        color: routing === "\u2192 Synth" ? "#f87171" : "#6b7280",
+                        background: routing === "\u2192 Synth" ? "rgba(248,113,113,0.08)" : "rgba(107,114,128,0.08)",
+                        borderColor: routing === "\u2192 Synth" ? "rgba(248,113,113,0.15)" : "rgba(107,114,128,0.1)",
                       }}
                     >
                       {routing}

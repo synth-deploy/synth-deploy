@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { DecisionDebrief } from "@deploystack/core";
+import { DecisionDebrief } from "@synth-deploy/core";
 import { EnvoyAgent } from "../src/agent/envoy-agent.js";
 import type { DeploymentInstruction } from "../src/agent/envoy-agent.js";
 import { EnvironmentScanner } from "../src/agent/environment-scanner.js";

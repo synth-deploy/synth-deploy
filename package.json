@@ -1,5 +1,5 @@
 {
-  "name": "deploystack",
+  "name": "synth-deploy",
   "private": true,
   "type": "module",
   "workspaces": [

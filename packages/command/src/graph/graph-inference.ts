@@ -3,8 +3,8 @@ import type {
   DeploymentGraph,
   DeploymentGraphNode,
   DeploymentGraphEdge,
-} from "@deploystack/core";
-import type { LlmClient, LlmResult, IArtifactStore } from "@deploystack/core";
+} from "@synth-deploy/core";
+import type { LlmClient, LlmResult, IArtifactStore } from "@synth-deploy/core";
 
 // ---------------------------------------------------------------------------
 // GraphInferenceEngine — uses LLM to reason about deployment ordering

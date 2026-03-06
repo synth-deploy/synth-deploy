@@ -219,8 +219,8 @@ describe("LlmClient — debrief recording", () => {
 
 describe("LlmClient — timeout and rate limiting", () => {
   afterEach(() => {
-    delete process.env.DEPLOYSTACK_LLM_TIMEOUT_MS;
-    delete process.env.DEPLOYSTACK_LLM_RATE_LIMIT;
+    delete process.env.SYNTH_LLM_TIMEOUT_MS;
+    delete process.env.SYNTH_LLM_RATE_LIMIT;
   });
 
   it("stores timeout from config", () => {
@@ -237,14 +237,14 @@ describe("LlmClient — timeout and rate limiting", () => {
   });
 
   it("reads timeout from environment variable", () => {
-    process.env.DEPLOYSTACK_LLM_TIMEOUT_MS = "10000";
+    process.env.SYNTH_LLM_TIMEOUT_MS = "10000";
     const debrief = new DecisionDebrief();
     const client = new LlmClient(debrief, "command");
     expect((client as unknown as { _timeoutMs: number })._timeoutMs).toBe(10000);
   });
 
   it("config timeoutMs takes precedence over environment variable", () => {
-    process.env.DEPLOYSTACK_LLM_TIMEOUT_MS = "10000";
+    process.env.SYNTH_LLM_TIMEOUT_MS = "10000";
     const debrief = new DecisionDebrief();
     const client = new LlmClient(debrief, "command", { timeoutMs: 5000 });
     expect((client as unknown as { _timeoutMs: number })._timeoutMs).toBe(5000);
@@ -263,14 +263,14 @@ describe("LlmClient — timeout and rate limiting", () => {
   });
 
   it("reads rate limit from environment variable", () => {
-    process.env.DEPLOYSTACK_LLM_RATE_LIMIT = "5";
+    process.env.SYNTH_LLM_RATE_LIMIT = "5";
     const debrief = new DecisionDebrief();
     const client = new LlmClient(debrief, "command");
     expect((client as unknown as { _rateLimitPerMinute: number })._rateLimitPerMinute).toBe(5);
   });
 
   it("config rateLimitPerMinute takes precedence over environment variable", () => {
-    process.env.DEPLOYSTACK_LLM_RATE_LIMIT = "5";
+    process.env.SYNTH_LLM_RATE_LIMIT = "5";
     const debrief = new DecisionDebrief();
     const client = new LlmClient(debrief, "command", { rateLimitPerMinute: 15 });
     expect((client as unknown as { _rateLimitPerMinute: number })._rateLimitPerMinute).toBe(15);
@@ -586,9 +586,9 @@ describe("LlmClient — error scenarios", () => {
 
 describe("LlmClient — provider detection", () => {
   afterEach(() => {
-    delete process.env.DEPLOYSTACK_LLM_PROVIDER;
-    delete process.env.DEPLOYSTACK_LLM_BASE_URL;
-    delete process.env.DEPLOYSTACK_LLM_MODEL;
+    delete process.env.SYNTH_LLM_PROVIDER;
+    delete process.env.SYNTH_LLM_BASE_URL;
+    delete process.env.SYNTH_LLM_MODEL;
   });
 
   it("defaults to anthropic provider when no config or env var", () => {
@@ -598,8 +598,8 @@ describe("LlmClient — provider detection", () => {
     expect(internal._provider).toBe("anthropic");
   });
 
-  it("reads provider from DEPLOYSTACK_LLM_PROVIDER env var", () => {
-    process.env.DEPLOYSTACK_LLM_PROVIDER = "bedrock";
+  it("reads provider from SYNTH_LLM_PROVIDER env var", () => {
+    process.env.SYNTH_LLM_PROVIDER = "bedrock";
     const debrief = new DecisionDebrief();
     const client = new LlmClient(debrief, "command");
     const internal = client as unknown as { _provider: LlmSdkProvider };
@@ -607,15 +607,15 @@ describe("LlmClient — provider detection", () => {
   });
 
   it("explicit config.provider takes precedence over env var", () => {
-    process.env.DEPLOYSTACK_LLM_PROVIDER = "bedrock";
+    process.env.SYNTH_LLM_PROVIDER = "bedrock";
     const debrief = new DecisionDebrief();
     const client = new LlmClient(debrief, "command", { provider: "vertex" });
     const internal = client as unknown as { _provider: LlmSdkProvider };
     expect(internal._provider).toBe("vertex");
   });
 
-  it("reads base URL from DEPLOYSTACK_LLM_BASE_URL env var", () => {
-    process.env.DEPLOYSTACK_LLM_BASE_URL = "http://my-ollama:11434/v1";
+  it("reads base URL from SYNTH_LLM_BASE_URL env var", () => {
+    process.env.SYNTH_LLM_BASE_URL = "http://my-ollama:11434/v1";
     const debrief = new DecisionDebrief();
     const client = new LlmClient(debrief, "command");
     const internal = client as unknown as { _baseUrl: string | undefined };
@@ -623,7 +623,7 @@ describe("LlmClient — provider detection", () => {
   });
 
   it("explicit config.baseUrl takes precedence over env var", () => {
-    process.env.DEPLOYSTACK_LLM_BASE_URL = "http://env-url/v1";
+    process.env.SYNTH_LLM_BASE_URL = "http://env-url/v1";
     const debrief = new DecisionDebrief();
     const client = new LlmClient(debrief, "command", {
       baseUrl: "http://config-url/v1",
@@ -678,7 +678,7 @@ describe("LlmClient — isAvailable per provider", () => {
     delete process.env.AWS_SECRET_ACCESS_KEY;
     delete process.env.CLOUD_ML_REGION;
     delete process.env.ANTHROPIC_VERTEX_PROJECT_ID;
-    delete process.env.DEPLOYSTACK_LLM_BASE_URL;
+    delete process.env.SYNTH_LLM_BASE_URL;
   });
 
   // --- anthropic ---
@@ -765,8 +765,8 @@ describe("LlmClient — isAvailable per provider", () => {
     expect(client.isAvailable()).toBe(true);
   });
 
-  it("openai-compatible: available when DEPLOYSTACK_LLM_BASE_URL env var is set", () => {
-    process.env.DEPLOYSTACK_LLM_BASE_URL = "http://localhost:11434/v1";
+  it("openai-compatible: available when SYNTH_LLM_BASE_URL env var is set", () => {
+    process.env.SYNTH_LLM_BASE_URL = "http://localhost:11434/v1";
     const debrief = new DecisionDebrief();
     const client = new LlmClient(debrief, "command", {
       provider: "openai-compatible",
@@ -775,7 +775,7 @@ describe("LlmClient — isAvailable per provider", () => {
   });
 
   it("openai-compatible: not available when baseUrl is missing", () => {
-    delete process.env.DEPLOYSTACK_LLM_BASE_URL;
+    delete process.env.SYNTH_LLM_BASE_URL;
     const debrief = new DecisionDebrief();
     const client = new LlmClient(debrief, "command", {
       provider: "openai-compatible",
@@ -1089,7 +1089,7 @@ describe("LlmClient — missing provider SDK", () => {
 // ---------------------------------------------------------------------------
 
 describe("LlmClient — fallback messages per provider", () => {
-  it("anthropic: fallback mentions DEPLOYSTACK_LLM_API_KEY", async () => {
+  it("anthropic: fallback mentions SYNTH_LLM_API_KEY", async () => {
     const debrief = new DecisionDebrief();
     const client = new LlmClient(debrief, "command", {
       provider: "anthropic",
@@ -1098,7 +1098,7 @@ describe("LlmClient — fallback messages per provider", () => {
     const result = await client.reason(makeParams());
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.reason).toContain("DEPLOYSTACK_LLM_API_KEY");
+      expect(result.reason).toContain("SYNTH_LLM_API_KEY");
     }
   });
 
@@ -1126,8 +1126,8 @@ describe("LlmClient — fallback messages per provider", () => {
     }
   });
 
-  it("openai-compatible: fallback mentions DEPLOYSTACK_LLM_BASE_URL", async () => {
-    delete process.env.DEPLOYSTACK_LLM_BASE_URL;
+  it("openai-compatible: fallback mentions SYNTH_LLM_BASE_URL", async () => {
+    delete process.env.SYNTH_LLM_BASE_URL;
     const debrief = new DecisionDebrief();
     const client = new LlmClient(debrief, "command", {
       provider: "openai-compatible",
@@ -1135,7 +1135,7 @@ describe("LlmClient — fallback messages per provider", () => {
     const result = await client.reason(makeParams());
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.reason).toContain("DEPLOYSTACK_LLM_BASE_URL");
+      expect(result.reason).toContain("SYNTH_LLM_BASE_URL");
     }
   });
 });

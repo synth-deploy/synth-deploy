@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import type { ISettingsStore, ITelemetryStore } from "@deploystack/core";
+import type { ISettingsStore, ITelemetryStore } from "@synth-deploy/core";
 import type { EnvoyRegistry } from "../agent/envoy-registry.js";
 import { requirePermission } from "../middleware/permissions.js";
 

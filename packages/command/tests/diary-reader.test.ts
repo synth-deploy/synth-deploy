@@ -6,12 +6,12 @@ import {
   PartitionStore,
   generatePostmortem,
   generateOperationHistory,
-} from "@deploystack/core";
+} from "@synth-deploy/core";
 import type {
   Partition,
   Environment,
   Deployment,
-} from "@deploystack/core";
+} from "@synth-deploy/core";
 import {
   CommandAgent,
   InMemoryDeploymentStore,

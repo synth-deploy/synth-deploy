@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CommandAgent, DeploymentStore } from "../agent/command-agent.js";
-import type { IArtifactStore, IEnvironmentStore, IPartitionStore } from "@deploystack/core";
+import type { IArtifactStore, IEnvironmentStore, IPartitionStore } from "@synth-deploy/core";
 
 /**
  * Register MCP tools on the server. These are the actions MCP clients
