@@ -68,8 +68,7 @@ website/
 │   │   ├── index.astro              # Homepage (hero, features, architecture, CTA)
 │   │   └── docs/
 │   │       ├── index.astro          # Getting Started guide
-│   │       ├── architecture.astro   # Architecture documentation
-│   │       └── step-types.astro     # Step Type Library reference
+│   │       └── architecture.astro   # Architecture documentation
 │   ├── layouts/
 │   │   ├── Layout.astro             # Main site layout (nav, footer)
 │   │   └── DocsLayout.astro         # Docs layout with sidebar
