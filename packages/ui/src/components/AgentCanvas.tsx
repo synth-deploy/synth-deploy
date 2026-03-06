@@ -18,6 +18,7 @@ import ArtifactDetailPanel from "./canvas/ArtifactDetailPanel.js";
 import PlanReviewPanel from "./canvas/PlanReviewPanel.js";
 import FleetDeploymentPanel from "./canvas/FleetDeploymentPanel.js";
 import DeploymentGraphPanel from "./canvas/DeploymentGraphPanel.js";
+import TopologyPanel from "./canvas/TopologyPanel.js";
 import ErrorBoundary from "./ErrorBoundary.js";
 
 export default function AgentCanvas() {
@@ -172,6 +173,9 @@ export default function AgentCanvas() {
           />
         );
 
+      case "topology":
+        return <TopologyPanel key="topology" title={panel.title} />;
+
       case "settings":
         return <SettingsPanel key="settings" title={panel.title} />;
 
@@ -190,19 +194,14 @@ export default function AgentCanvas() {
     : undefined;
 
   return (
-    <div className="v2-canvas">
-      {/* Panel content area */}
-      <div className="v2-canvas-content">
-        <ErrorBoundary>
-          {renderPanel()}
-        </ErrorBoundary>
-      </div>
-
-      {/* SynthChannel — fixed at bottom */}
+    <>
+      <ErrorBoundary>
+        {renderPanel()}
+      </ErrorBoundary>
       <SynthChannel
         scope={scope}
         onAgentResult={handleAgentResult}
       />
-    </div>
+    </>
   );
 }

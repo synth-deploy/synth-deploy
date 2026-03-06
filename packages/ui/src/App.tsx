@@ -1,5 +1,7 @@
 import AgentCanvas from "./components/AgentCanvas.js";
+import Header from "./components/Header.js";
 import LlmGate from "./components/LlmGate.js";
+import { ThemeProvider } from "./context/ThemeContext.js";
 import { SettingsProvider } from "./context/SettingsContext.js";
 import { CanvasProvider } from "./context/CanvasContext.js";
 import { AuthProvider, useAuth } from "./context/AuthContext.js";
@@ -37,18 +39,23 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <AuthGate>
-        <SettingsProvider>
-          <LlmGate>
-            <CanvasProvider>
-              <div className="v2-layout">
-                <AgentCanvas />
-              </div>
-            </CanvasProvider>
-          </LlmGate>
-        </SettingsProvider>
-      </AuthGate>
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <AuthGate>
+          <SettingsProvider>
+            <LlmGate>
+              <CanvasProvider>
+                <div className="v6-layout">
+                  <Header />
+                  <main className="v6-main">
+                    <AgentCanvas />
+                  </main>
+                </div>
+              </CanvasProvider>
+            </LlmGate>
+          </SettingsProvider>
+        </AuthGate>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }
