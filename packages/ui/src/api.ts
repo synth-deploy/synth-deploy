@@ -579,7 +579,7 @@ export async function listRoleMappings(providerId: string): Promise<RoleMappingR
 
 export async function createRoleMapping(
   providerId: string,
-  params: { idpGroup: string; deployStackRole: string },
+  params: { idpGroup: string; synthRole: string },
 ): Promise<RoleMappingRule> {
   const data = await fetchJson<{ mapping: RoleMappingRule }>(`/api/idp/providers/${providerId}/mappings`, {
     method: "POST",

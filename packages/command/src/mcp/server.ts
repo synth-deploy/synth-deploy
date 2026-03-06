@@ -17,7 +17,7 @@ export function createMcpServer(deps: {
 }): McpServer {
   const mcp = new McpServer(
     {
-      name: "deploystack",
+      name: "synth",
       version: "0.1.0",
     },
     {

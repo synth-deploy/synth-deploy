@@ -236,7 +236,7 @@ describe("API client — debrief", () => {
 
 describe("API client — health", () => {
   it("getHealth fetches the health endpoint", async () => {
-    const health = { status: "ok", service: "deploystack", timestamp: "2026-03-01T00:00:00Z" };
+    const health = { status: "ok", service: "synth", timestamp: "2026-03-01T00:00:00Z" };
     mockFetchResponse(health);
 
     const result = await getHealth();

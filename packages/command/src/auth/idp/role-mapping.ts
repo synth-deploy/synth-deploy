@@ -14,7 +14,7 @@ export function applyRoleMappings(
 
   for (const rule of rules) {
     if (idpUser.groups.includes(rule.idpGroup)) {
-      matchedRoles.add(rule.deployStackRole);
+      matchedRoles.add(rule.synthRole);
     }
   }
 

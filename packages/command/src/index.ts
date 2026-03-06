@@ -49,7 +49,7 @@ const DATA_DIR = path.resolve(process.env.SYNTH_DATA_DIR ?? "data");
 mkdirSync(DATA_DIR, { recursive: true });
 
 const debrief = new PersistentDecisionDebrief(path.join(DATA_DIR, "debrief.db"));
-const entityDb = openEntityDatabase(path.join(DATA_DIR, "deploystack.db"));
+const entityDb = openEntityDatabase(path.join(DATA_DIR, "synth.db"));
 const partitions = new PersistentPartitionStore(entityDb);
 const environments = new PersistentEnvironmentStore(entityDb);
 const settings = new PersistentSettingsStore(entityDb);
@@ -327,15 +327,15 @@ if (process.env.SYNTH_SEED_DEMO !== 'false' && partitions.list().length === 0) {
 
   const envoyId = "envoy-prod-1";
   securityBoundaryStore.set(envoyId, [
-    { id: crypto.randomUUID(), envoyId, boundaryType: "filesystem", config: { allowedPaths: ["/opt/deploystack", "/var/log/deploystack"], readOnly: ["/etc"], denied: ["/root", "/home"] } },
+    { id: crypto.randomUUID(), envoyId, boundaryType: "filesystem", config: { allowedPaths: ["/opt/synth", "/var/log/synth"], readOnly: ["/etc"], denied: ["/root", "/home"] } },
     { id: crypto.randomUUID(), envoyId, boundaryType: "network", config: { allowedHosts: ["db.internal", "redis.internal", "registry.internal"], allowedPorts: [5432, 6379, 443], deniedCidrs: ["10.0.0.0/8"] } },
     { id: crypto.randomUUID(), envoyId, boundaryType: "execution", config: { allowedCommands: ["docker", "npm", "systemctl", "curl"], deniedCommands: ["rm -rf", "dd", "mkfs"], maxTimeoutMs: 300000 } },
-    { id: crypto.randomUUID(), envoyId, boundaryType: "credential", config: { allowedSecretPaths: ["deploystack/*"], deniedSecretPaths: ["admin/*", "root/*"], rotationRequired: true } },
+    { id: crypto.randomUUID(), envoyId, boundaryType: "credential", config: { allowedSecretPaths: ["synth/*"], deniedSecretPaths: ["admin/*", "root/*"], rotationRequired: true } },
   ]);
 
   const stagingEnvoyId = "envoy-staging-1";
   securityBoundaryStore.set(stagingEnvoyId, [
-    { id: crypto.randomUUID(), envoyId: stagingEnvoyId, boundaryType: "filesystem", config: { allowedPaths: ["/opt/deploystack", "/var/log", "/tmp"], readOnly: ["/etc"] } },
+    { id: crypto.randomUUID(), envoyId: stagingEnvoyId, boundaryType: "filesystem", config: { allowedPaths: ["/opt/synth", "/var/log", "/tmp"], readOnly: ["/etc"] } },
     { id: crypto.randomUUID(), envoyId: stagingEnvoyId, boundaryType: "network", config: { allowedHosts: ["*"], allowedPorts: [5432, 6379, 443, 8080], deniedCidrs: [] } },
     { id: crypto.randomUUID(), envoyId: stagingEnvoyId, boundaryType: "execution", config: { allowedCommands: ["docker", "npm", "systemctl", "curl", "node"], deniedCommands: ["rm -rf"], maxTimeoutMs: 600000 } },
   ]);

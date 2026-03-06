@@ -30,7 +30,7 @@ export function registerHealthRoutes(
 ): void {
   app.get("/health", async () => {
     if (!options) {
-      return { status: "ok", service: "deploystack-server", timestamp: new Date().toISOString() };
+      return { status: "ok", service: "synth-command", timestamp: new Date().toISOString() };
     }
 
     const checks: Record<string, CheckResult> = {};
@@ -147,7 +147,7 @@ export function registerHealthRoutes(
 
     return {
       status,
-      service: "deploystack-server",
+      service: "synth-command",
       checks,
       timestamp: new Date().toISOString(),
     };

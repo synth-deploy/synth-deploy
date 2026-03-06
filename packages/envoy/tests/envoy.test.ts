@@ -395,7 +395,7 @@ describe("Envoy HTTP Server", () => {
 
     const body = JSON.parse(response.body);
     expect(body.status).toBe("healthy");
-    expect(body.service).toBe("deploystack-envoy");
+    expect(body.service).toBe("synth-envoy");
     expect(body.hostname).toBeDefined();
     expect(body.readiness.ready).toBe(true);
   });

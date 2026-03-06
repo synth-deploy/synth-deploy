@@ -1235,7 +1235,7 @@ describe("Health Routes", () => {
       expect(res.statusCode).toBe(200);
       const body = JSON.parse(res.payload);
       expect(body.status).toBe("ok");
-      expect(body.service).toBe("deploystack-server");
+      expect(body.service).toBe("synth-command");
       expect(body.timestamp).toBeDefined();
       // Validate timestamp is a valid ISO date
       expect(() => new Date(body.timestamp)).not.toThrow();

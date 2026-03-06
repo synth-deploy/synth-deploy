@@ -47,11 +47,11 @@ COPY --from=build /app/packages/command/dist packages/command/dist/
 COPY --from=build /app/packages/ui/dist packages/ui/dist/
 
 # Create non-root user
-RUN groupadd --gid 1000 deploystack && \
-    useradd --uid 1000 --gid deploystack --shell /bin/sh --create-home deploystack
+RUN groupadd --gid 1000 synth && \
+    useradd --uid 1000 --gid synth --shell /bin/sh --create-home synth
 
 # SQLite data directory
-RUN mkdir -p /data && chown deploystack:deploystack /data
+RUN mkdir -p /data && chown synth:synth /data
 VOLUME /data
 ENV SYNTH_DATA_DIR=/data
 ENV NODE_ENV=production
@@ -61,6 +61,6 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
   CMD curl -f http://localhost:3000/health || exit 1
 
-USER deploystack
+USER synth
 
 CMD ["node", "packages/command/dist/index.js"]

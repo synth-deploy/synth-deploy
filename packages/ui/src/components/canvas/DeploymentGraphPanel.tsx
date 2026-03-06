@@ -63,7 +63,7 @@ interface DeploymentGraph {
 
 let authToken: string | null = null;
 try {
-  authToken = localStorage.getItem("deploystack_token");
+  authToken = localStorage.getItem("synth_token");
 } catch { /* SSR safe */ }
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {

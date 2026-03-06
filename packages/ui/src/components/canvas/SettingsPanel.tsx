@@ -412,7 +412,7 @@ export default function SettingsPanel({ title }: Props) {
     if (!idpMappingNewGroup || !idpMappingNewRole) return;
     const mapping = await createRoleMapping(providerId, {
       idpGroup: idpMappingNewGroup,
-      deployStackRole: idpMappingNewRole,
+      synthRole: idpMappingNewRole,
     });
     setIdpMappings((prev) => ({
       ...prev,
@@ -1123,7 +1123,7 @@ export default function SettingsPanel({ title }: Props) {
                                   style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0", fontSize: "0.85em" }}
                                 >
                                   <span style={{ flex: 1 }}>
-                                    <strong>{mapping.idpGroup}</strong> &rarr; {mapping.deployStackRole}
+                                    <strong>{mapping.idpGroup}</strong> &rarr; {mapping.synthRole}
                                   </span>
                                   <button
                                     className="btn"
@@ -1263,7 +1263,7 @@ export default function SettingsPanel({ title }: Props) {
                       <input
                         value={idpNewSamlIssuer}
                         onChange={(e) => setIdpNewSamlIssuer(e.target.value)}
-                        placeholder="https://deploystack.example.com/sp"
+                        placeholder="https://synth.example.com/sp"
                         style={{ maxWidth: 400 }}
                       />
                       <div className="settings-description">
@@ -1328,7 +1328,7 @@ export default function SettingsPanel({ title }: Props) {
                       <input
                         value={idpNewLdapBindDn}
                         onChange={(e) => setIdpNewLdapBindDn(e.target.value)}
-                        placeholder="cn=svc-deploystack,ou=ServiceAccounts,dc=corp,dc=example,dc=com"
+                        placeholder="cn=svc-synth,ou=ServiceAccounts,dc=corp,dc=example,dc=com"
                         style={{ maxWidth: 500 }}
                       />
                       <div className="settings-description">

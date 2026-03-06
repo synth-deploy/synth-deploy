@@ -195,7 +195,7 @@ export function openEntityDatabase(dbPath: string): Database.Database {
       id TEXT PRIMARY KEY,
       provider_id TEXT NOT NULL,
       idp_group TEXT NOT NULL,
-      deploy_stack_role TEXT NOT NULL
+      synth_role TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_role_mappings_provider ON role_mappings(provider_id);
 
@@ -253,7 +253,7 @@ export function openEntityDatabase(dbPath: string): Database.Database {
         id TEXT PRIMARY KEY,
         provider_id TEXT NOT NULL,
         idp_group TEXT NOT NULL,
-        deploy_stack_role TEXT NOT NULL
+        synth_role TEXT NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_role_mappings_provider ON role_mappings(provider_id);
     `);
@@ -1500,7 +1500,7 @@ interface IdpProviderRow {
 // ---------------------------------------------------------------------------
 
 function deriveEncryptionKey(secret: string): Buffer {
-  return crypto.pbkdf2Sync(secret, "deploystack-idp-config", 100_000, 32, "sha256");
+  return crypto.pbkdf2Sync(secret, "synth-idp-config", 100_000, 32, "sha256");
 }
 
 function encryptValue(plaintext: string, key: Buffer): string {
@@ -1711,7 +1711,7 @@ interface RoleMappingRow {
   id: string;
   provider_id: string;
   idp_group: string;
-  deploy_stack_role: string;
+  synth_role: string;
 }
 
 function rowToRoleMapping(row: RoleMappingRow): RoleMappingRule {
@@ -1719,7 +1719,7 @@ function rowToRoleMapping(row: RoleMappingRow): RoleMappingRule {
     id: row.id,
     providerId: row.provider_id,
     idpGroup: row.idp_group,
-    deployStackRole: row.deploy_stack_role,
+    synthRole: row.synth_role,
   };
 }
 
@@ -1734,8 +1734,8 @@ export class PersistentRoleMappingStore {
   constructor(private db: Database.Database) {
     this.stmts = {
       insert: db.prepare(
-        `INSERT INTO role_mappings (id, provider_id, idp_group, deploy_stack_role)
-         VALUES (@id, @provider_id, @idp_group, @deploy_stack_role)`,
+        `INSERT INTO role_mappings (id, provider_id, idp_group, synth_role)
+         VALUES (@id, @provider_id, @idp_group, @synth_role)`,
       ),
       getById: db.prepare(`SELECT * FROM role_mappings WHERE id = ?`),
       listByProvider: db.prepare(`SELECT * FROM role_mappings WHERE provider_id = ?`),
@@ -1748,7 +1748,7 @@ export class PersistentRoleMappingStore {
       id: rule.id,
       provider_id: rule.providerId,
       idp_group: rule.idpGroup,
-      deploy_stack_role: rule.deployStackRole,
+      synth_role: rule.synthRole,
     });
     return structuredClone(rule);
   }

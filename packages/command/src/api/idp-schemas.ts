@@ -15,5 +15,5 @@ export const UpdateIdpProviderSchema = z.object({
 
 export const CreateRoleMappingSchema = z.object({
   idpGroup: z.string().min(1),
-  deployStackRole: z.string().min(1),
+  synthRole: z.string().min(1),
 });

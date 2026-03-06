@@ -38,7 +38,7 @@ import { createEnvoyServer } from "@synth-deploy/envoy/server.js";
 // ==========================================================================
 
 function makeTmpDir(): string {
-  const dir = path.join(os.tmpdir(), `deploystack-integration-${crypto.randomUUID()}`);
+  const dir = path.join(os.tmpdir(), `synth-integration-${crypto.randomUUID()}`);
   fs.mkdirSync(dir, { recursive: true });
   fs.mkdirSync(path.join(dir, "deployments"), { recursive: true });
   return dir;

@@ -60,7 +60,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setToken(oidcToken);
           setRefreshTokenState(oidcRefresh);
           setAuthToken(oidcToken);
-          sessionStorage.setItem("deploystack_refresh_token", oidcRefresh);
+          sessionStorage.setItem("synth_refresh_token", oidcRefresh);
 
           const me = await authMe();
           setUser(me.user);
@@ -78,14 +78,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         // Try to restore session from stored refresh token
-        const storedRefresh = sessionStorage.getItem("deploystack_refresh_token");
+        const storedRefresh = sessionStorage.getItem("synth_refresh_token");
         if (storedRefresh) {
           try {
             const result = await authRefresh(storedRefresh);
             setToken(result.token);
             setRefreshTokenState(result.refreshToken);
             setAuthToken(result.token);
-            sessionStorage.setItem("deploystack_refresh_token", result.refreshToken);
+            sessionStorage.setItem("synth_refresh_token", result.refreshToken);
 
             // Fetch user info
             const me = await authMe();
@@ -93,7 +93,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setPermissions(me.permissions);
           } catch {
             // Refresh failed — need to log in again
-            sessionStorage.removeItem("deploystack_refresh_token");
+            sessionStorage.removeItem("synth_refresh_token");
           }
         }
       } catch {
@@ -113,7 +113,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setAuthToken(result.token);
       setUser(result.user);
       setPermissions(result.permissions);
-      sessionStorage.setItem("deploystack_refresh_token", result.refreshToken);
+      sessionStorage.setItem("synth_refresh_token", result.refreshToken);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Login failed";
       setError(message);
@@ -131,7 +131,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(result.user);
       setPermissions(result.permissions);
       setNeedsSetup(false);
-      sessionStorage.setItem("deploystack_refresh_token", result.refreshToken);
+      sessionStorage.setItem("synth_refresh_token", result.refreshToken);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Registration failed";
       setError(message);
@@ -157,7 +157,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
     setPermissions([]);
     setAuthToken(null);
-    sessionStorage.removeItem("deploystack_refresh_token");
+    sessionStorage.removeItem("synth_refresh_token");
   }, [token]);
 
   return (

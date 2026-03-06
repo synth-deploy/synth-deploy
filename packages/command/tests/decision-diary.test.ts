@@ -531,7 +531,7 @@ describe("PersistentDecisionDebrief — SQLite backing store", () => {
   beforeEach(() => {
     dbPath = path.join(
       os.tmpdir(),
-      `deploystack-test-${Date.now()}-${Math.random().toString(36).slice(2)}.db`,
+      `synth-test-${Date.now()}-${Math.random().toString(36).slice(2)}.db`,
     );
     diary = new PersistentDecisionDebrief(dbPath);
   });
@@ -768,7 +768,7 @@ describe("PersistentDecisionDebrief — integration with CommandAgent", () => {
   beforeEach(() => {
     dbPath = path.join(
       os.tmpdir(),
-      `deploystack-agent-test-${Date.now()}-${Math.random().toString(36).slice(2)}.db`,
+      `synth-agent-test-${Date.now()}-${Math.random().toString(36).slice(2)}.db`,
     );
     diary = new PersistentDecisionDebrief(dbPath);
     healthChecker = new MockHealthChecker();

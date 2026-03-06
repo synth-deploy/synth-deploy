@@ -27,7 +27,7 @@ export class McpClientManager {
     try {
       const transport = new StreamableHTTPClientTransport(new URL(config.url));
       const client = new Client({
-        name: "deploystack-command",
+        name: "synth-command",
         version: "0.1.0",
       });
       await client.connect(transport);

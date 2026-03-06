@@ -130,7 +130,7 @@ export function createEnvoyServer(
     const status = agent.getStatus();
     return {
       status: status.healthy ? "healthy" : "degraded",
-      service: "deploystack-envoy",
+      service: "synth-envoy",
       hostname: status.hostname,
       timestamp: new Date().toISOString(),
       readiness: status.readiness,

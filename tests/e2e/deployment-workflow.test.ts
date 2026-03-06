@@ -39,7 +39,7 @@ import { createEnvoyServer } from "@synth-deploy/envoy/server.js";
 // ==========================================================================
 
 function makeTmpDir(): string {
-  const dir = path.join(os.tmpdir(), `deploystack-e2e-${crypto.randomUUID()}`);
+  const dir = path.join(os.tmpdir(), `synth-e2e-${crypto.randomUUID()}`);
   fs.mkdirSync(dir, { recursive: true });
   fs.mkdirSync(path.join(dir, "deployments"), { recursive: true });
   return dir;
@@ -373,7 +373,7 @@ describe("E2E: Envoy deployment via HTTP", () => {
     const { status, body } = await httpRequest(envoyBaseUrl, "GET", "/health");
     expect(status).toBe(200);
     expect(body.status).toBe("healthy");
-    expect(body.service).toBe("deploystack-envoy");
+    expect(body.service).toBe("synth-envoy");
   });
 });
 

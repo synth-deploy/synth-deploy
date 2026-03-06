@@ -1,4 +1,4 @@
-# DeployStack — Dev Guide
+# Synth — Dev Guide
 
 ## Prerequisites
 

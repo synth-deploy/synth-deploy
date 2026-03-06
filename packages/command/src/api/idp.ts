@@ -218,7 +218,7 @@ export function registerIdpRoutes(
       id: crypto.randomUUID(),
       providerId: request.params.id,
       idpGroup: parsed.data.idpGroup,
-      deployStackRole: parsed.data.deployStackRole,
+      synthRole: parsed.data.synthRole,
     });
 
     return reply.status(201).send({ mapping: rule });

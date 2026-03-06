@@ -70,7 +70,7 @@ export interface ScenarioHarness {
 // ---------------------------------------------------------------------------
 
 export function makeTmpDir(): string {
-  const dir = path.join(os.tmpdir(), `deploystack-scenario-${crypto.randomUUID()}`);
+  const dir = path.join(os.tmpdir(), `synth-scenario-${crypto.randomUUID()}`);
   fs.mkdirSync(dir, { recursive: true });
   fs.mkdirSync(path.join(dir, "deployments"), { recursive: true });
   return dir;

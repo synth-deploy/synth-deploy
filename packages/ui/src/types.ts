@@ -376,7 +376,7 @@ export interface RoleMappingRule {
   id: string;
   providerId: string;
   idpGroup: string;
-  deployStackRole: string;
+  synthRole: string;
 }
 
 export interface IdpProviderPublic {
