@@ -2,7 +2,7 @@
 import Layout from "../layouts/Layout.astro";
 ---
 
-<Layout title="DeployStack — Deployment Intelligence, Embedded">
+<Layout title="Synth — Deployment Intelligence, Embedded">
   <!-- Hero -->
   <section class="relative overflow-hidden">
     <div class="absolute inset-0 pointer-events-none">
@@ -17,13 +17,13 @@ import Layout from "../layouts/Layout.astro";
           <span class="text-ds-accent">Start deploying intelligently.</span>
         </h1>
         <p class="text-xl text-ds-text-secondary max-w-2xl mx-auto mb-10 leading-relaxed">
-          DeployStack replaces rigid automation with an intelligent agent that understands
+          Synth replaces rigid automation with an intelligent agent that understands
           what you're doing, makes decisions, and explains every one of them. No chatbot.
           No new paradigm. Just a deployment tool that thinks.
         </p>
         <div class="flex items-center justify-center gap-4">
           <a
-            href="https://github.com/jmfullerton96/DeployStack"
+            href="https://github.com/jmfullerton96/synth-deploy"
             target="_blank"
             rel="noopener"
             class="rounded-lg bg-ds-accent px-6 py-3 text-ds-bg font-semibold hover:bg-ds-accent/90 transition-colors"
@@ -46,10 +46,10 @@ import Layout from "../layouts/Layout.astro";
             <div class="w-3 h-3 rounded-full bg-red-500/60"></div>
             <div class="w-3 h-3 rounded-full bg-yellow-500/60"></div>
             <div class="w-3 h-3 rounded-full bg-green-500/60"></div>
-            <span class="ml-2 text-xs text-ds-text-muted font-mono">deploystack</span>
+            <span class="ml-2 text-xs text-ds-text-muted font-mono">synth</span>
           </div>
           <div class="p-6 font-mono text-sm leading-relaxed text-left">
-            <p class="text-ds-text-muted">$ deploystack deploy web-app v2.4.1 --partition acme-corp</p>
+            <p class="text-ds-text-muted">$ synth deploy web-app v2.4.1 --partition acme-corp</p>
             <p class="mt-3 text-ds-accent">Agent: Planned 3-step pipeline for web-app v2.4.1</p>
             <p class="text-ds-text-secondary">  1. Install dependencies <span class="text-ds-accent">&#10003;</span> 14.2s</p>
             <p class="text-ds-text-secondary">  2. Run migrations <span class="text-ds-accent">&#10003;</span> 3.1s</p>
@@ -69,17 +69,17 @@ import Layout from "../layouts/Layout.astro";
         <p class="section-heading">Simple to Set Up</p>
         <h2 class="text-3xl md:text-4xl font-bold mb-4">Two components. One command.</h2>
         <p class="text-ds-text-secondary text-lg max-w-2xl mx-auto">
-          DeployStack runs as two lightweight services — Command and Envoy — that communicate
+          Synth runs as two lightweight services — the Synth server and Envoy — that communicate
           over HTTP. No complex infrastructure. No vendor lock-in. Self-hosted by design.
         </p>
       </div>
 
       <div class="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
-        <!-- Command card -->
+        <!-- Synth server card -->
         <div class="glass-card p-8 scroll-reveal scroll-reveal-delay-1">
           <div class="flex items-center gap-3 mb-4">
             <div class="entity-badge border-ds-command/30 bg-ds-command/10 text-ds-command">
-              Command
+              Synth
             </div>
           </div>
           <h3 class="text-lg font-semibold mb-2">The brain</h3>
@@ -88,7 +88,7 @@ import Layout from "../layouts/Layout.astro";
             Runs the intelligent agent, exposes the REST API, and hosts the MCP server.
           </p>
           <div class="mt-4 font-mono text-xs text-ds-text-muted bg-ds-bg/50 rounded-lg px-4 py-3">
-            docker run deploystack/command
+            docker run synth-deploy/server
           </div>
         </div>
 
@@ -102,10 +102,10 @@ import Layout from "../layouts/Layout.astro";
           <h3 class="text-lg font-semibold mb-2">The hands</h3>
           <p class="text-ds-text-secondary leading-relaxed text-sm">
             Lightweight agents deployed on target machines. Execute deployment steps,
-            run health checks, and report results back to Command.
+            run health checks, and report results back to Synth.
           </p>
           <div class="mt-4 font-mono text-xs text-ds-text-muted bg-ds-bg/50 rounded-lg px-4 py-3">
-            docker run deploystack/envoy
+            docker run synth-deploy/envoy
           </div>
         </div>
       </div>
@@ -327,7 +327,7 @@ import Layout from "../layouts/Layout.astro";
       <!-- Flow diagram with entity badges -->
       <div class="glass-card p-8 md:p-10 max-w-3xl mx-auto scroll-reveal scroll-reveal-delay-2">
         <div class="font-mono text-sm text-center space-y-6">
-          <!-- Row 1: Engineer → Command -->
+          <!-- Row 1: Engineer → Synth -->
           <div class="flex items-center justify-center gap-3 md:gap-4 flex-wrap">
             <span class="entity-badge border-ds-text-muted/30 bg-ds-text-muted/10 text-ds-text-secondary">
               Engineer
@@ -338,15 +338,15 @@ import Layout from "../layouts/Layout.astro";
             </span>
             <span class="text-ds-text-muted">&rarr;</span>
             <span class="entity-badge border-ds-command/30 bg-ds-command/10 text-ds-command">
-              Command
+              Synth
             </span>
           </div>
           <p class="text-ds-text-muted text-xs">resolves variables, plans pipeline, creates order</p>
 
-          <!-- Row 2: Command → Envoy → Target -->
+          <!-- Row 2: Synth → Envoy → Target -->
           <div class="flex items-center justify-center gap-3 md:gap-4 flex-wrap">
             <span class="entity-badge border-ds-command/30 bg-ds-command/10 text-ds-command">
-              Command
+              Synth
             </span>
             <span class="text-ds-text-muted">&rarr;</span>
             <span class="entity-badge border-ds-envoy/30 bg-ds-envoy/10 text-ds-envoy">
@@ -365,7 +365,7 @@ import Layout from "../layouts/Layout.astro";
               Debrief
             </span>
             <span class="text-ds-text-muted">&larr;</span>
-            <span class="text-ds-text-secondary text-xs">every decision logged from both Command and Envoy</span>
+            <span class="text-ds-text-secondary text-xs">every decision logged from both Synth and Envoy</span>
           </div>
         </div>
       </div>
@@ -399,7 +399,7 @@ import Layout from "../layouts/Layout.astro";
         <p class="section-heading">Operational Depth</p>
         <h2 class="text-3xl md:text-4xl font-bold mb-4">Built for engineers who get paged</h2>
         <p class="text-ds-text-secondary text-lg max-w-2xl mx-auto">
-          DeployStack is designed for the worst moments — when a deploy fails at 2am
+          Synth is designed for the worst moments — when a deploy fails at 2am
           and you need to understand what happened immediately, not after reading logs
           for twenty minutes.
         </p>
@@ -425,7 +425,7 @@ import Layout from "../layouts/Layout.astro";
           </h3>
           <p class="text-sm text-ds-text-secondary leading-relaxed">
             Pre-flight and post-deploy health checks. Envoys report readiness state,
-            lifecycle phase, and deployment capacity. Command won't send work to a
+            lifecycle phase, and deployment capacity. Synth won't send work to a
             draining or degraded Envoy.
           </p>
         </div>
@@ -453,11 +453,11 @@ import Layout from "../layouts/Layout.astro";
     <div class="relative mx-auto max-w-6xl px-6 text-center scroll-reveal">
       <h2 class="text-3xl md:text-4xl font-bold mb-4">Ready to deploy smarter?</h2>
       <p class="text-ds-text-secondary text-lg mb-8 max-w-xl mx-auto">
-        DeployStack is open source and self-hosted. Get started in minutes.
+        Synth is open source and self-hosted. Get started in minutes.
       </p>
       <div class="flex items-center justify-center gap-4">
         <a
-          href="https://github.com/jmfullerton96/DeployStack"
+          href="https://github.com/jmfullerton96/synth-deploy"
           target="_blank"
           rel="noopener"
           class="inline-block rounded-lg bg-ds-accent px-8 py-3 text-ds-bg font-semibold hover:bg-ds-accent/90 transition-colors"

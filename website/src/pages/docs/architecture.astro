@@ -6,13 +6,13 @@ import DocsLayout from "../../layouts/DocsLayout.astro";
   <h1>Architecture</h1>
 
   <p>
-    DeployStack uses a two-tier architecture: a central <strong>Command</strong>
+    Synth uses a two-tier architecture: a central <strong>Synth</strong>
     server and distributed <strong>Envoy</strong> agents.
   </p>
 
-  <h2>Command</h2>
+  <h2>Synth Server</h2>
   <p>
-    The brain of DeployStack. Command is a Fastify-based Node.js server that
+    The brain of Synth. The server is a Fastify-based Node.js application that
     manages all deployment state, runs the intelligent agent, and exposes both a
     REST API and an MCP server.
   </p>
@@ -27,21 +27,21 @@ import DocsLayout from "../../layouts/DocsLayout.astro";
   <h2>Envoy</h2>
   <p>
     Lightweight agents deployed on target machines. Envoys receive deployment
-    instructions from Command, execute steps locally, run health checks, and
+    instructions from the Synth server, execute steps locally, run health checks, and
     report results back.
   </p>
   <ul>
     <li><strong>Deployment executor</strong> — Runs shell commands with variable injection and timeouts</li>
-    <li><strong>Health reporting</strong> — Periodic status reports to Command</li>
+    <li><strong>Health reporting</strong> — Periodic status reports to Synth</li>
     <li><strong>Query engine</strong> — Local environment inspection for diagnostics</li>
   </ul>
 
   <h2>Data Flow</h2>
-  <pre><code>Engineer → Command (resolve intent, plan pipeline, create order)
-Command → Envoy (dispatch deployment steps)
+  <pre><code>Engineer → Synth (resolve intent, plan pipeline, create order)
+Synth → Envoy (dispatch deployment steps)
 Envoy → Target Machine (execute commands, health checks)
-Envoy → Command (report results)
-Command → Debrief (log every decision)</code></pre>
+Envoy → Synth (report results)
+Synth → Debrief (log every decision)</code></pre>
 
   <h2>Partition Isolation</h2>
   <p>
@@ -52,7 +52,7 @@ Command → Debrief (log every decision)</code></pre>
 
   <h2>MCP Integration</h2>
   <p>
-    DeployStack exposes deployment operations as MCP tools, making them
+    Synth exposes deployment operations as MCP tools, making them
     accessible to any MCP-compatible AI client. It also connects to external MCP
     servers for data enrichment — monitoring, CI/CD, and infrastructure data can
     flow into the agent's decision-making.

@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# DeployStack Installer
-# Installs Command (orchestration server) and/or Envoy (deployment agent)
+# Synth Installer
+# Installs the Synth server and/or Envoy (deployment agent)
 # as system services on Linux (systemd) or macOS (launchd).
 
 COMPONENT="all"
-INSTALL_DIR="/opt/deploystack"
-DATA_DIR="/var/lib/deploystack"
-REPO_URL="https://github.com/deploystack/deploystack.git"
+INSTALL_DIR="/opt/synth"
+DATA_DIR="/var/lib/synth"
+REPO_URL="https://github.com/jmfullerton96/synth-deploy.git"
 USE_LOCAL=false
 COMMAND_PORT=3000
 ENVOY_PORT=3001
@@ -25,19 +25,19 @@ usage() {
   cat <<EOF
 Usage: $0 [OPTIONS]
 
-Install DeployStack services as system daemons.
+Install Synth services as system daemons.
 
 Options:
   --component <name>   Which component to install: command, envoy, or all (default: all)
-  --install-dir <path> Installation directory (default: /opt/deploystack)
-  --data-dir <path>    Data directory for SQLite and artifacts (default: /var/lib/deploystack)
+  --install-dir <path> Installation directory (default: /opt/synth)
+  --data-dir <path>    Data directory for SQLite and artifacts (default: /var/lib/synth)
   --local              Use current directory as source instead of cloning
-  --command-url <url>  Command server URL for Envoy to connect to (default: http://localhost:3000)
+  --command-url <url>  Synth server URL for Envoy to connect to (default: http://localhost:3000)
   --help               Show this help message
 
 Examples:
   $0                              # Install both services
-  $0 --component command          # Install Command only
+  $0 --component command          # Install Synth server only
   $0 --component envoy            # Install Envoy only
   $0 --local --component all      # Install from local repo checkout
 EOF
@@ -67,7 +67,7 @@ esac
 
 check_node() {
   if ! command -v node &>/dev/null; then
-    fatal "Node.js is not installed. DeployStack requires Node.js 22 or later.
+    fatal "Node.js is not installed. Synth requires Node.js 22 or later.
 Install it from https://nodejs.org/ or via your package manager:
   - macOS:  brew install node@22
   - Ubuntu: curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash - && sudo apt-get install -y nodejs
@@ -80,7 +80,7 @@ Install it from https://nodejs.org/ or via your package manager:
   major=$(echo "$node_version" | cut -d. -f1)
 
   if [[ "$major" -lt 22 ]]; then
-    fatal "Node.js ${node_version} is too old. DeployStack requires Node.js 22 or later.
+    fatal "Node.js ${node_version} is too old. Synth requires Node.js 22 or later.
 Current: node ${node_version}
 Run 'node -v' to confirm, then upgrade from https://nodejs.org/"
   fi
@@ -106,13 +106,13 @@ obtain_source() {
   if $USE_LOCAL; then
     if [[ ! -f "package.json" ]]; then
       fatal "--local specified but no package.json found in current directory.
-Run this script from the DeployStack repository root."
+Run this script from the Synth repository root."
     fi
     SOURCE_DIR="$(pwd)"
     info "Using local source at ${SOURCE_DIR}"
   else
     SOURCE_DIR=$(mktemp -d)
-    info "Cloning DeployStack into ${SOURCE_DIR}..."
+    info "Cloning Synth into ${SOURCE_DIR}..."
     git clone --depth 1 "$REPO_URL" "$SOURCE_DIR"
   fi
 }
@@ -159,10 +159,10 @@ install_files() {
 # --- Linux: systemd ---
 
 install_systemd_command() {
-  info "Creating systemd unit for deploystack-command..."
-  sudo tee /etc/systemd/system/deploystack-command.service >/dev/null <<UNIT
+  info "Creating systemd unit for synth-server..."
+  sudo tee /etc/systemd/system/synth-server.service >/dev/null <<UNIT
 [Unit]
-Description=DeployStack Command — orchestration server
+Description=Synth — orchestration server
 After=network.target
 
 [Service]
@@ -170,7 +170,7 @@ Type=simple
 WorkingDirectory=${INSTALL_DIR}
 ExecStart=/usr/bin/env node packages/command/dist/index.js
 Environment=NODE_ENV=production
-Environment=DEPLOYSTACK_DATA_DIR=${DATA_DIR}
+Environment=SYNTH_DATA_DIR=${DATA_DIR}
 Environment=PORT=${COMMAND_PORT}
 Restart=on-failure
 RestartSec=5
@@ -181,16 +181,16 @@ StandardError=journal
 WantedBy=multi-user.target
 UNIT
   sudo systemctl daemon-reload
-  sudo systemctl enable deploystack-command
+  sudo systemctl enable synth-server
 }
 
 install_systemd_envoy() {
-  info "Creating systemd unit for deploystack-envoy..."
-  sudo tee /etc/systemd/system/deploystack-envoy.service >/dev/null <<UNIT
+  info "Creating systemd unit for synth-envoy..."
+  sudo tee /etc/systemd/system/synth-envoy.service >/dev/null <<UNIT
 [Unit]
-Description=DeployStack Envoy — deployment agent
+Description=Synth Envoy — deployment agent
 After=network.target
-$(if [[ "$COMPONENT" == "all" ]]; then echo "After=deploystack-command.service"; fi)
+$(if [[ "$COMPONENT" == "all" ]]; then echo "After=synth-server.service"; fi)
 
 [Service]
 Type=simple
@@ -198,7 +198,7 @@ WorkingDirectory=${INSTALL_DIR}
 ExecStart=/usr/bin/env node packages/envoy/dist/index.js
 Environment=NODE_ENV=production
 Environment=ENVOY_PORT=${ENVOY_PORT}
-Environment=DEPLOYSTACK_COMMAND_URL=${COMMAND_URL}
+Environment=SYNTH_COMMAND_URL=${COMMAND_URL}
 Environment=ENVOY_BASE_DIR=${DATA_DIR}/envoy-workspace
 Restart=on-failure
 RestartSec=5
@@ -209,14 +209,14 @@ StandardError=journal
 WantedBy=multi-user.target
 UNIT
   sudo systemctl daemon-reload
-  sudo systemctl enable deploystack-envoy
+  sudo systemctl enable synth-envoy
 }
 
 # --- macOS: launchd ---
 
 install_launchd_command() {
-  local plist_path="$HOME/Library/LaunchAgents/com.deploystack.command.plist"
-  info "Creating launchd plist for deploystack-command..."
+  local plist_path="$HOME/Library/LaunchAgents/com.synthdeploy.server.plist"
+  info "Creating launchd plist for synth-server..."
   mkdir -p "$HOME/Library/LaunchAgents"
   cat > "$plist_path" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -224,7 +224,7 @@ install_launchd_command() {
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>com.deploystack.command</string>
+  <string>com.synthdeploy.server</string>
   <key>ProgramArguments</key>
   <array>
     <string>$(command -v node)</string>
@@ -236,7 +236,7 @@ install_launchd_command() {
   <dict>
     <key>NODE_ENV</key>
     <string>production</string>
-    <key>DEPLOYSTACK_DATA_DIR</key>
+    <key>SYNTH_DATA_DIR</key>
     <string>${DATA_DIR}</string>
     <key>PORT</key>
     <string>${COMMAND_PORT}</string>
@@ -255,8 +255,8 @@ PLIST
 }
 
 install_launchd_envoy() {
-  local plist_path="$HOME/Library/LaunchAgents/com.deploystack.envoy.plist"
-  info "Creating launchd plist for deploystack-envoy..."
+  local plist_path="$HOME/Library/LaunchAgents/com.synthdeploy.envoy.plist"
+  info "Creating launchd plist for synth-envoy..."
   mkdir -p "$HOME/Library/LaunchAgents"
   cat > "$plist_path" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -264,7 +264,7 @@ install_launchd_envoy() {
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>com.deploystack.envoy</string>
+  <string>com.synthdeploy.envoy</string>
   <key>ProgramArguments</key>
   <array>
     <string>$(command -v node)</string>
@@ -278,7 +278,7 @@ install_launchd_envoy() {
     <string>production</string>
     <key>ENVOY_PORT</key>
     <string>${ENVOY_PORT}</string>
-    <key>DEPLOYSTACK_COMMAND_URL</key>
+    <key>SYNTH_COMMAND_URL</key>
     <string>${COMMAND_URL}</string>
     <key>ENVOY_BASE_DIR</key>
     <string>${DATA_DIR}/envoy-workspace</string>
@@ -301,7 +301,7 @@ PLIST
 print_instructions_linux() {
   echo ""
   echo "================================================================"
-  echo "  DeployStack installed successfully"
+  echo "  Synth installed successfully"
   echo "================================================================"
   echo ""
   echo "  Install dir: ${INSTALL_DIR}"
@@ -309,20 +309,20 @@ print_instructions_linux() {
   echo ""
 
   if [[ "$COMPONENT" == "command" || "$COMPONENT" == "all" ]]; then
-    echo "  Command (port ${COMMAND_PORT}):"
-    echo "    Start:   sudo systemctl start deploystack-command"
-    echo "    Stop:    sudo systemctl stop deploystack-command"
-    echo "    Status:  sudo systemctl status deploystack-command"
-    echo "    Logs:    journalctl -u deploystack-command -f"
+    echo "  Synth Server (port ${COMMAND_PORT}):"
+    echo "    Start:   sudo systemctl start synth-server"
+    echo "    Stop:    sudo systemctl stop synth-server"
+    echo "    Status:  sudo systemctl status synth-server"
+    echo "    Logs:    journalctl -u synth-server -f"
     echo ""
   fi
 
   if [[ "$COMPONENT" == "envoy" || "$COMPONENT" == "all" ]]; then
     echo "  Envoy (port ${ENVOY_PORT}):"
-    echo "    Start:   sudo systemctl start deploystack-envoy"
-    echo "    Stop:    sudo systemctl stop deploystack-envoy"
-    echo "    Status:  sudo systemctl status deploystack-envoy"
-    echo "    Logs:    journalctl -u deploystack-envoy -f"
+    echo "    Start:   sudo systemctl start synth-envoy"
+    echo "    Stop:    sudo systemctl stop synth-envoy"
+    echo "    Status:  sudo systemctl status synth-envoy"
+    echo "    Logs:    journalctl -u synth-envoy -f"
     echo ""
   fi
 
@@ -332,7 +332,7 @@ print_instructions_linux() {
 print_instructions_macos() {
   echo ""
   echo "================================================================"
-  echo "  DeployStack installed successfully"
+  echo "  Synth installed successfully"
   echo "================================================================"
   echo ""
   echo "  Install dir: ${INSTALL_DIR}"
@@ -340,9 +340,9 @@ print_instructions_macos() {
   echo ""
 
   if [[ "$COMPONENT" == "command" || "$COMPONENT" == "all" ]]; then
-    echo "  Command (port ${COMMAND_PORT}):"
-    echo "    Start:   launchctl load ~/Library/LaunchAgents/com.deploystack.command.plist"
-    echo "    Stop:    launchctl unload ~/Library/LaunchAgents/com.deploystack.command.plist"
+    echo "  Synth Server (port ${COMMAND_PORT}):"
+    echo "    Start:   launchctl load ~/Library/LaunchAgents/com.synthdeploy.server.plist"
+    echo "    Stop:    launchctl unload ~/Library/LaunchAgents/com.synthdeploy.server.plist"
     echo "    Logs:    tail -f ${DATA_DIR}/command.log"
     echo "    Errors:  tail -f ${DATA_DIR}/command.err"
     echo ""
@@ -350,8 +350,8 @@ print_instructions_macos() {
 
   if [[ "$COMPONENT" == "envoy" || "$COMPONENT" == "all" ]]; then
     echo "  Envoy (port ${ENVOY_PORT}):"
-    echo "    Start:   launchctl load ~/Library/LaunchAgents/com.deploystack.envoy.plist"
-    echo "    Stop:    launchctl unload ~/Library/LaunchAgents/com.deploystack.envoy.plist"
+    echo "    Start:   launchctl load ~/Library/LaunchAgents/com.synthdeploy.envoy.plist"
+    echo "    Stop:    launchctl unload ~/Library/LaunchAgents/com.synthdeploy.envoy.plist"
     echo "    Logs:    tail -f ${DATA_DIR}/envoy.log"
     echo "    Errors:  tail -f ${DATA_DIR}/envoy.err"
     echo ""
@@ -363,7 +363,7 @@ print_instructions_macos() {
 # --- Main ---
 
 main() {
-  info "DeployStack Installer"
+  info "Synth Installer"
   info "Component: ${COMPONENT}"
 
   check_node
@@ -398,10 +398,10 @@ main() {
       echo ""
       echo "Manual start commands:"
       if [[ "$COMPONENT" == "command" || "$COMPONENT" == "all" ]]; then
-        echo "  Command: DEPLOYSTACK_DATA_DIR=${DATA_DIR} node ${INSTALL_DIR}/packages/command/dist/index.js"
+        echo "  Synth:  SYNTH_DATA_DIR=${DATA_DIR} node ${INSTALL_DIR}/packages/command/dist/index.js"
       fi
       if [[ "$COMPONENT" == "envoy" || "$COMPONENT" == "all" ]]; then
-        echo "  Envoy:   DEPLOYSTACK_COMMAND_URL=${COMMAND_URL} node ${INSTALL_DIR}/packages/envoy/dist/index.js"
+        echo "  Envoy:  SYNTH_COMMAND_URL=${COMMAND_URL} node ${INSTALL_DIR}/packages/envoy/dist/index.js"
       fi
       ;;
   esac

@@ -1,5 +1,5 @@
 {
-  "name": "@deploystack/website",
+  "name": "@synth-deploy/website",
   "type": "module",
   "version": "0.1.0",
   "private": true,

@@ -1,8 +1,8 @@
-# DeployStack Website
+# Synth Website
 
-Product website for DeployStack, built with [Astro](https://astro.build/) and [Tailwind CSS](https://tailwindcss.com/). Generates a fully static site — no client-side JavaScript frameworks.
+Product website for Synth, built with [Astro](https://astro.build/) and [Tailwind CSS](https://tailwindcss.com/). Generates a fully static site — no client-side JavaScript frameworks.
 
-**Live URL:** https://deploystack.dev
+**Live URL:** https://synthdeploy.com
 
 ## Prerequisites
 
@@ -57,7 +57,7 @@ The workflow is defined in [.github/workflows/website.yml](../.github/workflows/
 
 ### DNS / Custom Domain
 
-The site is configured for `https://deploystack.dev` in [astro.config.mjs](astro.config.mjs). If you change the domain, update the `site` property there.
+The site is configured for `https://synthdeploy.com` in [astro.config.mjs](astro.config.mjs). If you change the domain, update the `site` property there.
 
 ## Site Structure
 

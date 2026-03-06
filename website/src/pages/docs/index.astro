@@ -1,8 +1,8 @@
 ---
 import DocsLayout from "../../layouts/DocsLayout.astro";
 
-const quickStart = `git clone https://github.com/jmfullerton96/DeployStack.git
-cd DeployStack
+const quickStart = `git clone https://github.com/jmfullerton96/synth-deploy.git
+cd synth-deploy
 npm install
 npm run build
 npm start`;
@@ -21,8 +21,8 @@ curl http://localhost:3000/api/step-types`;
   <h1>Getting Started</h1>
 
   <p>
-    DeployStack is a self-hosted deployment platform with embedded intelligence.
-    It runs as two components: <strong>Command</strong> (the central server) and
+    Synth is a self-hosted deployment platform with embedded intelligence.
+    It runs as two components: the <strong>Synth server</strong> (the central orchestrator) and
     <strong>Envoy</strong> (lightweight agents on target machines).
   </p>
 
@@ -37,7 +37,7 @@ curl http://localhost:3000/api/step-types`;
   <pre><code>{quickStart}</code></pre>
 
   <p>
-    Command starts on <code>http://localhost:3000</code> with demo data seeded
+    The Synth server starts on <code>http://localhost:3000</code> with demo data seeded
     automatically (3 partitions, 3 environments, 3 operations, and sample
     deployments).
   </p>
@@ -86,7 +86,7 @@ curl http://localhost:3000/api/step-types`;
 
   <h2>API</h2>
   <p>
-    Command exposes a RESTful API at <code>/api</code> and an MCP server at
+    Synth exposes a RESTful API at <code>/api</code> and an MCP server at
     <code>/mcp</code>. The UI communicates through the REST API.
   </p>
 
