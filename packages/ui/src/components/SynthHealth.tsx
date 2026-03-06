@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { getHealth } from "../api.js";
 
-export default function CommandHealth() {
+export default function SynthHealth() {
   const [health, setHealth] = useState<{ status: string; timestamp: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
 

@@ -2599,7 +2599,7 @@ table a:hover {
 }
 
 /* Command Card */
-.v2-command-card {
+.v2-synth-card {
   background: rgba(15,20,30,0.5);
   border: 1px solid rgba(99,225,190,0.12);
   border-radius: 16px;
@@ -2609,32 +2609,32 @@ table a:hover {
   margin-bottom: 24px;
 }
 
-.v2-command-card-glow {
+.v2-synth-card-glow {
   position: absolute;
   inset: 0;
   background: radial-gradient(ellipse at 50% 50%, rgba(99,225,190,0.03) 0%, transparent 70%);
   pointer-events: none;
 }
 
-.v2-command-card-content {
+.v2-synth-card-content {
   display: flex;
   align-items: center;
   gap: 16px;
   position: relative;
 }
 
-.v2-command-info {
+.v2-synth-info {
   flex: 1;
 }
 
-.v2-command-title-row {
+.v2-synth-title-row {
   display: flex;
   align-items: center;
   gap: 10px;
   margin-bottom: 8px;
 }
 
-.v2-command-label {
+.v2-synth-label {
   font-family: var(--font-mono);
   font-size: 13px;
   font-weight: 700;
@@ -2643,47 +2643,47 @@ table a:hover {
   text-transform: uppercase;
 }
 
-.v2-command-status-badge {
+.v2-synth-status-badge {
   padding: 2px 10px;
   border-radius: 100px;
   background: rgba(99,225,190,0.1);
   border: 1px solid rgba(99,225,190,0.2);
 }
 
-.v2-command-status-badge span {
+.v2-synth-status-badge span {
   font-family: var(--font-mono);
   font-size: 9px;
   color: #63e1be;
   letter-spacing: 0.08em;
 }
 
-.v2-command-subtitle {
+.v2-synth-subtitle {
   font-family: var(--font);
   font-size: 12px;
   color: #8c96a5;
   line-height: 1.6;
 }
 
-.v2-command-stats {
+.v2-synth-stats {
   display: flex;
   gap: 16px;
   margin-top: 12px;
 }
 
-.v2-command-stat {
+.v2-synth-stat {
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 
-.v2-command-stat-value {
+.v2-synth-stat-value {
   font-family: var(--font-mono);
   font-size: 16px;
   color: #e2e8f0;
   font-weight: 600;
 }
 
-.v2-command-stat-label {
+.v2-synth-stat-label {
   font-family: var(--font);
   font-size: 10px;
   color: #6b7280;
@@ -3690,7 +3690,7 @@ table a:hover {
 
 /* ---- v2 Command Channel ---- */
 
-.command-channel {
+.synth-channel {
   position: fixed;
   bottom: 0;
   left: 0;
@@ -3700,7 +3700,7 @@ table a:hover {
   flex-direction: column;
 }
 
-.command-channel-panel {
+.synth-channel-panel {
   overflow: hidden;
   transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
   background: linear-gradient(180deg, rgba(8,11,20,0.97), rgba(12,16,28,0.99));
@@ -3709,7 +3709,7 @@ table a:hover {
   -webkit-backdrop-filter: blur(20px);
 }
 
-.command-channel-panel-header {
+.synth-channel-panel-header {
   padding: 10px 32px;
   border-bottom: 1px solid rgba(99, 225, 190, 0.06);
   display: flex;
@@ -3717,7 +3717,7 @@ table a:hover {
   gap: 12px;
 }
 
-.command-channel-scope-label {
+.synth-channel-scope-label {
   font-family: var(--font-mono);
   font-size: 9px;
   color: #4b5563;
@@ -3725,7 +3725,7 @@ table a:hover {
   text-transform: uppercase;
 }
 
-.command-channel-collapse-btn {
+.synth-channel-collapse-btn {
   margin-left: auto;
   background: rgba(107,114,128,0.1);
   border: 1px solid rgba(107,114,128,0.15);
@@ -3737,7 +3737,7 @@ table a:hover {
   color: #6b7280;
 }
 
-.command-channel-messages {
+.synth-channel-messages {
   padding: 16px 32px;
   overflow-y: auto;
   max-height: calc(40vh - 90px);
@@ -3746,30 +3746,30 @@ table a:hover {
   gap: 4px;
 }
 
-.command-channel-msg {
+.synth-channel-msg {
   padding: 10px 14px;
   border-radius: 10px;
   border: 1px solid;
 }
 
-.command-channel-msg-you {
+.synth-channel-msg-you {
   background: rgba(99,225,190,0.03);
   border-color: rgba(99,225,190,0.06);
 }
 
-.command-channel-msg-command {
+.synth-channel-msg-command {
   background: rgba(15,20,30,0.5);
   border-color: rgba(107,114,128,0.06);
 }
 
-.command-channel-msg-header {
+.synth-channel-msg-header {
   display: flex;
   align-items: center;
   gap: 8px;
   margin-bottom: 6px;
 }
 
-.command-channel-speaker {
+.synth-channel-speaker {
   font-family: var(--font-mono);
   font-size: 9px;
   letter-spacing: 0.1em;
@@ -3789,19 +3789,19 @@ table a:hover {
   background: rgba(129,140,248,0.08);
 }
 
-.command-channel-time {
+.synth-channel-time {
   font-family: var(--font-mono);
   font-size: 9px;
   color: #374151;
 }
 
-.command-channel-entities {
+.synth-channel-entities {
   display: flex;
   gap: 4px;
   margin-left: 4px;
 }
 
-.command-channel-msg-text {
+.synth-channel-msg-text {
   font-family: var(--font);
   font-size: 13px;
   color: #9ca3af;
@@ -3809,11 +3809,11 @@ table a:hover {
   padding-left: 2px;
 }
 
-.command-channel-msg-you .command-channel-msg-text {
+.synth-channel-msg-you .synth-channel-msg-text {
   color: #cbd5e1;
 }
 
-.command-channel-typing-dots {
+.synth-channel-typing-dots {
   display: flex;
   gap: 4px;
 }
@@ -3827,7 +3827,7 @@ table a:hover {
 }
 
 /* Command channel input bar */
-.command-channel-bar {
+.synth-channel-bar {
   background: rgba(12,16,28,0.98);
   border-top: 1px solid rgba(99,225,190,0.08);
   padding: 12px 32px;
@@ -3835,7 +3835,7 @@ table a:hover {
   -webkit-backdrop-filter: blur(20px);
 }
 
-.command-channel-input-wrapper {
+.synth-channel-input-wrapper {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -3845,7 +3845,7 @@ table a:hover {
   padding: 4px 6px 4px 16px;
 }
 
-.command-channel-prefix {
+.synth-channel-prefix {
   font-family: var(--font-mono);
   font-size: 11px;
   color: #63e1be;
@@ -3856,7 +3856,7 @@ table a:hover {
   flex-shrink: 0;
 }
 
-.command-channel-input {
+.synth-channel-input {
   flex: 1;
   background: transparent;
   border: none;
@@ -3867,7 +3867,7 @@ table a:hover {
   padding: 10px 0;
 }
 
-.command-channel-toggle-btn {
+.synth-channel-toggle-btn {
   background: rgba(99,225,190,0.06);
   border: 1px solid rgba(99,225,190,0.1);
   border-radius: 8px;
@@ -3881,7 +3881,7 @@ table a:hover {
   gap: 6px;
 }
 
-.command-channel-submit-btn {
+.synth-channel-submit-btn {
   border: 1px solid;
   border-radius: 10px;
   padding: 8px 16px;
@@ -3890,11 +3890,11 @@ table a:hover {
   cursor: pointer;
 }
 
-.command-channel-submit-btn:disabled {
+.synth-channel-submit-btn:disabled {
   cursor: default;
 }
 
-.command-channel-hint {
+.synth-channel-hint {
   text-align: center;
   margin-top: 6px;
   font-family: var(--font);

@@ -20,7 +20,7 @@ import { useCanvas } from "../../context/CanvasContext.js";
 import { useSettings } from "../../context/SettingsContext.js";
 import { useQuery } from "../../hooks/useQuery.js";
 import SectionHeader from "../SectionHeader.js";
-import CommandEye from "../CommandEye.js";
+import SynthEye from "../SynthEye.js";
 import DeploymentParticles from "../DeploymentParticles.js";
 
 // ---------------------------------------------------------------------------
@@ -236,7 +236,7 @@ function EmptyState({ onComplete }: { onComplete: () => void }) {
   return (
     <div className="v2-dashboard">
       <div style={{ textAlign: "center", padding: "32px 20px 24px" }}>
-        <CommandEye />
+        <SynthEye />
         <h2 style={{ color: "var(--agent-text)", fontSize: 22, fontWeight: 700, marginTop: 16, marginBottom: 8 }}>
           Welcome to Synth
         </h2>
@@ -372,7 +372,7 @@ function EmptyState({ onComplete }: { onComplete: () => void }) {
           <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#34d399" }}>
             <span style={{ fontWeight: 600 }}>{connectedEnvoy.hostname ?? connectedEnvoy.id.slice(0, 8)}</span>
             <span style={{ color: "var(--agent-text-muted)" }}>({connectedEnvoy.url})</span>
-            <span className="v2-command-status-badge" style={{ fontSize: 10 }}>OK</span>
+            <span className="v2-synth-status-badge" style={{ fontSize: 10 }}>OK</span>
           </div>
         )}
         {step > 2 && !connectedEnvoy && (
@@ -692,32 +692,32 @@ function NormalState({ stats: _stats }: { stats: SystemState["stats"] }) {
       </div>
 
       {/* Synth status card */}
-      <div className="v2-command-card">
-        <div className="v2-command-card-glow" />
-        <div className="v2-command-card-content">
-          <CommandEye />
-          <div className="v2-command-info">
-            <div className="v2-command-title-row">
-              <span className="v2-command-label">Synth</span>
-              <div className="v2-command-status-badge">
+      <div className="v2-synth-card">
+        <div className="v2-synth-card-glow" />
+        <div className="v2-synth-card-content">
+          <SynthEye />
+          <div className="v2-synth-info">
+            <div className="v2-synth-title-row">
+              <span className="v2-synth-label">Synth</span>
+              <div className="v2-synth-status-badge">
                 <span>{commandStatus.toUpperCase()}</span>
               </div>
             </div>
-            <div className="v2-command-subtitle">
+            <div className="v2-synth-subtitle">
               Monitoring {artifacts.length} Artifacts &middot; {environments.length} Environments &middot; {partitions.length} Partitions
             </div>
-            <div className="v2-command-stats">
-              <div className="v2-command-stat">
-                <span className="v2-command-stat-value">{debriefCount}</span>
-                <span className="v2-command-stat-label">Decisions today</span>
+            <div className="v2-synth-stats">
+              <div className="v2-synth-stat">
+                <span className="v2-synth-stat-value">{debriefCount}</span>
+                <span className="v2-synth-stat-label">Decisions today</span>
               </div>
-              <div className="v2-command-stat">
-                <span className="v2-command-stat-value">{activeDeployments.length}</span>
-                <span className="v2-command-stat-label">Active deploys</span>
+              <div className="v2-synth-stat">
+                <span className="v2-synth-stat-value">{activeDeployments.length}</span>
+                <span className="v2-synth-stat-label">Active deploys</span>
               </div>
-              <div className="v2-command-stat">
-                <span className="v2-command-stat-value">{agentContext?.signals.filter((s) => s.severity === "critical").length ?? 0}</span>
-                <span className="v2-command-stat-label">Escalations</span>
+              <div className="v2-synth-stat">
+                <span className="v2-synth-stat-value">{agentContext?.signals.filter((s) => s.severity === "critical").length ?? 0}</span>
+                <span className="v2-synth-stat-label">Escalations</span>
               </div>
             </div>
           </div>

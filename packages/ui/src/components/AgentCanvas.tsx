@@ -1,6 +1,6 @@
 import { useCanvas } from "../context/CanvasContext.js";
 import type { CanvasQueryResult } from "../api.js";
-import CommandChannel from "./CommandChannel.js";
+import SynthChannel from "./SynthChannel.js";
 import OperationalOverview from "./canvas/OperationalOverview.js";
 import PartitionDetailPanel from "./canvas/PartitionDetailPanel.js";
 import EnvironmentDetailPanel from "./canvas/EnvironmentDetailPanel.js";
@@ -184,7 +184,7 @@ export default function AgentCanvas() {
     }
   }
 
-  // Determine scope for CommandChannel based on current panel
+  // Determine scope for SynthChannel based on current panel
   const scope = currentPanel.type === "partition-detail"
     ? currentPanel.title
     : undefined;
@@ -198,8 +198,8 @@ export default function AgentCanvas() {
         </ErrorBoundary>
       </div>
 
-      {/* CommandChannel — fixed at bottom */}
-      <CommandChannel
+      {/* SynthChannel — fixed at bottom */}
+      <SynthChannel
         scope={scope}
         onAgentResult={handleAgentResult}
       />

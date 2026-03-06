@@ -1,11 +1,11 @@
 import { useRef, useEffect } from "react";
 
-interface CommandEyeProps {
+interface SynthEyeProps {
   width?: number;
   height?: number;
 }
 
-export default function CommandEye({ width = 90, height = 90 }: CommandEyeProps) {
+export default function SynthEye({ width = 90, height = 90 }: SynthEyeProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {

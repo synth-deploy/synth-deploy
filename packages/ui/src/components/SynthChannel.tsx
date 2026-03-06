@@ -12,12 +12,12 @@ interface Message {
   entities?: Array<{ type: EntityType; label: string }>;
 }
 
-interface CommandChannelProps {
+interface SynthChannelProps {
   scope?: string;
   onAgentResult?: (result: CanvasQueryResult) => void;
 }
 
-export default function CommandChannel({ scope, onAgentResult }: CommandChannelProps) {
+export default function SynthChannel({ scope, onAgentResult }: SynthChannelProps) {
   const [expanded, setExpanded] = useState(false);
   const [inputValue, setInputValue] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
@@ -86,18 +86,18 @@ export default function CommandChannel({ scope, onAgentResult }: CommandChannelP
   const prefix = scope ? `ASK \u203A ${scope} \u203A` : "ASK \u203A";
 
   return (
-    <div className="command-channel">
+    <div className="synth-channel">
       {/* Expanded conversation panel */}
       <div
-        className="command-channel-panel"
+        className="synth-channel-panel"
         style={{
           maxHeight: expanded ? "40vh" : 0,
           opacity: expanded ? 1 : 0,
         }}
       >
         {expanded && (
-          <div className="command-channel-panel-header">
-            <span className="command-channel-scope-label">
+          <div className="synth-channel-panel-header">
+            <span className="synth-channel-scope-label">
               {scope ? "Investigating" : "Querying"}
             </span>
             {scope ? (
@@ -106,46 +106,46 @@ export default function CommandChannel({ scope, onAgentResult }: CommandChannelP
               <EntityTag type="Synth" label="Synth" />
             )}
             <button
-              className="command-channel-collapse-btn"
+              className="synth-channel-collapse-btn"
               onClick={() => setExpanded(false)}
             >
               Collapse
             </button>
           </div>
         )}
-        <div ref={scrollRef} className="command-channel-messages">
+        <div ref={scrollRef} className="synth-channel-messages">
           {messages.map((msg, i) => {
             const isYou = msg.speaker === "you";
             return (
               <div
                 key={msg.id}
-                className={`command-channel-msg ${isYou ? "command-channel-msg-you" : "command-channel-msg-command"}`}
+                className={`synth-channel-msg ${isYou ? "synth-channel-msg-you" : "synth-channel-msg-command"}`}
                 style={{
                   animation: i === messages.length - 1 ? "fadeSlideIn 0.3s ease" : "none",
                 }}
               >
-                <div className="command-channel-msg-header">
-                  <span className={`command-channel-speaker ${isYou ? "speaker-you" : "speaker-command"}`}>
+                <div className="synth-channel-msg-header">
+                  <span className={`synth-channel-speaker ${isYou ? "speaker-you" : "speaker-command"}`}>
                     {isYou ? "YOU" : "ENVOY"}
                   </span>
-                  <span className="command-channel-time">{msg.time}</span>
+                  <span className="synth-channel-time">{msg.time}</span>
                   {msg.entities && (
-                    <div className="command-channel-entities">
+                    <div className="synth-channel-entities">
                       {msg.entities.map((e, j) => (
                         <EntityTag key={j} type={e.type} label={e.label} />
                       ))}
                     </div>
                   )}
                 </div>
-                <div className="command-channel-msg-text">{msg.text}</div>
+                <div className="synth-channel-msg-text">{msg.text}</div>
               </div>
             );
           })}
           {typing && (
-            <div className="command-channel-msg command-channel-msg-command">
-              <div className="command-channel-msg-header">
-                <span className="command-channel-speaker speaker-command">ENVOY</span>
-                <div className="command-channel-typing-dots">
+            <div className="synth-channel-msg synth-channel-msg-command">
+              <div className="synth-channel-msg-header">
+                <span className="synth-channel-speaker speaker-command">ENVOY</span>
+                <div className="synth-channel-typing-dots">
                   <div className="typing-dot" style={{ animationDelay: "0s" }} />
                   <div className="typing-dot" style={{ animationDelay: "0.15s" }} />
                   <div className="typing-dot" style={{ animationDelay: "0.3s" }} />
@@ -157,11 +157,11 @@ export default function CommandChannel({ scope, onAgentResult }: CommandChannelP
       </div>
 
       {/* Input bar */}
-      <div className="command-channel-bar">
-        <div className="command-channel-input-wrapper">
-          <span className="command-channel-prefix">{prefix}</span>
+      <div className="synth-channel-bar">
+        <div className="synth-channel-input-wrapper">
+          <span className="synth-channel-prefix">{prefix}</span>
           <input
-            className="command-channel-input"
+            className="synth-channel-input"
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onKeyDown={(e) => {
@@ -177,7 +177,7 @@ export default function CommandChannel({ scope, onAgentResult }: CommandChannelP
           />
           {messages.length > 0 && (
             <button
-              className="command-channel-toggle-btn"
+              className="synth-channel-toggle-btn"
               onClick={() => setExpanded(!expanded)}
             >
               <span
@@ -193,7 +193,7 @@ export default function CommandChannel({ scope, onAgentResult }: CommandChannelP
             </button>
           )}
           <button
-            className="command-channel-submit-btn"
+            className="synth-channel-submit-btn"
             onClick={handleSubmit}
             disabled={!inputValue.trim()}
             style={{
@@ -210,7 +210,7 @@ export default function CommandChannel({ scope, onAgentResult }: CommandChannelP
           </button>
         </div>
         {!expanded && messages.length === 0 && (
-          <div className="command-channel-hint">
+          <div className="synth-channel-hint">
             {scope
               ? `Scoped to ${scope} \u2014 ask questions to investigate`
               : "Ask questions to investigate \u00B7 Navigate by describing what you need \u00B7 Your context becomes part of the Debrief"}
