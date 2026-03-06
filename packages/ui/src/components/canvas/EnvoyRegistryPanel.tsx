@@ -1,9 +1,9 @@
-import { useState, useEffect } from "react";
 import { listEnvoys } from "../../api.js";
 import type { EnvoyRegistryEntry } from "../../api.js";
 import { useCanvas } from "../../context/CanvasContext.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
 import SectionHeader from "../SectionHeader.js";
+import { useQuery } from "../../hooks/useQuery.js";
 
 interface Props {
   title: string;
@@ -14,15 +14,7 @@ const healthColor = (h: EnvoyRegistryEntry["health"]) =>
 
 export default function EnvoyRegistryPanel({ title }: Props) {
   const { pushPanel } = useCanvas();
-  const [envoys, setEnvoys] = useState<EnvoyRegistryEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    listEnvoys()
-      .then(setEnvoys)
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, []);
+  const { data: envoys, loading } = useQuery<EnvoyRegistryEntry[]>("list:envoys", listEnvoys);
 
   if (loading) {
     return (
@@ -42,7 +34,7 @@ export default function EnvoyRegistryPanel({ title }: Props) {
           subtitle="agents executing deployments"
         />
         <div className="v2-envoys-list">
-          {envoys.map((envoy) => (
+          {(envoys ?? []).map((envoy) => (
             <div
               key={envoy.id}
               className="v2-envoy-row"
@@ -108,7 +100,7 @@ export default function EnvoyRegistryPanel({ title }: Props) {
               </div>
             </div>
           ))}
-          {envoys.length === 0 && (
+          {(envoys ?? []).length === 0 && (
             <div style={{ color: "#666", fontSize: 13, padding: "16px 0" }}>
               No Envoys configured. Add an Envoy URL in Settings.
             </div>

@@ -18,6 +18,7 @@ import type { Deployment, Partition, Environment, Artifact, DebriefEntry } from 
 import type { DeploymentContext, SystemState, AlertSignal, EnvoyRegistryEntry } from "../../api.js";
 import { useCanvas } from "../../context/CanvasContext.js";
 import { useSettings } from "../../context/SettingsContext.js";
+import { useQuery } from "../../hooks/useQuery.js";
 import SectionHeader from "../SectionHeader.js";
 import CommandEye from "../CommandEye.js";
 import DeploymentParticles from "../DeploymentParticles.js";
@@ -27,34 +28,24 @@ import DeploymentParticles from "../DeploymentParticles.js";
 // ---------------------------------------------------------------------------
 
 export default function OperationalOverview() {
-  const [systemState, setSystemState] = useState<SystemState | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  const fetchState = () =>
-    getSystemState()
-      .then(setSystemState)
-      .catch(() => {});
+  const { data: systemState, loading, refresh } = useQuery<SystemState>(
+    "systemState",
+    getSystemState,
+    { refetchInterval: 30_000 },
+  );
 
   useEffect(() => {
-    fetchState().then(() => setLoading(false));
-
-    const interval = setInterval(fetchState, 30000);
-
-    const onFocus = () => fetchState();
+    const onFocus = () => refresh();
     window.addEventListener("focus", onFocus);
-
-    return () => {
-      clearInterval(interval);
-      window.removeEventListener("focus", onFocus);
-    };
-  }, []);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [refresh]);
 
   if (loading) return <div className="loading">Loading...</div>;
   if (!systemState) return <div className="loading">Failed to load system state.</div>;
 
   switch (systemState.state) {
     case "empty":
-      return <EmptyState onComplete={fetchState} />;
+      return <EmptyState onComplete={refresh} />;
     case "alert":
       return <AlertState signals={systemState.signals} stats={systemState.stats} />;
     case "normal":
@@ -593,16 +584,18 @@ function NormalState({ stats: _stats }: { stats: SystemState["stats"] }) {
   const { settings } = useSettings();
   const environmentsEnabled = settings?.environmentsEnabled ?? true;
 
-  const [deployments, setDeployments] = useState<Deployment[]>([]);
-  const [partitions, setPartitions] = useState<Partition[]>([]);
-  const [environments, setEnvironments] = useState<Environment[]>([]);
-  const [artifacts, setArtifacts] = useState<Artifact[]>([]);
-  const [envoys, setEnvoys] = useState<EnvoyRegistryEntry[]>([]);
-  const [debriefEntries, setDebriefEntries] = useState<DebriefEntry[]>([]);
-  const [agentContext, setAgentContext] = useState<DeploymentContext | null>(null);
-  const [commandStatus, setCommandStatus] = useState<string>("observing");
+  const { data: _deployments, loading: l1 } = useQuery("list:deployments", listDeployments);
+  const { data: _partitions, loading: l2 } = useQuery("list:partitions", listPartitions);
+  const { data: _environments, loading: l3 } = useQuery("list:environments", listEnvironments);
+  const { data: _artifacts, loading: l4 } = useQuery("list:artifacts", listArtifacts);
+  const { data: _envoys, loading: l5 } = useQuery("list:envoys", () => listEnvoys().catch(() => [] as EnvoyRegistryEntry[]));
+  const { data: _debriefEntries, loading: l6 } = useQuery("dashboard:debrief", () => getRecentDebrief({ limit: 10 }));
+  const { data: agentContext } = useQuery("dashboard:agentContext", () => getDeploymentContext().catch(() => null));
+  const { data: _healthData } = useQuery("dashboard:health", () => getHealth().catch(() => null));
+  const loading = l1 || l2 || l3 || l4 || l5 || l6;
+
+  const commandStatus = _healthData ? "observing" : "observing";
   const [signalsExpanded, setSignalsExpanded] = useState(false);
-  const [loading, setLoading] = useState(true);
   const [tick, setTick] = useState(0);
 
   // Inline deployment authoring state
@@ -616,31 +609,6 @@ function NormalState({ stats: _stats }: { stats: SystemState["stats"] }) {
   useEffect(() => {
     const id = setInterval(() => setTick((t) => t + 1), 100);
     return () => clearInterval(id);
-  }, []);
-
-  useEffect(() => {
-    Promise.all([
-      listDeployments(),
-      listPartitions(),
-      listEnvironments(),
-      listArtifacts(),
-      listEnvoys().catch(() => []),
-      getRecentDebrief({ limit: 10 }),
-      getDeploymentContext().catch(() => null),
-      getHealth().catch(() => null),
-    ])
-      .then(([d, parts, envs, arts, envoyList, db, ctx, health]) => {
-        setDeployments(d);
-        setPartitions(parts);
-        setEnvironments(envs);
-        setArtifacts(arts);
-        setEnvoys(envoyList);
-        setDebriefEntries(db);
-        setAgentContext(ctx);
-        if (health) setCommandStatus("observing");
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
   }, []);
 
   async function handleInlineDeploy() {
@@ -666,9 +634,15 @@ function NormalState({ stats: _stats }: { stats: SystemState["stats"] }) {
     }
   }
 
-  const healthyEnvoyCount = envoys.filter((e) => e.health === "OK").length;
+  // Use safe defaults so the dashboard renders progressively as data arrives
+  const deployments = _deployments ?? [];
+  const partitions = _partitions ?? [];
+  const environments = _environments ?? [];
+  const artifacts = _artifacts ?? [];
+  const envoys = _envoys ?? [];
+  const debriefEntries = _debriefEntries ?? [];
 
-  if (loading) return <div className="loading">Loading...</div>;
+  const healthyEnvoyCount = envoys.filter((e) => e.health === "OK").length;
 
   const activeDeployments = deployments.filter(
     (d) => d.status === "running" || d.status === "pending",

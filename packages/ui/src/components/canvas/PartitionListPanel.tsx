@@ -1,8 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { listPartitions, listEnvironments, listDeployments, createPartition } from "../../api.js";
 import type { Partition, Environment, Deployment } from "../../types.js";
 import { useCanvas } from "../../context/CanvasContext.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
+import { useQuery, invalidate } from "../../hooks/useQuery.js";
 
 interface Props {
   title: string;
@@ -11,10 +12,10 @@ interface Props {
 export default function PartitionListPanel({ title }: Props) {
   const { pushPanel } = useCanvas();
 
-  const [partitions, setPartitions] = useState<Partition[]>([]);
-  const [environments, setEnvironments] = useState<Environment[]>([]);
-  const [deployments, setDeployments] = useState<Deployment[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: partitions, loading: l1 } = useQuery<Partition[]>("list:partitions", listPartitions);
+  const { data: environments, loading: l2 } = useQuery<Environment[]>("list:environments", listEnvironments);
+  const { data: deployments, loading: l3 } = useQuery<Deployment[]>("list:deployments", listDeployments);
+  const loading = l1 || l2 || l3;
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState("");
   const [error, setError] = useState("");
@@ -26,7 +27,7 @@ export default function PartitionListPanel({ title }: Props) {
     }
     try {
       const p = await createPartition(name.trim());
-      setPartitions((prev) => [...prev, p]);
+      invalidate("list:partitions");
       setName("");
       setError("");
       setShowForm(false);
@@ -34,17 +35,6 @@ export default function PartitionListPanel({ title }: Props) {
       setError(e.message || "Failed to create partition");
     }
   };
-
-  useEffect(() => {
-    Promise.all([listPartitions(), listEnvironments(), listDeployments()])
-      .then(([t, e, d]) => {
-        setPartitions(t);
-        setEnvironments(e);
-        setDeployments(d);
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
-  }, []);
 
   if (loading) return <CanvasPanelHost title={title}><div className="loading">Loading...</div></CanvasPanelHost>;
 
@@ -82,9 +72,9 @@ export default function PartitionListPanel({ title }: Props) {
         )}
 
         <div className="v2-entity-list-items">
-          {partitions.map((p) => {
+          {(partitions ?? []).map((p) => {
             const varCount = Object.keys(p.variables).length;
-            const deploys = deployments.filter((d) => d.partitionId === p.id);
+            const deploys = (deployments ?? []).filter((d) => d.partitionId === p.id);
             const deployCount = deploys.length;
             const lastDeploy = deploys.length > 0
               ? [...deploys].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0]
@@ -110,7 +100,7 @@ export default function PartitionListPanel({ title }: Props) {
                 <div className="v2-partition-list-info">
                   <div className="v2-partition-list-name">{p.name}</div>
                   <div className="v2-partition-list-envs">
-                    {environments.map((e) => (
+                    {(environments ?? []).map((e) => (
                       <span key={e.id} className={`v2-partition-list-env ${isDormant ? "v2-env-dormant" : ""}`}>
                         {e.name}
                       </span>
@@ -141,7 +131,7 @@ export default function PartitionListPanel({ title }: Props) {
               </div>
             );
           })}
-          {partitions.length === 0 && (
+          {(partitions ?? []).length === 0 && (
             <div className="v2-empty-hint">No partitions yet. Use the Command Channel to create one.</div>
           )}
         </div>

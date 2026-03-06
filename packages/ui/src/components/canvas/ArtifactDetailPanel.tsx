@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useMemo } from "react";
 import {
   getArtifact,
   addArtifactAnnotation,
@@ -9,6 +9,7 @@ import {
 } from "../../api.js";
 import type { Artifact, ArtifactVersion, Deployment, Environment } from "../../types.js";
 import { useCanvas } from "../../context/CanvasContext.js";
+import { useQuery, invalidateExact } from "../../hooks/useQuery.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
 import SectionHeader from "../SectionHeader.js";
 
@@ -41,11 +42,19 @@ const sourceLabels: Record<string, string> = {
 export default function ArtifactDetailPanel({ artifactId, title }: Props) {
   const { pushPanel } = useCanvas();
 
-  const [artifact, setArtifact] = useState<Artifact | null>(null);
-  const [versions, setVersions] = useState<ArtifactVersion[]>([]);
-  const [deployments, setDeployments] = useState<Deployment[]>([]);
-  const [envNameMap, setEnvNameMap] = useState<Record<string, string>>({});
-  const [loading, setLoading] = useState(true);
+  const { data: artData, loading: l1 } = useQuery(`artifact:${artifactId}`, () => getArtifact(artifactId));
+  const { data: deployments, loading: l2 } = useQuery(`deployments:artifact:${artifactId}`, () => listDeployments({ artifactId }).catch(() => [] as Deployment[]));
+  const { data: envs, loading: l3 } = useQuery("list:environments", () => listEnvironments().catch(() => [] as Environment[]));
+  const loading = l1 || l2 || l3;
+
+  const artifact = artData?.artifact ?? null;
+  const versions = artData?.versions ?? [];
+  const envNameMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const e of (envs ?? [])) map[e.id] = e.name;
+    return map;
+  }, [envs]);
+
   const [activeTab, setActiveTab] = useState<TabKey>("analysis");
 
   // Annotation form
@@ -61,25 +70,6 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
   const [versionSubmitting, setVersionSubmitting] = useState(false);
   const [versionError, setVersionError] = useState<string | null>(null);
 
-  useEffect(() => {
-    Promise.all([
-      getArtifact(artifactId),
-      listArtifactVersions(artifactId).catch(() => []),
-      listDeployments({ artifactId }).catch(() => []),
-      listEnvironments().catch(() => []),
-    ])
-      .then(([artData, vers, deps, envs]) => {
-        setArtifact(artData.artifact);
-        setVersions(artData.versions ?? vers);
-        setDeployments(deps);
-        const map: Record<string, string> = {};
-        for (const e of envs) map[e.id] = e.name;
-        setEnvNameMap(map);
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, [artifactId]);
-
   async function handleAnnotationSubmit() {
     if (!annotationCorrection.trim()) {
       setAnnotationError("Correction text is required");
@@ -88,11 +78,11 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
     setAnnotationSubmitting(true);
     setAnnotationError(null);
     try {
-      const updated = await addArtifactAnnotation(artifactId, {
+      await addArtifactAnnotation(artifactId, {
         field: annotationField,
         correction: annotationCorrection.trim(),
       });
-      setArtifact(updated);
+      invalidateExact(`artifact:${artifactId}`);
       setAnnotationCorrection("");
     } catch (err: unknown) {
       setAnnotationError(err instanceof Error ? err.message : "Failed to add annotation");
@@ -109,11 +99,11 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
     setVersionSubmitting(true);
     setVersionError(null);
     try {
-      const ver = await addArtifactVersion(artifactId, {
+      await addArtifactVersion(artifactId, {
         version: versionString.trim(),
         source: versionSource.trim() || "manual",
       });
-      setVersions((prev) => [...prev, ver]);
+      invalidateExact(`artifact:${artifactId}`);
       setVersionString("");
       setVersionSource("");
       setShowVersionForm(false);
@@ -142,7 +132,7 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
   const cColor = confidenceColor(confidence);
   const cLabel = confidenceLabel(confidence);
   const configEntries = Object.entries(artifact.analysis.configurationExpectations ?? {});
-  const sortedDeployments = [...deployments].sort(
+  const sortedDeployments = [...(deployments ?? [])].sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
   );
 

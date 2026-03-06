@@ -9,9 +9,9 @@ export function registerEnvoyRoutes(
   registry: EnvoyRegistry,
   telemetry: ITelemetryStore,
 ): void {
-  // List all registered Envoys with live health probing
+  // List all registered Envoys (cached data — no live probe)
   app.get("/api/envoys", { preHandler: [requirePermission("envoy.view")] }, async () => {
-    const entries = await registry.probeAll();
+    let entries = registry.listEntries();
 
     // Also include the legacy settings-based default envoy if no registry entries
     if (entries.length === 0) {
@@ -21,8 +21,8 @@ export function registerEnvoyRoutes(
           name: "default",
           url: envoyConfig.url,
         });
-        const probed = await registry.probe(legacy.id);
-        if (probed) entries.push(probed);
+        const entry = registry.get(legacy.id);
+        if (entry) entries = [entry];
       }
     }
 
@@ -77,10 +77,10 @@ export function registerEnvoyRoutes(
     });
   });
 
-  // Get a specific Envoy's health
+  // Get a specific Envoy's cached status (instant, no live probe)
   app.get("/api/envoys/:id/health", { preHandler: [requirePermission("envoy.view")] }, async (request, reply) => {
     const { id } = request.params as { id: string };
-    const entry = await registry.probe(id);
+    const entry = registry.get(id);
 
     if (!entry) {
       return reply.status(404).send({ error: "Envoy not found" });

@@ -1,7 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { getPartition, listDeployments, listEnvironments, getRecentDebrief } from "../../api.js";
 import type { Partition, Deployment, Environment, DebriefEntry } from "../../types.js";
 import { useCanvas } from "../../context/CanvasContext.js";
+import { useQuery } from "../../hooks/useQuery.js";
 import SectionHeader from "../SectionHeader.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
 
@@ -13,38 +14,24 @@ interface Props {
 export default function PartitionDetailPanel({ partitionId, title }: Props) {
   const { pushPanel } = useCanvas();
 
-  const [partition, setPartition] = useState<Partition | null>(null);
-  const [deployments, setDeployments] = useState<Deployment[]>([]);
-  const [environments, setEnvironments] = useState<Environment[]>([]);
-  const [debriefEntries, setDebriefEntries] = useState<DebriefEntry[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: partition, loading: l1 } = useQuery<Partition>(`partition:${partitionId}`, () => getPartition(partitionId));
+  const { data: deployments, loading: l2 } = useQuery<Deployment[]>(`deployments:partition:${partitionId}`, () => listDeployments({ partitionId }));
+  const { data: environments, loading: l3 } = useQuery<Environment[]>("list:environments", () => listEnvironments());
+  const { data: debriefEntries, loading: l4 } = useQuery<DebriefEntry[]>(`debrief:partition:${partitionId}`, () => getRecentDebrief({ partitionId, limit: 10 }).catch(() => [] as DebriefEntry[]));
+  const loading = l1 || l2 || l3 || l4;
   const [activeTab, setActiveTab] = useState<"overview" | "variables" | "history">("overview");
-
-  useEffect(() => {
-    Promise.all([
-      getPartition(partitionId),
-      listDeployments({ partitionId }),
-      listEnvironments(),
-      getRecentDebrief({ partitionId, limit: 10 }).catch(() => []),
-    ]).then(([p, d, e, db]) => {
-      setPartition(p);
-      setDeployments(d);
-      setEnvironments(e);
-      setDebriefEntries(db);
-      setLoading(false);
-    }).catch(() => setLoading(false));
-  }, [partitionId]);
 
   if (loading) return <CanvasPanelHost title={title}><div className="loading">Loading...</div></CanvasPanelHost>;
   if (!partition) return <CanvasPanelHost title={title}><div className="error-msg">Partition not found</div></CanvasPanelHost>;
 
-  const vars = Object.entries(partition.variables);
-  const sortedDeploys = [...deployments].sort(
+  const vars = Object.entries(partition?.variables ?? {});
+  const depsList = deployments ?? [];
+  const sortedDeploys = [...depsList].sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
   );
-  const succeededCount = deployments.filter((d) => d.status === "succeeded").length;
-  const successRate = deployments.length > 0
-    ? `${Math.round((succeededCount / deployments.length) * 100)}%`
+  const succeededCount = depsList.filter((d) => d.status === "succeeded").length;
+  const successRate = depsList.length > 0
+    ? `${Math.round((succeededCount / depsList.length) * 100)}%`
     : "\u2014";
 
   return (
@@ -67,7 +54,7 @@ export default function PartitionDetailPanel({ partitionId, title }: Props) {
                 <div className="v2-status-active-badge">ACTIVE</div>
               </div>
               <div className="v2-partition-detail-envs">
-                {environments.map((e) => (
+                {(environments ?? []).map((e) => (
                   <button
                     key={e.id}
                     className="v2-env-tag"
@@ -91,7 +78,7 @@ export default function PartitionDetailPanel({ partitionId, title }: Props) {
                 <span className="v2-stat-label">Variables</span>
               </div>
               <div className="v2-stat-col">
-                <span className="v2-stat-value">{deployments.length}</span>
+                <span className="v2-stat-value">{depsList.length}</span>
                 <span className="v2-stat-label">Deployments</span>
               </div>
               <div className="v2-stat-col">
@@ -122,7 +109,7 @@ export default function PartitionDetailPanel({ partitionId, title }: Props) {
               <SectionHeader color="#34d399" shape="circle" label="Recent Deployments" subtitle={`for ${partition.name}`} />
               <div className="v2-scoped-list">
                 {sortedDeploys.slice(0, 10).map((d) => {
-                  const envName = environments.find((e) => e.id === d.environmentId)?.name ?? d.environmentId;
+                  const envName = (environments ?? []).find((e) => e.id === d.environmentId)?.name ?? d.environmentId;
                   return (
                     <div
                       key={d.id}
@@ -157,7 +144,7 @@ export default function PartitionDetailPanel({ partitionId, title }: Props) {
             <div className="v2-detail-sidebar">
               <SectionHeader color="#e879f9" shape="diamond" label="Recent Debriefs" />
               <div className="v2-scoped-list">
-                {debriefEntries.length > 0 ? debriefEntries.slice(0, 5).map((entry) => (
+                {(debriefEntries ?? []).length > 0 ? (debriefEntries ?? []).slice(0, 5).map((entry) => (
                   <div key={entry.id} className="v2-debrief-row v2-debrief-compact">
                     <div className="v2-debrief-status-bar" style={{ background: "#63e1be" }} />
                     <div className="v2-debrief-content">
@@ -211,7 +198,7 @@ export default function PartitionDetailPanel({ partitionId, title }: Props) {
             <span className="v2-history-label">DEPLOYMENT HISTORY</span>
             <div className="v2-scoped-list">
               {sortedDeploys.map((d) => {
-                const envName = environments.find((e) => e.id === d.environmentId)?.name ?? d.environmentId;
+                const envName = (environments ?? []).find((e) => e.id === d.environmentId)?.name ?? d.environmentId;
                 const isFailed = d.status === "failed";
                 return (
                   <div

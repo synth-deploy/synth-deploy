@@ -172,6 +172,34 @@ export class EnvoyRegistry {
   }
 
   /**
+   * Return cached registry entry without probing (instant).
+   */
+  get(id: string): EnvoyRegistryEntry | undefined {
+    const reg = this.envoys.get(id);
+    if (!reg) return undefined;
+    const healthMap: Record<string, "OK" | "Degraded" | "Unreachable"> = {
+      healthy: "OK",
+      degraded: "Degraded",
+      unreachable: "Unreachable",
+    };
+    return {
+      ...reg,
+      health: healthMap[reg.lastHealthStatus ?? "unreachable"] ?? "Unreachable",
+      hostname: null,
+      lastSeen: reg.lastHealthCheck,
+      summary: null,
+      readiness: null,
+    };
+  }
+
+  /**
+   * Return all cached registry entries without probing (instant).
+   */
+  listEntries(): EnvoyRegistryEntry[] {
+    return Array.from(this.envoys.values()).map((reg) => this.get(reg.id)!);
+  }
+
+  /**
    * Probe an Envoy's health and update its registry entry.
    */
   async probe(id: string): Promise<EnvoyRegistryEntry | undefined> {

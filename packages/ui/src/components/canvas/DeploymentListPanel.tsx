@@ -1,8 +1,8 @@
-import { useState, useEffect } from "react";
 import { listDeployments, listEnvironments, listArtifacts, listPartitions } from "../../api.js";
 import type { Deployment, Environment, Artifact, Partition } from "../../types.js";
 import { useCanvas } from "../../context/CanvasContext.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
+import { useQuery } from "../../hooks/useQuery.js";
 
 interface Props {
   title: string;
@@ -13,30 +13,18 @@ interface Props {
 export default function DeploymentListPanel({ title, filterStatus, filterPartitionId }: Props) {
   const { pushPanel } = useCanvas();
 
-  const [deployments, setDeployments] = useState<Deployment[]>([]);
-  const [environments, setEnvironments] = useState<Environment[]>([]);
-  const [artifacts, setArtifacts] = useState<Artifact[]>([]);
-  const [partitions, setPartitions] = useState<Partition[]>([]);
-  const [loading, setLoading] = useState(true);
+  const deploymentKey = `list:deployments${filterPartitionId ? `:partition:${filterPartitionId}` : ""}`;
+  const { data: rawDeployments, loading: l1 } = useQuery<Deployment[]>(deploymentKey, () =>
+    listDeployments(filterPartitionId ? { partitionId: filterPartitionId } : undefined),
+  );
+  const { data: environments, loading: l2 } = useQuery<Environment[]>("list:environments", listEnvironments);
+  const { data: artifacts, loading: l3 } = useQuery<Artifact[]>("list:artifacts", listArtifacts);
+  const { data: partitions, loading: l4 } = useQuery<Partition[]>("list:partitions", listPartitions);
+  const loading = l1 || l2 || l3 || l4;
 
-  useEffect(() => {
-    Promise.all([
-      listDeployments(filterPartitionId ? { partitionId: filterPartitionId } : undefined),
-      listEnvironments(),
-      listArtifacts(),
-      listPartitions(),
-    ]).then(([d, e, a, t]) => {
-      let filtered = d;
-      if (filterStatus) {
-        filtered = filtered.filter((dep) => dep.status === filterStatus);
-      }
-      setDeployments(filtered);
-      setEnvironments(e);
-      setArtifacts(a);
-      setPartitions(t);
-      setLoading(false);
-    }).catch(() => setLoading(false));
-  }, [filterStatus, filterPartitionId]);
+  const deployments = filterStatus
+    ? (rawDeployments ?? []).filter((dep) => dep.status === filterStatus)
+    : (rawDeployments ?? []);
 
   if (loading) return <CanvasPanelHost title={title}><div className="loading">Loading...</div></CanvasPanelHost>;
 
@@ -81,15 +69,15 @@ export default function DeploymentListPanel({ title, filterStatus, filterPartiti
                 <span className={`badge badge-${d.status}`}>{d.status}</span>
                 <span className="canvas-activity-version">{d.version}</span>
                 <span className="canvas-activity-artifact">
-                  {artifacts.find((a) => a.id === d.artifactId)?.name ?? d.artifactId.slice(0, 8)}
+                  {(artifacts ?? []).find((a) => a.id === d.artifactId)?.name ?? d.artifactId.slice(0, 8)}
                 </span>
                 <span className="canvas-activity-partition">
                   {d.partitionId
-                    ? (partitions.find((t) => t.id === d.partitionId)?.name ?? d.partitionId.slice(0, 8))
+                    ? ((partitions ?? []).find((t) => t.id === d.partitionId)?.name ?? d.partitionId.slice(0, 8))
                     : "\u2014"}
                 </span>
                 <span className="canvas-activity-env">
-                  {environments.find((e) => e.id === d.environmentId)?.name ?? d.environmentId}
+                  {(environments ?? []).find((e) => e.id === d.environmentId)?.name ?? d.environmentId}
                 </span>
                 <span className="canvas-activity-time">
                   {new Date(d.createdAt).toLocaleString()}

@@ -1,8 +1,9 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { listArtifacts, createArtifact } from "../../api.js";
 import type { Artifact } from "../../types.js";
 import { useCanvas } from "../../context/CanvasContext.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
+import { useQuery, invalidate } from "../../hooks/useQuery.js";
 
 interface Props {
   title: string;
@@ -34,8 +35,7 @@ function getConfidenceLabel(level: ConfidenceLevel): string {
 
 export default function ArtifactCatalogPanel({ title }: Props) {
   const { pushPanel } = useCanvas();
-  const [artifacts, setArtifacts] = useState<Artifact[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: artifacts, loading } = useQuery<Artifact[]>("list:artifacts", listArtifacts);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<string | null>(null);
   const [confidenceFilter, setConfidenceFilter] = useState<ConfidenceLevel | null>(null);
@@ -45,20 +45,13 @@ export default function ArtifactCatalogPanel({ title }: Props) {
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
-  useEffect(() => {
-    listArtifacts()
-      .then(setArtifacts)
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, []);
-
   const artifactTypes = useMemo(
-    () => [...new Set(artifacts.map((a) => a.type))],
+    () => [...new Set((artifacts ?? []).map((a) => a.type))],
     [artifacts],
   );
 
   const filtered = useMemo(() => {
-    let result = artifacts;
+    let result = artifacts ?? [];
     if (search.trim()) {
       const q = search.toLowerCase();
       result = result.filter((a) => a.name.toLowerCase().includes(q));
@@ -93,7 +86,7 @@ export default function ArtifactCatalogPanel({ title }: Props) {
     setCreateError(null);
     try {
       const artifact = await createArtifact({ name: newName.trim(), type: newType });
-      setArtifacts((prev) => [...prev, artifact]);
+      invalidate("list:artifacts");
       setNewName("");
       setNewType("docker");
       setShowAddForm(false);
@@ -225,7 +218,7 @@ export default function ArtifactCatalogPanel({ title }: Props) {
             <h3 style={{ fontSize: 15, fontWeight: 600, margin: 0 }}>
               Artifact Catalog
               <span style={{ fontSize: 12, fontWeight: 400, color: "var(--agent-text-muted)", marginLeft: 8 }}>
-                {artifacts.length} artifact{artifacts.length !== 1 ? "s" : ""}
+                {(artifacts ?? []).length} artifact{(artifacts ?? []).length !== 1 ? "s" : ""}
               </span>
             </h3>
             <button
@@ -370,7 +363,7 @@ export default function ArtifactCatalogPanel({ title }: Props) {
           {/* Content */}
           {filtered.length === 0 && (
             <div className="text-muted" style={{ fontSize: 13, padding: "20px 0" }}>
-              {artifacts.length === 0
+              {(artifacts ?? []).length === 0
                 ? "No artifacts yet. Use the Command Channel to create one, or click Add Artifact above."
                 : "No artifacts match your filters."}
             </div>

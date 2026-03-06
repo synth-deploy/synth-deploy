@@ -20,6 +20,7 @@ import type {
   Partition,
 } from "../../types.js";
 import { useCanvas } from "../../context/CanvasContext.js";
+import { useQuery } from "../../hooks/useQuery.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
 
 interface Props {
@@ -32,14 +33,18 @@ type ReviewMode = "review" | "modify" | "reject-prompt";
 export default function PlanReviewPanel({ deploymentId, title }: Props) {
   const { replacePanel } = useCanvas();
 
+  const { data: result, loading: l1 } = useQuery(`deployment:${deploymentId}`, () => getDeployment(deploymentId));
+  const { data: enrichCtx, loading: l2 } = useQuery(`deploymentEnrichment:${deploymentId}`, () => getDeploymentEnrichment(deploymentId).catch(() => ({ enrichment: null }) as { enrichment: null; recommendation?: DeploymentRecommendation }));
+  const { data: environments, loading: l3 } = useQuery("list:environments", () => listEnvironments());
+  const { data: artifacts, loading: l4 } = useQuery("list:artifacts", () => listArtifacts());
+  const { data: partitions, loading: l5 } = useQuery("list:partitions", () => listPartitions());
+  const loading = l1 || l2 || l3 || l4 || l5;
+
   const [deployment, setDeployment] = useState<Deployment | null>(null);
-  const [debrief, setDebrief] = useState<DebriefEntry[]>([]);
-  const [enrichment, setEnrichment] = useState<DeploymentEnrichment | null>(null);
-  const [recommendation, setRecommendation] = useState<DeploymentRecommendation | null>(null);
-  const [environments, setEnvironments] = useState<Environment[]>([]);
-  const [artifacts, setArtifacts] = useState<Artifact[]>([]);
-  const [partitions, setPartitions] = useState<Partition[]>([]);
-  const [loading, setLoading] = useState(true);
+  const debrief = result?.debrief ?? [];
+  const enrichment = enrichCtx?.enrichment ?? null;
+  const recommendation = enrichCtx?.recommendation ?? result?.deployment?.recommendation ?? null;
+
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -49,27 +54,15 @@ export default function PlanReviewPanel({ deploymentId, title }: Props) {
   const [modifiedSteps, setModifiedSteps] = useState<PlannedStep[]>([]);
   const [modifyReason, setModifyReason] = useState("");
 
+  // Sync deployment from query result and initialize modifiedSteps
   useEffect(() => {
-    Promise.all([
-      getDeployment(deploymentId),
-      getDeploymentEnrichment(deploymentId).catch(() => ({ enrichment: null })),
-      listEnvironments(),
-      listArtifacts(),
-      listPartitions(),
-    ]).then(([result, ctx, e, a, p]) => {
+    if (result?.deployment) {
       setDeployment(result.deployment);
-      setDebrief(result.debrief);
-      setEnrichment(ctx.enrichment);
-      setRecommendation(ctx.recommendation ?? result.deployment.recommendation ?? null);
-      setEnvironments(e);
-      setArtifacts(a);
-      setPartitions(p);
       if (result.deployment.plan) {
         setModifiedSteps(result.deployment.plan.steps.map((s) => ({ ...s })));
       }
-      setLoading(false);
-    }).catch(() => setLoading(false));
-  }, [deploymentId]);
+    }
+  }, [result]);
 
   if (loading) {
     return (
@@ -97,10 +90,10 @@ export default function PlanReviewPanel({ deploymentId, title }: Props) {
     );
   }
 
-  const envName = environments.find((e) => e.id === deployment.environmentId)?.name ?? deployment.environmentId;
-  const artName = artifacts.find((a) => a.id === deployment.artifactId)?.name ?? deployment.artifactId.slice(0, 8);
+  const envName = (environments ?? []).find((e) => e.id === deployment.environmentId)?.name ?? deployment.environmentId;
+  const artName = (artifacts ?? []).find((a) => a.id === deployment.artifactId)?.name ?? deployment.artifactId.slice(0, 8);
   const partName = deployment.partitionId
-    ? (partitions.find((p) => p.id === deployment.partitionId)?.name ?? deployment.partitionId.slice(0, 8))
+    ? ((partitions ?? []).find((p) => p.id === deployment.partitionId)?.name ?? deployment.partitionId.slice(0, 8))
     : null;
 
   const plan = deployment.plan;

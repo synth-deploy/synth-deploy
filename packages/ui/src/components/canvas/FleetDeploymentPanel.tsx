@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
 import {
   getFleetDeployment,
   approveFleetDeployment,
@@ -7,6 +7,7 @@ import {
   resumeFleetDeployment,
 } from "../../api.js";
 import type { FleetDeployment, FleetDeploymentStatus } from "../../api.js";
+import { useQuery } from "../../hooks/useQuery.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
 import SectionHeader from "../SectionHeader.js";
 
@@ -43,38 +44,22 @@ const strategyLabels: Record<string, string> = {
 // ---------------------------------------------------------------------------
 
 export default function FleetDeploymentPanel({ fleetDeploymentId, title }: Props) {
-  const [fleet, setFleet] = useState<FleetDeployment | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { data: fleet, loading, error, refresh } = useQuery<FleetDeployment>(
+    `fleetDeployment:${fleetDeploymentId}`,
+    () => getFleetDeployment(fleetDeploymentId),
+    { refetchInterval: 3000 },
+  );
   const [actionLoading, setActionLoading] = useState(false);
-
-  const loadFleet = useCallback(() => {
-    getFleetDeployment(fleetDeploymentId)
-      .then(setFleet)
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
-  }, [fleetDeploymentId]);
-
-  useEffect(() => {
-    loadFleet();
-
-    // Auto-refresh while in active states
-    const interval = setInterval(() => {
-      getFleetDeployment(fleetDeploymentId)
-        .then(setFleet)
-        .catch(() => {});
-    }, 3000);
-
-    return () => clearInterval(interval);
-  }, [fleetDeploymentId, loadFleet]);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const handleAction = async (action: () => Promise<FleetDeployment>) => {
     setActionLoading(true);
+    setActionError(null);
     try {
-      const updated = await action();
-      setFleet(updated);
+      await action();
+      refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Action failed");
+      setActionError(err instanceof Error ? err.message : "Action failed");
     } finally {
       setActionLoading(false);
     }
@@ -91,7 +76,7 @@ export default function FleetDeploymentPanel({ fleetDeploymentId, title }: Props
   if (error && !fleet) {
     return (
       <CanvasPanelHost title={title}>
-        <div style={{ color: "#dc2626", padding: 16 }}>{error}</div>
+        <div style={{ color: "#dc2626", padding: 16 }}>{error.message}</div>
       </CanvasPanelHost>
     );
   }
@@ -376,7 +361,7 @@ export default function FleetDeploymentPanel({ fleetDeploymentId, title }: Props
         </div>
 
         {/* Error display */}
-        {error && (
+        {actionError && (
           <div
             style={{
               marginTop: 12,
@@ -388,7 +373,7 @@ export default function FleetDeploymentPanel({ fleetDeploymentId, title }: Props
               fontSize: 12,
             }}
           >
-            {error}
+            {actionError}
           </div>
         )}
       </div>

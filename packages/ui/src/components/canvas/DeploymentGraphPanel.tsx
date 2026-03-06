@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
+import { useQuery } from "../../hooks/useQuery.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
 import SectionHeader from "../SectionHeader.js";
 
@@ -163,16 +164,7 @@ export default function DeploymentGraphPanel({ title, graphId }: Props) {
 // ---------------------------------------------------------------------------
 
 function GraphListView({ title }: { title: string }) {
-  const [graphs, setGraphs] = useState<DeploymentGraph[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    fetchGraphList()
-      .then(setGraphs)
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false));
-  }, []);
+  const { data: graphs, loading, error } = useQuery<DeploymentGraph[]>("list:deploymentGraphs", fetchGraphList);
 
   if (loading) {
     return (
@@ -185,7 +177,7 @@ function GraphListView({ title }: { title: string }) {
   if (error) {
     return (
       <CanvasPanelHost title={title}>
-        <div className="error-msg">{error}</div>
+        <div className="error-msg">{error.message}</div>
       </CanvasPanelHost>
     );
   }
@@ -200,13 +192,13 @@ function GraphListView({ title }: { title: string }) {
           subtitle="orchestrated multi-envoy deployments"
         />
 
-        {graphs.length === 0 && (
+        {(graphs ?? []).length === 0 && (
           <div style={{ color: "#666", fontSize: 13, padding: "16px 0" }}>
             No deployment graphs created yet. Create one via the API.
           </div>
         )}
 
-        {graphs.map((g) => (
+        {(graphs ?? []).map((g) => (
           <div
             key={g.id}
             style={{
@@ -239,9 +231,10 @@ function GraphListView({ title }: { title: string }) {
 // ---------------------------------------------------------------------------
 
 function GraphDetailView({ title, graphId }: { title: string; graphId: string }) {
-  const [graph, setGraph] = useState<DeploymentGraph | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { data: graph, loading, error, refresh: reload } = useQuery<DeploymentGraph>(
+    `deploymentGraph:${graphId}`,
+    () => fetchGraph(graphId),
+  );
   const [actionError, setActionError] = useState<string | null>(null);
   const [editMode, setEditMode] = useState(false);
   const [editedEdges, setEditedEdges] = useState<GraphEdge[]>([]);
@@ -262,20 +255,13 @@ function GraphDetailView({ title, graphId }: { title: string; graphId: string })
   const [newBindingStepIndex, setNewBindingStepIndex] = useState("");
   const [newBindingOutputKey, setNewBindingOutputKey] = useState("");
 
-  const reload = useCallback(() => {
-    fetchGraph(graphId)
-      .then((g) => {
-        setGraph(g);
-        setEditedEdges(g.edges);
-        setEditedNodes(g.nodes);
-      })
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false));
-  }, [graphId]);
-
+  // Sync edit state when graph data loads/changes
   useEffect(() => {
-    reload();
-  }, [reload]);
+    if (graph) {
+      setEditedEdges(graph.edges);
+      setEditedNodes(graph.nodes);
+    }
+  }, [graph]);
 
   if (loading) {
     return (
@@ -288,7 +274,7 @@ function GraphDetailView({ title, graphId }: { title: string; graphId: string })
   if (error || !graph) {
     return (
       <CanvasPanelHost title={title}>
-        <div className="error-msg">{error ?? "Graph not found"}</div>
+        <div className="error-msg">{error?.message ?? "Graph not found"}</div>
       </CanvasPanelHost>
     );
   }

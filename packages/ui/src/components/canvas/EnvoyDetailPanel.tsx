@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
 import { getEnvoyHealth } from "../../api.js";
 import type { EnvoyRegistryEntry } from "../../api.js";
+import { useQuery } from "../../hooks/useQuery.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
 
 interface Props {
@@ -9,16 +9,7 @@ interface Props {
 }
 
 export default function EnvoyDetailPanel({ envoyId, title }: Props) {
-  const [envoy, setEnvoy] = useState<EnvoyRegistryEntry | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    getEnvoyHealth(envoyId)
-      .then(setEnvoy)
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
-  }, [envoyId]);
+  const { data: envoy, loading, error } = useQuery<EnvoyRegistryEntry>(`envoyHealth:${envoyId}`, () => getEnvoyHealth(envoyId));
 
   if (loading) {
     return (
@@ -31,7 +22,7 @@ export default function EnvoyDetailPanel({ envoyId, title }: Props) {
   if (error || !envoy) {
     return (
       <CanvasPanelHost title={title}>
-        <div className="error-msg">{error ?? "Envoy not found"}</div>
+        <div className="error-msg">{error?.message ?? "Envoy not found"}</div>
       </CanvasPanelHost>
     );
   }

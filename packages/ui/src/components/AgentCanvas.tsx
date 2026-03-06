@@ -47,7 +47,7 @@ export default function AgentCanvas() {
       case "partition-detail":
         return (
           <PartitionDetailPanel
-            key={panel.id}
+            key={`partition-detail:${params.id}`}
             partitionId={params.id}
             title={panel.title}
           />
@@ -56,7 +56,7 @@ export default function AgentCanvas() {
       case "environment-detail":
         return (
           <EnvironmentDetailPanel
-            key={panel.id}
+            key={`environment-detail:${params.id}`}
             environmentId={params.id}
             title={panel.title}
           />
@@ -65,7 +65,7 @@ export default function AgentCanvas() {
       case "deployment-detail":
         return (
           <DeploymentDetailPanel
-            key={panel.id}
+            key={`deployment-detail:${params.id}`}
             deploymentId={params.id}
             title={panel.title}
           />
@@ -74,7 +74,7 @@ export default function AgentCanvas() {
       case "deployment-list":
         return (
           <DeploymentListPanel
-            key={panel.id}
+            key={`deployment-list:${params.status ?? ""}:${params.partitionId ?? ""}`}
             title={panel.title}
             filterStatus={params.status}
             filterPartitionId={params.partitionId}
@@ -84,19 +84,19 @@ export default function AgentCanvas() {
       case "deployment-authoring":
         return (
           <DeploymentAuthoringPanel
-            key={panel.id}
+            key={`deployment-authoring:${params.artifactId ?? ""}`}
             title={panel.title}
             preselectedArtifactId={params.artifactId}
           />
         );
 
       case "partition-list":
-        return <PartitionListPanel key={panel.id} title={panel.title} />;
+        return <PartitionListPanel key="partition-list" title={panel.title} />;
 
       case "debrief":
         return (
           <DebriefPanel
-            key={panel.id}
+            key={`debrief:${params.partitionId ?? ""}:${params.decisionType ?? ""}`}
             title={panel.title}
             filterPartitionId={params.partitionId}
             filterDecisionType={params.decisionType}
@@ -114,7 +114,7 @@ export default function AgentCanvas() {
         }
         return (
           <SignalDetailPanel
-            key={panel.id}
+            key={`signal-detail:${panel.id}`}
             signal={signal}
             title={panel.title}
           />
@@ -122,24 +122,24 @@ export default function AgentCanvas() {
       }
 
       case "envoy-registry":
-        return <EnvoyRegistryPanel key={panel.id} title={panel.title} />;
+        return <EnvoyRegistryPanel key="envoy-registry" title={panel.title} />;
 
       case "envoy-detail":
         return (
           <EnvoyDetailPanel
-            key={panel.id}
+            key={`envoy-detail:${params.id}`}
             envoyId={params.id}
             title={panel.title}
           />
         );
 
       case "artifact-catalog":
-        return <ArtifactCatalogPanel key={panel.id} title={panel.title} />;
+        return <ArtifactCatalogPanel key="artifact-catalog" title={panel.title} />;
 
       case "artifact-detail":
         return (
           <ArtifactDetailPanel
-            key={panel.id}
+            key={`artifact-detail:${params.artifactId}`}
             artifactId={params.artifactId}
             title={panel.title}
           />
@@ -148,7 +148,7 @@ export default function AgentCanvas() {
       case "plan-review":
         return (
           <PlanReviewPanel
-            key={panel.id}
+            key={`plan-review:${params.id}`}
             deploymentId={params.id}
             title={panel.title}
           />
@@ -157,7 +157,7 @@ export default function AgentCanvas() {
       case "fleet-deployment":
         return (
           <FleetDeploymentPanel
-            key={panel.id}
+            key={`fleet-deployment:${params.id}`}
             fleetDeploymentId={params.id}
             title={panel.title}
           />
@@ -166,14 +166,14 @@ export default function AgentCanvas() {
       case "deployment-graph":
         return (
           <DeploymentGraphPanel
-            key={panel.id}
+            key={`deployment-graph:${params.id}`}
             graphId={params.id}
             title={panel.title}
           />
         );
 
       case "settings":
-        return <SettingsPanel key={panel.id} title={panel.title} />;
+        return <SettingsPanel key="settings" title={panel.title} />;
 
       default:
         return (

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import {
   listArtifacts,
   listPartitions,
@@ -14,6 +14,7 @@ import CanvasPanelHost from "./CanvasPanelHost.js";
 import { useCanvas } from "../../context/CanvasContext.js";
 import EnvBadge from "../EnvBadge.js";
 import PreFlightDisplay from "./PreFlightDisplay.js";
+import { useQuery } from "../../hooks/useQuery.js";
 
 interface Props {
   title: string;
@@ -25,11 +26,11 @@ export default function DeploymentAuthoringPanel({ title, preselectedArtifactId 
   const { settings: appSettings } = useSettings();
   const environmentsEnabled = appSettings?.environmentsEnabled ?? true;
 
-  const [artifacts, setArtifacts] = useState<Artifact[]>([]);
-  const [partitions, setPartitions] = useState<Partition[]>([]);
-  const [environments, setEnvironments] = useState<Environment[]>([]);
-  const [envoys, setEnvoys] = useState<EnvoyRegistryEntry[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: artifacts, loading: l1 } = useQuery<Artifact[]>("list:artifacts", listArtifacts);
+  const { data: partitions, loading: l2 } = useQuery<Partition[]>("list:partitions", listPartitions);
+  const { data: environments, loading: l3 } = useQuery<Environment[]>("list:environments", listEnvironments);
+  const { data: envoys, loading: l4 } = useQuery<EnvoyRegistryEntry[]>("list:envoys", () => listEnvoys().catch(() => [] as EnvoyRegistryEntry[]));
+  const loading = l1 || l2 || l3 || l4;
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -39,21 +40,6 @@ export default function DeploymentAuthoringPanel({ title, preselectedArtifactId 
   const [selectedPartitionId, setSelectedPartitionId] = useState<string>("");
   const [version, setVersion] = useState<string>("");
   const [preFlightRec, setPreFlightRec] = useState<PreFlightContext["recommendation"] | null>(null);
-
-  useEffect(() => {
-    Promise.all([
-      listArtifacts(),
-      listPartitions(),
-      listEnvironments(),
-      listEnvoys().catch(() => []),
-    ]).then(([arts, parts, envs, envoyList]) => {
-      setArtifacts(arts);
-      setPartitions(parts);
-      setEnvironments(envs);
-      setEnvoys(envoyList);
-      setLoading(false);
-    }).catch(() => setLoading(false));
-  }, []);
 
   async function handleDeploy() {
     if (!selectedArtifactId || (environmentsEnabled && !selectedEnvironmentId)) return;
@@ -92,7 +78,7 @@ export default function DeploymentAuthoringPanel({ title, preselectedArtifactId 
     }
   }
 
-  const selectedArtifact = artifacts.find((a) => a.id === selectedArtifactId);
+  const selectedArtifact = (artifacts ?? []).find((a) => a.id === selectedArtifactId);
 
   if (loading)
     return (
@@ -122,7 +108,7 @@ export default function DeploymentAuthoringPanel({ title, preselectedArtifactId 
               style={{ fontSize: 13, padding: "6px 8px", width: "100%" }}
             >
               <option value="">Select artifact...</option>
-              {artifacts.map((art) => (
+              {(artifacts ?? []).map((art) => (
                 <option key={art.id} value={art.id}>
                   {art.name} ({art.type})
                 </option>
@@ -169,22 +155,22 @@ export default function DeploymentAuthoringPanel({ title, preselectedArtifactId 
                 style={{ fontSize: 13, padding: "6px 8px", width: "100%" }}
               >
                 <option value="">Select environment...</option>
-                {environments.map((env) => (
+                {(environments ?? []).map((env) => (
                   <option key={env.id} value={env.id}>
                     {env.name}
                   </option>
                 ))}
               </select>
-              {envoys.length > 0 && (
+              {(envoys ?? []).length > 0 && (
                 <div style={{ fontSize: 11, color: "var(--agent-text-muted)", marginTop: 4 }}>
-                  {envoys.filter((e) => e.health === "OK").length} / {envoys.length} envoy{envoys.length !== 1 ? "s" : ""} healthy
+                  {(envoys ?? []).filter((e) => e.health === "OK").length} / {(envoys ?? []).length} envoy{(envoys ?? []).length !== 1 ? "s" : ""} healthy
                 </div>
               )}
             </div>
           )}
 
           {/* Partition selection (optional) */}
-          {partitions.length > 0 && (
+          {(partitions ?? []).length > 0 && (
             <div style={{ marginBottom: 12 }}>
               <label style={{ fontSize: 12, fontWeight: 600, color: "var(--agent-text-muted)", display: "block", marginBottom: 4 }}>
                 Partition (optional)
@@ -195,7 +181,7 @@ export default function DeploymentAuthoringPanel({ title, preselectedArtifactId 
                 style={{ fontSize: 13, padding: "6px 8px", width: "100%" }}
               >
                 <option value="">No partition</option>
-                {partitions.map((p) => (
+                {(partitions ?? []).map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name}
                   </option>
@@ -241,11 +227,11 @@ export default function DeploymentAuthoringPanel({ title, preselectedArtifactId 
                 </div>
                 <div>
                   <strong>Environment:</strong>{" "}
-                  <EnvBadge name={environments.find((e) => e.id === selectedEnvironmentId)?.name ?? selectedEnvironmentId.slice(0, 8)} />
+                  <EnvBadge name={(environments ?? []).find((e) => e.id === selectedEnvironmentId)?.name ?? selectedEnvironmentId.slice(0, 8)} />
                 </div>
                 {selectedPartitionId && (
                   <div>
-                    <strong>Partition:</strong> {partitions.find((p) => p.id === selectedPartitionId)?.name ?? selectedPartitionId.slice(0, 8)}
+                    <strong>Partition:</strong> {(partitions ?? []).find((p) => p.id === selectedPartitionId)?.name ?? selectedPartitionId.slice(0, 8)}
                   </div>
                 )}
                 {version && (

@@ -4,6 +4,7 @@ import type { AppSettings, CommandInfo, ConflictPolicy, McpServerConfig, TaskMod
 import { TASK_MODEL_META } from "../../types.js";
 import { useSettings } from "../../context/SettingsContext.js";
 import { useAuth } from "../../context/AuthContext.js";
+import { useQuery } from "../../hooks/useQuery.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
 
 interface Props {
@@ -14,9 +15,11 @@ export default function SettingsPanel({ title }: Props) {
   const { refresh: refreshGlobalSettings } = useSettings();
   const { permissions } = useAuth();
   const canManageSettings = permissions.includes("settings.manage");
+  const { data: fetchedSettings, loading: l1 } = useQuery("settings", getSettings);
+  const { data: fetchedCommandInfo, loading: l2 } = useQuery("commandInfo", getCommandInfo);
+  const loading = l1 || l2;
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [commandInfo, setCommandInfo] = useState<CommandInfo | null>(null);
-  const [loading, setLoading] = useState(true);
   const [agentSaved, setAgentSaved] = useState(false);
   const [envoySaved, setEnvoySaved] = useState(false);
   const [coBrandingSaved, setCoBrandingSaved] = useState(false);
@@ -34,6 +37,7 @@ export default function SettingsPanel({ title }: Props) {
   const [verifyingTask, setVerifyingTask] = useState<string | null>(null);
 
   // --- IdP state ---
+  const { data: idpData } = useQuery("list:idpProviders", listIdpProviders);
   const [idpProviders, setIdpProviders] = useState<IdpProvider[]>([]);
   const [idpShowForm, setIdpShowForm] = useState(false);
   const [idpNewType, setIdpNewType] = useState<"oidc" | "saml" | "ldap">("oidc");
@@ -72,6 +76,8 @@ export default function SettingsPanel({ title }: Props) {
   const [idpMappingProviderId, setIdpMappingProviderId] = useState<string | null>(null);
 
   // --- Intake state ---
+  const { data: intakeChannelsData } = useQuery("list:intakeChannels", listIntakeChannels);
+  const { data: intakeEventsData } = useQuery("list:intakeEvents", () => listIntakeEvents({ limit: 20 }), { refetchInterval: 10_000 });
   const [intakeChannels, setIntakeChannels] = useState<IntakeChannel[]>([]);
   const [intakeShowForm, setIntakeShowForm] = useState(false);
   const [intakeNewType, setIntakeNewType] = useState<"webhook" | "registry">("webhook");
@@ -99,33 +105,36 @@ export default function SettingsPanel({ title }: Props) {
   // --- Intake activity feed state ---
   const [intakeEvents, setIntakeEvents] = useState<IntakeEvent[]>([]);
 
+  // Sync fetched settings to local state for editing
   useEffect(() => {
-    Promise.all([getSettings(), getCommandInfo()])
-      .then(([s, info]) => {
-        setSettings(s);
-        setCommandInfo(info);
-        setCoBrandingOperatorName(s.coBranding?.operatorName ?? "");
-        setCoBrandingLogoUrl(s.coBranding?.logoUrl ?? "");
-        setCoBrandingAccentColor(s.coBranding?.accentColor ?? "");
-        setMcpServers(s.mcpServers ?? []);
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
-    // Load IdP providers
-    listIdpProviders().then(setIdpProviders).catch(() => {});
-    // Load intake channels
-    listIntakeChannels().then(setIntakeChannels).catch(() => {});
-    // Load intake events
-    listIntakeEvents({ limit: 20 }).then(setIntakeEvents).catch(() => {});
-  }, []);
+    if (fetchedSettings && !settings) {
+      setSettings(fetchedSettings);
+      setCoBrandingOperatorName(fetchedSettings.coBranding?.operatorName ?? "");
+      setCoBrandingLogoUrl(fetchedSettings.coBranding?.logoUrl ?? "");
+      setCoBrandingAccentColor(fetchedSettings.coBranding?.accentColor ?? "");
+      setMcpServers(fetchedSettings.mcpServers ?? []);
+    }
+  }, [fetchedSettings]);
 
-  // Auto-refresh intake events every 10 seconds
+  // Sync command info
   useEffect(() => {
-    const interval = setInterval(() => {
-      listIntakeEvents({ limit: 20 }).then(setIntakeEvents).catch(() => {});
-    }, 10_000);
-    return () => clearInterval(interval);
-  }, []);
+    if (fetchedCommandInfo) setCommandInfo(fetchedCommandInfo);
+  }, [fetchedCommandInfo]);
+
+  // Sync IdP providers
+  useEffect(() => {
+    if (idpData) setIdpProviders(idpData);
+  }, [idpData]);
+
+  // Sync intake channels
+  useEffect(() => {
+    if (intakeChannelsData) setIntakeChannels(intakeChannelsData);
+  }, [intakeChannelsData]);
+
+  // Sync intake events
+  useEffect(() => {
+    if (intakeEventsData) setIntakeEvents(intakeEventsData);
+  }, [intakeEventsData]);
 
   async function handleSaveAgent() {
     if (!settings) return;

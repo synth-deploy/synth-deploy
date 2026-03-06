@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { getDeployment, getPostmortem, listEnvironments, listArtifacts, listPartitions } from "../../api.js";
 import type { Deployment, DebriefEntry, Environment, Artifact, Partition, PostmortemReport } from "../../types.js";
 import { useCanvas } from "../../context/CanvasContext.js";
+import { useQuery } from "../../hooks/useQuery.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
 
 const decisionTypeColors: Record<string, string> = {
@@ -296,37 +297,24 @@ interface Props {
 export default function DeploymentDetailPanel({ deploymentId, title }: Props) {
   const { pushPanel } = useCanvas();
 
-  const [deployment, setDeployment] = useState<Deployment | null>(null);
-  const [debrief, setDebrief] = useState<DebriefEntry[]>([]);
+  const { data: result, loading: l1, refresh: refreshDeployment } = useQuery(`deployment:${deploymentId}`, () => getDeployment(deploymentId));
+  const { data: environments, loading: l2 } = useQuery("list:environments", () => listEnvironments());
+  const { data: artifacts, loading: l3 } = useQuery("list:artifacts", () => listArtifacts());
+  const { data: partitions, loading: l4 } = useQuery("list:partitions", () => listPartitions());
+  const loading = l1 || l2 || l3 || l4;
+
+  const deployment = result?.deployment ?? null;
+  const debrief = result?.debrief ?? [];
+
   const [postmortem, setPostmortem] = useState<PostmortemReport | null>(null);
-  const [environments, setEnvironments] = useState<Environment[]>([]);
-  const [artifacts, setArtifacts] = useState<Artifact[]>([]);
-  const [partitions, setPartitions] = useState<Partition[]>([]);
-  const [loading, setLoading] = useState(true);
   const [expandedEntries, setExpandedEntries] = useState<Set<string>>(new Set());
 
+  // Fetch postmortem for failed deployments
   useEffect(() => {
-    Promise.all([
-      getDeployment(deploymentId),
-      listEnvironments(),
-      listArtifacts(),
-      listPartitions(),
-    ]).then(async ([result, e, a, t]) => {
-      setDeployment(result.deployment);
-      setDebrief(result.debrief);
-      setEnvironments(e);
-      setArtifacts(a);
-      setPartitions(t);
-
-      if (result.deployment.status === "failed") {
-        try {
-          const pm = await getPostmortem(deploymentId);
-          setPostmortem(pm);
-        } catch { /* postmortem not available */ }
-      }
-      setLoading(false);
-    }).catch(() => setLoading(false));
-  }, [deploymentId]);
+    if (deployment?.status === "failed") {
+      getPostmortem(deploymentId).then(setPostmortem).catch(() => {});
+    }
+  }, [deployment?.status, deploymentId]);
 
   // Live streaming for running deployments
   const isRunning = deployment?.status === "running";
@@ -335,20 +323,17 @@ export default function DeploymentDetailPanel({ deploymentId, title }: Props) {
   // Re-fetch deployment when stream completes (to get final state)
   useEffect(() => {
     if (streamCompleted) {
-      getDeployment(deploymentId).then((result) => {
-        setDeployment(result.deployment);
-        setDebrief(result.debrief);
-      }).catch(() => {});
+      refreshDeployment();
     }
-  }, [streamCompleted, deploymentId]);
+  }, [streamCompleted, refreshDeployment]);
 
   if (loading) return <CanvasPanelHost title={title}><div className="loading">Loading...</div></CanvasPanelHost>;
   if (!deployment) return <CanvasPanelHost title={title}><div className="error-msg">Deployment not found</div></CanvasPanelHost>;
 
-  const envName = environments.find((e) => e.id === deployment.environmentId)?.name ?? deployment.environmentId;
-  const artName = artifacts.find((a) => a.id === deployment.artifactId)?.name ?? deployment.artifactId.slice(0, 8);
+  const envName = (environments ?? []).find((e) => e.id === deployment.environmentId)?.name ?? deployment.environmentId;
+  const artName = (artifacts ?? []).find((a) => a.id === deployment.artifactId)?.name ?? deployment.artifactId.slice(0, 8);
   const partName = deployment.partitionId
-    ? (partitions.find((t) => t.id === deployment.partitionId)?.name ?? deployment.partitionId.slice(0, 8))
+    ? ((partitions ?? []).find((t) => t.id === deployment.partitionId)?.name ?? deployment.partitionId.slice(0, 8))
     : null;
 
   function toggleEntry(id: string) {

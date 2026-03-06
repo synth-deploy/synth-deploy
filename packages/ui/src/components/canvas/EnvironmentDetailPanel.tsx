@@ -1,7 +1,7 @@
-import { useState, useEffect } from "react";
 import { getEnvironment, listDeployments, listArtifacts } from "../../api.js";
 import type { Environment, Deployment, Artifact } from "../../types.js";
 import { useCanvas } from "../../context/CanvasContext.js";
+import { useQuery } from "../../hooks/useQuery.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
 
 interface Props {
@@ -12,23 +12,11 @@ interface Props {
 export default function EnvironmentDetailPanel({ environmentId, title }: Props) {
   const { pushPanel } = useCanvas();
 
-  const [environment, setEnvironment] = useState<Environment | null>(null);
-  const [deployments, setDeployments] = useState<Deployment[]>([]);
-  const [artifacts, setArtifacts] = useState<Artifact[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    Promise.all([
-      getEnvironment(environmentId),
-      listDeployments(),
-      listArtifacts(),
-    ]).then(([e, d, a]) => {
-      setEnvironment(e);
-      setDeployments(d.filter((dep) => dep.environmentId === environmentId));
-      setArtifacts(a);
-      setLoading(false);
-    }).catch(() => setLoading(false));
-  }, [environmentId]);
+  const { data: environment, loading: l1 } = useQuery<Environment>(`environment:${environmentId}`, () => getEnvironment(environmentId));
+  const { data: allDeployments, loading: l2 } = useQuery<Deployment[]>("list:deployments", () => listDeployments());
+  const { data: artifacts, loading: l3 } = useQuery<Artifact[]>("list:artifacts", () => listArtifacts());
+  const loading = l1 || l2 || l3;
+  const deployments = (allDeployments ?? []).filter((dep) => dep.environmentId === environmentId);
 
   if (loading) return <CanvasPanelHost title={title}><div className="loading">Loading...</div></CanvasPanelHost>;
   if (!environment) return <CanvasPanelHost title={title}><div className="error-msg">Environment not found</div></CanvasPanelHost>;
@@ -92,7 +80,7 @@ export default function EnvironmentDetailPanel({ environmentId, title }: Props) 
                   <span className={`badge badge-${d.status}`}>{d.status}</span>
                   <span className="canvas-activity-version">{d.version}</span>
                   <span className="canvas-activity-artifact">
-                    {artifacts.find((a) => a.id === d.artifactId)?.name ?? d.artifactId.slice(0, 8)}
+                    {(artifacts ?? []).find((a) => a.id === d.artifactId)?.name ?? d.artifactId.slice(0, 8)}
                   </span>
                   <span className="canvas-activity-time">
                     {new Date(d.createdAt).toLocaleString()}

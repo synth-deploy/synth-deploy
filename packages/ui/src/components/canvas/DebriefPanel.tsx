@@ -1,8 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { getRecentDebrief, listPartitions } from "../../api.js";
 import type { DebriefEntry, Partition, DecisionType } from "../../types.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
 import DebriefTimeline from "../DebriefTimeline.js";
+import { useQuery } from "../../hooks/useQuery.js";
 
 const DECISION_TYPES: { value: DecisionType; label: string }[] = [
   { value: "pipeline-plan", label: "Plan" },
@@ -25,69 +26,38 @@ interface Props {
 }
 
 export default function DebriefPanel({ title, filterPartitionId, filterDecisionType }: Props) {
-  const [entries, setEntries] = useState<DebriefEntry[]>([]);
-  const [partitions, setPartitions] = useState<Partition[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [filterPartition, setFilterPartition] = useState(filterPartitionId ?? "");
   const [filterType, setFilterType] = useState(filterDecisionType ?? "");
 
-  function fetchEntries(partitionId?: string, decisionType?: string) {
-    setLoading(true);
-    setError(null);
+  const debriefKey = `debrief:${filterPartition}:${filterType}`;
+  const { data: entries, loading: l1, error } = useQuery<DebriefEntry[]>(debriefKey, () =>
     getRecentDebrief({
       limit: 100,
-      partitionId: partitionId || undefined,
-      decisionType: decisionType || undefined,
-    })
-      .then((e) => {
-        setEntries(e);
-        setLoading(false);
-      })
-      .catch((e) => {
-        setError(e.message);
-        setLoading(false);
-      });
-  }
-
-  useEffect(() => {
-    Promise.all([
-      getRecentDebrief({
-        limit: 100,
-        partitionId: filterPartitionId || undefined,
-        decisionType: filterDecisionType || undefined,
-      }),
-      listPartitions(),
-    ])
-      .then(([e, t]) => {
-        setEntries(e);
-        setPartitions(t);
-        setLoading(false);
-      })
-      .catch((e) => {
-        setError(e.message);
-        setLoading(false);
-      });
-  }, []);
+      partitionId: filterPartition || undefined,
+      decisionType: filterType || undefined,
+    }),
+  );
+  const { data: partitions, loading: l2 } = useQuery<Partition[]>("list:partitions", listPartitions);
+  const loading = l1 || l2;
 
   function handlePartitionChange(partition: string) {
     setFilterPartition(partition);
-    fetchEntries(partition, filterType);
   }
 
   function handleTypeChange(type: string) {
     setFilterType(type);
-    fetchEntries(filterPartition, type);
   }
 
+  const safeEntries = entries ?? [];
+
   const uniquePartitions = new Set(
-    entries.filter((e) => e.partitionId).map((e) => e.partitionId),
+    safeEntries.filter((e) => e.partitionId).map((e) => e.partitionId),
   );
   const uniqueDeployments = new Set(
-    entries.filter((e) => e.deploymentId).map((e) => e.deploymentId),
+    safeEntries.filter((e) => e.deploymentId).map((e) => e.deploymentId),
   );
   const typeBreakdown = new Map<string, number>();
-  for (const entry of entries) {
+  for (const entry of safeEntries) {
     typeBreakdown.set(entry.decisionType, (typeBreakdown.get(entry.decisionType) ?? 0) + 1);
   }
 
@@ -96,7 +66,7 @@ export default function DebriefPanel({ title, filterPartitionId, filterDecisionT
       <div className="canvas-detail">
         <div className="canvas-summary-strip">
           <div className="canvas-summary-item">
-            <span className="canvas-summary-value">{entries.length}</span>
+            <span className="canvas-summary-value">{safeEntries.length}</span>
             <span className="canvas-summary-label">Decisions</span>
           </div>
           <div className="canvas-summary-item">
@@ -122,7 +92,7 @@ export default function DebriefPanel({ title, filterPartitionId, filterDecisionT
               style={{ fontSize: 13, padding: "4px 8px" }}
             >
               <option value="">All Partitions</option>
-              {partitions.map((t) => (
+              {(partitions ?? []).map((t) => (
                 <option key={t.id} value={t.id}>{t.name}</option>
               ))}
             </select>
@@ -139,13 +109,13 @@ export default function DebriefPanel({ title, filterPartitionId, filterDecisionT
           </div>
         </div>
 
-        {error && <div className="error-msg" style={{ margin: "0 16px 12px" }}>{error}</div>}
+        {error && <div className="error-msg" style={{ margin: "0 16px 12px" }}>{error.message}</div>}
 
         <div style={{ padding: "0 16px" }}>
           {loading ? (
             <div className="loading">Loading...</div>
           ) : (
-            <DebriefTimeline entries={entries} />
+            <DebriefTimeline entries={safeEntries} />
           )}
         </div>
       </div>
