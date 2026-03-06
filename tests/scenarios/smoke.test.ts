@@ -42,17 +42,17 @@ describe("Deploy happy path", () => {
   let deploymentId: string;
 
   it("creates artifact → environment → partition → deployment → verifies", async () => {
-    artifactId = await createArtifact(h.command.baseUrl, "web-app");
-    environmentId = await createEnvironment(h.command.baseUrl, "production", {
+    artifactId = await createArtifact(h.server.baseUrl, "web-app");
+    environmentId = await createEnvironment(h.server.baseUrl, "production", {
       APP_ENV: "production",
       LOG_LEVEL: "warn",
     });
-    partitionId = await createPartition(h.command.baseUrl, "Acme Corp", {
+    partitionId = await createPartition(h.server.baseUrl, "Acme Corp", {
       DB_HOST: "acme-db.internal",
       REGION: "us-east-1",
     });
 
-    const res = await deploy(h.command.baseUrl, {
+    const res = await deploy(h.server.baseUrl, {
       artifactId,
       partitionId,
       environmentId,
@@ -67,7 +67,7 @@ describe("Deploy happy path", () => {
   });
 
   it("deployment has debrief entries with actionable detail", async () => {
-    const res = await http(h.command.baseUrl, "GET", `/api/deployments/${deploymentId}`);
+    const res = await http(h.server.baseUrl, "GET", `/api/deployments/${deploymentId}`);
     expect(res.status).toBe(200);
 
     const entries = res.body.debrief as Array<Record<string, unknown>>;
@@ -83,7 +83,7 @@ describe("Deploy happy path", () => {
   });
 
   it("debrief can be queried via general endpoint", async () => {
-    const res = await http(h.command.baseUrl, "GET", `/api/deployments/${deploymentId}`);
+    const res = await http(h.server.baseUrl, "GET", `/api/deployments/${deploymentId}`);
     const entries = res.body.debrief as Array<Record<string, unknown>>;
     // Just verify the endpoint returns successfully
     expect(Array.isArray(entries)).toBe(true);
@@ -96,11 +96,11 @@ describe("Deploy happy path", () => {
 
 describe("Deploy failure investigation", () => {
   it("deployment produces debrief explaining context", async () => {
-    const artId = await createArtifact(h.command.baseUrl, "failing-service");
-    const envId = await createEnvironment(h.command.baseUrl, "broken-env");
-    const partId = await createPartition(h.command.baseUrl, "FailCo");
+    const artId = await createArtifact(h.server.baseUrl, "failing-service");
+    const envId = await createEnvironment(h.server.baseUrl, "broken-env");
+    const partId = await createPartition(h.server.baseUrl, "FailCo");
 
-    const res = await deploy(h.command.baseUrl, {
+    const res = await deploy(h.server.baseUrl, {
       artifactId: artId,
       partitionId: partId,
       environmentId: envId,
@@ -111,17 +111,17 @@ describe("Deploy failure investigation", () => {
     const dep = res.body.deployment as Record<string, unknown>;
     const depId = dep.id as string;
 
-    const detailRes = await http(h.command.baseUrl, "GET", `/api/deployments/${depId}`);
+    const detailRes = await http(h.server.baseUrl, "GET", `/api/deployments/${depId}`);
     expect(detailRes.status).toBe(200);
     expect(detailRes.body.deployment).toBeDefined();
   });
 
   it("postmortem endpoint returns structured analysis", async () => {
-    const artId = await createArtifact(h.command.baseUrl, "postmortem-svc");
-    const envId = await createEnvironment(h.command.baseUrl, "postmortem-env");
-    const partId = await createPartition(h.command.baseUrl, "PostmortemCo");
+    const artId = await createArtifact(h.server.baseUrl, "postmortem-svc");
+    const envId = await createEnvironment(h.server.baseUrl, "postmortem-env");
+    const partId = await createPartition(h.server.baseUrl, "PostmortemCo");
 
-    const res = await deploy(h.command.baseUrl, {
+    const res = await deploy(h.server.baseUrl, {
       artifactId: artId,
       partitionId: partId,
       environmentId: envId,
@@ -129,7 +129,7 @@ describe("Deploy failure investigation", () => {
     });
 
     const depId = (res.body.deployment as Record<string, unknown>).id as string;
-    const pmRes = await http(h.command.baseUrl, "GET", `/api/deployments/${depId}/postmortem`);
+    const pmRes = await http(h.server.baseUrl, "GET", `/api/deployments/${depId}/postmortem`);
     expect(pmRes.status).toBe(200);
     expect(pmRes.body.postmortem).toBeDefined();
   });
@@ -146,13 +146,13 @@ describe("Multi-partition isolation", () => {
   const deploymentIds: string[] = [];
 
   it("deploys same artifact across 3 partitions", async () => {
-    artifactId = await createArtifact(h.command.baseUrl, "batch-deploy-svc");
-    environmentId = await createEnvironment(h.command.baseUrl, "batch-env", {
+    artifactId = await createArtifact(h.server.baseUrl, "batch-deploy-svc");
+    environmentId = await createEnvironment(h.server.baseUrl, "batch-env", {
       APP_ENV: "staging",
     });
 
     for (const name of ["Alpha Inc", "Beta LLC", "Gamma Corp"]) {
-      const id = await createPartition(h.command.baseUrl, name, {
+      const id = await createPartition(h.server.baseUrl, name, {
         TENANT: name.toLowerCase().replace(/\s+/g, "-"),
       });
       partitions.push({ id, name });
@@ -160,7 +160,7 @@ describe("Multi-partition isolation", () => {
 
     // Deploy v1.0.0 to all three
     for (const p of partitions) {
-      const res = await deploy(h.command.baseUrl, {
+      const res = await deploy(h.server.baseUrl, {
         artifactId,
         partitionId: p.id,
         environmentId,
@@ -176,7 +176,7 @@ describe("Multi-partition isolation", () => {
   it("partition A deployments are NOT visible when querying partition B", async () => {
     for (let i = 0; i < partitions.length; i++) {
       const res = await http(
-        h.command.baseUrl,
+        h.server.baseUrl,
         "GET",
         `/api/deployments?partitionId=${partitions[i].id}`,
       );
@@ -200,7 +200,7 @@ describe("Multi-partition isolation", () => {
   it("debrief entries are scoped to correct partition", async () => {
     for (let i = 0; i < partitions.length; i++) {
       const res = await http(
-        h.command.baseUrl,
+        h.server.baseUrl,
         "GET",
         `/api/debrief?partitionId=${partitions[i].id}`,
       );
@@ -221,7 +221,7 @@ describe("Multi-partition isolation", () => {
 describe("Debrief queries", () => {
   it("queries debrief by decision type returns only matching entries", async () => {
     const res = await http(
-      h.command.baseUrl,
+      h.server.baseUrl,
       "GET",
       "/api/debrief?decisionType=pipeline-plan",
     );
@@ -234,7 +234,7 @@ describe("Debrief queries", () => {
   });
 
   it("queries debrief with limit returns at most N entries", async () => {
-    const res = await http(h.command.baseUrl, "GET", "/api/debrief?limit=2");
+    const res = await http(h.server.baseUrl, "GET", "/api/debrief?limit=2");
     expect(res.status).toBe(200);
     const entries = res.body.entries as Array<Record<string, unknown>>;
     expect(entries.length).toBeLessThanOrEqual(2);
@@ -242,13 +242,13 @@ describe("Debrief queries", () => {
 
   it("queries debrief by partition + decision type narrows correctly", async () => {
     // First find a partition that has entries
-    const allRes = await http(h.command.baseUrl, "GET", "/api/debrief?limit=1");
+    const allRes = await http(h.server.baseUrl, "GET", "/api/debrief?limit=1");
     const entries = allRes.body.entries as Array<Record<string, unknown>>;
     if (entries.length === 0) return; // nothing to test
 
     const partitionId = entries[0].partitionId as string;
     const res = await http(
-      h.command.baseUrl,
+      h.server.baseUrl,
       "GET",
       `/api/debrief?partitionId=${partitionId}&decisionType=pipeline-plan`,
     );
@@ -267,12 +267,12 @@ describe("Debrief queries", () => {
 
 describe("Partition lifecycle", () => {
   it("partition with deployments cannot be deleted (deletion guard)", async () => {
-    const artId = await createArtifact(h.command.baseUrl, "lifecycle-svc");
-    const envId = await createEnvironment(h.command.baseUrl, "lifecycle-env");
-    const partId = await createPartition(h.command.baseUrl, "EphemeralCo");
+    const artId = await createArtifact(h.server.baseUrl, "lifecycle-svc");
+    const envId = await createEnvironment(h.server.baseUrl, "lifecycle-env");
+    const partId = await createPartition(h.server.baseUrl, "EphemeralCo");
 
     // Deploy
-    const res = await deploy(h.command.baseUrl, {
+    const res = await deploy(h.server.baseUrl, {
       artifactId: artId,
       partitionId: partId,
       environmentId: envId,
@@ -282,27 +282,27 @@ describe("Partition lifecycle", () => {
     const depId = (res.body.deployment as Record<string, unknown>).id as string;
 
     // Attempt to delete partition — rejected because it has deployments
-    const delRes = await http(h.command.baseUrl, "DELETE", `/api/partitions/${partId}`);
+    const delRes = await http(h.server.baseUrl, "DELETE", `/api/partitions/${partId}`);
     expect(delRes.status).toBe(409);
 
     // Partition still exists
-    const getRes = await http(h.command.baseUrl, "GET", `/api/partitions/${partId}`);
+    const getRes = await http(h.server.baseUrl, "GET", `/api/partitions/${partId}`);
     expect(getRes.status).toBe(200);
 
     // Deployment still queryable
-    const depRes = await http(h.command.baseUrl, "GET", `/api/deployments/${depId}`);
+    const depRes = await http(h.server.baseUrl, "GET", `/api/deployments/${depId}`);
     expect(depRes.status).toBe(200);
   });
 
   it("partition without deployments can be deleted", async () => {
-    const partId = await createPartition(h.command.baseUrl, "EmptyCo");
+    const partId = await createPartition(h.server.baseUrl, "EmptyCo");
 
-    const delRes = await http(h.command.baseUrl, "DELETE", `/api/partitions/${partId}`);
+    const delRes = await http(h.server.baseUrl, "DELETE", `/api/partitions/${partId}`);
     expect(delRes.status).toBe(200);
     expect(delRes.body.deleted).toBe(true);
 
     // Partition should no longer appear in list
-    const listRes = await http(h.command.baseUrl, "GET", "/api/partitions");
+    const listRes = await http(h.server.baseUrl, "GET", "/api/partitions");
     const partitions = listRes.body.partitions as Array<Record<string, unknown>>;
     expect(partitions.find((p) => p.id === partId)).toBeUndefined();
   });

@@ -92,7 +92,7 @@ async function deployViaHttp(
 // Helper: build a Synth server with all routes registered
 // ==========================================================================
 
-interface CommandServerContext {
+interface SynthServerContext {
   app: FastifyInstance;
   baseUrl: string;
   diary: DecisionDebrief;
@@ -123,7 +123,7 @@ function addMockAuth(app: FastifyInstance) {
   });
 }
 
-async function createCommandServer(): Promise<CommandServerContext> {
+async function createSynthServer(): Promise<SynthServerContext> {
   const diary = new DecisionDebrief();
   const partitions = new PartitionStore();
   const environments = new EnvironmentStore();
@@ -157,10 +157,10 @@ async function createCommandServer(): Promise<CommandServerContext> {
 // ==========================================================================
 
 describe("E2E: Full deployment lifecycle via HTTP", () => {
-  let ctx: CommandServerContext;
+  let ctx: SynthServerContext;
 
   beforeAll(async () => {
-    ctx = await createCommandServer();
+    ctx = await createSynthServer();
   });
 
   afterAll(async () => {
@@ -382,14 +382,14 @@ describe("E2E: Envoy deployment via HTTP", () => {
 // ==========================================================================
 
 describe("E2E: Partition isolation via HTTP", () => {
-  let ctx: CommandServerContext;
+  let ctx: SynthServerContext;
   let partitionAId: string;
   let partitionBId: string;
   let artifactId: string;
   let environmentId: string;
 
   beforeAll(async () => {
-    ctx = await createCommandServer();
+    ctx = await createSynthServer();
 
     const envRes = await httpRequest(ctx.baseUrl, "POST", "/api/environments", {
       name: "production",

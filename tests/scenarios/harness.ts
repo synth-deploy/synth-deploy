@@ -39,7 +39,7 @@ import { createEnvoyServer } from "@synth-deploy/envoy/server.js";
 // Types
 // ---------------------------------------------------------------------------
 
-export interface CommandContext {
+export interface SynthServerContext {
   app: FastifyInstance;
   baseUrl: string;
   diary: DecisionDebrief;
@@ -61,7 +61,7 @@ export interface EnvoyContext {
 }
 
 export interface ScenarioHarness {
-  command: CommandContext;
+  server: SynthServerContext;
   envoy: EnvoyContext;
 }
 
@@ -190,7 +190,7 @@ export async function deploy(
 // Server factories
 // ---------------------------------------------------------------------------
 
-export async function createCommandServer(): Promise<CommandContext> {
+export async function createSynthServer(): Promise<SynthServerContext> {
   const diary = new DecisionDebrief();
   const partitions = new PartitionStore();
   const artifactStore = new ArtifactStore();
@@ -233,13 +233,13 @@ export async function createEnvoyServer_(): Promise<EnvoyContext> {
 }
 
 export async function createHarness(): Promise<ScenarioHarness> {
-  const command = await createCommandServer();
+  const server = await createSynthServer();
   const envoy = await createEnvoyServer_();
-  return { command, envoy };
+  return { server, envoy };
 }
 
 export async function teardownHarness(harness: ScenarioHarness): Promise<void> {
-  await harness.command.app.close();
+  await harness.server.app.close();
   await harness.envoy.app.close();
   removeTmpDir(harness.envoy.tmpDir);
 }
