@@ -80,7 +80,7 @@ export default function Login({ onLogin, onRegister, needsSetup, error }: LoginP
     <div className="login-page">
       <div className="login-card">
         <div className="login-header">
-          <h1 className="login-title">DeployStack</h1>
+          <h1 className="login-title">Synth</h1>
           <p className="login-subtitle">
             {needsSetup
               ? "Create your admin account to get started"

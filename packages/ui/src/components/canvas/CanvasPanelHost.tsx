@@ -42,11 +42,11 @@ export default function CanvasPanelHost({ title, dismissible = true, children }:
               >
                 {coBranding.operatorName}
               </span>
-              <span className="v2-cobranding-powered-by">by DeployStack</span>
+              <span className="v2-cobranding-powered-by">by Synth</span>
             </span>
           ) : (
             <span className="v2-breadcrumb-logo" onClick={resetToOverview}>
-              DeployStack
+              Synth
             </span>
           )}
           {breadcrumbPath.map((item, i) => (

@@ -8,14 +8,14 @@ export default function CommandHealth() {
   useEffect(() => {
     getHealth()
       .then(setHealth)
-      .catch(() => setError("Command unreachable"));
+      .catch(() => setError("Synth unreachable"));
   }, []);
 
   if (error) {
     return (
       <div className="card">
         <div className="card-header">
-          <h3>Command Health</h3>
+          <h3>Synth Health</h3>
         </div>
         <div className="badge badge-failed">Offline</div>
         <p className="text-muted" style={{ marginTop: 8, fontSize: 12 }}>{error}</p>
@@ -27,7 +27,7 @@ export default function CommandHealth() {
     return (
       <div className="card">
         <div className="card-header">
-          <h3>Command Health</h3>
+          <h3>Synth Health</h3>
         </div>
         <p className="text-muted" style={{ fontSize: 12 }}>Checking...</p>
       </div>
@@ -37,7 +37,7 @@ export default function CommandHealth() {
   return (
     <div className="card">
       <div className="card-header">
-        <h3>Command Health</h3>
+        <h3>Synth Health</h3>
       </div>
       <div className="badge badge-succeeded">Online</div>
       <p className="text-muted" style={{ marginTop: 8, fontSize: 11 }}>

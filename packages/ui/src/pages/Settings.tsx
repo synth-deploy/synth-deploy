@@ -291,7 +291,7 @@ export default function Settings() {
           </div>
 
           <div className="settings-description" style={{ marginBottom: 16 }}>
-            DeployStack requires an LLM connection to function. Configure your
+            Synth requires an LLM connection to function. Configure your
             provider below. API keys are set via the DEPLOYSTACK_LLM_API_KEY
             environment variable and are never stored in settings.
           </div>
@@ -907,12 +907,12 @@ export default function Settings() {
         </div>
       </div>
 
-      {/* Command Connection Info */}
+      {/* Synth Connection Info */}
       {commandInfo && (
         <div className="section">
           <div className="card">
             <div className="card-header">
-              <h3>Command Connection</h3>
+              <h3>Synth Connection</h3>
             </div>
             <div className="command-info-grid">
               <div className="command-info-item">

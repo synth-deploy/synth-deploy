@@ -712,12 +712,12 @@ export default function SettingsPanel({ title }: Props) {
           </div>
         </div>
 
-        {/* Command Connection Info */}
+        {/* Synth Connection Info */}
         {commandInfo && (
           <div className="section">
             <div className="card">
               <div className="card-header">
-                <h3>Command Connection</h3>
+                <h3>Synth Connection</h3>
               </div>
               <div className="command-info-grid">
                 <div className="command-info-item">
@@ -867,7 +867,7 @@ export default function SettingsPanel({ title }: Props) {
             </div>
             <div className="settings-description" style={{ marginBottom: 12 }}>
               Optionally brand this instance with your organization's identity.
-              When configured, the UI shows your name and logo with "by DeployStack" beneath.
+              When configured, the UI shows your name and logo with "by Synth" beneath.
             </div>
             <div className="form-group">
               <label>Operator Name</label>
@@ -1146,7 +1146,7 @@ export default function SettingsPanel({ title }: Props) {
                             <input
                               value={idpMappingNewRole}
                               onChange={(e) => setIdpMappingNewRole(e.target.value)}
-                              placeholder="DeployStack Role"
+                              placeholder="Synth Role"
                               style={{ maxWidth: 180, fontSize: "0.85em" }}
                             />
                             <button
@@ -1267,7 +1267,7 @@ export default function SettingsPanel({ title }: Props) {
                         style={{ maxWidth: 400 }}
                       />
                       <div className="settings-description">
-                        The Service Provider entity ID that identifies this DeployStack instance to the IdP.
+                        The Service Provider entity ID that identifies this Synth instance to the IdP.
                       </div>
                     </div>
                     <div className="form-group" style={{ marginBottom: 0 }}>

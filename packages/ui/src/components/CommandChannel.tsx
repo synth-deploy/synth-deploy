@@ -103,7 +103,7 @@ export default function CommandChannel({ scope, onAgentResult }: CommandChannelP
             {scope ? (
               <EntityTag type="Partition" label={scope} />
             ) : (
-              <EntityTag type="Command" label="DeployStack" />
+              <EntityTag type="Synth" label="Synth" />
             )}
             <button
               className="command-channel-collapse-btn"

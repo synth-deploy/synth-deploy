@@ -50,10 +50,10 @@ export default function LlmGate({ children }: LlmGateProps) {
     return (
       <div className="llm-gate-container">
         <div className="llm-gate-card">
-          <div className="llm-gate-logo">DeployStack</div>
+          <div className="llm-gate-logo">Synth</div>
           <div className="llm-gate-title">Unable to reach server</div>
           <div className="llm-gate-message">
-            Could not connect to the DeployStack server to verify LLM status.
+            Could not connect to the Synth server to verify LLM status.
           </div>
           <div className="llm-gate-detail">{error}</div>
           <button
@@ -79,10 +79,10 @@ export default function LlmGate({ children }: LlmGateProps) {
     return (
       <div className="llm-gate-container">
         <div className="llm-gate-card">
-          <div className="llm-gate-logo">DeployStack</div>
+          <div className="llm-gate-logo">Synth</div>
           <div className="llm-gate-title">LLM Connection Required</div>
           <div className="llm-gate-message">
-            DeployStack requires an LLM connection to function. The intelligence
+            Synth requires an LLM connection to function. The intelligence
             is the product -- without it, there is no deployment reasoning,
             no risk assessment, and no plan generation.
           </div>
@@ -103,7 +103,7 @@ export default function LlmGate({ children }: LlmGateProps) {
             </div>
             <div className="llm-gate-setup-step">
               <span className="llm-gate-step-number">3</span>
-              <span>Restart the DeployStack server</span>
+              <span>Restart the Synth server</span>
             </div>
           </div>
           <button

@@ -13,7 +13,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       <div className="login-page">
         <div className="login-card">
           <div className="login-header">
-            <h1 className="login-title">DeployStack</h1>
+            <h1 className="login-title">Synth</h1>
             <p className="login-subtitle">Loading...</p>
           </div>
         </div>

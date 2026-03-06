@@ -1,4 +1,4 @@
-export type EntityType = "Envoy" | "Partition" | "Artifact" | "Deployment" | "Debrief" | "Command";
+export type EntityType = "Envoy" | "Partition" | "Artifact" | "Deployment" | "Debrief" | "Synth" | "Command";
 
 const ENTITY_COLORS: Record<EntityType, { color: string; bg: string; border: string }> = {
   Envoy: { color: "#34d399", bg: "rgba(52, 211, 153, 0.1)", border: "rgba(52, 211, 153, 0.2)" },
@@ -6,6 +6,7 @@ const ENTITY_COLORS: Record<EntityType, { color: string; bg: string; border: str
   Artifact: { color: "#6b7280", bg: "rgba(107, 114, 128, 0.1)", border: "rgba(107, 114, 128, 0.2)" },
   Deployment: { color: "#f59e0b", bg: "rgba(245, 158, 11, 0.1)", border: "rgba(245, 158, 11, 0.2)" },
   Debrief: { color: "#e879f9", bg: "rgba(232, 121, 249, 0.1)", border: "rgba(232, 121, 249, 0.2)" },
+  Synth: { color: "#63e1be", bg: "rgba(99, 225, 190, 0.1)", border: "rgba(99, 225, 190, 0.2)" },
   Command: { color: "#63e1be", bg: "rgba(99, 225, 190, 0.1)", border: "rgba(99, 225, 190, 0.2)" },
 };
 
@@ -16,7 +17,7 @@ interface EntityTagProps {
 }
 
 export default function EntityTag({ type, label, onClick }: EntityTagProps) {
-  const c = ENTITY_COLORS[type] ?? ENTITY_COLORS.Command;
+  const c = ENTITY_COLORS[type] ?? ENTITY_COLORS.Synth;
   return (
     <span
       className="entity-tag"

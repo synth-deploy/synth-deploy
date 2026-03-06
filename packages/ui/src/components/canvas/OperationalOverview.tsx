@@ -238,7 +238,7 @@ function EmptyState({ onComplete }: { onComplete: () => void }) {
       <div style={{ textAlign: "center", padding: "32px 20px 24px" }}>
         <CommandEye />
         <h2 style={{ color: "var(--agent-text)", fontSize: 22, fontWeight: 700, marginTop: 16, marginBottom: 8 }}>
-          Welcome to DeployStack
+          Welcome to Synth
         </h2>
         <p style={{ color: "var(--agent-text-muted)", fontSize: 14, maxWidth: 460, margin: "0 auto" }}>
           Let&rsquo;s set up your first intelligent deployment. Three steps &mdash; then you&rsquo;re operational.
@@ -256,7 +256,7 @@ function EmptyState({ onComplete }: { onComplete: () => void }) {
               What are you deploying?
             </div>
             <div style={{ fontSize: 12, color: "var(--agent-text-muted)" }}>
-              An artifact is what you&rsquo;re deploying &mdash; a container image, package, binary, or config bundle. DeployStack will analyze it.
+              An artifact is what you&rsquo;re deploying &mdash; a container image, package, binary, or config bundle. Synth will analyze it.
             </div>
           </div>
         </div>
@@ -340,7 +340,7 @@ function EmptyState({ onComplete }: { onComplete: () => void }) {
                 Register an Envoy
               </div>
               <div style={{ color: "var(--agent-text-muted)", lineHeight: 1.5 }}>
-                Install and start an envoy on your target machine. It will connect back to this DeployStack instance automatically.
+                Install and start an envoy on your target machine. It will connect back to this Synth instance automatically.
               </div>
               <div style={{ marginTop: 12, fontFamily: "var(--font-mono)", fontSize: 12, color: "#63e1be", background: "rgba(0,0,0,0.3)", padding: "8px 12px", borderRadius: 6, wordBreak: "break-all" }}>
                 npx @deploystack/envoy --command-url {window.location.origin}
@@ -395,7 +395,7 @@ function EmptyState({ onComplete }: { onComplete: () => void }) {
             <div style={{ fontSize: 12, color: "var(--agent-text-muted)" }}>
               {deploymentId
                 ? "Watch the plan, execution, and debrief unfold below."
-                : "Deploy your artifact. DeployStack will analyze it, generate a plan, and execute it."}
+                : "Deploy your artifact. Synth will analyze it, generate a plan, and execute it."}
             </div>
           </div>
         </div>
@@ -460,7 +460,7 @@ function EmptyState({ onComplete }: { onComplete: () => void }) {
                 {deploymentDebrief.map((entry) => (
                   <div key={entry.id} style={{ fontSize: 12, color: "var(--agent-text-muted)", padding: "4px 0", borderBottom: "1px solid rgba(107,114,128,0.1)" }}>
                     <span style={{ color: entry.agent === "envoy" ? "#34d399" : "#63e1be", fontWeight: 500 }}>
-                      {entry.agent === "envoy" ? "Envoy" : "Command"}
+                      {entry.agent === "envoy" ? "Envoy" : "Synth"}
                     </span>
                     {" \u2014 "}
                     {entry.decision}
@@ -684,10 +684,10 @@ function NormalState({ stats: _stats }: { stats: SystemState["stats"] }) {
             >
               {settings.coBranding.operatorName}
             </span>
-            <span className="v2-cobranding-powered-by">by DeployStack</span>
+            <span className="v2-cobranding-powered-by">by Synth</span>
           </span>
         ) : (
-          <span className="v2-breadcrumb-logo">DeployStack</span>
+          <span className="v2-breadcrumb-logo">Synth</span>
         )}
       </div>
 
@@ -698,7 +698,7 @@ function NormalState({ stats: _stats }: { stats: SystemState["stats"] }) {
           <CommandEye />
           <div className="v2-command-info">
             <div className="v2-command-title-row">
-              <span className="v2-command-label">Command</span>
+              <span className="v2-command-label">Synth</span>
               <div className="v2-command-status-badge">
                 <span>{commandStatus.toUpperCase()}</span>
               </div>
@@ -824,7 +824,7 @@ function NormalState({ stats: _stats }: { stats: SystemState["stats"] }) {
           <div>
             <div style={{ fontWeight: 700, fontSize: 15, color: "var(--agent-text)" }}>Deploy</div>
             <div style={{ fontSize: 12, color: "var(--agent-text-muted)" }}>
-              Select what and where &mdash; DeployStack handles the rest
+              Select what and where &mdash; Synth handles the rest
             </div>
           </div>
           <button
@@ -1017,7 +1017,7 @@ function NormalState({ stats: _stats }: { stats: SystemState["stats"] }) {
           </div>
         ))}
         {artifacts.length === 0 && (
-          <div className="v2-empty-hint">No artifacts yet. Use the Command Channel to add one.</div>
+          <div className="v2-empty-hint">No artifacts yet. Use the Synth Channel to add one.</div>
         )}
       </div>
 
@@ -1254,7 +1254,7 @@ function NormalState({ stats: _stats }: { stats: SystemState["stats"] }) {
 
       {deployments.length === 0 && partitions.length === 0 && artifacts.length === 0 && (
         <div className="v2-empty-state">
-          <p>No data yet. Use the Command Channel below to get started.</p>
+          <p>No data yet. Use the Synth Channel below to get started.</p>
         </div>
       )}
     </div>
