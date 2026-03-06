@@ -16,18 +16,18 @@ import {
   TelemetryStore,
 } from "@synth-deploy/core";
 
-// --- Command imports ---
+// --- Server imports ---
 import {
-  CommandAgent,
+  SynthAgent,
   InMemoryDeploymentStore,
-} from "@synth-deploy/command/agent/command-agent.js";
-import { registerDeploymentRoutes } from "@synth-deploy/command/api/deployments.js";
-import { registerPartitionRoutes } from "@synth-deploy/command/api/partitions.js";
-import { registerEnvironmentRoutes } from "@synth-deploy/command/api/environments.js";
-import { registerSettingsRoutes } from "@synth-deploy/command/api/settings.js";
-import { registerEnvoyReportRoutes } from "@synth-deploy/command/api/envoy-reports.js";
-import { registerArtifactRoutes } from "@synth-deploy/command/api/artifacts.js";
-import { registerHealthRoutes } from "@synth-deploy/command/api/health.js";
+} from "@synth-deploy/server/agent/synth-agent.js";
+import { registerDeploymentRoutes } from "@synth-deploy/server/api/deployments.js";
+import { registerPartitionRoutes } from "@synth-deploy/server/api/partitions.js";
+import { registerEnvironmentRoutes } from "@synth-deploy/server/api/environments.js";
+import { registerSettingsRoutes } from "@synth-deploy/server/api/settings.js";
+import { registerEnvoyReportRoutes } from "@synth-deploy/server/api/envoy-reports.js";
+import { registerArtifactRoutes } from "@synth-deploy/server/api/artifacts.js";
+import { registerHealthRoutes } from "@synth-deploy/server/api/health.js";
 
 // --- Envoy imports ---
 import { EnvoyAgent } from "@synth-deploy/envoy/agent/envoy-agent.js";
@@ -89,7 +89,7 @@ async function deployViaHttp(
 }
 
 // ==========================================================================
-// Helper: build a Command server with all routes registered
+// Helper: build a Synth server with all routes registered
 // ==========================================================================
 
 interface CommandServerContext {
@@ -102,7 +102,7 @@ interface CommandServerContext {
   artifactStore: ArtifactStore;
   settings: SettingsStore;
   telemetry: TelemetryStore;
-  agent: CommandAgent;
+  agent: SynthAgent;
 }
 
 function addMockAuth(app: FastifyInstance) {
@@ -131,7 +131,7 @@ async function createCommandServer(): Promise<CommandServerContext> {
   const artifactStore = new ArtifactStore();
   const settings = new SettingsStore();
   const telemetry = new TelemetryStore();
-  const agent = new CommandAgent(diary, deployments, artifactStore, environments, partitions, undefined, {
+  const agent = new SynthAgent(diary, deployments, artifactStore, environments, partitions, undefined, {
     healthCheckBackoffMs: 1,
     executionDelayMs: 1,
   });

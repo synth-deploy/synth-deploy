@@ -15,7 +15,7 @@ import type {
 import { LlmClient } from "@synth-deploy/core";
 import type { EnvoyKnowledgeStore, LocalDeploymentRecord } from "../state/knowledge-store.js";
 import { EnvironmentScanner } from "./environment-scanner.js";
-import type { CommandReporter } from "./command-reporter.js";
+import type { ServerReporter } from "./server-reporter.js";
 import { DiagnosticInvestigator } from "./diagnostic-investigator.js";
 import type { DiagnosticReport } from "./diagnostic-investigator.js";
 import {
@@ -196,7 +196,7 @@ export class EnvoyAgent {
   private operationExecutor: DefaultOperationExecutor | null = null;
   private scanner: EnvironmentScanner;
   private investigator: DiagnosticInvestigator;
-  private reporter: CommandReporter | null;
+  private reporter: ServerReporter | null;
   private llmClient: LlmClient | null;
   private _lifecycleState: LifecycleState = "active";
   private executorReady: Promise<void>;
@@ -205,7 +205,7 @@ export class EnvoyAgent {
     private debrief: DebriefWriter,
     private state: EnvoyKnowledgeStore,
     private baseDir: string,
-    reporter?: CommandReporter,
+    reporter?: ServerReporter,
     llm?: LlmClient,
   ) {
     this.scanner = new EnvironmentScanner(baseDir, state);

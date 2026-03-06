@@ -15,7 +15,7 @@ export default {
           "accent-dim": "rgba(99, 225, 190, 0.15)",
           "accent-hover": "rgba(99, 225, 190, 0.25)",
           // Entity colors
-          command: "#63e1be",
+          server: "#63e1be",
           envoy: "#34d399",
           partition: "#818cf8",
           order: "#f59e0b",

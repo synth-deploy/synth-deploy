@@ -16,17 +16,17 @@ import {
   TelemetryStore,
 } from "@synth-deploy/core";
 
-// --- Command imports ---
+// --- Server imports ---
 import {
-  CommandAgent,
+  SynthAgent,
   InMemoryDeploymentStore,
-} from "@synth-deploy/command/agent/command-agent.js";
-import { registerDeploymentRoutes } from "@synth-deploy/command/api/deployments.js";
-import { registerPartitionRoutes } from "@synth-deploy/command/api/partitions.js";
-import { registerEnvironmentRoutes } from "@synth-deploy/command/api/environments.js";
-import { registerSettingsRoutes } from "@synth-deploy/command/api/settings.js";
-import { registerEnvoyReportRoutes } from "@synth-deploy/command/api/envoy-reports.js";
-import { registerArtifactRoutes } from "@synth-deploy/command/api/artifacts.js";
+} from "@synth-deploy/server/agent/synth-agent.js";
+import { registerDeploymentRoutes } from "@synth-deploy/server/api/deployments.js";
+import { registerPartitionRoutes } from "@synth-deploy/server/api/partitions.js";
+import { registerEnvironmentRoutes } from "@synth-deploy/server/api/environments.js";
+import { registerSettingsRoutes } from "@synth-deploy/server/api/settings.js";
+import { registerEnvoyReportRoutes } from "@synth-deploy/server/api/envoy-reports.js";
+import { registerArtifactRoutes } from "@synth-deploy/server/api/artifacts.js";
 
 // --- Envoy imports ---
 import { EnvoyAgent } from "@synth-deploy/envoy/agent/envoy-agent.js";
@@ -213,10 +213,10 @@ describe("Command -> Envoy dispatch and report-back cycle", () => {
 });
 
 // ==========================================================================
-// Scenario 2: REST API -> CommandAgent -> store persistence roundtrip
+// Scenario 2: REST API -> SynthAgent -> store persistence roundtrip
 // ==========================================================================
 
-describe("REST API -> CommandAgent -> store persistence roundtrip", () => {
+describe("REST API -> SynthAgent -> store persistence roundtrip", () => {
   let commandApp: FastifyInstance;
   let diary: DecisionDebrief;
   let partitions: PartitionStore;
@@ -225,7 +225,7 @@ describe("REST API -> CommandAgent -> store persistence roundtrip", () => {
   let artifactStore: ArtifactStore;
   let settings: SettingsStore;
   let telemetry: TelemetryStore;
-  let agent: CommandAgent;
+  let agent: SynthAgent;
 
   beforeAll(async () => {
     diary = new DecisionDebrief();
@@ -235,7 +235,7 @@ describe("REST API -> CommandAgent -> store persistence roundtrip", () => {
     artifactStore = new ArtifactStore();
     settings = new SettingsStore();
     telemetry = new TelemetryStore();
-    agent = new CommandAgent(diary, deployments, artifactStore, environments, partitions, undefined, {
+    agent = new SynthAgent(diary, deployments, artifactStore, environments, partitions, undefined, {
       healthCheckBackoffMs: 1,
       executionDelayMs: 1,
     });
@@ -341,7 +341,7 @@ describe("Partition isolation end-to-end", () => {
   let artifactStore: ArtifactStore;
   let settings: SettingsStore;
   let telemetry: TelemetryStore;
-  let agent: CommandAgent;
+  let agent: SynthAgent;
 
   let partitionAId: string;
   let partitionBId: string;
@@ -356,7 +356,7 @@ describe("Partition isolation end-to-end", () => {
     artifactStore = new ArtifactStore();
     settings = new SettingsStore();
     telemetry = new TelemetryStore();
-    agent = new CommandAgent(diary, deployments, artifactStore, environments, partitions, undefined, {
+    agent = new SynthAgent(diary, deployments, artifactStore, environments, partitions, undefined, {
       healthCheckBackoffMs: 1,
       executionDelayMs: 1,
     });
@@ -464,7 +464,7 @@ describe("Decision Diary completeness for multi-step workflow", () => {
   let artifactStore: ArtifactStore;
   let settings: SettingsStore;
   let telemetry: TelemetryStore;
-  let agent: CommandAgent;
+  let agent: SynthAgent;
 
   beforeAll(async () => {
     diary = new DecisionDebrief();
@@ -474,7 +474,7 @@ describe("Decision Diary completeness for multi-step workflow", () => {
     artifactStore = new ArtifactStore();
     settings = new SettingsStore();
     telemetry = new TelemetryStore();
-    agent = new CommandAgent(diary, deployments, artifactStore, environments, partitions, undefined, {
+    agent = new SynthAgent(diary, deployments, artifactStore, environments, partitions, undefined, {
       healthCheckBackoffMs: 1,
       executionDelayMs: 1,
     });

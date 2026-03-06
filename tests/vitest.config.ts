@@ -12,7 +12,7 @@ export default defineConfig({
   resolve: {
     alias: {
       "@synth-deploy/core": path.resolve(__dirname, "../packages/core/src/index.ts"),
-      "@synth-deploy/command": path.resolve(__dirname, "../packages/command/src"),
+      "@synth-deploy/server": path.resolve(__dirname, "../packages/server/src"),
       "@synth-deploy/envoy": path.resolve(__dirname, "../packages/envoy/src"),
     },
   },

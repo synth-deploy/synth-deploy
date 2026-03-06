@@ -1,5 +1,5 @@
 /**
- * Scenario test harness — boots Command + Envoy in-process and provides
+ * Scenario test harness — boots Synth server + Envoy in-process and provides
  * helpers for scripting user actions via HTTP. Foundation for all scenario
  * and fault-injection tests.
  */
@@ -20,16 +20,16 @@ import {
 } from "@synth-deploy/core";
 
 import {
-  CommandAgent,
+  SynthAgent,
   InMemoryDeploymentStore,
-} from "@synth-deploy/command/agent/command-agent.js";
-import { registerDeploymentRoutes } from "@synth-deploy/command/api/deployments.js";
-import { registerPartitionRoutes } from "@synth-deploy/command/api/partitions.js";
-import { registerEnvironmentRoutes } from "@synth-deploy/command/api/environments.js";
-import { registerSettingsRoutes } from "@synth-deploy/command/api/settings.js";
-import { registerEnvoyReportRoutes } from "@synth-deploy/command/api/envoy-reports.js";
-import { registerArtifactRoutes } from "@synth-deploy/command/api/artifacts.js";
-import { registerHealthRoutes } from "@synth-deploy/command/api/health.js";
+} from "@synth-deploy/server/agent/synth-agent.js";
+import { registerDeploymentRoutes } from "@synth-deploy/server/api/deployments.js";
+import { registerPartitionRoutes } from "@synth-deploy/server/api/partitions.js";
+import { registerEnvironmentRoutes } from "@synth-deploy/server/api/environments.js";
+import { registerSettingsRoutes } from "@synth-deploy/server/api/settings.js";
+import { registerEnvoyReportRoutes } from "@synth-deploy/server/api/envoy-reports.js";
+import { registerArtifactRoutes } from "@synth-deploy/server/api/artifacts.js";
+import { registerHealthRoutes } from "@synth-deploy/server/api/health.js";
 
 import { EnvoyAgent } from "@synth-deploy/envoy/agent/envoy-agent.js";
 import { LocalStateStore } from "@synth-deploy/envoy/state/local-state.js";
@@ -49,7 +49,7 @@ export interface CommandContext {
   deployments: InMemoryDeploymentStore;
   telemetry: TelemetryStore;
   settings: SettingsStore;
-  agent: CommandAgent;
+  agent: SynthAgent;
 }
 
 export interface EnvoyContext {
@@ -198,7 +198,7 @@ export async function createCommandServer(): Promise<CommandContext> {
   const deployments = new InMemoryDeploymentStore();
   const telemetry = new TelemetryStore();
   const settings = new SettingsStore();
-  const agent = new CommandAgent(diary, deployments, artifactStore, environments, partitions, undefined, {
+  const agent = new SynthAgent(diary, deployments, artifactStore, environments, partitions, undefined, {
     healthCheckBackoffMs: 1,
     executionDelayMs: 1,
   });

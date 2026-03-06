@@ -1,8 +1,8 @@
 services:
-  command:
+  server:
     build:
       context: .
-      dockerfile: Dockerfile.command
+      dockerfile: Dockerfile.server
     ports:
       - "3000:3000"
     volumes:
@@ -28,9 +28,9 @@ services:
       - envoy-workspace:/workspace
     environment:
       - NODE_ENV=production
-      - SYNTH_COMMAND_URL=http://command:3000
+      - SYNTH_SERVER_URL=http://server:3000
     depends_on:
-      command:
+      server:
         condition: service_healthy
     mem_limit: 512m
     cpus: 1.0

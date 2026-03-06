@@ -55,14 +55,14 @@ jobs:
       - name: Build all packages
         run: npm run build
 
-      # Core must be published first — command and envoy depend on it.
+      # Core must be published first — server and envoy depend on it.
       - name: Publish @synth-deploy/core
         run: npm publish --workspace=packages/core || echo "::warning::@synth-deploy/core publish failed or already published"
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Publish @synth-deploy/command
-        run: npm publish --workspace=packages/command || echo "::warning::@synth-deploy/command publish failed or already published"
+      - name: Publish @synth-deploy/server
+        run: npm publish --workspace=packages/server || echo "::warning::@synth-deploy/server publish failed or already published"
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -71,9 +71,9 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # ─── Docker: Command ───────────────────────────────────────
-  docker-command:
-    name: Docker — Command
+  # ─── Docker: Server ──────────────────────────────────────
+  docker-server:
+    name: Docker — Server
     needs: ci
     runs-on: ubuntu-latest
     steps:
@@ -83,11 +83,11 @@ jobs:
       - name: Check for Dockerfile
         id: check
         run: |
-          if [ -f Dockerfile.command ]; then
+          if [ -f Dockerfile.server ]; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::Skipping Docker build — Dockerfile.command not found"
+            echo "::notice::Skipping Docker build — Dockerfile.server not found"
           fi
 
       - name: Set up Docker Buildx
@@ -114,18 +114,18 @@ jobs:
         id: version
         run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
 
-      - name: Build and push Command image
+      - name: Build and push Server image
         if: steps.check.outputs.exists == 'true'
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: Dockerfile.command
+          file: Dockerfile.server
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/synth-command:${{ steps.version.outputs.VERSION }}
-            ghcr.io/${{ github.repository_owner }}/synth-command:latest
-            synth-deploy/command:${{ steps.version.outputs.VERSION }}
-            synth-deploy/command:latest
+            ghcr.io/${{ github.repository_owner }}/synth-server:${{ steps.version.outputs.VERSION }}
+            ghcr.io/${{ github.repository_owner }}/synth-server:latest
+            synth-deploy/server:${{ steps.version.outputs.VERSION }}
+            synth-deploy/server:latest
           labels: |
             org.opencontainers.image.title=Synth
             org.opencontainers.image.description=Synth orchestration server with embedded UI

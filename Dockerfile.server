@@ -1,5 +1,5 @@
-# Synth Envoy — multi-stage Docker build
-# Deployment agent (port 3001)
+# Synth Server — multi-stage Docker build
+# Orchestration server + UI (port 3000)
 
 # --- Stage 1: Build ---
 FROM node:22-slim AS build
@@ -19,10 +19,11 @@ RUN npm ci
 # Copy source and config
 COPY tsconfig.base.json ./
 COPY packages/core/ packages/core/
-COPY packages/envoy/ packages/envoy/
+COPY packages/server/ packages/server/
+COPY packages/ui/ packages/ui/
 
-# Build core and envoy
-RUN npm run build -w packages/core && npm run build -w packages/envoy
+# Build all packages
+RUN npm run build
 
 # --- Stage 2: Runtime ---
 FROM node:22-slim
@@ -34,30 +35,32 @@ WORKDIR /app
 # Copy package manifests for workspace resolution
 COPY package.json package-lock.json ./
 COPY packages/core/package.json packages/core/
-COPY packages/envoy/package.json packages/envoy/
+COPY packages/server/package.json packages/server/
+COPY packages/ui/package.json packages/ui/
 
 # Install production dependencies only
 RUN npm ci --omit=dev
 
 # Copy built artifacts
 COPY --from=build /app/packages/core/dist packages/core/dist/
-COPY --from=build /app/packages/envoy/dist packages/envoy/dist/
+COPY --from=build /app/packages/server/dist packages/server/dist/
+COPY --from=build /app/packages/ui/dist packages/ui/dist/
 
 # Create non-root user
 RUN groupadd --gid 1000 synth && \
     useradd --uid 1000 --gid synth --shell /bin/sh --create-home synth
 
-# Deployment workspace directory
-RUN mkdir -p /workspace && chown synth:synth /workspace
-VOLUME /workspace
-ENV SYNTH_SERVER_URL=http://server:3000
+# SQLite data directory
+RUN mkdir -p /data && chown synth:synth /data
+VOLUME /data
+ENV SYNTH_DATA_DIR=/data
 ENV NODE_ENV=production
 
-EXPOSE 3001
+EXPOSE 3000
 
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
-  CMD curl -f http://localhost:3001/health || exit 1
+  CMD curl -f http://localhost:3000/health || exit 1
 
 USER synth
 
-CMD ["node", "packages/envoy/dist/index.js"]
+CMD ["node", "packages/server/dist/index.js"]

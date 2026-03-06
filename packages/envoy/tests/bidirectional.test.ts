@@ -9,7 +9,7 @@ import type { DebriefEntry, DebriefWriter } from "@synth-deploy/core";
 import { EnvoyAgent } from "../src/agent/envoy-agent.js";
 import type { DeploymentInstruction } from "../src/agent/envoy-agent.js";
 import { LocalStateStore } from "../src/state/local-state.js";
-import { CommandReporter } from "../src/agent/command-reporter.js";
+import { ServerReporter } from "../src/agent/server-reporter.js";
 import { createEnvoyServer } from "../src/server.js";
 
 // ---------------------------------------------------------------------------
@@ -189,7 +189,7 @@ describe("Envoy→Command bidirectional communication", () => {
   });
 
   it("Envoy pushes deployment result to Command", async () => {
-    const reporter = new CommandReporter(
+    const reporter = new ServerReporter(
       commandAddress,
       "envoy-test-01",
     );
@@ -217,7 +217,7 @@ describe("Envoy→Command bidirectional communication", () => {
   });
 
   it("Command diary receives Envoy's diary entries", async () => {
-    const reporter = new CommandReporter(
+    const reporter = new ServerReporter(
       commandAddress,
       "envoy-test-02",
     );
@@ -253,7 +253,7 @@ describe("Envoy→Command bidirectional communication", () => {
   });
 
   it("Command diary has decision types from Envoy pipeline", async () => {
-    const reporter = new CommandReporter(
+    const reporter = new ServerReporter(
       commandAddress,
       "envoy-test-03",
     );
@@ -282,7 +282,7 @@ describe("Envoy→Command bidirectional communication", () => {
   });
 
   it("combined Command + Envoy diary tells unified story", async () => {
-    const reporter = new CommandReporter(
+    const reporter = new ServerReporter(
       commandAddress,
       "envoy-test-04",
     );
@@ -378,7 +378,7 @@ describe("Envoy→Command bidirectional communication", () => {
 
   it("reporter handles command being unreachable gracefully", async () => {
     // Reporter pointing at a non-existent command
-    const reporter = new CommandReporter(
+    const reporter = new ServerReporter(
       "http://127.0.0.1:1",
       "envoy-test-05",
     );
@@ -403,7 +403,7 @@ describe("Envoy→Command bidirectional communication", () => {
   });
 
   it("Envoy without reporter still works (no Command configured)", async () => {
-    // No reporter — simulates SYNTH_COMMAND_URL not being set
+    // No reporter — simulates SYNTH_SERVER_URL not being set
     const agent = new EnvoyAgent(envoyDiary, state, baseDir);
 
     const result = await agent.executeDeployment(

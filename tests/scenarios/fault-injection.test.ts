@@ -18,15 +18,15 @@ import {
   SettingsStore,
 } from "@synth-deploy/core";
 import {
-  CommandAgent,
+  SynthAgent,
   InMemoryDeploymentStore,
-} from "@synth-deploy/command/agent/command-agent.js";
-import { registerDeploymentRoutes } from "@synth-deploy/command/api/deployments.js";
-import { registerPartitionRoutes } from "@synth-deploy/command/api/partitions.js";
-import { registerEnvironmentRoutes } from "@synth-deploy/command/api/environments.js";
-import { registerSettingsRoutes } from "@synth-deploy/command/api/settings.js";
-import { registerEnvoyReportRoutes } from "@synth-deploy/command/api/envoy-reports.js";
-import { registerArtifactRoutes } from "@synth-deploy/command/api/artifacts.js";
+} from "@synth-deploy/server/agent/synth-agent.js";
+import { registerDeploymentRoutes } from "@synth-deploy/server/api/deployments.js";
+import { registerPartitionRoutes } from "@synth-deploy/server/api/partitions.js";
+import { registerEnvironmentRoutes } from "@synth-deploy/server/api/environments.js";
+import { registerSettingsRoutes } from "@synth-deploy/server/api/settings.js";
+import { registerEnvoyReportRoutes } from "@synth-deploy/server/api/envoy-reports.js";
+import { registerArtifactRoutes } from "@synth-deploy/server/api/artifacts.js";
 import { EnvoyAgent } from "@synth-deploy/envoy/agent/envoy-agent.js";
 import { LocalStateStore } from "@synth-deploy/envoy/state/local-state.js";
 import { createEnvoyServer } from "@synth-deploy/envoy/server.js";
@@ -79,7 +79,7 @@ async function createCommandWithEnvoy(envoyUrl: string, timeoutMs = 2000) {
   const settings = new SettingsStore();
   settings.update({ envoy: { url: envoyUrl, timeoutMs } });
 
-  const agent = new CommandAgent(diary, deployments, artifactStore, environments, partitions, undefined, {
+  const agent = new SynthAgent(diary, deployments, artifactStore, environments, partitions, undefined, {
     healthCheckBackoffMs: 1,
     executionDelayMs: 1,
   }, settings);

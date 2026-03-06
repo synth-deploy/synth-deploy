@@ -22,7 +22,7 @@ const BASE_DIR = process.env.ENVOY_BASE_DIR ?? path.join(process.cwd(), ".envoy"
 fs.mkdirSync(BASE_DIR, { recursive: true });
 fs.mkdirSync(path.join(BASE_DIR, "deployments"), { recursive: true });
 
-const COMMAND_URL = process.env.SYNTH_COMMAND_URL ?? "";
+const COMMAND_URL = process.env.SYNTH_SERVER_URL ?? "";
 
 const debrief = new DecisionDebrief();
 
@@ -41,12 +41,12 @@ try {
   state = new LocalStateStore();
 }
 
-// Connect the CommandReporter if a Command URL is configured
-let reporter: import("./agent/command-reporter.js").CommandReporter | undefined;
+// Connect the ServerReporter if a server URL is configured
+let reporter: import("./agent/server-reporter.js").ServerReporter | undefined;
 if (COMMAND_URL) {
-  const { CommandReporter } = await import("./agent/command-reporter.js");
+  const { ServerReporter } = await import("./agent/server-reporter.js");
   const envoyId = `envoy-${HOST}:${PORT}`;
-  reporter = new CommandReporter(COMMAND_URL, envoyId);
+  reporter = new ServerReporter(COMMAND_URL, envoyId);
 }
 
 // LLM client for diagnostic enhancement — gracefully degrades if no API key
@@ -67,7 +67,7 @@ debrief.record({
     baseDir: BASE_DIR,
     port: PORT,
     host: HOST,
-    commandUrl: COMMAND_URL || "(not configured)",
+    serverUrl: COMMAND_URL || "(not configured)",
     storeType: persistentStore ? "persistent (SQLite)" : "in-memory",
   },
 });
@@ -76,7 +76,7 @@ debrief.record({
 
 function hoursAgo(h: number): Date { return new Date(Date.now() - h * 3600_000); }
 
-// Use stable IDs so they don't need to match Command's UUIDs —
+// Use stable IDs so they don't need to match the server's UUIDs —
 // Envoy tracks its own view of the world.
 const partitionIds = {
   acme: crypto.randomUUID(),
@@ -240,8 +240,8 @@ export type {
   SystemKnowledgeCategory,
 } from "./state/knowledge-store.js";
 export { createEnvoyServer } from "./server.js";
-export { CommandReporter } from "./agent/command-reporter.js";
-export type { EnvoyReport, SerializedDebriefEntry } from "./agent/command-reporter.js";
+export { ServerReporter } from "./agent/server-reporter.js";
+export type { EnvoyReport, SerializedDebriefEntry } from "./agent/server-reporter.js";
 export { DiagnosticInvestigator } from "./agent/diagnostic-investigator.js";
 export type {
   DiagnosticReport,

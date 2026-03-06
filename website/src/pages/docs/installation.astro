@@ -12,11 +12,11 @@ cd synth-deploy
 const installOptions = `./install.sh [OPTIONS]
 
 Options:
-  --component <name>   command, envoy, or all (default: all)
+  --component <name>   server, envoy, or all (default: all)
   --install-dir <path> Installation directory (default: /opt/synth)
   --data-dir <path>    Data/SQLite directory (default: /var/lib/synth)
   --local              Use current directory as source instead of cloning
-  --command-url <url>  Synth server URL for Envoy (default: http://localhost:3000)`;
+  --server-url <url>  Synth server URL for Envoy (default: http://localhost:3000)`;
 
 const dockerStart = `# Clone the repository
 git clone https://github.com/jmfullerton96/synth-deploy.git
@@ -30,10 +30,10 @@ curl http://localhost:3000/health
 curl http://localhost:3001/health`;
 
 const dockerCustom = `services:
-  command:
+  server:
     build:
       context: .
-      dockerfile: Dockerfile.command
+      dockerfile: Dockerfile.server
     ports:
       - "3000:3000"
     volumes:
@@ -58,9 +58,9 @@ const dockerCustom = `services:
       - envoy-workspace:/workspace
     environment:
       - NODE_ENV=production
-      - SYNTH_COMMAND_URL=http://command:3000
+      - SYNTH_SERVER_URL=http://server:3000
     depends_on:
-      command:
+      server:
         condition: service_healthy
     mem_limit: 512m
     cpus: 1.0
@@ -82,7 +82,7 @@ journalctl -u synth-envoy -f`;
 const macosCommands = `# Synth server
 launchctl load ~/Library/LaunchAgents/com.synthdeploy.server.plist
 launchctl unload ~/Library/LaunchAgents/com.synthdeploy.server.plist
-tail -f /var/lib/synth/command.log
+tail -f /var/lib/synth/server.log
 
 # Envoy service
 launchctl load ~/Library/LaunchAgents/com.synthdeploy.envoy.plist
@@ -94,12 +94,12 @@ docker run -d \\
   --name synth-envoy \\
   -p 3001:3001 \\
   -v envoy-workspace:/workspace \\
-  -e SYNTH_COMMAND_URL=http://command-host:3000 \\
+  -e SYNTH_SERVER_URL=http://server-host:3000 \\
   -e ENVOY_PORT=3001 \\
   synth-deploy/envoy`;
 
 const multiEnvoyInstall = `# On target machine: install Envoy only
-./install.sh --component envoy --command-url http://command-host:3000`;
+./install.sh --component envoy --server-url http://server-host:3000`;
 ---
 
 <DocsLayout title="Installation & Configuration">
@@ -230,7 +230,7 @@ const multiEnvoyInstall = `# On target machine: install Envoy only
       <tr><td><code>ENVOY_PORT</code></td><td><code>3001</code></td><td>HTTP port for the Envoy agent</td></tr>
       <tr><td><code>ENVOY_HOST</code></td><td><code>0.0.0.0</code></td><td>Bind address</td></tr>
       <tr><td><code>ENVOY_BASE_DIR</code></td><td><code>.envoy</code> (cwd)</td><td>Base directory for deployment workspaces and local state</td></tr>
-      <tr><td><code>SYNTH_COMMAND_URL</code></td><td><em>empty</em></td><td>URL of the Synth server (e.g., <code>http://command:3000</code>). Required for Envoy to report results back.</td></tr>
+      <tr><td><code>SYNTH_SERVER_URL</code></td><td><em>empty</em></td><td>URL of the Synth server (e.g., <code>http://server:3000</code>). Required for Envoy to report results back.</td></tr>
       <tr><td><code>ANTHROPIC_API_KEY</code></td><td><em>unset</em></td><td>Enables LLM-powered diagnostic investigation on the Envoy. Degrades gracefully without it.</td></tr>
     </tbody>
   </table>
@@ -326,7 +326,7 @@ const multiEnvoyInstall = `# On target machine: install Envoy only
     Each Envoy identifies itself to Synth using a generated ID based on its
     host and port (e.g., <code>envoy-0.0.0.0:3001</code>). Envoys report
     deployment results and debrief entries back to Synth automatically when
-    <code>SYNTH_COMMAND_URL</code> is set.
+    <code>SYNTH_SERVER_URL</code> is set.
   </p>
 
   <h2>Troubleshooting</h2>
@@ -340,12 +340,12 @@ const multiEnvoyInstall = `# On target machine: install Envoy only
 
   <h3>Envoy cannot reach Synth</h3>
   <p>
-    Verify <code>SYNTH_COMMAND_URL</code> is set and reachable from the Envoy
-    host. In Docker Compose, use the service name (<code>http://command:3000</code>).
+    Verify <code>SYNTH_SERVER_URL</code> is set and reachable from the Envoy
+    host. In Docker Compose, use the service name (<code>http://server:3000</code>).
     For remote setups, ensure firewalls allow traffic on port 3000.
   </p>
   <pre><code>{`# From the Envoy host
-curl -f http://command-host:3000/health`}</code></pre>
+curl -f http://server-host:3000/health`}</code></pre>
 
   <h3>CORS errors in the browser</h3>
   <p>

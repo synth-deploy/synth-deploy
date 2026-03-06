@@ -10,9 +10,9 @@ INSTALL_DIR="/opt/synth"
 DATA_DIR="/var/lib/synth"
 REPO_URL="https://github.com/jmfullerton96/synth-deploy.git"
 USE_LOCAL=false
-COMMAND_PORT=3000
+SERVER_PORT=3000
 ENVOY_PORT=3001
-COMMAND_URL="http://localhost:${COMMAND_PORT}"
+SERVER_URL="http://localhost:${SERVER_PORT}"
 
 # --- Helpers ---
 
@@ -28,16 +28,16 @@ Usage: $0 [OPTIONS]
 Install Synth services as system daemons.
 
 Options:
-  --component <name>   Which component to install: command, envoy, or all (default: all)
+  --component <name>   Which component to install: server, envoy, or all (default: all)
   --install-dir <path> Installation directory (default: /opt/synth)
   --data-dir <path>    Data directory for SQLite and artifacts (default: /var/lib/synth)
   --local              Use current directory as source instead of cloning
-  --command-url <url>  Synth server URL for Envoy to connect to (default: http://localhost:3000)
+  --server-url <url>  Synth server URL for Envoy to connect to (default: http://localhost:3000)
   --help               Show this help message
 
 Examples:
   $0                              # Install both services
-  $0 --component command          # Install Synth server only
+  $0 --component server          # Install Synth server only
   $0 --component envoy            # Install Envoy only
   $0 --local --component all      # Install from local repo checkout
 EOF
@@ -52,15 +52,15 @@ while [[ $# -gt 0 ]]; do
     --install-dir) INSTALL_DIR="$2"; shift 2 ;;
     --data-dir)    DATA_DIR="$2"; shift 2 ;;
     --local)       USE_LOCAL=true; shift ;;
-    --command-url) COMMAND_URL="$2"; shift 2 ;;
+    --server-url) SERVER_URL="$2"; shift 2 ;;
     --help)        usage ;;
     *) fatal "Unknown option: $1. Run $0 --help for usage." ;;
   esac
 done
 
 case "$COMPONENT" in
-  command|envoy|all) ;;
-  *) fatal "Invalid component '${COMPONENT}'. Must be command, envoy, or all." ;;
+  server|envoy|all) ;;
+  *) fatal "Invalid component '${COMPONENT}'. Must be server, envoy, or all." ;;
 esac
 
 # --- Check Node.js ---
@@ -135,10 +135,10 @@ install_files() {
   sudo cp "$SOURCE_DIR/packages/core/package.json" "$INSTALL_DIR/packages/core/"
   sudo cp -r "$SOURCE_DIR/packages/core/dist" "$INSTALL_DIR/packages/core/"
 
-  if [[ "$COMPONENT" == "command" || "$COMPONENT" == "all" ]]; then
-    sudo mkdir -p "$INSTALL_DIR/packages/command"
-    sudo cp "$SOURCE_DIR/packages/command/package.json" "$INSTALL_DIR/packages/command/"
-    sudo cp -r "$SOURCE_DIR/packages/command/dist" "$INSTALL_DIR/packages/command/"
+  if [[ "$COMPONENT" == "server" || "$COMPONENT" == "all" ]]; then
+    sudo mkdir -p "$INSTALL_DIR/packages/server"
+    sudo cp "$SOURCE_DIR/packages/server/package.json" "$INSTALL_DIR/packages/server/"
+    sudo cp -r "$SOURCE_DIR/packages/server/dist" "$INSTALL_DIR/packages/server/"
 
     sudo mkdir -p "$INSTALL_DIR/packages/ui"
     sudo cp "$SOURCE_DIR/packages/ui/package.json" "$INSTALL_DIR/packages/ui/"
@@ -158,7 +158,7 @@ install_files() {
 
 # --- Linux: systemd ---
 
-install_systemd_command() {
+install_systemd_server() {
   info "Creating systemd unit for synth-server..."
   sudo tee /etc/systemd/system/synth-server.service >/dev/null <<UNIT
 [Unit]
@@ -168,10 +168,10 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory=${INSTALL_DIR}
-ExecStart=/usr/bin/env node packages/command/dist/index.js
+ExecStart=/usr/bin/env node packages/server/dist/index.js
 Environment=NODE_ENV=production
 Environment=SYNTH_DATA_DIR=${DATA_DIR}
-Environment=PORT=${COMMAND_PORT}
+Environment=PORT=${SERVER_PORT}
 Restart=on-failure
 RestartSec=5
 StandardOutput=journal
@@ -198,7 +198,7 @@ WorkingDirectory=${INSTALL_DIR}
 ExecStart=/usr/bin/env node packages/envoy/dist/index.js
 Environment=NODE_ENV=production
 Environment=ENVOY_PORT=${ENVOY_PORT}
-Environment=SYNTH_COMMAND_URL=${COMMAND_URL}
+Environment=SYNTH_SERVER_URL=${SERVER_URL}
 Environment=ENVOY_BASE_DIR=${DATA_DIR}/envoy-workspace
 Restart=on-failure
 RestartSec=5
@@ -214,7 +214,7 @@ UNIT
 
 # --- macOS: launchd ---
 
-install_launchd_command() {
+install_launchd_server() {
   local plist_path="$HOME/Library/LaunchAgents/com.synthdeploy.server.plist"
   info "Creating launchd plist for synth-server..."
   mkdir -p "$HOME/Library/LaunchAgents"
@@ -228,7 +228,7 @@ install_launchd_command() {
   <key>ProgramArguments</key>
   <array>
     <string>$(command -v node)</string>
-    <string>${INSTALL_DIR}/packages/command/dist/index.js</string>
+    <string>${INSTALL_DIR}/packages/server/dist/index.js</string>
   </array>
   <key>WorkingDirectory</key>
   <string>${INSTALL_DIR}</string>
@@ -239,16 +239,16 @@ install_launchd_command() {
     <key>SYNTH_DATA_DIR</key>
     <string>${DATA_DIR}</string>
     <key>PORT</key>
-    <string>${COMMAND_PORT}</string>
+    <string>${SERVER_PORT}</string>
   </dict>
   <key>RunAtLoad</key>
   <true/>
   <key>KeepAlive</key>
   <true/>
   <key>StandardOutPath</key>
-  <string>${DATA_DIR}/command.log</string>
+  <string>${DATA_DIR}/server.log</string>
   <key>StandardErrorPath</key>
-  <string>${DATA_DIR}/command.err</string>
+  <string>${DATA_DIR}/server.err</string>
 </dict>
 </plist>
 PLIST
@@ -278,8 +278,8 @@ install_launchd_envoy() {
     <string>production</string>
     <key>ENVOY_PORT</key>
     <string>${ENVOY_PORT}</string>
-    <key>SYNTH_COMMAND_URL</key>
-    <string>${COMMAND_URL}</string>
+    <key>SYNTH_SERVER_URL</key>
+    <string>${SERVER_URL}</string>
     <key>ENVOY_BASE_DIR</key>
     <string>${DATA_DIR}/envoy-workspace</string>
   </dict>
@@ -308,8 +308,8 @@ print_instructions_linux() {
   echo "  Data dir:    ${DATA_DIR}"
   echo ""
 
-  if [[ "$COMPONENT" == "command" || "$COMPONENT" == "all" ]]; then
-    echo "  Synth Server (port ${COMMAND_PORT}):"
+  if [[ "$COMPONENT" == "server" || "$COMPONENT" == "all" ]]; then
+    echo "  Synth Server (port ${SERVER_PORT}):"
     echo "    Start:   sudo systemctl start synth-server"
     echo "    Stop:    sudo systemctl stop synth-server"
     echo "    Status:  sudo systemctl status synth-server"
@@ -339,12 +339,12 @@ print_instructions_macos() {
   echo "  Data dir:    ${DATA_DIR}"
   echo ""
 
-  if [[ "$COMPONENT" == "command" || "$COMPONENT" == "all" ]]; then
-    echo "  Synth Server (port ${COMMAND_PORT}):"
+  if [[ "$COMPONENT" == "server" || "$COMPONENT" == "all" ]]; then
+    echo "  Synth Server (port ${SERVER_PORT}):"
     echo "    Start:   launchctl load ~/Library/LaunchAgents/com.synthdeploy.server.plist"
     echo "    Stop:    launchctl unload ~/Library/LaunchAgents/com.synthdeploy.server.plist"
-    echo "    Logs:    tail -f ${DATA_DIR}/command.log"
-    echo "    Errors:  tail -f ${DATA_DIR}/command.err"
+    echo "    Logs:    tail -f ${DATA_DIR}/server.log"
+    echo "    Errors:  tail -f ${DATA_DIR}/server.err"
     echo ""
   fi
 
@@ -376,8 +376,8 @@ main() {
 
   case "$os" in
     Linux)
-      if [[ "$COMPONENT" == "command" || "$COMPONENT" == "all" ]]; then
-        install_systemd_command
+      if [[ "$COMPONENT" == "server" || "$COMPONENT" == "all" ]]; then
+        install_systemd_server
       fi
       if [[ "$COMPONENT" == "envoy" || "$COMPONENT" == "all" ]]; then
         install_systemd_envoy
@@ -385,8 +385,8 @@ main() {
       print_instructions_linux
       ;;
     Darwin)
-      if [[ "$COMPONENT" == "command" || "$COMPONENT" == "all" ]]; then
-        install_launchd_command
+      if [[ "$COMPONENT" == "server" || "$COMPONENT" == "all" ]]; then
+        install_launchd_server
       fi
       if [[ "$COMPONENT" == "envoy" || "$COMPONENT" == "all" ]]; then
         install_launchd_envoy
@@ -397,11 +397,11 @@ main() {
       warn "Unsupported OS: ${os}. Files installed to ${INSTALL_DIR} but no service manager configured."
       echo ""
       echo "Manual start commands:"
-      if [[ "$COMPONENT" == "command" || "$COMPONENT" == "all" ]]; then
-        echo "  Synth:  SYNTH_DATA_DIR=${DATA_DIR} node ${INSTALL_DIR}/packages/command/dist/index.js"
+      if [[ "$COMPONENT" == "server" || "$COMPONENT" == "all" ]]; then
+        echo "  Synth:  SYNTH_DATA_DIR=${DATA_DIR} node ${INSTALL_DIR}/packages/server/dist/index.js"
       fi
       if [[ "$COMPONENT" == "envoy" || "$COMPONENT" == "all" ]]; then
-        echo "  Envoy:  SYNTH_COMMAND_URL=${COMMAND_URL} node ${INSTALL_DIR}/packages/envoy/dist/index.js"
+        echo "  Envoy:  SYNTH_SERVER_URL=${SERVER_URL} node ${INSTALL_DIR}/packages/envoy/dist/index.js"
       fi
       ;;
   esac
