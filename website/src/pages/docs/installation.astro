@@ -30,7 +30,7 @@ curl http://localhost:3000/health
 curl http://localhost:3001/health`;
 
 const dockerCustom = `services:
-  server:
+  synth-server:
     build:
       context: .
       dockerfile: Dockerfile.server
@@ -58,9 +58,9 @@ const dockerCustom = `services:
       - envoy-workspace:/workspace
     environment:
       - NODE_ENV=production
-      - SYNTH_SERVER_URL=http://server:3000
+      - SYNTH_SERVER_URL=http://synth-server:3000
     depends_on:
-      server:
+      synth-server:
         condition: service_healthy
     mem_limit: 512m
     cpus: 1.0
@@ -230,7 +230,7 @@ const multiEnvoyInstall = `# On target machine: install Envoy only
       <tr><td><code>ENVOY_PORT</code></td><td><code>3001</code></td><td>HTTP port for the Envoy agent</td></tr>
       <tr><td><code>ENVOY_HOST</code></td><td><code>0.0.0.0</code></td><td>Bind address</td></tr>
       <tr><td><code>ENVOY_BASE_DIR</code></td><td><code>.envoy</code> (cwd)</td><td>Base directory for deployment workspaces and local state</td></tr>
-      <tr><td><code>SYNTH_SERVER_URL</code></td><td><em>empty</em></td><td>URL of the Synth server (e.g., <code>http://server:3000</code>). Required for Envoy to report results back.</td></tr>
+      <tr><td><code>SYNTH_SERVER_URL</code></td><td><em>empty</em></td><td>URL of the Synth server (e.g., <code>http://synth-server:3000</code>). Required for Envoy to report results back.</td></tr>
       <tr><td><code>ANTHROPIC_API_KEY</code></td><td><em>unset</em></td><td>Enables LLM-powered diagnostic investigation on the Envoy. Degrades gracefully without it.</td></tr>
     </tbody>
   </table>
@@ -341,7 +341,7 @@ const multiEnvoyInstall = `# On target machine: install Envoy only
   <h3>Envoy cannot reach Synth</h3>
   <p>
     Verify <code>SYNTH_SERVER_URL</code> is set and reachable from the Envoy
-    host. In Docker Compose, use the service name (<code>http://server:3000</code>).
+    host. In Docker Compose, use the service name (<code>http://synth-server:3000</code>).
     For remote setups, ensure firewalls allow traffic on port 3000.
   </p>
   <pre><code>{`# From the Envoy host

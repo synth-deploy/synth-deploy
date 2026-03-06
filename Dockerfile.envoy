@@ -50,7 +50,7 @@ RUN groupadd --gid 1000 synth && \
 # Deployment workspace directory
 RUN mkdir -p /workspace && chown synth:synth /workspace
 VOLUME /workspace
-ENV SYNTH_SERVER_URL=http://server:3000
+ENV SYNTH_SERVER_URL=http://synth-server:3000
 ENV NODE_ENV=production
 
 EXPOSE 3001

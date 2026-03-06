@@ -1,5 +1,5 @@
 services:
-  server:
+  synth-server:
     build:
       context: .
       dockerfile: Dockerfile.server
@@ -28,9 +28,9 @@ services:
       - envoy-workspace:/workspace
     environment:
       - NODE_ENV=production
-      - SYNTH_SERVER_URL=http://server:3000
+      - SYNTH_SERVER_URL=http://synth-server:3000
     depends_on:
-      server:
+      synth-server:
         condition: service_healthy
     mem_limit: 512m
     cpus: 1.0
