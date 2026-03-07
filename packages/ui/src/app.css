@@ -4852,7 +4852,8 @@ table a:hover {
 
 /* ---- Synth assessment card ---- */
 
-.synth-assessment {
+.synth-assessment,
+.synth-assessment-card {
   padding: 16px 20px;
   border-radius: 10px;
   background: var(--accent-dim);
@@ -4863,8 +4864,33 @@ table a:hover {
 .synth-assessment-header {
   display: flex;
   align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.synth-assessment-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+  font-family: var(--font-display);
+}
+
+.synth-assessment-subtitle {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.synth-assessment-stats {
+  display: flex;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.synth-assessment-actions {
+  display: flex;
   gap: 8px;
-  margin-bottom: 8px;
+  margin-top: 14px;
 }
 
 .synth-assessment-label {

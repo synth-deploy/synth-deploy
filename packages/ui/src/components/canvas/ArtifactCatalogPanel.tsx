@@ -4,7 +4,9 @@ import type { Artifact } from "../../types.js";
 import { useCanvas } from "../../context/CanvasContext.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
 import ConfidenceIndicator from "../ConfidenceIndicator.js";
+import SynthMark from "../SynthMark.js";
 import { useQuery, invalidate } from "../../hooks/useQuery.js";
+import AddArtifactModal from "../AddArtifactModal.js";
 
 interface Props {
   title: string;
@@ -28,6 +30,8 @@ export default function ArtifactCatalogPanel({ title }: Props) {
   const [typeFilter, setTypeFilter] = useState<string | null>(null);
   const [confidenceFilter, setConfidenceFilter] = useState<ConfidenceLevel | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [selectedArtifact, setSelectedArtifact] = useState<Artifact | null>(null);
   const [newName, setNewName] = useState("");
   const [newType, setNewType] = useState("docker");
   const [creating, setCreating] = useState(false);
@@ -86,11 +90,7 @@ export default function ArtifactCatalogPanel({ title }: Props) {
   }
 
   function handleArtifactClick(art: Artifact) {
-    pushPanel({
-      type: "artifact-detail",
-      title: art.name,
-      params: { artifactId: art.id },
-    });
+    setSelectedArtifact(art);
   }
 
   if (loading)
@@ -181,10 +181,13 @@ export default function ArtifactCatalogPanel({ title }: Props) {
     );
   }
 
+  const technologies = selectedArtifact?.analysis.dependencies ?? [];
+  const sidePanelConfidence = selectedArtifact?.analysis.confidence ?? 0;
+
   return (
     <CanvasPanelHost title={title}>
-      <div className="canvas-detail">
-        <div style={{ padding: "0 16px" }}>
+      <div className="canvas-detail" style={{ display: "flex", gap: 0 }}>
+        <div style={{ flex: selectedArtifact ? "1 1 55%" : "1 1 100%", minWidth: 0, padding: "0 16px", transition: "flex 0.2s" }}>
           {/* Header row */}
           <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 16 }}>
             <div>
@@ -196,86 +199,18 @@ export default function ArtifactCatalogPanel({ title }: Props) {
                 </span>
               </p>
             </div>
-            <button className="btn-accent-outline" onClick={() => setShowAddForm(!showAddForm)}>
+            <button className="btn-accent-outline" onClick={() => setShowAddModal(true)}>
               <svg className="icon-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                 <line x1="12" y1="5" x2="12" y2="19" />
                 <line x1="5" y1="12" x2="19" y2="12" />
               </svg>
-              {showAddForm ? "Cancel" : "Add Artifact"}
+              Add Artifact
             </button>
           </div>
 
-          {/* Add artifact form */}
-          {showAddForm && (
-            <div
-              style={{
-                padding: 12,
-                borderRadius: 8,
-                border: "1px solid var(--border)",
-                background: "var(--surface)",
-                marginBottom: 16,
-                display: "flex",
-                gap: 8,
-                alignItems: "flex-end",
-                flexWrap: "wrap",
-              }}
-            >
-              <div style={{ flex: "1 1 200px" }}>
-                <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", display: "block", marginBottom: 3 }}>
-                  Name
-                </label>
-                <input
-                  placeholder="e.g. my-web-app"
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleCreate()}
-                  style={{
-                    width: "100%",
-                    fontSize: 13,
-                    padding: "6px 10px",
-                    borderRadius: 6,
-                    border: "1px solid var(--border)",
-                    background: "var(--input-bg)",
-                    color: "var(--text)",
-                  }}
-                />
-              </div>
-              <div style={{ flex: "0 0 150px" }}>
-                <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", display: "block", marginBottom: 3 }}>
-                  Type
-                </label>
-                <select
-                  value={newType}
-                  onChange={(e) => setNewType(e.target.value)}
-                  style={{
-                    width: "100%",
-                    fontSize: 13,
-                    padding: "6px 10px",
-                    borderRadius: 6,
-                    border: "1px solid var(--border)",
-                    background: "var(--input-bg)",
-                    color: "var(--text)",
-                  }}
-                >
-                  <option value="docker">Docker Image</option>
-                  <option value="binary">Binary</option>
-                  <option value="archive">Archive</option>
-                  <option value="script">Script</option>
-                  <option value="helm-chart">Helm Chart</option>
-                </select>
-              </div>
-              <button
-                className="btn btn-primary"
-                onClick={handleCreate}
-                disabled={creating}
-                style={{ fontSize: 12, padding: "6px 14px", flexShrink: 0 }}
-              >
-                {creating ? "Creating..." : "Create"}
-              </button>
-              {createError && (
-                <div style={{ width: "100%", color: "var(--status-failed)", fontSize: 12 }}>{createError}</div>
-              )}
-            </div>
+          {/* Add artifact modal */}
+          {showAddModal && (
+            <AddArtifactModal onClose={() => setShowAddModal(false)} />
           )}
 
           {/* Search bar */}
@@ -377,6 +312,99 @@ export default function ArtifactCatalogPanel({ title }: Props) {
             </div>
           )}
         </div>
+
+        {/* Side panel — quick analysis view */}
+        {selectedArtifact && (
+          <div style={{
+            flex: "0 0 45%",
+            borderLeft: "1px solid var(--border)",
+            padding: 16,
+            overflowY: "auto",
+            background: "var(--surface)",
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <SynthMark size={18} active />
+                <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>
+                  Synth&rsquo;s Analysis
+                </span>
+              </div>
+              <button
+                style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: 16, padding: "0 4px" }}
+                onClick={() => setSelectedArtifact(null)}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>
+                {selectedArtifact.type}
+              </div>
+              {technologies.length > 0 && (
+                <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 8 }}>
+                  {technologies.slice(0, 6).map((dep, i) => (
+                    <span key={i} style={{
+                      fontSize: 10, padding: "2px 8px", borderRadius: 12,
+                      background: "var(--accent-dim)", color: "var(--accent)", border: "1px solid var(--accent-border)",
+                    }}>
+                      {dep}
+                    </span>
+                  ))}
+                </div>
+              )}
+              <ConfidenceIndicator value={sidePanelConfidence} qualifier="confidence" wide />
+            </div>
+
+            {sidePanelConfidence < 0.7 && (
+              <div style={{
+                padding: "8px 12px", borderRadius: 6, marginBottom: 12,
+                background: "color-mix(in srgb, var(--status-warning) 8%, transparent)",
+                border: "1px solid color-mix(in srgb, var(--status-warning) 20%, transparent)",
+                fontSize: 12, color: "var(--status-warning)",
+              }}>
+                Low confidence — consider annotating this artifact to improve Synth&rsquo;s understanding.
+              </div>
+            )}
+
+            {selectedArtifact.analysis.summary && (
+              <div style={{ fontSize: 13, color: "var(--text)", lineHeight: 1.5, marginBottom: 12 }}>
+                {selectedArtifact.analysis.summary}
+              </div>
+            )}
+
+            {selectedArtifact.analysis.deploymentIntent && (
+              <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 12, padding: "8px 10px", borderRadius: 6, background: "var(--surface-alt)" }}>
+                <strong style={{ color: "var(--text)" }}>Deployment pattern:</strong> {selectedArtifact.analysis.deploymentIntent}
+              </div>
+            )}
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 16 }}>
+              <button
+                className="btn btn-primary"
+                style={{ fontSize: 12 }}
+                onClick={() => pushPanel({
+                  type: "artifact-detail",
+                  title: selectedArtifact.name,
+                  params: { artifactId: selectedArtifact.id },
+                })}
+              >
+                Examine Full Analysis →
+              </button>
+              <button
+                className="btn"
+                style={{ fontSize: 12 }}
+                onClick={() => pushPanel({
+                  type: "deployment-authoring",
+                  title: "New Deployment",
+                  params: { artifactId: selectedArtifact.id },
+                })}
+              >
+                Deploy This Artifact →
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </CanvasPanelHost>
   );

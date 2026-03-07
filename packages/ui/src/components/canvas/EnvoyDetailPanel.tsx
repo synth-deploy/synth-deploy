@@ -1,5 +1,8 @@
-import { getEnvoyHealth } from "../../api.js";
+import { useState } from "react";
+import { getEnvoyHealth, listEnvironments, listPartitions } from "../../api.js";
 import type { EnvoyRegistryEntry } from "../../api.js";
+import type { Environment, Partition } from "../../types.js";
+import { useCanvas } from "../../context/CanvasContext.js";
 import { useQuery } from "../../hooks/useQuery.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
 
@@ -9,7 +12,13 @@ interface Props {
 }
 
 export default function EnvoyDetailPanel({ envoyId, title }: Props) {
-  const { data: envoy, loading, error } = useQuery<EnvoyRegistryEntry>(`envoyHealth:${envoyId}`, () => getEnvoyHealth(envoyId));
+  const { pushPanel } = useCanvas();
+  const { data: envoy, loading: l1, error } = useQuery<EnvoyRegistryEntry>(`envoyHealth:${envoyId}`, () => getEnvoyHealth(envoyId));
+  const { data: environments, loading: l2 } = useQuery<Environment[]>("list:environments", listEnvironments);
+  const { data: partitions, loading: l3 } = useQuery<Partition[]>("list:partitions", listPartitions);
+  const loading = l1 || l2 || l3;
+  const [showEnvPicker, setShowEnvPicker] = useState(false);
+  const [showPartPicker, setShowPartPicker] = useState(false);
 
   if (loading) {
     return (
@@ -138,6 +147,122 @@ export default function EnvoyDetailPanel({ envoyId, title }: Props) {
             </div>
           </div>
         )}
+
+        {/* Connections — environments and partitions linked to this envoy */}
+        <div className="canvas-section">
+          <h3 className="canvas-section-title">Connections</h3>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            {/* Environments card */}
+            <div style={{ padding: 12, borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text)" }}>Environments</span>
+                <button
+                  className="btn btn-sm"
+                  onClick={() => setShowEnvPicker(!showEnvPicker)}
+                  style={{ fontSize: 11, padding: "2px 8px" }}
+                >
+                  + Assign
+                </button>
+              </div>
+              {showEnvPicker && (
+                <div style={{ marginBottom: 8, display: "flex", flexDirection: "column", gap: 4 }}>
+                  {(environments ?? []).map((env) => (
+                    <button
+                      key={env.id}
+                      className="canvas-activity-row"
+                      style={{ fontSize: 12, padding: "4px 8px" }}
+                      onClick={() => {
+                        // TODO: wire to POST /api/envoys/:id/connections
+                        pushPanel({ type: "environment-detail", title: env.name, params: { id: env.id } });
+                        setShowEnvPicker(false);
+                      }}
+                    >
+                      {env.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {(environments ?? []).length > 0 ? (
+                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                  {(environments ?? []).map((env) => (
+                    <div key={env.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "4px 0" }}>
+                      <button
+                        style={{ background: "none", border: "none", color: "var(--accent)", cursor: "pointer", fontSize: 12, fontWeight: 500, padding: 0 }}
+                        onClick={() => pushPanel({ type: "environment-detail", title: env.name, params: { id: env.id } })}
+                      >
+                        {env.name}
+                      </button>
+                      <button
+                        style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: 12, padding: "0 4px" }}
+                        title="Unlink environment"
+                        onClick={() => {/* TODO: wire to DELETE /api/envoys/:id/connections/environment/:targetId */}}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ fontSize: 12, color: "var(--text-muted)" }}>No environments linked</div>
+              )}
+            </div>
+
+            {/* Partitions card */}
+            <div style={{ padding: 12, borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text)" }}>Partitions</span>
+                <button
+                  className="btn btn-sm"
+                  onClick={() => setShowPartPicker(!showPartPicker)}
+                  style={{ fontSize: 11, padding: "2px 8px" }}
+                >
+                  + Assign
+                </button>
+              </div>
+              {showPartPicker && (
+                <div style={{ marginBottom: 8, display: "flex", flexDirection: "column", gap: 4 }}>
+                  {(partitions ?? []).map((part) => (
+                    <button
+                      key={part.id}
+                      className="canvas-activity-row"
+                      style={{ fontSize: 12, padding: "4px 8px" }}
+                      onClick={() => {
+                        // TODO: wire to POST /api/envoys/:id/connections
+                        pushPanel({ type: "partition-detail", title: part.name, params: { id: part.id } });
+                        setShowPartPicker(false);
+                      }}
+                    >
+                      {part.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {(partitions ?? []).length > 0 ? (
+                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                  {(partitions ?? []).map((part) => (
+                    <div key={part.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "4px 0" }}>
+                      <button
+                        style={{ background: "none", border: "none", color: "var(--accent)", cursor: "pointer", fontSize: 12, fontWeight: 500, padding: 0 }}
+                        onClick={() => pushPanel({ type: "partition-detail", title: part.name, params: { id: part.id } })}
+                      >
+                        {part.name}
+                      </button>
+                      <button
+                        style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: 12, padding: "0 4px" }}
+                        title="Unlink partition"
+                        onClick={() => {/* TODO: wire to DELETE /api/envoys/:id/connections/partition/:targetId */}}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ fontSize: 12, color: "var(--text-muted)" }}>No partitions linked</div>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
     </CanvasPanelHost>
   );

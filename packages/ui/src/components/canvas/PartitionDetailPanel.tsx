@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { getPartition, listDeployments, listEnvironments, getRecentDebrief } from "../../api.js";
+import { getPartition, updatePartitionVariables, listDeployments, listEnvironments, getRecentDebrief } from "../../api.js";
 import type { Partition, Deployment, Environment, DebriefEntry } from "../../types.js";
 import { useCanvas } from "../../context/CanvasContext.js";
-import { useQuery } from "../../hooks/useQuery.js";
+import { useQuery, invalidateExact } from "../../hooks/useQuery.js";
 import SectionHeader from "../SectionHeader.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
 
@@ -20,6 +20,38 @@ export default function PartitionDetailPanel({ partitionId, title }: Props) {
   const { data: debriefEntries, loading: l4 } = useQuery<DebriefEntry[]>(`debrief:partition:${partitionId}`, () => getRecentDebrief({ partitionId, limit: 10 }).catch(() => [] as DebriefEntry[]));
   const loading = l1 || l2 || l3 || l4;
   const [activeTab, setActiveTab] = useState<"overview" | "variables" | "history">("overview");
+  const [addingVar, setAddingVar] = useState(false);
+  const [newKey, setNewKey] = useState("");
+  const [newValue, setNewValue] = useState("");
+  const [editingKey, setEditingKey] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState("");
+  const [varSaving, setVarSaving] = useState(false);
+
+  async function saveVariable(key: string, value: string) {
+    if (!partition) return;
+    setVarSaving(true);
+    try {
+      await updatePartitionVariables(partitionId, { ...partition.variables, [key]: value });
+      invalidateExact(`partition:${partitionId}`);
+      setEditingKey(null);
+      setAddingVar(false);
+      setNewKey("");
+      setNewValue("");
+    } catch { /* ignored */ }
+    setVarSaving(false);
+  }
+
+  async function deleteVariable(key: string) {
+    if (!partition) return;
+    setVarSaving(true);
+    try {
+      const next = { ...partition.variables };
+      delete next[key];
+      await updatePartitionVariables(partitionId, next);
+      invalidateExact(`partition:${partitionId}`);
+    } catch { /* ignored */ }
+    setVarSaving(false);
+  }
 
   if (loading) return <CanvasPanelHost title={title}><div className="loading">Loading...</div></CanvasPanelHost>;
   if (!partition) return <CanvasPanelHost title={title}><div className="error-msg">Partition not found</div></CanvasPanelHost>;
@@ -173,20 +205,75 @@ export default function PartitionDetailPanel({ partitionId, title }: Props) {
           <div className="v2-variables-view">
             <div className="v2-variables-header">
               <span className="v2-variables-count">{vars.length} VARIABLES</span>
-              <button className="v2-create-btn v2-create-btn-partition">+ Add Variable</button>
+              <button
+                className="v2-create-btn v2-create-btn-partition"
+                onClick={() => { setAddingVar(true); setNewKey(""); setNewValue(""); }}
+              >
+                + Add Variable
+              </button>
             </div>
+            {addingVar && (
+              <div style={{ display: "flex", gap: 6, marginBottom: 8, padding: "0 16px", alignItems: "flex-end" }}>
+                <input
+                  placeholder="Key"
+                  value={newKey}
+                  onChange={(e) => setNewKey(e.target.value)}
+                  style={{ flex: 1, fontSize: 12, padding: "4px 8px", borderRadius: 4, border: "1px solid var(--border)", background: "var(--input-bg)", color: "var(--text)", fontFamily: "var(--font-mono)" }}
+                />
+                <input
+                  placeholder="Value"
+                  value={newValue}
+                  onChange={(e) => setNewValue(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && newKey.trim() && saveVariable(newKey.trim(), newValue)}
+                  style={{ flex: 2, fontSize: 12, padding: "4px 8px", borderRadius: 4, border: "1px solid var(--border)", background: "var(--input-bg)", color: "var(--text)", fontFamily: "var(--font-mono)" }}
+                />
+                <button className="btn btn-sm btn-primary" disabled={varSaving || !newKey.trim()} onClick={() => saveVariable(newKey.trim(), newValue)} style={{ fontSize: 11 }}>Save</button>
+                <button className="btn btn-sm" onClick={() => setAddingVar(false)} style={{ fontSize: 11 }}>Cancel</button>
+              </div>
+            )}
             <div className="v2-variables-table">
               <div className="v2-variables-table-header">
                 <div style={{ flex: 1 }}>Key</div>
                 <div style={{ flex: 2 }}>Value</div>
+                <div style={{ width: 50 }} />
               </div>
               {vars.map(([k, v]) => (
-                <div key={k} className="v2-variables-table-row">
+                <div key={k} className="v2-variables-table-row" style={{ display: "flex", alignItems: "center" }}>
                   <div className="v2-var-key" style={{ flex: 1 }}>{k}</div>
-                  <div className="v2-var-value" style={{ flex: 2 }}>{v}</div>
+                  {editingKey === k ? (
+                    <>
+                      <input
+                        value={editValue}
+                        onChange={(e) => setEditValue(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && saveVariable(k, editValue)}
+                        autoFocus
+                        style={{ flex: 2, fontSize: 12, padding: "2px 6px", borderRadius: 4, border: "1px solid var(--accent-border)", background: "var(--input-bg)", color: "var(--text)", fontFamily: "var(--font-mono)" }}
+                      />
+                      <button style={{ background: "none", border: "none", color: "var(--accent)", cursor: "pointer", fontSize: 11, marginLeft: 4 }} disabled={varSaving} onClick={() => saveVariable(k, editValue)}>Save</button>
+                      <button style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: 11 }} onClick={() => setEditingKey(null)}>Cancel</button>
+                    </>
+                  ) : (
+                    <>
+                      <div className="v2-var-value" style={{ flex: 2 }}>{v}</div>
+                      <button
+                        style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: 12, padding: "0 4px" }}
+                        title="Edit"
+                        onClick={() => { setEditingKey(k); setEditValue(v); }}
+                      >
+                        ✎
+                      </button>
+                      <button
+                        style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: 12, padding: "0 4px" }}
+                        title="Delete"
+                        onClick={() => deleteVariable(k)}
+                      >
+                        ✕
+                      </button>
+                    </>
+                  )}
                 </div>
               ))}
-              {vars.length === 0 && (
+              {vars.length === 0 && !addingVar && (
                 <div className="v2-empty-hint" style={{ padding: 16 }}>No variables configured</div>
               )}
             </div>

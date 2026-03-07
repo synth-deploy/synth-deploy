@@ -552,6 +552,13 @@ function NormalState({ stats: _stats, signals }: { stats: SystemState["stats"]; 
             </div>
           </div>
         </div>
+        <ConfidenceIndicator
+          value={artifacts.length > 0
+            ? artifacts.reduce((sum, a) => sum + a.analysis.confidence, 0) / artifacts.length
+            : 0}
+          qualifier="understanding"
+          wide
+        />
         <div className="synth-assessment-stats">
           <div className="stat-card">
             <span className="stat-card-value">{debriefCount}</span>
@@ -565,6 +572,20 @@ function NormalState({ stats: _stats, signals }: { stats: SystemState["stats"]; 
             <span className="stat-card-value">{agentContext?.signals.filter((s) => s.severity === "critical").length ?? 0}</span>
             <span className="stat-card-label">Escalations</span>
           </div>
+        </div>
+        <div className="synth-assessment-actions">
+          <button
+            className="btn btn-primary"
+            onClick={() => pushPanel({ type: "deployment-authoring", title: "New Deployment", params: {} })}
+          >
+            New Deployment
+          </button>
+          <button
+            className="btn"
+            onClick={() => pushPanel({ type: "artifact-catalog", title: "Artifacts", params: {} })}
+          >
+            Review Artifacts
+          </button>
         </div>
       </div>
 

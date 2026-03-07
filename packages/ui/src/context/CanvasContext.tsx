@@ -1,10 +1,15 @@
-import { createContext, useContext, useReducer, type ReactNode } from "react";
+import { createContext, useContext, useReducer, useState, type ReactNode } from "react";
 
 export interface CanvasPanel {
   id: string;
   type: string;
   title: string;
   params: Record<string, string>;
+}
+
+export interface MinimizedDeployment {
+  deploymentId: string;
+  artifactName: string;
 }
 
 interface CanvasState {
@@ -57,6 +62,10 @@ interface CanvasContextValue {
   replacePanel: (panel: Omit<CanvasPanel, "id">) => void;
   resetToOverview: () => void;
   depth: number;
+  minimizedDeployment: MinimizedDeployment | null;
+  minimizeDeployment: (info: MinimizedDeployment) => void;
+  restoreDeployment: () => void;
+  clearMinimizedDeployment: () => void;
 }
 
 const CanvasContext = createContext<CanvasContextValue | null>(null);
@@ -65,6 +74,7 @@ export function CanvasProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(canvasReducer, {
     panels: [OVERVIEW_PANEL],
   });
+  const [minimizedDeployment, setMinimizedDeployment] = useState<MinimizedDeployment | null>(null);
 
   const value: CanvasContextValue = {
     panels: state.panels,
@@ -74,6 +84,25 @@ export function CanvasProvider({ children }: { children: ReactNode }) {
     replacePanel: (panel) => dispatch({ type: "REPLACE", panel }),
     resetToOverview: () => dispatch({ type: "RESET" }),
     depth: state.panels.length,
+    minimizedDeployment,
+    minimizeDeployment: (info) => {
+      setMinimizedDeployment(info);
+      dispatch({ type: "POP" });
+    },
+    restoreDeployment: () => {
+      if (minimizedDeployment) {
+        dispatch({
+          type: "PUSH",
+          panel: {
+            type: "deployment-detail",
+            title: `Deployment`,
+            params: { id: minimizedDeployment.deploymentId },
+          },
+        });
+        setMinimizedDeployment(null);
+      }
+    },
+    clearMinimizedDeployment: () => setMinimizedDeployment(null),
   };
 
   return (

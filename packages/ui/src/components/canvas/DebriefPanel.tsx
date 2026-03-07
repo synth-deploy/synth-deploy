@@ -1,6 +1,6 @@
-import { useState } from "react";
-import { getRecentDebrief, listPartitions } from "../../api.js";
-import type { DebriefEntry, Partition, DecisionType } from "../../types.js";
+import { useState, useEffect } from "react";
+import { getRecentDebrief, getDeployment, listPartitions, listArtifacts, listEnvironments } from "../../api.js";
+import type { DebriefEntry, Partition, Deployment, Artifact, Environment, DecisionType } from "../../types.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
 import DebriefTimeline from "../DebriefTimeline.js";
 import { useQuery } from "../../hooks/useQuery.js";
@@ -25,9 +25,198 @@ interface Props {
   filterDecisionType?: string;
 }
 
+// ---------------------------------------------------------------------------
+// Deployment detail sub-view for debrief drill-in
+// ---------------------------------------------------------------------------
+function DeploymentDebriefDetail({ deploymentId, onBack }: { deploymentId: string; onBack: () => void }) {
+  const [deployment, setDeployment] = useState<Deployment | null>(null);
+  const [debrief, setDebrief] = useState<DebriefEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const { data: artifacts } = useQuery<Artifact[]>("list:artifacts", listArtifacts);
+  const { data: environments } = useQuery<Environment[]>("list:environments", listEnvironments);
+
+  useEffect(() => {
+    setLoading(true);
+    getDeployment(deploymentId)
+      .then(({ deployment: d, debrief: db }) => { setDeployment(d); setDebrief(db); })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [deploymentId]);
+
+  if (loading) return <div className="loading">Loading deployment detail...</div>;
+  if (!deployment) return <div className="error-msg">Deployment not found</div>;
+
+  const artName = (artifacts ?? []).find((a) => a.id === deployment.artifactId)?.name ?? deployment.artifactId.slice(0, 8);
+  const envName = (environments ?? []).find((e) => e.id === deployment.environmentId)?.name ?? deployment.environmentId.slice(0, 8);
+  const duration = deployment.completedAt
+    ? Math.round((new Date(deployment.completedAt).getTime() - new Date(deployment.createdAt).getTime()) / 1000)
+    : null;
+  const envoyEntries = debrief.filter((e) => e.agent === "envoy");
+
+  return (
+    <div>
+      <button
+        onClick={onBack}
+        style={{ background: "none", border: "none", color: "var(--accent)", cursor: "pointer", fontSize: 12, marginBottom: 12, padding: 0 }}
+      >
+        ← Back to list
+      </button>
+
+      {/* Summary stat cards */}
+      <div className="canvas-summary-strip" style={{ marginBottom: 16 }}>
+        <div className="canvas-summary-item">
+          <span className="canvas-summary-value" style={{ fontSize: 13 }}>{artName}</span>
+          <span className="canvas-summary-label">Artifact</span>
+        </div>
+        <div className="canvas-summary-item">
+          <span className="canvas-summary-value" style={{ fontSize: 13 }}>{new Date(deployment.createdAt).toLocaleString()}</span>
+          <span className="canvas-summary-label">Started</span>
+        </div>
+        <div className="canvas-summary-item">
+          <span className="canvas-summary-value" style={{ fontSize: 13 }}>{duration != null ? `${duration}s` : "—"}</span>
+          <span className="canvas-summary-label">Duration</span>
+        </div>
+        <div className="canvas-summary-item">
+          <span className="canvas-summary-value" style={{
+            fontSize: 13,
+            color: deployment.status === "succeeded" ? "var(--status-succeeded)" : deployment.status === "failed" ? "var(--status-failed)" : "var(--text)",
+          }}>
+            {deployment.status}
+          </span>
+          <span className="canvas-summary-label">Status</span>
+        </div>
+      </div>
+
+      {/* Synth's Assessment at time of deployment */}
+      {deployment.recommendation && (
+        <div className="canvas-section">
+          <h3 className="canvas-section-title">Synth&rsquo;s Assessment</h3>
+          <div style={{
+            padding: "10px 14px", borderRadius: 6, fontSize: 13, color: "var(--text)", lineHeight: 1.5,
+            background: "var(--surface)", border: "1px solid var(--border)",
+          }}>
+            <div style={{ fontWeight: 600, marginBottom: 4, color: deployment.recommendation.verdict === "proceed" ? "var(--status-succeeded)" : deployment.recommendation.verdict === "caution" ? "var(--status-warning)" : "var(--status-failed)" }}>
+              {deployment.recommendation.verdict === "proceed" ? "Proceed" : deployment.recommendation.verdict === "caution" ? "Proceed with Caution" : "Hold"}
+            </div>
+            {deployment.recommendation.summary}
+            {deployment.recommendation.factors.length > 0 && (
+              <ul style={{ margin: "6px 0 0", paddingLeft: 18, fontSize: 12, color: "var(--text-muted)" }}>
+                {deployment.recommendation.factors.map((f, i) => <li key={i}>{f}</li>)}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Executed Plan steps with durations */}
+      {deployment.executionRecord && (
+        <div className="canvas-section">
+          <h3 className="canvas-section-title">Executed Plan</h3>
+          <div className="canvas-timeline">
+            {deployment.executionRecord.steps.map((step, i) => {
+              const stepDuration = step.completedAt
+                ? `${Math.round((new Date(step.completedAt).getTime() - new Date(step.startedAt).getTime()) / 1000)}s`
+                : "—";
+              const dotColor = step.status === "completed" ? "var(--status-succeeded)" : step.status === "failed" ? "var(--status-failed)" : "var(--status-warning)";
+              return (
+                <div key={i} className="canvas-timeline-entry" style={{ cursor: "default" }}>
+                  <div className="canvas-timeline-dot" style={{ background: dotColor }} />
+                  <div className="canvas-timeline-content">
+                    <div className="canvas-timeline-header">
+                      <span className="canvas-timeline-type">{step.status}</span>
+                      <span className="canvas-timeline-time">{stepDuration}</span>
+                    </div>
+                    <div className="canvas-timeline-decision">{step.description}</div>
+                    {step.output && <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>{step.output}</div>}
+                    {step.error && <div style={{ fontSize: 11, color: "var(--status-failed)", marginTop: 2 }}>{step.error}</div>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Config Diff — old vs new */}
+      {deployment.plan?.diffFromCurrent && (
+        <div className="canvas-section">
+          <h3 className="canvas-section-title">Config Diff</h3>
+          <pre style={{
+            fontSize: 12, background: "var(--surface-alt)", padding: 12, borderRadius: 6,
+            overflow: "auto", whiteSpace: "pre-wrap", color: "var(--text-muted)",
+          }}>
+            {deployment.plan.diffFromCurrent}
+          </pre>
+        </div>
+      )}
+
+      {/* Variables at time of deployment */}
+      {Object.keys(deployment.variables).length > 0 && (
+        <div className="canvas-section">
+          <h3 className="canvas-section-title">Variables</h3>
+          <div className="canvas-var-table">
+            {Object.entries(deployment.variables).map(([k, v]) => (
+              <div key={k} className="canvas-var-row">
+                <span className="mono">{k}</span>
+                <span className="mono">{v}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Envoy Notes */}
+      {envoyEntries.length > 0 && (
+        <div className="canvas-section">
+          <h3 className="canvas-section-title">Envoy Notes</h3>
+          <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: "var(--text)", lineHeight: 1.7 }}>
+            {envoyEntries.map((entry) => (
+              <li key={entry.id} style={{ marginBottom: 4 }}>
+                <span style={{ color: "var(--text)" }}>{entry.decision}</span>
+                {entry.reasoning && (
+                  <span style={{ color: "var(--text-muted)", fontSize: 12 }}> — {entry.reasoning}</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Rollback Plan */}
+      {deployment.rollbackPlan && (
+        <div className="canvas-section">
+          <h3 className="canvas-section-title">Rollback Plan</h3>
+          <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 8, lineHeight: 1.5 }}>
+            {deployment.rollbackPlan.reasoning}
+          </div>
+          <div className="canvas-timeline">
+            {deployment.rollbackPlan.steps.map((step, i) => (
+              <div key={i} className="canvas-timeline-entry" style={{ cursor: "default" }}>
+                <div className="canvas-timeline-dot" style={{ background: "var(--accent)" }} />
+                <div className="canvas-timeline-content">
+                  <div className="canvas-timeline-header">
+                    <span className="canvas-timeline-type">{step.action}</span>
+                    <span className="canvas-timeline-time">{step.target}</span>
+                  </div>
+                  <div className="canvas-timeline-decision">{step.description}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Main component
+// ---------------------------------------------------------------------------
+
 export default function DebriefPanel({ title, filterPartitionId, filterDecisionType }: Props) {
   const [filterPartition, setFilterPartition] = useState(filterPartitionId ?? "");
   const [filterType, setFilterType] = useState(filterDecisionType ?? "");
+  const [selectedDeploymentId, setSelectedDeploymentId] = useState<string | null>(null);
 
   const debriefKey = `debrief:${filterPartition}:${filterType}`;
   const { data: entries, loading: l1, error } = useQuery<DebriefEntry[]>(debriefKey, () =>
@@ -40,14 +229,6 @@ export default function DebriefPanel({ title, filterPartitionId, filterDecisionT
   const { data: partitions, loading: l2 } = useQuery<Partition[]>("list:partitions", listPartitions);
   const loading = l1 || l2;
 
-  function handlePartitionChange(partition: string) {
-    setFilterPartition(partition);
-  }
-
-  function handleTypeChange(type: string) {
-    setFilterType(type);
-  }
-
   const safeEntries = entries ?? [];
 
   const uniquePartitions = new Set(
@@ -59,6 +240,19 @@ export default function DebriefPanel({ title, filterPartitionId, filterDecisionT
   const typeBreakdown = new Map<string, number>();
   for (const entry of safeEntries) {
     typeBreakdown.set(entry.decisionType, (typeBreakdown.get(entry.decisionType) ?? 0) + 1);
+  }
+
+  // Group entries by deployment for drill-in list
+  const deploymentGroups = new Map<string, { entries: DebriefEntry[]; latest: string }>();
+  for (const entry of safeEntries) {
+    if (!entry.deploymentId) continue;
+    const group = deploymentGroups.get(entry.deploymentId);
+    if (group) {
+      group.entries.push(entry);
+      if (entry.timestamp > group.latest) group.latest = entry.timestamp;
+    } else {
+      deploymentGroups.set(entry.deploymentId, { entries: [entry], latest: entry.timestamp });
+    }
   }
 
   return (
@@ -83,41 +277,87 @@ export default function DebriefPanel({ title, filterPartitionId, filterDecisionT
           </div>
         </div>
 
-        <div className="card" style={{ margin: "0 16px 16px", padding: "12px 16px" }}>
-          <div className="flex gap-8 items-center">
-            <span className="text-muted" style={{ fontSize: 12 }}>Filter:</span>
-            <select
-              value={filterPartition}
-              onChange={(e) => handlePartitionChange(e.target.value)}
-              style={{ fontSize: 13, padding: "4px 8px" }}
-            >
-              <option value="">All Partitions</option>
-              {(partitions ?? []).map((t) => (
-                <option key={t.id} value={t.id}>{t.name}</option>
-              ))}
-            </select>
-            <select
-              value={filterType}
-              onChange={(e) => handleTypeChange(e.target.value)}
-              style={{ fontSize: 13, padding: "4px 8px" }}
-            >
-              <option value="">All Types</option>
-              {DECISION_TYPES.map((dt) => (
-                <option key={dt.value} value={dt.value}>{dt.label}</option>
-              ))}
-            </select>
+        {!selectedDeploymentId && (
+          <>
+            <div className="card" style={{ margin: "0 16px 16px", padding: "12px 16px" }}>
+              <div className="flex gap-8 items-center">
+                <span className="text-muted" style={{ fontSize: 12 }}>Filter:</span>
+                <select
+                  value={filterPartition}
+                  onChange={(e) => setFilterPartition(e.target.value)}
+                  style={{ fontSize: 13, padding: "4px 8px" }}
+                >
+                  <option value="">All Partitions</option>
+                  {(partitions ?? []).map((t) => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
+                </select>
+                <select
+                  value={filterType}
+                  onChange={(e) => setFilterType(e.target.value)}
+                  style={{ fontSize: 13, padding: "4px 8px" }}
+                >
+                  <option value="">All Types</option>
+                  {DECISION_TYPES.map((dt) => (
+                    <option key={dt.value} value={dt.value}>{dt.label}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Deployment group cards for drill-in */}
+            {deploymentGroups.size > 0 && (
+              <div style={{ padding: "0 16px", marginBottom: 16 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>
+                  Deployment Debriefs
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {[...deploymentGroups.entries()]
+                    .sort(([, a], [, b]) => b.latest.localeCompare(a.latest))
+                    .slice(0, 20)
+                    .map(([depId, group]) => (
+                      <button
+                        key={depId}
+                        className="canvas-activity-row"
+                        style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px" }}
+                        onClick={() => setSelectedDeploymentId(depId)}
+                      >
+                        <span style={{ fontSize: 12, fontWeight: 500, color: "var(--text)" }}>
+                          {depId.slice(0, 8)}
+                        </span>
+                        <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
+                          {group.entries.length} decision{group.entries.length !== 1 ? "s" : ""}
+                        </span>
+                        <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--text-muted)" }}>
+                          {new Date(group.latest).toLocaleString()}
+                        </span>
+                        <span style={{ fontSize: 12, color: "var(--accent)" }}>→</span>
+                      </button>
+                    ))}
+                </div>
+              </div>
+            )}
+
+            {error && <div className="error-msg" style={{ margin: "0 16px 12px" }}>{error.message}</div>}
+
+            <div style={{ padding: "0 16px" }}>
+              {loading ? (
+                <div className="loading">Loading...</div>
+              ) : (
+                <DebriefTimeline entries={safeEntries} />
+              )}
+            </div>
+          </>
+        )}
+
+        {selectedDeploymentId && (
+          <div style={{ padding: "0 16px" }}>
+            <DeploymentDebriefDetail
+              deploymentId={selectedDeploymentId}
+              onBack={() => setSelectedDeploymentId(null)}
+            />
           </div>
-        </div>
-
-        {error && <div className="error-msg" style={{ margin: "0 16px 12px" }}>{error.message}</div>}
-
-        <div style={{ padding: "0 16px" }}>
-          {loading ? (
-            <div className="loading">Loading...</div>
-          ) : (
-            <DebriefTimeline entries={safeEntries} />
-          )}
-        </div>
+        )}
       </div>
     </CanvasPanelHost>
   );

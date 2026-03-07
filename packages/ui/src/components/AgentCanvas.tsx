@@ -193,11 +193,51 @@ export default function AgentCanvas() {
     ? currentPanel.title
     : undefined;
 
+  const { minimizedDeployment, restoreDeployment } = useCanvas();
+
   return (
     <>
       <ErrorBoundary>
         {renderPanel()}
       </ErrorBoundary>
+      {minimizedDeployment && (
+        <button
+          onClick={restoreDeployment}
+          style={{
+            position: "fixed",
+            bottom: 64,
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 100,
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            padding: "10px 20px",
+            borderRadius: 24,
+            background: "var(--accent-dim)",
+            border: "1px solid var(--accent-border)",
+            color: "var(--accent)",
+            fontSize: 13,
+            fontWeight: 500,
+            cursor: "pointer",
+            backdropFilter: "blur(12px)",
+            boxShadow: "0 4px 20px rgba(0,0,0,0.12)",
+            animation: "fadeUp 0.3s ease-out",
+          }}
+        >
+          <span
+            style={{
+              width: 10,
+              height: 10,
+              borderRadius: "50%",
+              border: "2px solid var(--accent)",
+              borderTopColor: "transparent",
+              animation: "spin 1s linear infinite",
+            }}
+          />
+          {minimizedDeployment.artifactName} — In progress — click to view
+        </button>
+      )}
       <SynthChannel
         scope={scope}
         onAgentResult={handleAgentResult}

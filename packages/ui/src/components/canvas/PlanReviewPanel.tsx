@@ -28,7 +28,7 @@ interface Props {
   title: string;
 }
 
-type ReviewMode = "review" | "modify" | "reject-prompt";
+type ReviewMode = "review" | "refine" | "modify" | "reject-prompt";
 
 export default function PlanReviewPanel({ deploymentId, title }: Props) {
   const { replacePanel } = useCanvas();
@@ -53,6 +53,9 @@ export default function PlanReviewPanel({ deploymentId, title }: Props) {
   const [rejectReason, setRejectReason] = useState("");
   const [modifiedSteps, setModifiedSteps] = useState<PlannedStep[]>([]);
   const [modifyReason, setModifyReason] = useState("");
+  const [refineFeedback, setRefineFeedback] = useState("");
+  const [refining, setRefining] = useState(false);
+  const [revised, setRevised] = useState(false);
 
   // Sync deployment from query result and initialize modifiedSteps
   useEffect(() => {
@@ -156,6 +159,31 @@ export default function PlanReviewPanel({ deploymentId, title }: Props) {
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to modify plan");
       setActionLoading(false);
+    }
+  }
+
+  async function handleRefine() {
+    if (!refineFeedback.trim()) {
+      setError("Please describe what Synth should reconsider");
+      return;
+    }
+    setRefining(true);
+    setError(null);
+    try {
+      // TODO: wire to POST /api/deployments/:id/plan/refine when endpoint exists
+      // For now, use modifyDeploymentPlan with the feedback as the reason
+      const result = await modifyDeploymentPlan(deploymentId, {
+        steps: deployment!.plan!.steps,
+        reason: `Refine request: ${refineFeedback.trim()}`,
+      });
+      setDeployment(result.deployment);
+      setMode("review");
+      setRefineFeedback("");
+      setRevised(true);
+      setRefining(false);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to refine plan");
+      setRefining(false);
     }
   }
 
@@ -329,7 +357,12 @@ export default function PlanReviewPanel({ deploymentId, title }: Props) {
         {/* Plan steps — review mode */}
         {mode === "review" && plan && (
           <div className="canvas-section">
-            <h3 className="canvas-section-title">Proposed Plan ({plan.steps.length} steps)</h3>
+            <h3 className="canvas-section-title">
+              Proposed Plan ({plan.steps.length} steps)
+              {revised && (
+                <span style={{ marginLeft: 8, fontSize: 11, color: "var(--accent)", fontWeight: 500 }}>· Revised</span>
+              )}
+            </h3>
             <div className="canvas-timeline">
               {plan.steps.map((step, i) => (
                 <div key={i} className="canvas-timeline-entry" style={{ cursor: "default" }}>
@@ -482,6 +515,31 @@ export default function PlanReviewPanel({ deploymentId, title }: Props) {
           </div>
         )}
 
+        {/* Refine mode — feedback for re-reasoning */}
+        {mode === "refine" && (
+          <div className="canvas-section">
+            <h3 className="canvas-section-title">Refine Plan</h3>
+            <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 8, lineHeight: 1.5 }}>
+              Describe what Synth should reconsider. It will re-reason and produce a revised plan.
+            </div>
+            <textarea
+              value={refineFeedback}
+              onChange={(e) => setRefineFeedback(e.target.value)}
+              placeholder="e.g. The database migration should run before the app deployment, not after..."
+              className="v2-input"
+              rows={3}
+              style={{ fontSize: 12, width: "100%", boxSizing: "border-box", resize: "vertical" }}
+              autoFocus
+            />
+            {refining && (
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 8, fontSize: 12, color: "var(--accent)" }}>
+                <span style={{ width: 12, height: 12, borderRadius: "50%", border: "2px solid var(--accent)", borderTopColor: "transparent", animation: "spin 1s linear infinite", display: "inline-block" }} />
+                Re-reasoning...
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Reject prompt */}
         {mode === "reject-prompt" && (
           <div className="canvas-section">
@@ -539,6 +597,14 @@ export default function PlanReviewPanel({ deploymentId, title }: Props) {
               </button>
               <button
                 className="v2-btn v2-btn-secondary"
+                onClick={() => { setMode("refine"); setError(null); setRefineFeedback(""); }}
+                disabled={actionLoading}
+                style={{ fontSize: 13 }}
+              >
+                Refine
+              </button>
+              <button
+                className="v2-btn v2-btn-secondary"
                 onClick={() => { setMode("modify"); setError(null); }}
                 disabled={actionLoading}
                 style={{ fontSize: 13 }}
@@ -552,6 +618,27 @@ export default function PlanReviewPanel({ deploymentId, title }: Props) {
                 style={{ fontSize: 13 }}
               >
                 {actionLoading ? "Approving..." : "Greenlight"}
+              </button>
+            </>
+          )}
+
+          {mode === "refine" && (
+            <>
+              <button
+                className="v2-btn v2-btn-secondary"
+                onClick={() => { setMode("review"); setError(null); setRefineFeedback(""); }}
+                disabled={refining}
+                style={{ fontSize: 13 }}
+              >
+                Cancel
+              </button>
+              <button
+                className="v2-btn v2-btn-primary"
+                onClick={handleRefine}
+                disabled={refining}
+                style={{ fontSize: 13 }}
+              >
+                {refining ? "Revising..." : "Revise Plan"}
               </button>
             </>
           )}

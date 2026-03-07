@@ -1,0 +1,240 @@
+import { useState } from "react";
+import { createArtifact, manualUploadArtifact, createIntakeChannel } from "../api.js";
+import { invalidate } from "../hooks/useQuery.js";
+import ModalOverlay from "./ModalOverlay.js";
+
+interface Props {
+  onClose: () => void;
+}
+
+type IntakePath = "upload" | "registry" | "pipeline";
+
+export default function AddArtifactModal({ onClose }: Props) {
+  const [path, setPath] = useState<IntakePath>("upload");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+
+  // Upload state
+  const [name, setName] = useState("");
+  const [type, setType] = useState("docker");
+  const [version, setVersion] = useState("");
+  const [source, setSource] = useState("");
+
+  // Registry/Pipeline state
+  const [channelName, setChannelName] = useState("");
+  const [channelUrl, setChannelUrl] = useState("");
+
+  async function handleUpload() {
+    if (!name.trim()) { setError("Artifact name is required"); return; }
+    setSubmitting(true);
+    setError(null);
+    try {
+      await manualUploadArtifact({
+        artifactName: name.trim(),
+        artifactType: type,
+        version: version.trim() || "1.0.0",
+      });
+      invalidate("list:artifacts");
+      setSuccess(true);
+      setTimeout(onClose, 1500);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Upload failed");
+    }
+    setSubmitting(false);
+  }
+
+  async function handleCreateChannel(channelType: "registry" | "webhook") {
+    if (!channelName.trim()) { setError("Channel name is required"); return; }
+    setSubmitting(true);
+    setError(null);
+    try {
+      await createIntakeChannel({
+        name: channelName.trim(),
+        type: channelType,
+        config: { url: channelUrl.trim() || undefined },
+      });
+      invalidate("list:artifacts");
+      setSuccess(true);
+      setTimeout(onClose, 1500);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to create intake channel");
+    }
+    setSubmitting(false);
+  }
+
+  return (
+    <ModalOverlay onClose={onClose}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 }}>
+        <div>
+          <div className="modal-label">Artifact Intake</div>
+          <h2 className="modal-title">Add Artifact</h2>
+        </div>
+        <button className="modal-close" onClick={onClose}>&times;</button>
+      </div>
+
+      <p style={{ fontSize: 13, color: "var(--text-muted)", lineHeight: 1.55, margin: "0 0 18px 0" }}>
+        Choose how to bring an artifact into Synth. Once ingested, Synth will analyze it automatically.
+      </p>
+
+      {/* Path selector */}
+      <div className="segmented-control" style={{ width: "fit-content", marginBottom: 18 }}>
+        {([
+          { key: "upload" as const, label: "Upload" },
+          { key: "registry" as const, label: "Container Registry" },
+          { key: "pipeline" as const, label: "CI/CD Pipeline" },
+        ]).map(({ key, label }) => (
+          <button
+            key={key}
+            className={`segmented-control-btn ${path === key ? "segmented-control-btn-active" : ""}`}
+            onClick={() => { setPath(key); setError(null); }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {success && (
+        <div style={{
+          padding: "10px 14px", borderRadius: 8, marginBottom: 12,
+          background: "color-mix(in srgb, var(--status-succeeded) 10%, transparent)",
+          border: "1px solid color-mix(in srgb, var(--status-succeeded) 25%, transparent)",
+          color: "var(--status-succeeded)", fontSize: 13, fontWeight: 500,
+        }}>
+          Success! Artifact added.
+        </div>
+      )}
+
+      {/* Upload path */}
+      {path === "upload" && !success && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <div>
+            <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", display: "block", marginBottom: 3 }}>Name</label>
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. my-web-app"
+              style={{ width: "100%", fontSize: 13, padding: "6px 10px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--input-bg)", color: "var(--text)", boxSizing: "border-box" }}
+            />
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <div style={{ flex: 1 }}>
+              <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", display: "block", marginBottom: 3 }}>Type</label>
+              <select
+                value={type}
+                onChange={(e) => setType(e.target.value)}
+                style={{ width: "100%", fontSize: 13, padding: "6px 10px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--input-bg)", color: "var(--text)" }}
+              >
+                <option value="docker">Docker Image</option>
+                <option value="binary">Binary</option>
+                <option value="archive">Archive</option>
+                <option value="script">Script</option>
+                <option value="helm-chart">Helm Chart</option>
+              </select>
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", display: "block", marginBottom: 3 }}>Version</label>
+              <input
+                value={version}
+                onChange={(e) => setVersion(e.target.value)}
+                placeholder="1.0.0"
+                style={{ width: "100%", fontSize: 13, padding: "6px 10px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--input-bg)", color: "var(--text)", boxSizing: "border-box" }}
+              />
+            </div>
+          </div>
+          <div>
+            <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", display: "block", marginBottom: 3 }}>Source (optional)</label>
+            <input
+              value={source}
+              onChange={(e) => setSource(e.target.value)}
+              placeholder="e.g. docker.io/myorg/myapp"
+              style={{ width: "100%", fontSize: 13, padding: "6px 10px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--input-bg)", color: "var(--text)", boxSizing: "border-box" }}
+            />
+          </div>
+          <button
+            className="btn btn-primary"
+            onClick={handleUpload}
+            disabled={submitting}
+            style={{ alignSelf: "flex-start", fontSize: 13 }}
+          >
+            {submitting ? "Uploading..." : "Upload Artifact"}
+          </button>
+        </div>
+      )}
+
+      {/* Registry path */}
+      {path === "registry" && !success && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <p style={{ fontSize: 12, color: "var(--text-muted)", margin: 0 }}>
+            Connect a container registry. Synth will watch for new images and ingest them automatically.
+          </p>
+          <div>
+            <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", display: "block", marginBottom: 3 }}>Channel Name</label>
+            <input
+              value={channelName}
+              onChange={(e) => setChannelName(e.target.value)}
+              placeholder="e.g. production-registry"
+              style={{ width: "100%", fontSize: 13, padding: "6px 10px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--input-bg)", color: "var(--text)", boxSizing: "border-box" }}
+            />
+          </div>
+          <div>
+            <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", display: "block", marginBottom: 3 }}>Registry URL</label>
+            <input
+              value={channelUrl}
+              onChange={(e) => setChannelUrl(e.target.value)}
+              placeholder="e.g. docker.io/myorg"
+              style={{ width: "100%", fontSize: 13, padding: "6px 10px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--input-bg)", color: "var(--text)", boxSizing: "border-box" }}
+            />
+          </div>
+          <button
+            className="btn btn-primary"
+            onClick={() => handleCreateChannel("registry")}
+            disabled={submitting}
+            style={{ alignSelf: "flex-start", fontSize: 13 }}
+          >
+            {submitting ? "Connecting..." : "Connect Registry"}
+          </button>
+        </div>
+      )}
+
+      {/* Pipeline path */}
+      {path === "pipeline" && !success && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <p style={{ fontSize: 12, color: "var(--text-muted)", margin: 0 }}>
+            Set up a CI/CD webhook. Your pipeline will push artifacts to Synth on each build.
+          </p>
+          <div>
+            <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", display: "block", marginBottom: 3 }}>Channel Name</label>
+            <input
+              value={channelName}
+              onChange={(e) => setChannelName(e.target.value)}
+              placeholder="e.g. github-actions-prod"
+              style={{ width: "100%", fontSize: 13, padding: "6px 10px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--input-bg)", color: "var(--text)", boxSizing: "border-box" }}
+            />
+          </div>
+          <div>
+            <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", display: "block", marginBottom: 3 }}>Webhook URL (optional)</label>
+            <input
+              value={channelUrl}
+              onChange={(e) => setChannelUrl(e.target.value)}
+              placeholder="Auto-generated if blank"
+              style={{ width: "100%", fontSize: 13, padding: "6px 10px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--input-bg)", color: "var(--text)", boxSizing: "border-box" }}
+            />
+          </div>
+          <button
+            className="btn btn-primary"
+            onClick={() => handleCreateChannel("webhook")}
+            disabled={submitting}
+            style={{ alignSelf: "flex-start", fontSize: 13 }}
+          >
+            {submitting ? "Creating..." : "Create Pipeline Channel"}
+          </button>
+        </div>
+      )}
+
+      {error && (
+        <div style={{ marginTop: 10, color: "var(--status-failed)", fontSize: 12 }}>{error}</div>
+      )}
+    </ModalOverlay>
+  );
+}

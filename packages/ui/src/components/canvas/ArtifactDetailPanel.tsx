@@ -315,6 +315,38 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
           <div style={{ padding: "16px" }}>
             <SectionHeader color="var(--status-warning)" shape="diamond" label="Corrections & Annotations" />
 
+            {/* Confidence-adapted feedback section */}
+            <div style={{
+              padding: "12px 14px",
+              borderRadius: 8,
+              marginBottom: 16,
+              background: confidence >= 0.7
+                ? "color-mix(in srgb, var(--status-succeeded) 6%, transparent)"
+                : confidence >= 0.5
+                  ? "color-mix(in srgb, var(--status-warning) 6%, transparent)"
+                  : "color-mix(in srgb, var(--status-failed) 6%, transparent)",
+              border: `1px solid ${confidence >= 0.7
+                ? "color-mix(in srgb, var(--status-succeeded) 18%, transparent)"
+                : confidence >= 0.5
+                  ? "color-mix(in srgb, var(--status-warning) 18%, transparent)"
+                  : "color-mix(in srgb, var(--status-failed) 18%, transparent)"}`,
+            }}>
+              <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text)", marginBottom: 4 }}>
+                {confidence >= 0.7
+                  ? "Synth is confident, but confidence isn't certainty."
+                  : confidence >= 0.5
+                    ? "Synth's understanding is developing."
+                    : "Synth needs your help understanding this artifact."}
+              </div>
+              <div style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.5 }}>
+                {confidence >= 0.7
+                  ? "If you notice anything incorrect in the analysis above, correct it so Synth can learn."
+                  : confidence >= 0.5
+                    ? "Review the analysis and provide corrections to improve future deployments."
+                    : "This artifact needs annotations before Synth can deploy it safely. Use the form below to provide corrections."}
+              </div>
+            </div>
+
             {/* Add correction form */}
             <div
               style={{
@@ -326,7 +358,7 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
               }}
             >
               <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text)", marginBottom: 8 }}>
-                Add Correction
+                {confidence < 0.5 ? "Annotate Artifact" : confidence < 0.7 ? "Suggest a Correction" : "Flag Incorrect Analysis"}
               </div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
                 <div style={{ flex: "0 0 200px" }}>

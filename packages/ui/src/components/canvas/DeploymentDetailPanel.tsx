@@ -295,7 +295,7 @@ interface Props {
 }
 
 export default function DeploymentDetailPanel({ deploymentId, title }: Props) {
-  const { pushPanel } = useCanvas();
+  const { pushPanel, minimizeDeployment } = useCanvas();
 
   const { data: result, loading: l1, refresh: refreshDeployment } = useQuery(`deployment:${deploymentId}`, () => getDeployment(deploymentId));
   const { data: environments, loading: l2 } = useQuery("list:environments", () => listEnvironments());
@@ -393,6 +393,19 @@ export default function DeploymentDetailPanel({ deploymentId, title }: Props) {
             <span>Approved by: {deployment.approvedBy}</span>
           )}
         </div>
+
+        {/* Minimize button for running deployments */}
+        {isRunning && (
+          <div style={{ marginBottom: 12 }}>
+            <button
+              className="btn btn-sm"
+              onClick={() => minimizeDeployment({ deploymentId, artifactName: artName })}
+              style={{ fontSize: 12 }}
+            >
+              Minimize ↓
+            </button>
+          </div>
+        )}
 
         {/* Live execution progress (only for running deployments) */}
         {isRunning && progressEvents.length > 0 && (

@@ -1,7 +1,8 @@
-import { getEnvironment, listDeployments, listArtifacts } from "../../api.js";
+import { useState } from "react";
+import { getEnvironment, updateEnvironment, listDeployments, listArtifacts } from "../../api.js";
 import type { Environment, Deployment, Artifact } from "../../types.js";
 import { useCanvas } from "../../context/CanvasContext.js";
-import { useQuery } from "../../hooks/useQuery.js";
+import { useQuery, invalidateExact } from "../../hooks/useQuery.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
 
 interface Props {
@@ -21,7 +22,40 @@ export default function EnvironmentDetailPanel({ environmentId, title }: Props) 
   if (loading) return <CanvasPanelHost title={title}><div className="loading">Loading...</div></CanvasPanelHost>;
   if (!environment) return <CanvasPanelHost title={title}><div className="error-msg">Environment not found</div></CanvasPanelHost>;
 
-  const vars = Object.entries(environment.variables);
+  const [editingKey, setEditingKey] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState("");
+  const [addingVar, setAddingVar] = useState(false);
+  const [newKey, setNewKey] = useState("");
+  const [newValue, setNewValue] = useState("");
+  const [varSaving, setVarSaving] = useState(false);
+
+  async function saveVariable(key: string, value: string) {
+    if (!environment) return;
+    setVarSaving(true);
+    try {
+      await updateEnvironment(environmentId, { variables: { ...environment.variables, [key]: value } });
+      invalidateExact(`environment:${environmentId}`);
+      setEditingKey(null);
+      setAddingVar(false);
+      setNewKey("");
+      setNewValue("");
+    } catch { /* ignored */ }
+    setVarSaving(false);
+  }
+
+  async function deleteVariable(key: string) {
+    if (!environment) return;
+    setVarSaving(true);
+    try {
+      const next = { ...environment.variables };
+      delete next[key];
+      await updateEnvironment(environmentId, { variables: next });
+      invalidateExact(`environment:${environmentId}`);
+    } catch { /* ignored */ }
+    setVarSaving(false);
+  }
+
+  const vars = Object.entries(environment?.variables ?? {});
   const succeeded = deployments.filter((d) => d.status === "succeeded").length;
   const successRate = deployments.length > 0
     ? `${Math.round((succeeded / deployments.length) * 100)}%`
@@ -49,19 +83,78 @@ export default function EnvironmentDetailPanel({ environmentId, title }: Props) 
           </div>
         </div>
 
-        {vars.length > 0 && (
-          <div className="canvas-section">
+        <div className="canvas-section">
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <h3 className="canvas-section-title">Variables</h3>
-            <div className="canvas-var-table">
-              {vars.map(([k, v]) => (
-                <div key={k} className="canvas-var-row">
-                  <span className="mono">{k}</span>
-                  <span className="mono">{v}</span>
-                </div>
-              ))}
-            </div>
+            <button
+              className="btn btn-sm"
+              onClick={() => { setAddingVar(true); setNewKey(""); setNewValue(""); }}
+              style={{ fontSize: 11, padding: "2px 8px" }}
+            >
+              + Add Variable
+            </button>
           </div>
-        )}
+          {addingVar && (
+            <div style={{ display: "flex", gap: 6, marginBottom: 8, alignItems: "flex-end" }}>
+              <input
+                placeholder="Key"
+                value={newKey}
+                onChange={(e) => setNewKey(e.target.value)}
+                style={{ flex: 1, fontSize: 12, padding: "4px 8px", borderRadius: 4, border: "1px solid var(--border)", background: "var(--input-bg)", color: "var(--text)", fontFamily: "var(--font-mono)" }}
+              />
+              <input
+                placeholder="Value"
+                value={newValue}
+                onChange={(e) => setNewValue(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && newKey.trim() && saveVariable(newKey.trim(), newValue)}
+                style={{ flex: 2, fontSize: 12, padding: "4px 8px", borderRadius: 4, border: "1px solid var(--border)", background: "var(--input-bg)", color: "var(--text)", fontFamily: "var(--font-mono)" }}
+              />
+              <button className="btn btn-sm btn-primary" disabled={varSaving || !newKey.trim()} onClick={() => saveVariable(newKey.trim(), newValue)} style={{ fontSize: 11 }}>Save</button>
+              <button className="btn btn-sm" onClick={() => setAddingVar(false)} style={{ fontSize: 11 }}>Cancel</button>
+            </div>
+          )}
+          <div className="canvas-var-table">
+            {vars.map(([k, v]) => (
+              <div key={k} className="canvas-var-row" style={{ display: "flex", alignItems: "center" }}>
+                <span className="mono" style={{ flex: 1 }}>{k}</span>
+                {editingKey === k ? (
+                  <>
+                    <input
+                      value={editValue}
+                      onChange={(e) => setEditValue(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && saveVariable(k, editValue)}
+                      autoFocus
+                      style={{ flex: 2, fontSize: 12, padding: "2px 6px", borderRadius: 4, border: "1px solid var(--accent-border)", background: "var(--input-bg)", color: "var(--text)", fontFamily: "var(--font-mono)" }}
+                    />
+                    <button style={{ background: "none", border: "none", color: "var(--accent)", cursor: "pointer", fontSize: 11, marginLeft: 4 }} disabled={varSaving} onClick={() => saveVariable(k, editValue)}>Save</button>
+                    <button style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: 11, marginLeft: 2 }} onClick={() => setEditingKey(null)}>Cancel</button>
+                  </>
+                ) : (
+                  <>
+                    <span className="mono" style={{ flex: 2 }}>{v}</span>
+                    <button
+                      style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: 12, padding: "0 4px" }}
+                      title="Edit"
+                      onClick={() => { setEditingKey(k); setEditValue(v); }}
+                    >
+                      ✎
+                    </button>
+                    <button
+                      style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: 12, padding: "0 4px" }}
+                      title="Delete"
+                      onClick={() => deleteVariable(k)}
+                    >
+                      ✕
+                    </button>
+                  </>
+                )}
+              </div>
+            ))}
+            {vars.length === 0 && !addingVar && (
+              <div style={{ fontSize: 12, color: "var(--text-muted)", padding: 8 }}>No variables configured</div>
+            )}
+          </div>
+        </div>
 
         {sorted.length > 0 && (
           <div className="canvas-section">
