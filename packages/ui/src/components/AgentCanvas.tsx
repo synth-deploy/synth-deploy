@@ -1,6 +1,7 @@
 import { useCanvas } from "../context/CanvasContext.js";
 import type { CanvasQueryResult } from "../api.js";
 import SynthChannel from "./SynthChannel.js";
+import SynthMark from "./SynthMark.js";
 import OperationalOverview from "./canvas/OperationalOverview.js";
 import PartitionDetailPanel from "./canvas/PartitionDetailPanel.js";
 import EnvironmentDetailPanel from "./canvas/EnvironmentDetailPanel.js";
@@ -201,42 +202,37 @@ export default function AgentCanvas() {
         {renderPanel()}
       </ErrorBoundary>
       {minimizedDeployment && (
-        <button
+        <div
           onClick={restoreDeployment}
           style={{
             position: "fixed",
-            bottom: 64,
+            bottom: 20,
             left: "50%",
             transform: "translateX(-50%)",
-            zIndex: 100,
+            zIndex: 200,
             display: "flex",
             alignItems: "center",
-            gap: 8,
+            gap: 12,
             padding: "10px 20px",
-            borderRadius: 24,
-            background: "var(--accent-dim)",
+            borderRadius: 10,
+            background: "var(--surface)",
             border: "1px solid var(--accent-border)",
-            color: "var(--accent)",
-            fontSize: 13,
-            fontWeight: 500,
+            boxShadow: "0 24px 80px color-mix(in srgb, var(--text) 15%, transparent)",
             cursor: "pointer",
-            backdropFilter: "blur(12px)",
-            boxShadow: "0 4px 20px color-mix(in srgb, var(--text) 12%, transparent)",
-            animation: "fadeUp 0.3s ease-out",
+            animation: "fadeUp 0.25s ease",
           }}
         >
-          <span
-            style={{
-              width: 10,
-              height: 10,
-              borderRadius: "50%",
-              border: "2px solid var(--accent)",
-              borderTopColor: "transparent",
-              animation: "spin 1s linear infinite",
-            }}
-          />
-          {minimizedDeployment.artifactName} — In progress — click to view
-        </button>
+          <SynthMark size={16} active={true} />
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>
+              Deploying {minimizedDeployment.artifactName}
+            </div>
+            <div style={{ fontSize: 11, color: "var(--text-muted)" }}>In progress — click to view</div>
+          </div>
+          <div style={{ width: 48, height: 3, borderRadius: 2, background: "var(--surface-alt)", overflow: "hidden", marginLeft: 8 }}>
+            <div style={{ height: "100%", borderRadius: 2, background: "var(--accent)", animation: "progressPulse 2s ease infinite" }} />
+          </div>
+        </div>
       )}
       <SynthChannel
         scope={scope}

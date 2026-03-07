@@ -137,16 +137,27 @@ function DeploymentDebriefDetail({ deploymentId, onBack }: { deploymentId: strin
         </div>
       )}
 
-      {/* Config Diff — old vs new */}
+      {/* Config Diff — old vs new, colored by line type */}
       {deployment.plan?.diffFromCurrent && (
         <div className="canvas-section">
-          <h3 className="canvas-section-title">Config Diff</h3>
-          <pre style={{
-            fontSize: 12, background: "var(--surface-alt)", padding: 12, borderRadius: 6,
-            overflow: "auto", whiteSpace: "pre-wrap", color: "var(--text-muted)",
-          }}>
-            {deployment.plan.diffFromCurrent}
-          </pre>
+          <h3 className="canvas-section-title">Configuration Changes</h3>
+          <div style={{ borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)", padding: "12px 16px" }}>
+            {deployment.plan.diffFromCurrent.split("\n").filter(Boolean).map((line, i) => {
+              const isAdded = line.startsWith("+");
+              const isRemoved = line.startsWith("-");
+              return (
+                <div key={i} style={{
+                  fontFamily: "var(--font-mono, monospace)",
+                  fontSize: 12,
+                  lineHeight: 1.7,
+                  color: isAdded ? "var(--status-succeeded)" : isRemoved ? "var(--status-failed)" : "var(--text-muted)",
+                  textDecoration: isRemoved ? "line-through" : undefined,
+                }}>
+                  {line}
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 

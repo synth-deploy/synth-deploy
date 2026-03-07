@@ -20,7 +20,6 @@ import { useCanvas } from "../../context/CanvasContext.js";
 import { useSettings } from "../../context/SettingsContext.js";
 import { useQuery } from "../../hooks/useQuery.js";
 import SectionHeader from "../SectionHeader.js";
-import SynthEye from "../SynthEye.js";
 import SynthMark from "../SynthMark.js";
 import ConfidenceIndicator from "../ConfidenceIndicator.js";
 import StatusBadge from "../StatusBadge.js";
@@ -238,7 +237,7 @@ function EmptyState({ onComplete }: { onComplete: () => void }) {
   return (
     <div className="v2-dashboard">
       <div style={{ textAlign: "center", padding: "32px 20px 24px" }}>
-        <SynthEye />
+        <SynthMark size={56} active={false} />
         <h2 style={{ color: "var(--text)", fontSize: 22, fontWeight: 700, marginTop: 16, marginBottom: 8 }}>
           Welcome to Synth
         </h2>
