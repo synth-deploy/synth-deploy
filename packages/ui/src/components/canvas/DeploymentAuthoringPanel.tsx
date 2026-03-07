@@ -195,7 +195,7 @@ export default function DeploymentAuthoringPanel({ title, preselectedArtifactId 
                       >
                         {selected && (
                           <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                            <path d="M2 5L4.5 7.5L8 3" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                            <path d="M2 5L4.5 7.5L8 3" stroke="var(--bg)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                           </svg>
                         )}
                       </div>
@@ -245,7 +245,7 @@ export default function DeploymentAuthoringPanel({ title, preselectedArtifactId 
                       border: "none",
                       cursor: "pointer",
                       background: deployScope === scope ? "var(--accent)" : "var(--surface)",
-                      color: deployScope === scope ? "#fff" : "var(--text-muted)",
+                      color: deployScope === scope ? "var(--bg)" : "var(--text-muted)",
                       transition: "all 0.15s",
                     }}
                   >

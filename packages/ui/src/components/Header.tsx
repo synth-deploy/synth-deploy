@@ -1,4 +1,7 @@
 import { useCanvas } from "../context/CanvasContext.js";
+import { listEnvoys } from "../api.js";
+import type { EnvoyRegistryEntry } from "../api.js";
+import { useQuery } from "../hooks/useQuery.js";
 import SynthMark from "./SynthMark.js";
 import ThemeToggle from "./ThemeToggle.js";
 
@@ -11,6 +14,10 @@ const TABS = [
 
 export default function Header() {
   const { currentPanel, resetToOverview, pushPanel } = useCanvas();
+  const { data: envoys } = useQuery<EnvoyRegistryEntry[]>("list:envoys", () => listEnvoys().catch(() => [] as EnvoyRegistryEntry[]));
+  const envoyList = envoys ?? [];
+  const healthyCount = envoyList.filter((e) => e.health === "OK").length;
+  const totalCount = envoyList.length;
 
   const activeTab = TABS.find((t) => t.id === currentPanel.type)?.id ?? null;
 
@@ -48,8 +55,8 @@ export default function Header() {
           onClick={() => navTo("topology", "Topology")}
           title="Envoy fleet health"
         >
-          <span className="health-pip health-pip-healthy" />
-          <span className="health-pill-text">envoys healthy</span>
+          <span className={`health-pip ${healthyCount === totalCount ? "health-pip-healthy" : "health-pip-degraded"}`} />
+          <span className="health-pill-text">{totalCount > 0 ? `${healthyCount}/${totalCount} envoys healthy` : "No envoys"}</span>
         </button>
         <ThemeToggle />
         <button

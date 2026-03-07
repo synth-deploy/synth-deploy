@@ -230,8 +230,8 @@ export default function PlanReviewPanel({ deploymentId, title }: Props) {
               {enrichment.previouslyRolledBack && (
                 <div style={{
                   padding: "8px 12px",
-                  background: "rgba(220, 38, 38, 0.12)",
-                  border: "1px solid rgba(220, 38, 38, 0.3)",
+                  background: "color-mix(in srgb, var(--status-failed) 12%, transparent)",
+                  border: "1px solid color-mix(in srgb, var(--status-failed) 30%, transparent)",
                   borderRadius: 6,
                   fontSize: 13,
                   color: "var(--status-failed)",
@@ -242,8 +242,8 @@ export default function PlanReviewPanel({ deploymentId, title }: Props) {
               {enrichment.conflictingDeployments.length > 0 && (
                 <div style={{
                   padding: "8px 12px",
-                  background: "rgba(245, 158, 11, 0.12)",
-                  border: "1px solid rgba(245, 158, 11, 0.3)",
+                  background: "color-mix(in srgb, var(--status-warning) 12%, transparent)",
+                  border: "1px solid color-mix(in srgb, var(--status-warning) 30%, transparent)",
                   borderRadius: 6,
                   fontSize: 13,
                   color: "var(--status-warning)",
@@ -315,16 +315,16 @@ export default function PlanReviewPanel({ deploymentId, title }: Props) {
             <div style={{
               padding: "10px 14px",
               background: recommendation.verdict === "proceed"
-                ? "rgba(22, 163, 74, 0.12)"
+                ? "color-mix(in srgb, var(--status-succeeded) 12%, transparent)"
                 : recommendation.verdict === "caution"
-                ? "rgba(245, 158, 11, 0.12)"
-                : "rgba(220, 38, 38, 0.12)",
+                ? "color-mix(in srgb, var(--status-warning) 12%, transparent)"
+                : "color-mix(in srgb, var(--status-failed) 12%, transparent)",
               border: `1px solid ${
                 recommendation.verdict === "proceed"
-                  ? "rgba(22, 163, 74, 0.3)"
+                  ? "color-mix(in srgb, var(--status-succeeded) 30%, transparent)"
                   : recommendation.verdict === "caution"
-                  ? "rgba(245, 158, 11, 0.3)"
-                  : "rgba(220, 38, 38, 0.3)"
+                  ? "color-mix(in srgb, var(--status-warning) 30%, transparent)"
+                  : "color-mix(in srgb, var(--status-failed) 30%, transparent)"
               }`,
               borderRadius: 6,
             }}>
@@ -565,8 +565,8 @@ export default function PlanReviewPanel({ deploymentId, title }: Props) {
         {error && (
           <div style={{
             padding: "8px 12px",
-            background: "rgba(220, 38, 38, 0.12)",
-            border: "1px solid rgba(220, 38, 38, 0.3)",
+            background: "color-mix(in srgb, var(--status-failed) 12%, transparent)",
+            border: "1px solid color-mix(in srgb, var(--status-failed) 30%, transparent)",
             borderRadius: 6,
             fontSize: 13,
             color: "var(--status-failed)",

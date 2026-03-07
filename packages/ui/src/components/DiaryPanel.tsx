@@ -4,24 +4,24 @@ import { getRecentDebrief } from "../api.js";
 import type { DebriefEntry } from "../types.js";
 
 const DT_COLORS: Record<string, string> = {
-  "pipeline-plan": "#6366f1",
+  "pipeline-plan": "var(--dt-plan)",
   "configuration-resolved": "var(--accent)",
   "variable-conflict": "var(--status-warning)",
-  "health-check": "#06b6d4",
+  "health-check": "var(--dt-health)",
   "deployment-execution": "var(--accent)",
-  "deployment-verification": "#10b981",
+  "deployment-verification": "var(--dt-verification)",
   "deployment-completion": "var(--status-succeeded)",
   "deployment-failure": "var(--status-failed)",
-  "diagnostic-investigation": "#ec4899",
-  "environment-scan": "#14b8a6",
-  system: "#6b7280",
-  "llm-call": "#6b7280",
-  "artifact-analysis": "#ec4899",
-  "plan-generation": "#6366f1",
+  "diagnostic-investigation": "var(--dt-diagnostic)",
+  "environment-scan": "var(--dt-scan)",
+  system: "var(--dt-system)",
+  "llm-call": "var(--dt-system)",
+  "artifact-analysis": "var(--dt-diagnostic)",
+  "plan-generation": "var(--dt-plan)",
   "plan-approval": "var(--status-succeeded)",
   "plan-rejection": "var(--status-failed)",
   "rollback-execution": "var(--status-failed)",
-  "cross-system-context": "#14b8a6",
+  "cross-system-context": "var(--dt-scan)",
 };
 
 function formatTime(date: string | Date): string {
@@ -31,7 +31,7 @@ function formatTime(date: string | Date): string {
 
 function DiaryEntry({ entry }: { entry: DebriefEntry }) {
   const [expanded, setExpanded] = useState(false);
-  const borderColor = DT_COLORS[entry.decisionType] ?? "#6b7280";
+  const borderColor = DT_COLORS[entry.decisionType] ?? "var(--text-muted)";
 
   return (
     <div

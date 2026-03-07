@@ -74,7 +74,7 @@ export default function AddEnvoyModal({ onClose }: AddEnvoyModalProps) {
             border: "none",
             cursor: "pointer",
             background: copied ? "var(--status-succeeded)" : "var(--accent)",
-            color: "#fff",
+            color: "var(--bg)",
             fontSize: 13,
             fontWeight: 600,
             fontFamily: "var(--font-mono)",

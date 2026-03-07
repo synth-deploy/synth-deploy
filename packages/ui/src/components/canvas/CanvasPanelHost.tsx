@@ -13,14 +13,30 @@ export default function CanvasPanelHost({ title, dismissible = true, children }:
   const coBranding = settings?.coBranding;
 
   // Build breadcrumb path from the panel stack
-  const breadcrumbPath = panels.slice(1).map((panel, i) => ({
-    label: panel.title,
-    onClick: i < panels.length - 2
-      ? () => {
-          popPanel();
-        }
-      : undefined,
-  }));
+  // For topology children, replace "Topology" with the sub-category name (Envoys/Environments/Partitions)
+  const topologyChildCategory: Record<string, string> = {
+    "envoy-detail": "Envoys",
+    "environment-detail": "Environments",
+    "partition-detail": "Partitions",
+  };
+  const sliced = panels.slice(1);
+  const breadcrumbPath = sliced.map((panel, i) => {
+    let label = panel.title;
+    if (panel.type === "topology" && i + 1 < sliced.length) {
+      const childType = sliced[i + 1].type;
+      if (childType in topologyChildCategory) {
+        label = topologyChildCategory[childType];
+      }
+    }
+    return {
+      label,
+      onClick: i < panels.length - 2
+        ? () => {
+            popPanel();
+          }
+        : undefined,
+    };
+  });
 
   return (
     <div className="canvas-panel">

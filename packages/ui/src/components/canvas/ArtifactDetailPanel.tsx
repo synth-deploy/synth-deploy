@@ -144,8 +144,8 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
           <div
             style={{
               padding: "12px 16px",
-              background: "rgba(220,38,38,0.08)",
-              border: "1px solid rgba(220,38,38,0.25)",
+              background: "color-mix(in srgb, var(--status-failed) 8%, transparent)",
+              border: "1px solid color-mix(in srgb, var(--status-failed) 25%, transparent)",
               borderRadius: 8,
               margin: "0 16px 16px",
               fontSize: 13,
@@ -165,7 +165,7 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
                 width: 36,
                 height: 36,
                 borderRadius: 8,
-                background: "rgba(99,225,190,0.15)",
+                background: "color-mix(in srgb, var(--accent) 15%, transparent)",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
@@ -197,7 +197,7 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
                   height: 6,
                   width: 60,
                   borderRadius: 3,
-                  background: "rgba(255,255,255,0.1)",
+                  background: "color-mix(in srgb, var(--text) 10%, transparent)",
                   overflow: "hidden",
                 }}
               >
@@ -249,9 +249,9 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
                 lineHeight: 1.6,
                 marginBottom: 20,
                 padding: "8px 12px",
-                background: "rgba(255,255,255,0.03)",
+                background: "color-mix(in srgb, var(--text) 3%, transparent)",
                 borderRadius: 6,
-                borderLeft: "2px solid rgba(99,225,190,0.3)",
+                borderLeft: "2px solid color-mix(in srgb, var(--accent) 30%, transparent)",
               }}
             >
               {artifact.analysis.summary || "No analysis summary available."}
@@ -298,9 +298,9 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
                     color: "var(--text)",
                     lineHeight: 1.6,
                     padding: "8px 12px",
-                    background: "rgba(255,255,255,0.03)",
+                    background: "color-mix(in srgb, var(--text) 3%, transparent)",
                     borderRadius: 6,
-                    borderLeft: "2px solid rgba(232,121,249,0.3)",
+                    borderLeft: "2px solid color-mix(in srgb, var(--accent) 30%, transparent)",
                   }}
                 >
                   {artifact.analysis.deploymentIntent}

@@ -196,7 +196,7 @@ export default function AgentCanvas() {
   const { minimizedDeployment, restoreDeployment } = useCanvas();
 
   return (
-    <>
+    <div style={{ display: "flex", flexDirection: "column", minHeight: "100%" }}>
       <ErrorBoundary>
         {renderPanel()}
       </ErrorBoundary>
@@ -221,7 +221,7 @@ export default function AgentCanvas() {
             fontWeight: 500,
             cursor: "pointer",
             backdropFilter: "blur(12px)",
-            boxShadow: "0 4px 20px rgba(0,0,0,0.12)",
+            boxShadow: "0 4px 20px color-mix(in srgb, var(--text) 12%, transparent)",
             animation: "fadeUp 0.3s ease-out",
           }}
         >
@@ -242,6 +242,6 @@ export default function AgentCanvas() {
         scope={scope}
         onAgentResult={handleAgentResult}
       />
-    </>
+    </div>
   );
 }

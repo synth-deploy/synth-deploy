@@ -115,14 +115,14 @@ export default function FleetDeploymentPanel({ fleetDeploymentId, title }: Props
           >
             {status.label}
           </span>
-          <span style={{ fontSize: 11, color: "#888", fontFamily: "monospace" }}>
+          <span style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "monospace" }}>
             {fleet.id.slice(0, 8)}
           </span>
         </div>
 
         {/* Progress bar */}
         <div style={{ marginBottom: 20 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4, fontSize: 12, color: "#aaa" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4, fontSize: 12, color: "var(--text-muted)" }}>
             <span>Progress</span>
             <span>{progressPercent}%</span>
           </div>
@@ -130,7 +130,7 @@ export default function FleetDeploymentPanel({ fleetDeploymentId, title }: Props
             style={{
               height: 8,
               borderRadius: 4,
-              background: "rgba(255,255,255,0.06)",
+              background: "color-mix(in srgb, var(--text) 6%, transparent)",
               overflow: "hidden",
             }}
           >
@@ -140,13 +140,13 @@ export default function FleetDeploymentPanel({ fleetDeploymentId, title }: Props
                 borderRadius: 4,
                 width: `${progressPercent}%`,
                 background: progress.failed > 0
-                  ? "linear-gradient(90deg, #16a34a, #dc2626)"
+                  ? "linear-gradient(90deg, var(--status-succeeded), var(--status-failed))"
                   : "var(--status-succeeded)",
                 transition: "width 0.3s ease",
               }}
             />
           </div>
-          <div style={{ display: "flex", gap: 16, marginTop: 6, fontSize: 11, color: "#888" }}>
+          <div style={{ display: "flex", gap: 16, marginTop: 6, fontSize: 11, color: "var(--text-muted)" }}>
             <span>{progress.succeeded} succeeded</span>
             <span>{progress.failed} failed</span>
             <span>{progress.pending} pending</span>
@@ -157,7 +157,7 @@ export default function FleetDeploymentPanel({ fleetDeploymentId, title }: Props
         {/* Batch progress indicator */}
         {progress.totalBatches != null && progress.totalBatches > 1 && (
           <div style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 12, color: "#aaa", marginBottom: 6 }}>
+            <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 6 }}>
               Batch {(progress.currentBatch ?? 0) + 1} of {progress.totalBatches}
             </div>
             <div style={{ display: "flex", gap: 4 }}>
@@ -175,7 +175,7 @@ export default function FleetDeploymentPanel({ fleetDeploymentId, title }: Props
                         ? "var(--status-succeeded)"
                         : isCurrent
                           ? "var(--accent)"
-                          : "rgba(255,255,255,0.08)",
+                          : "color-mix(in srgb, var(--text) 8%, transparent)",
                     }}
                   />
                 );
@@ -187,45 +187,45 @@ export default function FleetDeploymentPanel({ fleetDeploymentId, title }: Props
         {/* Rollout config display */}
         <div
           style={{
-            background: "rgba(99,102,241,0.04)",
-            border: "1px solid rgba(99,102,241,0.15)",
+            background: "color-mix(in srgb, var(--accent) 4%, transparent)",
+            border: "1px solid color-mix(in srgb, var(--accent) 15%, transparent)",
             borderRadius: 8,
             padding: "12px 16px",
             marginBottom: 16,
           }}
         >
-          <div style={{ fontSize: 12, fontWeight: 600, color: "#aaa", marginBottom: 8 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", marginBottom: 8 }}>
             Rollout Configuration
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px 16px", fontSize: 12 }}>
             <div>
-              <span style={{ color: "#888" }}>Strategy: </span>
+              <span style={{ color: "var(--text-muted)" }}>Strategy: </span>
               <span style={{ color: "var(--text)" }}>
                 {strategyLabels[fleet.rolloutConfig.strategy] ?? fleet.rolloutConfig.strategy}
               </span>
             </div>
             {fleet.rolloutConfig.batchSize != null && (
               <div>
-                <span style={{ color: "#888" }}>Batch Size: </span>
+                <span style={{ color: "var(--text-muted)" }}>Batch Size: </span>
                 <span style={{ color: "var(--text)" }}>{fleet.rolloutConfig.batchSize}</span>
               </div>
             )}
             {fleet.rolloutConfig.batchPercent != null && (
               <div>
-                <span style={{ color: "#888" }}>Batch %: </span>
+                <span style={{ color: "var(--text-muted)" }}>Batch %: </span>
                 <span style={{ color: "var(--text)" }}>{fleet.rolloutConfig.batchPercent}%</span>
               </div>
             )}
             <div>
-              <span style={{ color: "#888" }}>Halt on: </span>
+              <span style={{ color: "var(--text-muted)" }}>Halt on: </span>
               <span style={{ color: "var(--text)" }}>{fleet.rolloutConfig.haltOnFailureCount} failure(s)</span>
             </div>
             <div>
-              <span style={{ color: "#888" }}>Health wait: </span>
+              <span style={{ color: "var(--text-muted)" }}>Health wait: </span>
               <span style={{ color: "var(--text)" }}>{fleet.rolloutConfig.healthCheckWaitMs}ms</span>
             </div>
             <div>
-              <span style={{ color: "#888" }}>Pause between: </span>
+              <span style={{ color: "var(--text-muted)" }}>Pause between: </span>
               <span style={{ color: "var(--text)" }}>{fleet.rolloutConfig.pauseBetweenBatches ? "Yes" : "No"}</span>
             </div>
           </div>
@@ -234,7 +234,7 @@ export default function FleetDeploymentPanel({ fleetDeploymentId, title }: Props
         {/* Per-envoy status table */}
         {fleet.validationResult && fleet.validationResult.results.length > 0 && (
           <div style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: "#aaa", marginBottom: 8 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", marginBottom: 8 }}>
               Envoy Status ({fleet.validationResult.validated}/{fleet.validationResult.total} validated)
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
@@ -247,9 +247,9 @@ export default function FleetDeploymentPanel({ fleetDeploymentId, title }: Props
                     gap: 10,
                     padding: "8px 12px",
                     background: result.validated
-                      ? "rgba(16,185,129,0.04)"
-                      : "rgba(220,38,38,0.04)",
-                    border: `1px solid ${result.validated ? "rgba(16,185,129,0.15)" : "rgba(220,38,38,0.15)"}`,
+                      ? "color-mix(in srgb, var(--status-succeeded) 4%, transparent)"
+                      : "color-mix(in srgb, var(--status-failed) 4%, transparent)",
+                    border: `1px solid ${result.validated ? "color-mix(in srgb, var(--status-succeeded) 15%, transparent)" : "color-mix(in srgb, var(--status-failed) 15%, transparent)"}`,
                     borderRadius: 6,
                     fontSize: 12,
                   }}
@@ -265,7 +265,7 @@ export default function FleetDeploymentPanel({ fleetDeploymentId, title }: Props
                   />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <span style={{ fontWeight: 600, color: "var(--text)" }}>{result.envoyName}</span>
-                    <span style={{ color: "#888", marginLeft: 6, fontFamily: "monospace", fontSize: 10 }}>
+                    <span style={{ color: "var(--text-muted)", marginLeft: 6, fontFamily: "monospace", fontSize: 10 }}>
                       {result.envoyId.slice(0, 8)}
                     </span>
                   </div>
@@ -303,7 +303,7 @@ export default function FleetDeploymentPanel({ fleetDeploymentId, title }: Props
               onClick={() => handleAction(() => approveFleetDeployment(fleet.id))}
               style={{
                 background: "var(--accent)",
-                color: "#fff",
+                color: "var(--bg)",
                 border: "none",
                 borderRadius: 6,
                 padding: "8px 16px",
@@ -324,7 +324,7 @@ export default function FleetDeploymentPanel({ fleetDeploymentId, title }: Props
               onClick={() => handleAction(() => executeFleetDeployment(fleet.id))}
               style={{
                 background: "var(--status-succeeded)",
-                color: "#fff",
+                color: "var(--bg)",
                 border: "none",
                 borderRadius: 6,
                 padding: "8px 16px",
@@ -346,7 +346,7 @@ export default function FleetDeploymentPanel({ fleetDeploymentId, title }: Props
               style={{
                 background: "transparent",
                 color: "var(--status-warning)",
-                border: "1px solid #ca8a04",
+                border: "1px solid var(--status-warning)",
                 borderRadius: 6,
                 padding: "8px 16px",
                 fontSize: 13,
@@ -366,8 +366,8 @@ export default function FleetDeploymentPanel({ fleetDeploymentId, title }: Props
             style={{
               marginTop: 12,
               padding: "8px 12px",
-              background: "rgba(220,38,38,0.08)",
-              border: "1px solid rgba(220,38,38,0.2)",
+              background: "color-mix(in srgb, var(--status-failed) 8%, transparent)",
+              border: "1px solid color-mix(in srgb, var(--status-failed) 20%, transparent)",
               borderRadius: 6,
               color: "var(--status-failed)",
               fontSize: 12,

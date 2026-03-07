@@ -15,19 +15,19 @@ const SEVERITY_CONFIG: Record<string, { color: string; bg: string; border: strin
   critical: {
     color: "var(--status-failed)",
     bg: "var(--status-failed-bg)",
-    border: "rgba(220, 38, 38, 0.3)",
+    border: "color-mix(in srgb, var(--status-failed) 30%, transparent)",
     label: "CRITICAL",
   },
   warning: {
     color: "var(--status-warning)",
-    bg: "rgba(245, 158, 11, 0.1)",
-    border: "rgba(245, 158, 11, 0.3)",
+    bg: "color-mix(in srgb, var(--status-warning) 10%, transparent)",
+    border: "color-mix(in srgb, var(--status-warning) 30%, transparent)",
     label: "WARNING",
   },
   info: {
     color: "var(--status-running)",
     bg: "var(--status-running-bg)",
-    border: "rgba(37, 99, 235, 0.3)",
+    border: "color-mix(in srgb, var(--accent) 30%, transparent)",
     label: "INFO",
   },
 };

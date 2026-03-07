@@ -128,7 +128,7 @@ export default function DebriefEntryCard({ entry }: { entry: DebriefEntry }) {
         <>
           <div className="debrief-entry-reasoning">{entry.reasoning}</div>
           {formatContext(entry.context) && (
-            <div className="debrief-entry-context" style={{ whiteSpace: "pre-line", fontSize: 12, lineHeight: 1.5, color: "var(--text-secondary, #9ca3af)", marginTop: 8, padding: "8px 12px", background: "var(--bg-secondary, rgba(0,0,0,0.2))", borderRadius: 6 }}>
+            <div className="debrief-entry-context" style={{ whiteSpace: "pre-line", fontSize: 12, lineHeight: 1.5, color: "var(--text-secondary)", marginTop: 8, padding: "8px 12px", background: "var(--surface-alt)", borderRadius: 6 }}>
               {formatContext(entry.context)}
             </div>
           )}

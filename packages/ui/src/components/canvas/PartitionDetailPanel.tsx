@@ -57,6 +57,13 @@ export default function PartitionDetailPanel({ partitionId, title }: Props) {
   if (!partition) return <CanvasPanelHost title={title}><div className="error-msg">Partition not found</div></CanvasPanelHost>;
 
   const vars = Object.entries(partition?.variables ?? {});
+  // Build set of variable keys that exist in parent environments (inherited/scoped)
+  const envVarKeys = new Set<string>();
+  for (const env of (environments ?? [])) {
+    for (const key of Object.keys(env.variables ?? {})) {
+      envVarKeys.add(key);
+    }
+  }
   const depsList = deployments ?? [];
   const sortedDeploys = [...depsList].sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
@@ -237,42 +244,51 @@ export default function PartitionDetailPanel({ partitionId, title }: Props) {
                 <div style={{ flex: 2 }}>Value</div>
                 <div style={{ width: 50 }} />
               </div>
-              {vars.map(([k, v]) => (
-                <div key={k} className="v2-variables-table-row" style={{ display: "flex", alignItems: "center" }}>
-                  <div className="v2-var-key" style={{ flex: 1 }}>{k}</div>
-                  {editingKey === k ? (
-                    <>
-                      <input
-                        value={editValue}
-                        onChange={(e) => setEditValue(e.target.value)}
-                        onKeyDown={(e) => e.key === "Enter" && saveVariable(k, editValue)}
-                        autoFocus
-                        style={{ flex: 2, fontSize: 12, padding: "2px 6px", borderRadius: 4, border: "1px solid var(--accent-border)", background: "var(--input-bg)", color: "var(--text)", fontFamily: "var(--font-mono)" }}
-                      />
-                      <button style={{ background: "none", border: "none", color: "var(--accent)", cursor: "pointer", fontSize: 11, marginLeft: 4 }} disabled={varSaving} onClick={() => saveVariable(k, editValue)}>Save</button>
-                      <button style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: 11 }} onClick={() => setEditingKey(null)}>Cancel</button>
-                    </>
-                  ) : (
-                    <>
-                      <div className="v2-var-value" style={{ flex: 2 }}>{v}</div>
-                      <button
-                        style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: 12, padding: "0 4px" }}
-                        title="Edit"
-                        onClick={() => { setEditingKey(k); setEditValue(v); }}
-                      >
-                        ✎
-                      </button>
-                      <button
-                        style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: 12, padding: "0 4px" }}
-                        title="Delete"
-                        onClick={() => deleteVariable(k)}
-                      >
-                        ✕
-                      </button>
-                    </>
-                  )}
-                </div>
-              ))}
+              {vars.map(([k, v]) => {
+                const isScoped = envVarKeys.has(k);
+                return (
+                  <div key={k} className="v2-variables-table-row" style={{ display: "flex", alignItems: "center" }}>
+                    <div className="v2-var-key" style={{ flex: 1 }}>{k}</div>
+                    {editingKey === k && !isScoped ? (
+                      <>
+                        <input
+                          value={editValue}
+                          onChange={(e) => setEditValue(e.target.value)}
+                          onKeyDown={(e) => e.key === "Enter" && saveVariable(k, editValue)}
+                          autoFocus
+                          style={{ flex: 2, fontSize: 12, padding: "2px 6px", borderRadius: 4, border: "1px solid var(--accent-border)", background: "var(--input-bg)", color: "var(--text)", fontFamily: "var(--font-mono)" }}
+                        />
+                        <button style={{ background: "none", border: "none", color: "var(--accent)", cursor: "pointer", fontSize: 11, marginLeft: 4 }} disabled={varSaving} onClick={() => saveVariable(k, editValue)}>Save</button>
+                        <button style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: 11 }} onClick={() => setEditingKey(null)}>Cancel</button>
+                      </>
+                    ) : (
+                      <>
+                        <div className="v2-var-value" style={{ flex: 2 }}>{v}</div>
+                        {isScoped ? (
+                          <span style={{ fontSize: 10, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.04em", padding: "1px 6px", borderRadius: 3, background: "var(--surface-alt)" }}>scoped</span>
+                        ) : (
+                          <>
+                            <button
+                              style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: 12, padding: "0 4px" }}
+                              title="Edit"
+                              onClick={() => { setEditingKey(k); setEditValue(v); }}
+                            >
+                              ✎
+                            </button>
+                            <button
+                              style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: 12, padding: "0 4px" }}
+                              title="Delete"
+                              onClick={() => deleteVariable(k)}
+                            >
+                              ✕
+                            </button>
+                          </>
+                        )}
+                      </>
+                    )}
+                  </div>
+                );
+              })}
               {vars.length === 0 && !addingVar && (
                 <div className="v2-empty-hint" style={{ padding: 16 }}>No variables configured</div>
               )}

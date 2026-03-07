@@ -193,7 +193,7 @@ function GraphListView({ title }: { title: string }) {
         />
 
         {(graphs ?? []).length === 0 && (
-          <div style={{ color: "#666", fontSize: 13, padding: "16px 0" }}>
+          <div style={{ color: "var(--text-muted)", fontSize: 13, padding: "16px 0" }}>
             No deployment graphs created yet. Create one via the API.
           </div>
         )}
@@ -202,8 +202,8 @@ function GraphListView({ title }: { title: string }) {
           <div
             key={g.id}
             style={{
-              background: "rgba(139,92,246,0.04)",
-              border: "1px solid rgba(139,92,246,0.15)",
+              background: "color-mix(in srgb, var(--accent) 4%, transparent)",
+              border: "1px solid color-mix(in srgb, var(--accent) 15%, transparent)",
               borderRadius: 8,
               padding: "12px 16px",
               marginBottom: 8,
@@ -213,7 +213,7 @@ function GraphListView({ title }: { title: string }) {
               <span style={{ fontWeight: 600, fontSize: 14 }}>{g.name}</span>
               <StatusBadge status={g.status} />
             </div>
-            <div style={{ fontSize: 11, color: "#666", marginTop: 4 }}>
+            <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>
               {g.nodes.length} node{g.nodes.length !== 1 ? "s" : ""} ·{" "}
               {g.edges.length} edge{g.edges.length !== 1 ? "s" : ""} ·{" "}
               {g.approvalMode} approval ·{" "}
@@ -416,7 +416,7 @@ function GraphDetailView({ title, graphId }: { title: string; graphId: string })
         <div style={{ marginBottom: 16 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
             <StatusBadge status={graph.status} />
-            <span style={{ fontSize: 12, color: "#888" }}>
+            <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
               Updated {new Date(graph.updatedAt).toLocaleString()}
             </span>
 
@@ -425,8 +425,8 @@ function GraphDetailView({ title, graphId }: { title: string; graphId: string })
                 onClick={handleToggleEdit}
                 style={{
                   marginLeft: "auto", fontSize: 11, padding: "2px 10px",
-                  borderRadius: 4, border: `1px solid ${editMode ? "#dc262640" : "#8b5cf640"}`,
-                  background: editMode ? "#dc262615" : "#8b5cf615",
+                  borderRadius: 4, border: `1px solid ${editMode ? "color-mix(in srgb, var(--status-failed) 25%, transparent)" : "color-mix(in srgb, var(--accent) 25%, transparent)"}`,
+                  background: editMode ? "color-mix(in srgb, var(--status-failed) 8%, transparent)" : "color-mix(in srgb, var(--accent) 8%, transparent)",
                   color: editMode ? "var(--status-failed)" : "var(--accent)",
                   cursor: "pointer",
                 }}
@@ -441,8 +441,8 @@ function GraphDetailView({ title, graphId }: { title: string; graphId: string })
                 onClick={handleApproveRemaining}
                 style={{
                   marginLeft: canEdit ? 0 : "auto", fontSize: 11, padding: "2px 10px",
-                  borderRadius: 4, border: "1px solid #16a34a40",
-                  background: "#16a34a15", color: "var(--status-succeeded)", cursor: "pointer",
+                  borderRadius: 4, border: "1px solid color-mix(in srgb, var(--status-succeeded) 25%, transparent)",
+                  background: "color-mix(in srgb, var(--status-succeeded) 8%, transparent)", color: "var(--status-succeeded)", cursor: "pointer",
                 }}
               >
                 Approve Remaining
@@ -455,7 +455,7 @@ function GraphDetailView({ title, graphId }: { title: string; graphId: string })
               onClick={handleSaveEdits}
               style={{
                 fontSize: 12, padding: "4px 16px", borderRadius: 4,
-                border: "1px solid #16a34a40", background: "#16a34a20",
+                border: "1px solid color-mix(in srgb, var(--status-succeeded) 25%, transparent)", background: "color-mix(in srgb, var(--status-succeeded) 12%, transparent)",
                 color: "var(--status-succeeded)", cursor: "pointer", marginBottom: 8,
               }}
             >
@@ -474,14 +474,14 @@ function GraphDetailView({ title, graphId }: { title: string; graphId: string })
         </div>
 
         {actionError && (
-          <div style={{ color: "var(--status-failed)", fontSize: 12, marginBottom: 8, padding: "6px 10px", background: "#dc262610", borderRadius: 6 }}>
+          <div style={{ color: "var(--status-failed)", fontSize: 12, marginBottom: 8, padding: "6px 10px", background: "color-mix(in srgb, var(--status-failed) 6%, transparent)", borderRadius: 6 }}>
             {actionError}
           </div>
         )}
 
         {/* Nodes */}
         <div style={{ marginBottom: 20 }}>
-          <h4 style={{ fontSize: 13, fontWeight: 600, color: "#aaa", marginBottom: 8, textTransform: "uppercase", letterSpacing: 1 }}>
+          <h4 style={{ fontSize: 13, fontWeight: 600, color: "var(--text-muted)", marginBottom: 8, textTransform: "uppercase", letterSpacing: 1 }}>
             Nodes ({graph.nodes.length})
           </h4>
 
@@ -491,8 +491,8 @@ function GraphDetailView({ title, graphId }: { title: string; graphId: string })
               <div
                 key={node.id}
                 style={{
-                  background: "rgba(139,92,246,0.03)",
-                  border: "1px solid rgba(139,92,246,0.12)",
+                  background: "color-mix(in srgb, var(--accent) 3%, transparent)",
+                  border: "1px solid color-mix(in srgb, var(--accent) 12%, transparent)",
                   borderRadius: 8,
                   padding: "10px 14px",
                   marginBottom: 6,
@@ -501,7 +501,7 @@ function GraphDetailView({ title, graphId }: { title: string; graphId: string })
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <span style={{
                     width: 22, height: 22, borderRadius: "50%",
-                    background: "rgba(139,92,246,0.15)", color: "var(--accent)",
+                    background: "color-mix(in srgb, var(--accent) 15%, transparent)", color: "var(--accent)",
                     display: "flex", alignItems: "center", justifyContent: "center",
                     fontSize: 11, fontWeight: 700, flexShrink: 0,
                   }}>
@@ -510,7 +510,7 @@ function GraphDetailView({ title, graphId }: { title: string; graphId: string })
                   <span style={{ fontWeight: 600, fontSize: 13 }}>
                     {node.artifactName ?? node.artifactId}
                   </span>
-                  <span style={{ fontSize: 11, color: "#888" }}>
+                  <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
                     {node.envoyName ?? node.envoyId}
                   </span>
                   <StatusBadge status={node.status} />
@@ -534,8 +534,8 @@ function GraphDetailView({ title, graphId }: { title: string; graphId: string })
                         onClick={() => handleRetryNode(node.id)}
                         style={{
                           fontSize: 11, padding: "2px 10px",
-                          borderRadius: 4, border: "1px solid #2563eb40",
-                          background: "#2563eb15", color: "var(--accent)", cursor: "pointer",
+                          borderRadius: 4, border: "1px solid color-mix(in srgb, var(--accent) 25%, transparent)",
+                          background: "color-mix(in srgb, var(--accent) 8%, transparent)", color: "var(--accent)", cursor: "pointer",
                         }}
                       >
                         Retry
@@ -544,8 +544,8 @@ function GraphDetailView({ title, graphId }: { title: string; graphId: string })
                         onClick={() => handleSkipNode(node.id)}
                         style={{
                           fontSize: 11, padding: "2px 10px",
-                          borderRadius: 4, border: "1px solid #ca8a0440",
-                          background: "#ca8a0415", color: "var(--status-warning)", cursor: "pointer",
+                          borderRadius: 4, border: "1px solid color-mix(in srgb, var(--status-warning) 25%, transparent)",
+                          background: "color-mix(in srgb, var(--status-warning) 8%, transparent)", color: "var(--status-warning)", cursor: "pointer",
                         }}
                       >
                         Skip
@@ -558,7 +558,7 @@ function GraphDetailView({ title, graphId }: { title: string; graphId: string })
                 {node.inputBindings && node.inputBindings.length > 0 && (
                   <div style={{ marginTop: 6, paddingLeft: 30 }}>
                     {node.inputBindings.map((b, i) => (
-                      <div key={i} style={{ fontSize: 11, color: "#888" }}>
+                      <div key={i} style={{ fontSize: 11, color: "var(--text-muted)" }}>
                         Input: <code style={{ color: "var(--accent)" }}>${b.variable}</code>{" "}
                         from node {b.sourceNodeId.slice(0, 8)}...
                         {b.resolvedValue && (
@@ -573,7 +573,7 @@ function GraphDetailView({ title, graphId }: { title: string; graphId: string })
                 {node.outputBindings && node.outputBindings.length > 0 && (
                   <div style={{ marginTop: 4, paddingLeft: 30 }}>
                     {node.outputBindings.map((b, i) => (
-                      <div key={i} style={{ fontSize: 11, color: "#888" }}>
+                      <div key={i} style={{ fontSize: 11, color: "var(--text-muted)" }}>
                         Output: <code style={{ color: "var(--accent)" }}>{b.name}</code>{" "}
                         ({b.source})
                       </div>
@@ -646,7 +646,7 @@ function GraphDetailView({ title, graphId }: { title: string; graphId: string })
 
         {/* Edges */}
         <div style={{ marginBottom: 20 }}>
-          <h4 style={{ fontSize: 13, fontWeight: 600, color: "#aaa", marginBottom: 8, textTransform: "uppercase", letterSpacing: 1 }}>
+          <h4 style={{ fontSize: 13, fontWeight: 600, color: "var(--text-muted)", marginBottom: 8, textTransform: "uppercase", letterSpacing: 1 }}>
             Dependencies ({editMode ? editedEdges.length : graph.edges.length})
           </h4>
 
@@ -657,21 +657,21 @@ function GraphDetailView({ title, graphId }: { title: string; graphId: string })
               <div
                 key={i}
                 style={{
-                  fontSize: 12, color: "#999", padding: "4px 0",
+                  fontSize: 12, color: "var(--text-muted)", padding: "4px 0",
                   display: "flex", alignItems: "center", gap: 6,
                 }}
               >
-                <span style={{ fontWeight: 500, color: "#ccc" }}>
+                <span style={{ fontWeight: 500, color: "var(--text-secondary)" }}>
                   {fromNode?.artifactName ?? edge.from.slice(0, 8)}
                 </span>
                 <span style={{ color: edge.type === "data_flow" ? "var(--accent)" : "var(--accent)" }}>
                   {edge.type === "data_flow" ? "-- data -->" : "-- depends -->"}
                 </span>
-                <span style={{ fontWeight: 500, color: "#ccc" }}>
+                <span style={{ fontWeight: 500, color: "var(--text-secondary)" }}>
                   {toNode?.artifactName ?? edge.to.slice(0, 8)}
                 </span>
                 {edge.dataBinding && (
-                  <span style={{ fontSize: 10, color: "#666" }}>
+                  <span style={{ fontSize: 10, color: "var(--text-muted)" }}>
                     ({edge.dataBinding.outputName} {"->"} {"$"}{edge.dataBinding.inputVariable})
                   </span>
                 )}
@@ -680,8 +680,8 @@ function GraphDetailView({ title, graphId }: { title: string; graphId: string })
                     onClick={() => handleRemoveEdge(i)}
                     style={{
                       marginLeft: "auto", fontSize: 10, padding: "1px 6px",
-                      borderRadius: 3, border: "1px solid #dc262640",
-                      background: "#dc262610", color: "var(--status-failed)", cursor: "pointer",
+                      borderRadius: 3, border: "1px solid color-mix(in srgb, var(--status-failed) 25%, transparent)",
+                      background: "color-mix(in srgb, var(--status-failed) 6%, transparent)", color: "var(--status-failed)", cursor: "pointer",
                     }}
                   >
                     Remove
@@ -695,10 +695,10 @@ function GraphDetailView({ title, graphId }: { title: string; graphId: string })
           {editMode && (
             <div style={{
               marginTop: 8, padding: "8px 10px",
-              background: "rgba(139,92,246,0.04)", borderRadius: 6,
-              border: "1px solid rgba(139,92,246,0.1)",
+              background: "color-mix(in srgb, var(--accent) 4%, transparent)", borderRadius: 6,
+              border: "1px solid color-mix(in srgb, var(--accent) 10%, transparent)",
             }}>
-              <div style={{ fontSize: 11, fontWeight: 600, color: "#aaa", marginBottom: 6 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", marginBottom: 6 }}>
                 Add Edge
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 4, alignItems: "center" }}>
@@ -767,7 +767,8 @@ const inputStyle: React.CSSProperties = {
 function smallBtnStyle(color: string): React.CSSProperties {
   return {
     fontSize: 10, padding: "1px 8px", borderRadius: 3,
-    border: `1px solid ${color}40`, background: `${color}15`,
+    border: `1px solid color-mix(in srgb, ${color} 25%, transparent)`,
+    background: `color-mix(in srgb, ${color} 8%, transparent)`,
     color, cursor: "pointer",
   };
 }
@@ -784,8 +785,8 @@ function StatusBadge({ status }: { status: string }) {
         fontSize: 10,
         fontWeight: 600,
         color,
-        border: `1px solid ${color}30`,
-        background: `${color}12`,
+        border: `1px solid color-mix(in srgb, ${color} 19%, transparent)`,
+        background: `color-mix(in srgb, ${color} 7%, transparent)`,
         borderRadius: 10,
         padding: "1px 8px",
         textTransform: "uppercase",
@@ -815,14 +816,14 @@ function ProgressBar({
   return (
     <div>
       <div style={{
-        height: 6, borderRadius: 3, background: "#333", overflow: "hidden",
+        height: 6, borderRadius: 3, background: "var(--surface-alt)", overflow: "hidden",
         display: "flex", marginBottom: 4,
       }}>
         <div style={{ width: `${pctComplete}%`, background: "var(--status-succeeded)", transition: "width 0.3s" }} />
         <div style={{ width: `${pctExecuting}%`, background: "var(--accent)", transition: "width 0.3s" }} />
         <div style={{ width: `${pctFailed}%`, background: "var(--status-failed)", transition: "width 0.3s" }} />
       </div>
-      <div style={{ fontSize: 11, color: "#888" }}>
+      <div style={{ fontSize: 11, color: "var(--text-muted)" }}>
         {completed}/{total} completed
         {failed > 0 && <span style={{ color: "var(--status-failed)" }}> · {failed} failed</span>}
         {executing > 0 && <span style={{ color: "var(--accent)" }}> · {executing} executing</span>}

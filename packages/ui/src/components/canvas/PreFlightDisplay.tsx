@@ -131,8 +131,8 @@ export default function PreFlightDisplay({ artifactId, environmentId, partitionI
             padding: "8px 10px",
             borderRadius: 6,
             background: context.recentHistory.recentFailures > 0
-              ? "rgba(218, 54, 51, 0.08)"
-              : "rgba(255,255,255,0.04)",
+              ? "color-mix(in srgb, var(--status-failed) 8%, transparent)"
+              : "color-mix(in srgb, var(--text) 4%, transparent)",
             fontSize: 12,
           }}
         >
@@ -156,7 +156,7 @@ export default function PreFlightDisplay({ artifactId, environmentId, partitionI
               flex: 1,
               padding: "8px 10px",
               borderRadius: 6,
-              background: "rgba(210, 153, 34, 0.08)",
+              background: "color-mix(in srgb, var(--status-warning) 8%, transparent)",
               fontSize: 12,
             }}
           >
