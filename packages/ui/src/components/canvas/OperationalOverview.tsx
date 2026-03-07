@@ -21,7 +21,9 @@ import { useSettings } from "../../context/SettingsContext.js";
 import { useQuery } from "../../hooks/useQuery.js";
 import SectionHeader from "../SectionHeader.js";
 import SynthEye from "../SynthEye.js";
-import DeploymentParticles from "../DeploymentParticles.js";
+import SynthMark from "../SynthMark.js";
+import ConfidenceIndicator from "../ConfidenceIndicator.js";
+import StatusBadge from "../StatusBadge.js";
 
 // ---------------------------------------------------------------------------
 // Top-level state-driven router
@@ -495,766 +497,191 @@ function EmptyState({ onComplete }: { onComplete: () => void }) {
 }
 
 // ---------------------------------------------------------------------------
-// AlertState — leads with actionable signals, then shows NormalState below
+// AlertState — delegates to NormalState with signals passed through
 // ---------------------------------------------------------------------------
 
 function AlertState({ signals, stats }: { signals: AlertSignal[]; stats: SystemState["stats"] }) {
-  const { pushPanel } = useCanvas();
-
-  return (
-    <div className="v2-dashboard">
-      {/* Alert banner */}
-      <div style={{
-        background: "rgba(220, 38, 38, 0.08)",
-        border: "1px solid rgba(220, 38, 38, 0.25)",
-        borderRadius: 8,
-        padding: "16px",
-        marginBottom: 16,
-      }}>
-        <div style={{ fontWeight: 600, fontSize: 14, color: "#dc2626", marginBottom: 8 }}>
-          Attention Required
-        </div>
-        <div style={{ fontSize: 13, color: "var(--agent-text-muted)" }}>
-          {signals.length} signal{signals.length !== 1 ? "s" : ""} need review
-        </div>
-      </div>
-
-      {/* Signal cards — each clickable for drill-in */}
-      {signals.map((signal, i) => {
-        const severityColor = signal.severity === "critical" ? "#dc2626" : "#f59e0b";
-        return (
-          <div
-            key={i}
-            onClick={() => {
-              if (signal.relatedEntity) {
-                const type = signal.relatedEntity.type;
-                if (type === "environment") {
-                  pushPanel({ type: "environment-detail", title: signal.relatedEntity.name, params: { id: signal.relatedEntity.id } });
-                } else if (type === "deployment") {
-                  pushPanel({ type: "deployment-detail", title: "Deployment", params: { id: signal.relatedEntity.id } });
-                } else if (type === "envoy") {
-                  pushPanel({ type: "envoy-registry", title: "Envoys", params: {} });
-                }
-              }
-            }}
-            style={{
-              display: "flex", alignItems: "center", gap: 12,
-              padding: "12px 16px", borderRadius: 8,
-              border: `1px solid ${severityColor}30`,
-              background: `${severityColor}08`,
-              cursor: signal.relatedEntity ? "pointer" : "default",
-              marginBottom: 8,
-            }}
-          >
-            <span style={{
-              width: 8, height: 8, borderRadius: "50%",
-              background: severityColor, flexShrink: 0,
-            }} />
-            <div style={{ flex: 1 }}>
-              <div style={{ fontWeight: 600, fontSize: 13, color: "var(--agent-text)" }}>
-                {signal.title}
-              </div>
-              <div style={{ fontSize: 12, color: "var(--agent-text-muted)", marginTop: 2 }}>
-                {signal.detail}
-              </div>
-            </div>
-            {signal.relatedEntity && (
-              <span style={{ fontSize: 11, color: "var(--agent-text-muted)" }}>
-                {signal.relatedEntity.name} &rarr;
-              </span>
-            )}
-          </div>
-        );
-      })}
-
-      {/* Still show deployment authoring below signals */}
-      <div style={{ marginTop: 24 }}>
-        <NormalState stats={stats} />
-      </div>
-    </div>
-  );
+  return <NormalState stats={stats} signals={signals} />;
 }
 
 // ---------------------------------------------------------------------------
-// NormalState — artifact-centric dashboard
+// NormalState — v6 operational dashboard
 // ---------------------------------------------------------------------------
 
-function NormalState({ stats: _stats }: { stats: SystemState["stats"] }) {
+function NormalState({ stats: _stats, signals }: { stats: SystemState["stats"]; signals?: AlertSignal[] }) {
   const { pushPanel } = useCanvas();
-  const { settings } = useSettings();
-  const environmentsEnabled = settings?.environmentsEnabled ?? true;
 
-  const { data: _deployments, loading: l1 } = useQuery("list:deployments", listDeployments);
-  const { data: _partitions, loading: l2 } = useQuery("list:partitions", listPartitions);
-  const { data: _environments, loading: l3 } = useQuery("list:environments", listEnvironments);
-  const { data: _artifacts, loading: l4 } = useQuery("list:artifacts", listArtifacts);
-  const { data: _envoys, loading: l5 } = useQuery("list:envoys", () => listEnvoys().catch(() => [] as EnvoyRegistryEntry[]));
-  const { data: _debriefEntries, loading: l6 } = useQuery("dashboard:debrief", () => getRecentDebrief({ limit: 10 }));
+  const { data: _deployments } = useQuery("list:deployments", listDeployments);
+  const { data: _environments } = useQuery("list:environments", listEnvironments);
+  const { data: _artifacts } = useQuery("list:artifacts", listArtifacts);
+  const { data: _partitions } = useQuery("list:partitions", listPartitions);
   const { data: agentContext } = useQuery("dashboard:agentContext", () => getDeploymentContext().catch(() => null));
   const { data: _healthData } = useQuery("dashboard:health", () => getHealth().catch(() => null));
-  const loading = l1 || l2 || l3 || l4 || l5 || l6;
+  const { data: _debriefs } = useQuery("list:debriefs", () => getRecentDebrief({ limit: 50 }).catch(() => [] as DebriefEntry[]));
 
-  const commandStatus = _healthData ? "observing" : "observing";
-  const [signalsExpanded, setSignalsExpanded] = useState(false);
-  const [tick, setTick] = useState(0);
-
-  // Inline deployment authoring state
-  const [deployArtifactId, setDeployArtifactId] = useState("");
-  const [deployEnvId, setDeployEnvId] = useState("");
-  const [deployPartitionId, setDeployPartitionId] = useState("");
-  const [deployVersion, setDeployVersion] = useState("");
-  const [deploying, setDeploying] = useState(false);
-  const [deployError, setDeployError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const id = setInterval(() => setTick((t) => t + 1), 100);
-    return () => clearInterval(id);
-  }, []);
-
-  async function handleInlineDeploy() {
-    if (!deployArtifactId || (environmentsEnabled && !deployEnvId)) return;
-    setDeploying(true);
-    setDeployError(null);
-    try {
-      const result = await createDeployment({
-        artifactId: deployArtifactId,
-        environmentId: environmentsEnabled ? deployEnvId : undefined,
-        partitionId: deployPartitionId || undefined,
-        version: deployVersion.trim() || undefined,
-      });
-      setDeploying(false);
-      pushPanel({
-        type: "deployment-detail",
-        title: `Deployment ${result.deployment.version || result.deployment.id.slice(0, 8)}`,
-        params: { id: result.deployment.id },
-      });
-    } catch (e: unknown) {
-      setDeployError(e instanceof Error ? e.message : String(e));
-      setDeploying(false);
-    }
-  }
-
-  // Use safe defaults so the dashboard renders progressively as data arrives
   const deployments = _deployments ?? [];
-  const partitions = _partitions ?? [];
   const environments = _environments ?? [];
   const artifacts = _artifacts ?? [];
-  const envoys = _envoys ?? [];
-  const debriefEntries = _debriefEntries ?? [];
+  const partitions = _partitions ?? [];
+  const activeDeployments = deployments.filter((d) => d.status === "running" || d.status === "planning" || d.status === "approved" || d.status === "pending");
+  const debriefCount = (_debriefs ?? []).length;
 
-  const healthyEnvoyCount = envoys.filter((e) => e.health === "OK").length;
-
-  const activeDeployments = deployments.filter(
-    (d) => d.status === "running" || d.status === "pending",
-  );
-  const debriefCount = debriefEntries.length;
-
-  // Debrief status helpers
-  const debriefStatusIcons: Record<string, { icon: string; color: string; bg: string }> = {
-    complete: { icon: "\u2713", color: "#34d399", bg: "rgba(52,211,153,0.1)" },
-    escalated: { icon: "\u2191", color: "#f87171", bg: "rgba(248,113,113,0.1)" },
-    decision: { icon: "\u25C6", color: "#63e1be", bg: "rgba(99,225,190,0.1)" },
-  };
-
-  function getDebriefStatus(entry: DebriefEntry): string {
-    if (entry.decisionType === "deployment-failure" || entry.decisionType === "diagnostic-investigation") return "escalated";
-    if (entry.decisionType === "deployment-completion") return "complete";
-    return "decision";
-  }
-
-  function getDebriefRouting(entry: DebriefEntry): string {
-    if (entry.decisionType === "deployment-failure") return "\u2192 Synth";
-    if (entry.decisionType === "deployment-completion") return "filed";
-    return "held";
+  // Time-ago helper
+  function timeAgo(dateStr: string): string {
+    const diff = Date.now() - new Date(dateStr).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return "just now";
+    if (mins < 60) return `${mins}m ago`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    return `${days}d ago`;
   }
 
   return (
-    <div className="v2-dashboard">
-      <div className="v2-breadcrumb">
-        {settings?.coBranding ? (
-          <span className="v2-breadcrumb-logo v2-cobranding-logo">
-            <img
-              src={settings.coBranding.logoUrl}
-              alt={settings.coBranding.operatorName}
-              className="v2-cobranding-img"
-            />
-            <span
-              className="v2-cobranding-name"
-              style={settings.coBranding.accentColor ? { color: settings.coBranding.accentColor } : undefined}
-            >
-              {settings.coBranding.operatorName}
-            </span>
-            <span className="v2-cobranding-powered-by">by Synth</span>
-          </span>
-        ) : (
-          <span className="v2-breadcrumb-logo">Synth</span>
-        )}
-      </div>
+    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
 
-      {/* Synth status card */}
-      <div className="v2-synth-card">
-        <div className="v2-synth-card-glow" />
-        <div className="v2-synth-card-content">
-          <SynthEye />
-          <div className="v2-synth-info">
-            <div className="v2-synth-title-row">
-              <span className="v2-synth-label">Synth</span>
-              <div className="v2-synth-status-badge">
-                <span>{commandStatus.toUpperCase()}</span>
-              </div>
+      {/* --- Synth Assessment Card --- */}
+      <div className="synth-assessment-card">
+        <div className="synth-assessment-header">
+          <SynthMark size={28} active />
+          <div>
+            <div className="synth-assessment-title">Synth Assessment</div>
+            <div className="synth-assessment-subtitle">
+              Monitoring {artifacts.length} Artifacts · {environments.length} Environments · {partitions.length} Partitions
             </div>
-            <div className="v2-synth-subtitle">
-              Monitoring {artifacts.length} Artifacts &middot; {environments.length} Environments &middot; {partitions.length} Partitions
-            </div>
-            <div className="v2-synth-stats">
-              <div className="v2-synth-stat">
-                <span className="v2-synth-stat-value">{debriefCount}</span>
-                <span className="v2-synth-stat-label">Decisions today</span>
-              </div>
-              <div className="v2-synth-stat">
-                <span className="v2-synth-stat-value">{activeDeployments.length}</span>
-                <span className="v2-synth-stat-label">Active deploys</span>
-              </div>
-              <div className="v2-synth-stat">
-                <span className="v2-synth-stat-value">{agentContext?.signals.filter((s) => s.severity === "critical").length ?? 0}</span>
-                <span className="v2-synth-stat-label">Escalations</span>
-              </div>
-            </div>
+          </div>
+        </div>
+        <div className="synth-assessment-stats">
+          <div className="stat-card">
+            <span className="stat-card-value">{debriefCount}</span>
+            <span className="stat-card-label">Decisions today</span>
+          </div>
+          <div className="stat-card">
+            <span className="stat-card-value">{activeDeployments.length}</span>
+            <span className="stat-card-label">Active deploys</span>
+          </div>
+          <div className="stat-card">
+            <span className="stat-card-value">{agentContext?.signals.filter((s) => s.severity === "critical").length ?? 0}</span>
+            <span className="stat-card-label">Escalations</span>
           </div>
         </div>
       </div>
 
-      {/* Active signals section — collapsible */}
-      {agentContext && agentContext.signals.length > 0 && (
-        <>
-          <div
-            className="v2-signals-collapse-header"
-            onClick={() => setSignalsExpanded(!signalsExpanded)}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-              padding: "10px 16px",
-              cursor: "pointer",
-              borderRadius: 8,
-              border: "1px solid var(--agent-border)",
-              background: "var(--agent-card-bg)",
-              marginBottom: signalsExpanded ? 8 : 0,
-              userSelect: "none",
-            }}
-          >
-            <span style={{
-              width: 8, height: 8, borderRadius: "50%",
-              background: agentContext.signals.some(s => s.severity === "critical") ? "#dc2626"
-                : agentContext.signals.some(s => s.severity === "warning") ? "#f59e0b" : "#2563eb",
-              flexShrink: 0,
-            }} />
-            <span style={{ fontWeight: 600, fontSize: 13, color: "var(--agent-text)" }}>
-              Active Signals
-            </span>
-            <span style={{
-              fontSize: 11, fontWeight: 600, color: "var(--agent-text-muted)",
-              background: "rgba(255,255,255,0.06)", padding: "2px 8px", borderRadius: 10,
-            }}>
-              {agentContext.signals.length}
-            </span>
-            <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--agent-text-muted)" }}>
-              {signalsExpanded ? "\u25B2" : "\u25BC"}
-            </span>
-          </div>
-          {signalsExpanded && (
-            <div className="v2-signals-list" style={{ gap: 4 }}>
-              {agentContext.signals.map((signal, i) => {
-                const severityColor =
-                  signal.severity === "critical" ? "#dc2626"
-                  : signal.severity === "warning" ? "#f59e0b"
-                  : "#2563eb";
-                return (
-                  <div
-                    key={i}
-                    className={`v2-signal-compact v2-signal-${signal.severity}`}
-                    onClick={() =>
-                      pushPanel({
-                        type: "signal-detail",
-                        title: signal.title,
-                        params: { signal: JSON.stringify(signal) },
-                      })
-                    }
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 10,
-                      padding: "8px 12px",
-                      borderRadius: 6,
-                      border: "1px solid var(--agent-border)",
-                      background: "var(--agent-card-bg)",
-                      cursor: "pointer",
-                      fontSize: 13,
-                    }}
-                  >
-                    <span style={{
-                      width: 6, height: 6, borderRadius: "50%",
-                      background: severityColor, flexShrink: 0,
-                    }} />
-                    <span style={{ fontWeight: 500, color: "var(--agent-text)", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {signal.title}
-                    </span>
-                    {signal.relatedEntity && (
-                      <span style={{ fontSize: 11, color: "var(--agent-text-muted)", flexShrink: 0 }}>
-                        {signal.relatedEntity.name}
-                      </span>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </>
+      {/* --- Active Signals --- */}
+      {signals && signals.length > 0 && (
+        <div style={{ marginBottom: 16 }}>
+          <div className="v6-section-label" style={{ marginBottom: 8 }}>Active Signals</div>
+          {signals.map((signal, i) => (
+            <button
+              key={i}
+              className="canvas-activity-row"
+              style={{ borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 10 }}
+              onClick={() => {
+                if (signal.relatedEntity) {
+                  const type = signal.relatedEntity.type;
+                  if (type === "environment") pushPanel({ type: "environment-detail", title: signal.relatedEntity.name, params: { id: signal.relatedEntity.id } });
+                  else if (type === "deployment") pushPanel({ type: "deployment-detail", title: "Deployment", params: { id: signal.relatedEntity.id } });
+                  else if (type === "envoy") pushPanel({ type: "envoy-registry", title: "Envoys", params: {} });
+                }
+              }}
+            >
+              <span className="status-pip" style={{ background: signal.severity === "critical" ? "var(--status-failed)" : "var(--status-warning)" }} />
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 500, fontSize: 13, color: "var(--text)" }}>{signal.title}</div>
+                <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>{signal.detail}</div>
+              </div>
+            </button>
+          ))}
+        </div>
       )}
 
-      {/* Inline Deployment Authoring — front and center */}
-      <div style={{
-        border: "1px solid rgba(99, 225, 190, 0.2)",
-        borderRadius: 10,
-        padding: 20,
-        background: "rgba(99, 225, 190, 0.03)",
-        marginBottom: 16,
-      }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-          <div>
-            <div style={{ fontWeight: 700, fontSize: 15, color: "var(--agent-text)" }}>Deploy</div>
-            <div style={{ fontSize: 12, color: "var(--agent-text-muted)" }}>
-              Select what and where &mdash; Synth handles the rest
-            </div>
-          </div>
-          <button
-            className="btn btn-secondary"
-            onClick={() => pushPanel({ type: "deployment-authoring", title: "Deploy", params: {} })}
-            style={{ fontSize: 11 }}
-          >
-            Full View
-          </button>
-        </div>
-
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}>
-          {/* Artifact */}
-          <div style={{ flex: "1 1 180px", minWidth: 0 }}>
-            <label style={{ fontSize: 11, fontWeight: 600, color: "var(--agent-text-muted)", display: "block", marginBottom: 3 }}>
-              Artifact
-            </label>
-            <select
-              value={deployArtifactId}
-              onChange={(e) => setDeployArtifactId(e.target.value)}
-              style={{ width: "100%", fontSize: 13, padding: "6px 8px", borderRadius: 6, border: "1px solid var(--agent-border)", background: "var(--agent-bg)", color: "var(--agent-text)" }}
-            >
-              <option value="">Select...</option>
-              {artifacts.map((art) => (
-                <option key={art.id} value={art.id}>
-                  {art.name} ({art.type})
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Environment */}
-          {environmentsEnabled && (
-            <div style={{ flex: "1 1 160px", minWidth: 0 }}>
-              <label style={{ fontSize: 11, fontWeight: 600, color: "var(--agent-text-muted)", display: "block", marginBottom: 3 }}>
-                Environment
-              </label>
-              <select
-                value={deployEnvId}
-                onChange={(e) => setDeployEnvId(e.target.value)}
-                style={{ width: "100%", fontSize: 13, padding: "6px 8px", borderRadius: 6, border: "1px solid var(--agent-border)", background: "var(--agent-bg)", color: "var(--agent-text)" }}
-              >
-                <option value="">Select...</option>
-                {environments.map((env) => (
-                  <option key={env.id} value={env.id}>{env.name}</option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          {/* Partition (optional) */}
-          {partitions.length > 0 && (
-            <div style={{ flex: "1 1 140px", minWidth: 0 }}>
-              <label style={{ fontSize: 11, fontWeight: 600, color: "var(--agent-text-muted)", display: "block", marginBottom: 3 }}>
-                Partition
-              </label>
-              <select
-                value={deployPartitionId}
-                onChange={(e) => setDeployPartitionId(e.target.value)}
-                style={{ width: "100%", fontSize: 13, padding: "6px 8px", borderRadius: 6, border: "1px solid var(--agent-border)", background: "var(--agent-bg)", color: "var(--agent-text)" }}
-              >
-                <option value="">None</option>
-                {partitions.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          {/* Version */}
-          <div style={{ flex: "0 1 110px", minWidth: 0 }}>
-            <label style={{ fontSize: 11, fontWeight: 600, color: "var(--agent-text-muted)", display: "block", marginBottom: 3 }}>
-              Version
-            </label>
-            <input
-              placeholder="1.0.0"
-              value={deployVersion}
-              onChange={(e) => setDeployVersion(e.target.value)}
-              style={{ width: "100%", fontSize: 13, padding: "6px 8px", borderRadius: 6, border: "1px solid var(--agent-border)", background: "var(--agent-bg)", color: "var(--agent-text)" }}
-            />
-          </div>
-
-          {/* Deploy button */}
-          <button
-            className="btn btn-primary"
-            onClick={handleInlineDeploy}
-            disabled={deploying || !deployArtifactId || (environmentsEnabled && !deployEnvId)}
-            style={{ flexShrink: 0, whiteSpace: "nowrap" }}
-          >
-            {deploying ? "Deploying..." : "Deploy"}
-          </button>
-        </div>
-
-        {/* Selected artifact analysis preview */}
-        {deployArtifactId && (() => {
-          const art = artifacts.find((a) => a.id === deployArtifactId);
-          return art?.analysis.summary ? (
-            <div style={{ fontSize: 12, color: "var(--agent-text-muted)", marginTop: 8, padding: "6px 10px", background: "rgba(255,255,255,0.03)", borderRadius: 6, borderLeft: "2px solid rgba(99,225,190,0.3)" }}>
-              {art.analysis.summary}
-            </div>
-          ) : null;
-        })()}
-
-        {deployError && <div style={{ color: "#dc2626", fontSize: 12, marginTop: 8 }}>{deployError}</div>}
-      </div>
-
-      {/* Recent Deployments */}
+      {/* --- Recent Deployments Table --- */}
       {deployments.length > 0 && (() => {
         const recentDeploys = [...deployments]
           .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
           .slice(0, 8);
         return (
-          <>
-            <SectionHeader
-              color="#f59e0b"
-              shape="square"
-              label="Recent Deployments"
-              subtitle="latest activity"
-              count={deployments.length}
-              onClick={() => pushPanel({ type: "deployment-list", title: "Deployments", params: {} })}
-            />
-            <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 16 }}>
-              {recentDeploys.map((d) => {
-                const artName = artifacts.find((a) => a.id === d.artifactId)?.name ?? d.artifactId.slice(0, 8);
-                const envName = environments.find((e) => e.id === d.environmentId)?.name ?? d.environmentId.slice(0, 8);
-                return (
-                  <div
-                    key={d.id}
-                    onClick={() => pushPanel({
-                      type: "deployment-detail",
-                      title: `Deployment ${d.version}`,
-                      params: { id: d.id },
-                    })}
-                    style={{
-                      display: "flex", alignItems: "center", gap: 10,
-                      padding: "8px 12px", borderRadius: 6,
-                      border: "1px solid var(--agent-border)", background: "var(--agent-card-bg)",
-                      cursor: "pointer", fontSize: 13,
-                    }}
-                  >
-                    <span className={`badge badge-${d.status}`} style={{ fontSize: 10 }}>{d.status}</span>
-                    <span style={{ fontWeight: 500, color: "var(--agent-text)" }}>{artName}</span>
-                    <span style={{ color: "var(--agent-text-muted)" }}>v{d.version}</span>
-                    <span style={{ color: "var(--agent-text-muted)", fontSize: 11 }}>&rarr; {envName}</span>
-                    <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--agent-text-muted)" }}>
-                      {new Date(d.createdAt).toLocaleString()}
-                    </span>
-                  </div>
-                );
-              })}
+          <div>
+            <div
+              className="section-label"
+              style={{
+                fontFamily: "var(--font-mono)",
+                fontSize: 11,
+                fontWeight: 600,
+                letterSpacing: "0.05em",
+                color: "var(--text-muted)",
+                textTransform: "uppercase",
+                marginBottom: 10,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+              }}
+            >
+              <span>Recent Deployments</span>
+              <button
+                className="btn btn-secondary"
+                style={{ fontSize: 11, padding: "3px 10px", textTransform: "none", letterSpacing: "normal", fontWeight: 500 }}
+                onClick={() => pushPanel({ type: "deployment-list", title: "Deployments", params: {} })}
+              >
+                View All
+              </button>
             </div>
-          </>
+            <div
+              style={{
+                border: "1px solid var(--border)",
+                borderRadius: 8,
+                overflow: "hidden",
+              }}
+            >
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                <thead>
+                  <tr style={{ borderBottom: "1px solid var(--border)" }}>
+                    <th style={{ textAlign: "left", padding: "8px 12px", fontWeight: 600, fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)", textTransform: "uppercase", letterSpacing: "0.04em" }}>Artifact</th>
+                    <th style={{ textAlign: "left", padding: "8px 12px", fontWeight: 600, fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)", textTransform: "uppercase", letterSpacing: "0.04em" }}>Version</th>
+                    <th style={{ textAlign: "left", padding: "8px 12px", fontWeight: 600, fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)", textTransform: "uppercase", letterSpacing: "0.04em" }}>Target</th>
+                    <th style={{ textAlign: "left", padding: "8px 12px", fontWeight: 600, fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)", textTransform: "uppercase", letterSpacing: "0.04em" }}>Status</th>
+                    <th style={{ textAlign: "right", padding: "8px 12px", fontWeight: 600, fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)", textTransform: "uppercase", letterSpacing: "0.04em" }}>When</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recentDeploys.map((d) => {
+                    const artName = artifacts.find((a) => a.id === d.artifactId)?.name ?? d.artifactId.slice(0, 8);
+                    const envName = environments.find((e) => e.id === d.environmentId)?.name ?? d.environmentId.slice(0, 8);
+                    return (
+                      <tr
+                        key={d.id}
+                        onClick={() => pushPanel({
+                          type: "deployment-detail",
+                          title: `Deployment ${d.version}`,
+                          params: { id: d.id },
+                        })}
+                        style={{
+                          borderBottom: "1px solid var(--border)",
+                          cursor: "pointer",
+                          background: "var(--surface)",
+                        }}
+                        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "color-mix(in srgb, var(--accent) 4%, var(--surface))"; }}
+                        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "var(--surface)"; }}
+                      >
+                        <td style={{ padding: "10px 12px", fontWeight: 500, color: "var(--text)" }}>{artName}</td>
+                        <td style={{ padding: "10px 12px", color: "var(--text-muted)", fontFamily: "var(--font-mono)", fontSize: 12 }}>v{d.version}</td>
+                        <td style={{ padding: "10px 12px", color: "var(--text-muted)" }}>{envName}</td>
+                        <td style={{ padding: "10px 12px" }}><StatusBadge status={d.status} /></td>
+                        <td style={{ padding: "10px 12px", textAlign: "right", color: "var(--text-muted)", fontSize: 12 }}>{timeAgo(d.createdAt)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
         );
       })()}
 
-      {/* Artifacts section */}
-      <SectionHeader
-        color="#6b7280"
-        shape="square"
-        label="Artifacts"
-        subtitle="what you're deploying"
-        count={artifacts.length}
-        onClick={() =>
-          pushPanel({ type: "artifact-catalog", title: "Artifact Catalog", params: {} })
-        }
-      />
-      <div className="v2-artifacts-grid">
-        {artifacts.map((art) => (
-          <div
-            key={art.id}
-            className="v2-artifact-card"
-            onClick={() =>
-              pushPanel({
-                type: "artifact-detail",
-                title: art.name,
-                params: { artifactId: art.id },
-              })
-            }
-          >
-            <div className="v2-artifact-card-grid-bg" />
-            <div className="v2-artifact-card-inner">
-              <div className="v2-artifact-id">{art.type}</div>
-              <div className="v2-artifact-name">{art.name}</div>
-              <div className="v2-artifact-meta">
-                {art.analysis.summary
-                  ? art.analysis.summary.slice(0, 60) + (art.analysis.summary.length > 60 ? "..." : "")
-                  : "Pending analysis"}
-              </div>
-            </div>
-          </div>
-        ))}
-        {artifacts.length === 0 && (
-          <div className="v2-empty-hint">No artifacts yet. Use the Synth Channel to add one.</div>
-        )}
-      </div>
-
-      {/* Deployment particles */}
-      {activeDeployments.length > 0 && (
-        <div className="v2-deployment-particles-section">
-          <span className="v2-particles-label">
-            Deployments &mdash; routing Artifacts to Envoys
-          </span>
-          <DeploymentParticles />
-          <div className="v2-active-deploys-row">
-            {activeDeployments.slice(0, 4).map((d) => {
-              const artName =
-                artifacts.find((a) => a.id === d.artifactId)?.name ?? d.artifactId.slice(0, 8);
-              const envName =
-                environments.find((e) => e.id === d.environmentId)?.name ?? d.environmentId.slice(0, 8);
-              return (
-                <div
-                  key={d.id}
-                  className="v2-active-deploy-tag"
-                  onClick={() =>
-                    pushPanel({
-                      type: "deployment-detail",
-                      title: `Deployment ${d.version}`,
-                      params: { id: d.id },
-                    })
-                  }
-                >
-                  {artName} v{d.version} &rarr; {envName}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      <div style={{ height: 24 }} />
-
-      {/* Partitions section */}
-      <SectionHeader
-        color="#818cf8"
-        shape="hollow"
-        label="Partitions"
-        subtitle="isolated boundaries, each walled off"
-        count={partitions.length}
-        onClick={() =>
-          pushPanel({ type: "partition-list", title: "Partitions", params: {} })
-        }
-      />
-      <div className="v2-partitions-grid">
-        {partitions.map((p) => {
-          const deployCount = deployments.filter((d) => d.partitionId === p.id).length;
-          const isDormant = Object.keys(p.variables).length === 0 && deployCount === 0;
-          return (
-            <div
-              key={p.id}
-              className={`v2-partition-card ${isDormant ? "v2-partition-dormant" : ""}`}
-              onClick={() => {
-                if (!isDormant) {
-                  pushPanel({
-                    type: "partition-detail",
-                    title: p.name,
-                    params: { id: p.id },
-                  });
-                }
-              }}
-            >
-              {!isDormant && (
-                <>
-                  <div className="v2-partition-barrier-top" />
-                  <div className="v2-partition-barrier-bottom" />
-                </>
-              )}
-              <div className="v2-partition-name">{p.name}</div>
-              <div className="v2-partition-envs">
-                {environments.map((e) => (
-                  <div
-                    key={e.id}
-                    className={`v2-partition-env-badge ${isDormant ? "v2-partition-env-dormant" : ""}`}
-                  >
-                    {e.name}
-                  </div>
-                ))}
-              </div>
-              <div className="v2-partition-meta">
-                {isDormant
-                  ? "Dormant"
-                  : `${deployCount} deployment${deployCount !== 1 ? "s" : ""}`}
-              </div>
-            </div>
-          );
-        })}
-        {partitions.length === 0 && (
-          <div className="v2-empty-hint">No partitions yet.</div>
-        )}
-      </div>
-
-      {/* Envoys section — shown as deployment context summary */}
-      <SectionHeader
-        color="#34d399"
-        shape="circle"
-        label="Envoys"
-        subtitle={`${healthyEnvoyCount} healthy / ${envoys.length} total`}
-        onClick={() =>
-          pushPanel({ type: "envoy-registry", title: "Envoys", params: {} })
-        }
-      />
-      <div className="v2-envoys-list">
-        {agentContext?.environmentSummary.map((envSummary) => {
-          const isExecuting = deployments.some(
-            (d) => d.environmentId === envSummary.id && d.status === "running",
-          );
-          const statusCfg = isExecuting
-            ? { color: "#63e1be", bg: "rgba(99,225,190,0.04)", border: "rgba(99,225,190,0.2)", label: "EXECUTING" }
-            : { color: "#6b7280", bg: "rgba(15,20,30,0.4)", border: "rgba(107,114,128,0.12)", label: "READY" };
-          return (
-            <div
-              key={envSummary.id}
-              className="v2-envoy-row"
-              style={{ background: statusCfg.bg, borderColor: statusCfg.border }}
-              onClick={() =>
-                pushPanel({
-                  type: "environment-detail",
-                  title: envSummary.name,
-                  params: { id: envSummary.id },
-                })
-              }
-            >
-              <div className="v2-envoy-indicator">
-                <div
-                  className="v2-envoy-ring"
-                  style={{
-                    borderColor: statusCfg.color,
-                    opacity: isExecuting
-                      ? 0.3 + 0.3 * Math.sin(tick * 0.1)
-                      : 0.15,
-                  }}
-                />
-                {isExecuting && (
-                  <div className="v2-envoy-spinner" style={{ borderTopColor: statusCfg.color }} />
-                )}
-                <div
-                  className="v2-envoy-dot"
-                  style={{
-                    background: statusCfg.color,
-                    opacity: isExecuting ? 0.8 : 0.3,
-                  }}
-                />
-              </div>
-              <div className="v2-envoy-info">
-                <div className="v2-envoy-name-row">
-                  <span className="v2-envoy-env-name">{envSummary.name}</span>
-                  <span className="v2-envoy-deploy-count">{envSummary.deployCount} deploys</span>
-                </div>
-                <div className="v2-envoy-last-status">
-                  {envSummary.lastDeployStatus
-                    ? `Last: ${envSummary.lastDeployStatus}`
-                    : "No deploys yet"}
-                </div>
-              </div>
-              <div className="v2-envoy-status-pill" style={{ color: statusCfg.color, borderColor: `${statusCfg.color}30`, background: `${statusCfg.color}15` }}>
-                {statusCfg.label}
-              </div>
-            </div>
-          );
-        })}
-        {(!agentContext || agentContext.environmentSummary.length === 0) && (
-          <div className="v2-empty-hint">No environments configured.</div>
-        )}
-      </div>
-
-      {/* Debriefs section */}
-      <SectionHeader
-        color="#e879f9"
-        shape="diamond"
-        label="Debriefs"
-        subtitle="reasoned records, handed off"
-        onClick={() =>
-          pushPanel({ type: "debrief", title: "Debrief", params: {} })
-        }
-      />
-      <div className="v2-debriefs-list">
-        {debriefEntries.slice(0, 5).map((entry) => {
-          const status = getDebriefStatus(entry);
-          const s = debriefStatusIcons[status] ?? debriefStatusIcons.decision;
-          const routing = getDebriefRouting(entry);
-          const partName =
-            partitions.find((t) => t.id === entry.partitionId)?.name ?? "System";
-          const statusBarColor =
-            status === "escalated"
-              ? "linear-gradient(180deg, #f87171, rgba(248,113,113,0.2))"
-              : status === "complete"
-                ? "linear-gradient(180deg, #34d399, rgba(52,211,153,0.2))"
-                : "linear-gradient(180deg, #63e1be, rgba(99,225,190,0.2))";
-          return (
-            <div key={entry.id} className="v2-debrief-row">
-              <div
-                className="v2-debrief-status-bar"
-                style={{ background: statusBarColor }}
-              />
-              <div className="v2-debrief-content">
-                <div className="v2-debrief-icon" style={{ background: s.bg }}>
-                  <span style={{ color: s.color }}>{s.icon}</span>
-                </div>
-                <div className="v2-debrief-body">
-                  <div className="v2-debrief-header">
-                    <span className="v2-debrief-time">
-                      {new Date(entry.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false })}
-                    </span>
-                    <span className="v2-debrief-from">
-                      {entry.agent === "envoy" ? `Envoy \u203A ${partName}` : "Synth"}
-                    </span>
-                    <span
-                      className="v2-debrief-routing"
-                      style={{
-                        color: routing === "\u2192 Synth" ? "#f87171" : "#6b7280",
-                        background: routing === "\u2192 Synth" ? "rgba(248,113,113,0.08)" : "rgba(107,114,128,0.08)",
-                        borderColor: routing === "\u2192 Synth" ? "rgba(248,113,113,0.15)" : "rgba(107,114,128,0.1)",
-                      }}
-                    >
-                      {routing}
-                    </span>
-                  </div>
-                  <div className="v2-debrief-summary">{entry.decision}</div>
-                </div>
-              </div>
-            </div>
-          );
-        })}
-        {debriefEntries.length === 0 && (
-          <div className="v2-empty-hint">No debrief entries yet.</div>
-        )}
-      </div>
-
-      {deployments.length === 0 && partitions.length === 0 && artifacts.length === 0 && (
-        <div className="v2-empty-state">
-          <p>No data yet. Use the Synth Channel below to get started.</p>
+      {deployments.length === 0 && artifacts.length === 0 && (
+        <div style={{ textAlign: "center", padding: "32px 16px", color: "var(--text-muted)", fontSize: 14 }}>
+          No deployment activity yet. Use the Synth Channel below to get started.
         </div>
       )}
     </div>

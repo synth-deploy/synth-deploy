@@ -52,7 +52,7 @@ export default function PreFlightDisplay({ artifactId, environmentId, partitionI
 
   if (loading) {
     return (
-      <div style={{ padding: "12px 0", fontSize: 13, color: "var(--agent-text-muted)" }}>
+      <div style={{ padding: "12px 0", fontSize: 13, color: "var(--text-muted)" }}>
         Analyzing deployment context...
       </div>
     );
@@ -60,7 +60,7 @@ export default function PreFlightDisplay({ artifactId, environmentId, partitionI
 
   if (error) {
     return (
-      <div style={{ padding: "12px 0", fontSize: 13, color: "var(--agent-text-muted)" }}>
+      <div style={{ padding: "12px 0", fontSize: 13, color: "var(--text-muted)" }}>
         Pre-flight check unavailable: {error}
       </div>
     );
@@ -94,11 +94,11 @@ export default function PreFlightDisplay({ artifactId, environmentId, partitionI
             </span>
           )}
         </div>
-        <div style={{ fontSize: 13, color: "var(--agent-text-primary)", lineHeight: 1.4 }}>
+        <div style={{ fontSize: 13, color: "var(--text)", lineHeight: 1.4 }}>
           {context.recommendation.reasoning}
         </div>
         {!context.llmAvailable && (
-          <div style={{ fontSize: 11, color: "var(--agent-text-muted)", marginTop: 4, fontStyle: "italic" }}>
+          <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4, fontStyle: "italic" }}>
             Agent recommendation unavailable — showing deterministic analysis only
           </div>
         )}
@@ -119,7 +119,7 @@ export default function PreFlightDisplay({ artifactId, environmentId, partitionI
           <div style={{ fontWeight: 600, color: healthColors.text, marginBottom: 2 }}>
             {healthColors.label}
           </div>
-          <div style={{ color: "var(--agent-text-muted)", fontSize: 11 }}>
+          <div style={{ color: "var(--text-muted)", fontSize: 11 }}>
             Target Envoy
           </div>
         </div>
@@ -136,7 +136,7 @@ export default function PreFlightDisplay({ artifactId, environmentId, partitionI
             fontSize: 12,
           }}
         >
-          <div style={{ fontWeight: 600, color: "var(--agent-text-primary)", marginBottom: 2 }}>
+          <div style={{ fontWeight: 600, color: "var(--text)", marginBottom: 2 }}>
             {context.recentHistory.deploymentsToday} today
             {context.recentHistory.recentFailures > 0 && (
               <span style={{ color: "#f85149", marginLeft: 6 }}>
@@ -144,7 +144,7 @@ export default function PreFlightDisplay({ artifactId, environmentId, partitionI
               </span>
             )}
           </div>
-          <div style={{ color: "var(--agent-text-muted)", fontSize: 11 }}>
+          <div style={{ color: "var(--text-muted)", fontSize: 11 }}>
             Deployments
           </div>
         </div>
@@ -163,7 +163,7 @@ export default function PreFlightDisplay({ artifactId, environmentId, partitionI
             <div style={{ fontWeight: 600, color: "#e3b341", marginBottom: 2 }}>
               {context.crossSystemContext.length} signal{context.crossSystemContext.length !== 1 ? "s" : ""}
             </div>
-            <div style={{ color: "var(--agent-text-muted)", fontSize: 11 }}>
+            <div style={{ color: "var(--text-muted)", fontSize: 11 }}>
               Cross-system
             </div>
           </div>
@@ -176,7 +176,7 @@ export default function PreFlightDisplay({ artifactId, environmentId, partitionI
         style={{
           background: "none",
           border: "none",
-          color: "var(--agent-text-muted)",
+          color: "var(--text-muted)",
           cursor: "pointer",
           fontSize: 11,
           padding: "4px 0",
@@ -187,7 +187,7 @@ export default function PreFlightDisplay({ artifactId, environmentId, partitionI
       </button>
 
       {expanded && (
-        <div style={{ marginTop: 8, fontSize: 12, color: "var(--agent-text-secondary)" }}>
+        <div style={{ marginTop: 8, fontSize: 12, color: "var(--text-muted)" }}>
           {/* Target health detail */}
           <div style={{ marginBottom: 8 }}>
             <div style={{ fontWeight: 600, marginBottom: 2 }}>Target Health</div>

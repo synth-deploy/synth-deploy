@@ -158,7 +158,7 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
         )}
 
         {/* Header */}
-        <div style={{ padding: "0 16px 16px", borderBottom: "1px solid var(--agent-border)" }}>
+        <div style={{ padding: "0 16px 16px", borderBottom: "1px solid var(--border)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
             <div
               style={{
@@ -171,19 +171,19 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
                 justifyContent: "center",
                 fontWeight: 700,
                 fontSize: 16,
-                color: "var(--agent-accent, #63e1be)",
+                color: "var(--accent)",
               }}
             >
               {artifact.name[0]?.toUpperCase()}
             </div>
             <div>
-              <div style={{ fontWeight: 600, fontSize: 16, color: "var(--agent-text)" }}>
+              <div style={{ fontWeight: 600, fontSize: 16, color: "var(--text)" }}>
                 {artifact.name}
               </div>
               <div
                 style={{
                   fontSize: 11,
-                  color: "var(--agent-text-muted)",
+                  color: "var(--text-muted)",
                   textTransform: "uppercase",
                   letterSpacing: "0.05em",
                 }}
@@ -245,7 +245,7 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
             <div
               style={{
                 fontSize: 13,
-                color: "var(--agent-text)",
+                color: "var(--text)",
                 lineHeight: 1.6,
                 marginBottom: 20,
                 padding: "8px 12px",
@@ -260,13 +260,13 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
             {/* Dependencies */}
             <SectionHeader color="#6366f1" shape="diamond" label="Dependencies" />
             {artifact.analysis.dependencies.length > 0 ? (
-              <ul style={{ margin: "0 0 20px", paddingLeft: 20, fontSize: 13, color: "var(--agent-text)", lineHeight: 1.8 }}>
+              <ul style={{ margin: "0 0 20px", paddingLeft: 20, fontSize: 13, color: "var(--text)", lineHeight: 1.8 }}>
                 {artifact.analysis.dependencies.map((dep, i) => (
                   <li key={i}>{dep}</li>
                 ))}
               </ul>
             ) : (
-              <div style={{ fontSize: 13, color: "var(--agent-text-muted)", marginBottom: 20 }}>
+              <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 20 }}>
                 No dependencies identified.
               </div>
             )}
@@ -283,7 +283,7 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
                 ))}
               </div>
             ) : (
-              <div style={{ fontSize: 13, color: "var(--agent-text-muted)", marginBottom: 20 }}>
+              <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 20 }}>
                 No configuration expectations identified.
               </div>
             )}
@@ -295,7 +295,7 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
                 <div
                   style={{
                     fontSize: 13,
-                    color: "var(--agent-text)",
+                    color: "var(--text)",
                     lineHeight: 1.6,
                     padding: "8px 12px",
                     background: "rgba(255,255,255,0.03)",
@@ -320,17 +320,17 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
               style={{
                 padding: 12,
                 borderRadius: 8,
-                border: "1px solid var(--agent-border)",
-                background: "var(--agent-card-bg)",
+                border: "1px solid var(--border)",
+                background: "var(--surface)",
                 marginBottom: 16,
               }}
             >
-              <div style={{ fontSize: 12, fontWeight: 600, color: "var(--agent-text)", marginBottom: 8 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text)", marginBottom: 8 }}>
                 Add Correction
               </div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
                 <div style={{ flex: "0 0 200px" }}>
-                  <label style={{ fontSize: 11, color: "var(--agent-text-muted)", display: "block", marginBottom: 3 }}>
+                  <label style={{ fontSize: 11, color: "var(--text-muted)", display: "block", marginBottom: 3 }}>
                     Field
                   </label>
                   <select
@@ -341,9 +341,9 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
                       fontSize: 13,
                       padding: "6px 10px",
                       borderRadius: 6,
-                      border: "1px solid var(--agent-border)",
-                      background: "var(--agent-bg)",
-                      color: "var(--agent-text)",
+                      border: "1px solid var(--border)",
+                      background: "var(--input-bg)",
+                      color: "var(--text)",
                     }}
                   >
                     <option value="summary">Summary</option>
@@ -353,7 +353,7 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
                   </select>
                 </div>
                 <div style={{ flex: "1 1 250px" }}>
-                  <label style={{ fontSize: 11, color: "var(--agent-text-muted)", display: "block", marginBottom: 3 }}>
+                  <label style={{ fontSize: 11, color: "var(--text-muted)", display: "block", marginBottom: 3 }}>
                     Correction
                   </label>
                   <input
@@ -366,9 +366,9 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
                       fontSize: 13,
                       padding: "6px 10px",
                       borderRadius: 6,
-                      border: "1px solid var(--agent-border)",
-                      background: "var(--agent-bg)",
-                      color: "var(--agent-text)",
+                      border: "1px solid var(--border)",
+                      background: "var(--input-bg)",
+                      color: "var(--text)",
                       boxSizing: "border-box",
                     }}
                   />
@@ -396,8 +396,8 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
                     style={{
                       padding: "10px 14px",
                       borderRadius: 8,
-                      border: "1px solid var(--agent-border)",
-                      background: "var(--agent-card-bg)",
+                      border: "1px solid var(--border)",
+                      background: "var(--surface)",
                     }}
                   >
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
@@ -412,15 +412,15 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
                       >
                         {ann.field}
                       </span>
-                      <span style={{ fontSize: 11, color: "var(--agent-text-muted)" }}>
+                      <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
                         {new Date(ann.annotatedAt).toLocaleString()}
                       </span>
                     </div>
-                    <div style={{ fontSize: 13, color: "var(--agent-text)", lineHeight: 1.5 }}>
+                    <div style={{ fontSize: 13, color: "var(--text)", lineHeight: 1.5 }}>
                       {ann.correction}
                     </div>
                     {ann.annotatedBy && (
-                      <div style={{ fontSize: 11, color: "var(--agent-text-muted)", marginTop: 4 }}>
+                      <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>
                         by {ann.annotatedBy}
                       </div>
                     )}
@@ -428,7 +428,7 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
                 ))}
               </div>
             ) : (
-              <div style={{ fontSize: 13, color: "var(--agent-text-muted)", padding: "8px 0" }}>
+              <div style={{ fontSize: 13, color: "var(--text-muted)", padding: "8px 0" }}>
                 No annotations yet. Use the form above to correct any analysis that needs improvement.
               </div>
             )}
@@ -450,7 +450,7 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
                     top: 8,
                     bottom: 8,
                     width: 2,
-                    background: "var(--agent-border)",
+                    background: "var(--border)",
                   }}
                 />
                 {artifact.learningHistory.map((entry, i) => {
@@ -467,26 +467,26 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
                           height: 10,
                           borderRadius: "50%",
                           background: "#e879f9",
-                          border: "2px solid var(--agent-bg)",
+                          border: "2px solid var(--input-bg)",
                         }}
                       />
                       <div
                         style={{
                           padding: "10px 14px",
                           borderRadius: 8,
-                          border: "1px solid var(--agent-border)",
-                          background: "var(--agent-card-bg)",
+                          border: "1px solid var(--border)",
+                          background: "var(--surface)",
                         }}
                       >
                         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                          <span style={{ fontSize: 12, fontWeight: 600, color: "var(--agent-text)" }}>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text)" }}>
                             {entry.event}
                           </span>
-                          <span style={{ fontSize: 11, color: "var(--agent-text-muted)" }}>
+                          <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
                             {new Date(entry.timestamp).toLocaleString()}
                           </span>
                         </div>
-                        <div style={{ fontSize: 12, color: "var(--agent-text-muted)", lineHeight: 1.5 }}>
+                        <div style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.5 }}>
                           {entry.details}
                         </div>
                         {source && (
@@ -509,7 +509,7 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
                 })}
               </div>
             ) : (
-              <div style={{ fontSize: 13, color: "var(--agent-text-muted)", padding: "8px 0" }}>
+              <div style={{ fontSize: 13, color: "var(--text-muted)", padding: "8px 0" }}>
                 No learning history entries yet.
               </div>
             )}
@@ -536,8 +536,8 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
                 style={{
                   padding: 12,
                   borderRadius: 8,
-                  border: "1px solid var(--agent-border)",
-                  background: "var(--agent-card-bg)",
+                  border: "1px solid var(--border)",
+                  background: "var(--surface)",
                   marginBottom: 16,
                   display: "flex",
                   gap: 8,
@@ -546,7 +546,7 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
                 }}
               >
                 <div style={{ flex: "1 1 150px" }}>
-                  <label style={{ fontSize: 11, color: "var(--agent-text-muted)", display: "block", marginBottom: 3 }}>
+                  <label style={{ fontSize: 11, color: "var(--text-muted)", display: "block", marginBottom: 3 }}>
                     Version
                   </label>
                   <input
@@ -559,14 +559,14 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
                       fontSize: 13,
                       padding: "6px 10px",
                       borderRadius: 6,
-                      border: "1px solid var(--agent-border)",
-                      background: "var(--agent-bg)",
-                      color: "var(--agent-text)",
+                      border: "1px solid var(--border)",
+                      background: "var(--input-bg)",
+                      color: "var(--text)",
                     }}
                   />
                 </div>
                 <div style={{ flex: "1 1 150px" }}>
-                  <label style={{ fontSize: 11, color: "var(--agent-text-muted)", display: "block", marginBottom: 3 }}>
+                  <label style={{ fontSize: 11, color: "var(--text-muted)", display: "block", marginBottom: 3 }}>
                     Source
                   </label>
                   <input
@@ -578,9 +578,9 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
                       fontSize: 13,
                       padding: "6px 10px",
                       borderRadius: 6,
-                      border: "1px solid var(--agent-border)",
-                      background: "var(--agent-bg)",
-                      color: "var(--agent-text)",
+                      border: "1px solid var(--border)",
+                      background: "var(--input-bg)",
+                      color: "var(--text)",
                     }}
                   />
                 </div>
@@ -607,8 +607,8 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
                     style={{
                       padding: "10px 14px",
                       borderRadius: 8,
-                      border: "1px solid var(--agent-border)",
-                      background: "var(--agent-card-bg)",
+                      border: "1px solid var(--border)",
+                      background: "var(--surface)",
                       display: "flex",
                       alignItems: "center",
                       gap: 12,
@@ -624,22 +624,22 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
                     >
                       {ver.version}
                     </span>
-                    <span style={{ fontSize: 12, color: "var(--agent-text-muted)" }}>
+                    <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
                       {ver.source}
                     </span>
                     {ver.metadata && Object.keys(ver.metadata).length > 0 && (
-                      <span style={{ fontSize: 11, color: "var(--agent-text-muted)" }}>
+                      <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
                         {Object.entries(ver.metadata).map(([k, v]) => `${k}=${v}`).join(", ")}
                       </span>
                     )}
-                    <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--agent-text-muted)" }}>
+                    <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--text-muted)" }}>
                       {new Date(ver.createdAt).toLocaleDateString()}
                     </span>
                   </div>
                 ))}
               </div>
             ) : (
-              <div style={{ fontSize: 13, color: "var(--agent-text-muted)", padding: "8px 0" }}>
+              <div style={{ fontSize: 13, color: "var(--text-muted)", padding: "8px 0" }}>
                 No versions recorded yet.
               </div>
             )}
@@ -680,7 +680,7 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
                 ))}
               </div>
             ) : (
-              <div style={{ fontSize: 13, color: "var(--agent-text-muted)", padding: "8px 0" }}>
+              <div style={{ fontSize: 13, color: "var(--text-muted)", padding: "8px 0" }}>
                 No deployments for this artifact yet.
               </div>
             )}

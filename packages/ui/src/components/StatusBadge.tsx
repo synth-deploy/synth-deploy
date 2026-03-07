@@ -7,6 +7,8 @@ const labels: Record<DeploymentStatus, string> = {
   pending: "Pending",
   planning: "Planning",
   approved: "Approved",
+  awaiting_approval: "Awaiting Approval",
+  rejected: "Rejected",
   rolled_back: "Rolled Back",
 };
 

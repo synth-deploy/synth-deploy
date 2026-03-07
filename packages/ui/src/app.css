@@ -1433,7 +1433,7 @@ table a:hover {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--agent-accent);
+  background: var(--accent);
   box-shadow: 0 0 8px rgba(99, 225, 190, 0.5);
   animation: agentPulse 2s ease-in-out infinite;
 }
@@ -1441,7 +1441,7 @@ table a:hover {
 .agent-banner-text {
   font-family: var(--font-mono);
   font-size: 11px;
-  color: var(--agent-accent);
+  color: var(--accent);
   letter-spacing: 0.06em;
 }
 
@@ -1482,12 +1482,12 @@ table a:hover {
   font-family: var(--font);
   font-size: 13px;
   font-weight: 600;
-  color: var(--agent-text);
+  color: var(--text);
 }
 
 .diary-panel-link {
   font-size: 11px;
-  color: var(--agent-accent);
+  color: var(--accent);
   text-decoration: none;
   font-family: var(--font-mono);
 }
@@ -1499,12 +1499,12 @@ table a:hover {
 .diary-panel-loading,
 .diary-panel-empty {
   font-size: 12px;
-  color: var(--agent-text-muted);
+  color: var(--text-muted);
   padding: 12px 0;
 }
 
 .diary-panel-entry {
-  border-left: 2px solid var(--agent-border);
+  border-left: 2px solid var(--border);
   padding: 8px 0 8px 14px;
   margin-bottom: 8px;
   cursor: pointer;
@@ -1526,7 +1526,7 @@ table a:hover {
 .diary-panel-entry-time {
   font-family: var(--font-mono);
   font-size: 10px;
-  color: var(--agent-text-muted);
+  color: var(--text-muted);
 }
 
 .diary-panel-entry-agent {
@@ -1541,18 +1541,18 @@ table a:hover {
 
 .diary-panel-entry-decision {
   font-size: 12px;
-  color: var(--agent-text);
+  color: var(--text);
   line-height: 1.4;
 }
 
 .diary-panel-entry-reasoning {
   font-size: 11px;
-  color: var(--agent-text-muted);
+  color: var(--text-muted);
   line-height: 1.4;
   font-style: italic;
   margin-top: 6px;
   padding-top: 6px;
-  border-top: 1px solid var(--agent-border);
+  border-top: 1px solid var(--border);
 }
 
 /* ---- Agent collapse utility ---- */
@@ -1612,7 +1612,7 @@ table a:hover {
 }
 
 .env-badge-expanded-body {
-  border-top: 1px solid var(--agent-border);
+  border-top: 1px solid var(--border);
   padding-top: 8px;
 }
 
@@ -1620,7 +1620,7 @@ table a:hover {
   display: flex;
   justify-content: space-between;
   font-size: 11px;
-  color: var(--agent-text-secondary);
+  color: var(--text-muted);
   margin-bottom: 4px;
 }
 
@@ -1663,8 +1663,8 @@ table a:hover {
 }
 
 .partition-row {
-  background: var(--agent-surface);
-  border: 1px solid var(--agent-border);
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 14px;
   padding: 18px 22px;
   margin-bottom: 12px;
@@ -1690,13 +1690,13 @@ table a:hover {
   justify-content: center;
   font-family: var(--font-mono);
   font-size: 13px;
-  color: var(--agent-accent);
+  color: var(--accent);
   font-weight: 700;
 }
 
 .partition-row-name {
   font-size: 15px;
-  color: var(--agent-text);
+  color: var(--text);
   font-weight: 600;
   letter-spacing: -0.01em;
 }
@@ -1716,8 +1716,8 @@ table a:hover {
   flex-direction: column;
   min-height: 100vh;
   width: 100vw;
-  background: var(--agent-bg);
-  color: var(--agent-text);
+  background: var(--input-bg);
+  color: var(--text);
   position: relative;
 }
 
@@ -1752,7 +1752,7 @@ table a:hover {
 .canvas-logo {
   font-size: 16px;
   font-weight: 700;
-  color: var(--agent-text);
+  color: var(--text);
   margin: 0;
   letter-spacing: 0.5px;
 }
@@ -1762,7 +1762,7 @@ table a:hover {
   align-items: center;
   gap: 6px;
   padding: 4px 10px;
-  background: var(--agent-accent-dim);
+  background: var(--accent-dim);
   border-radius: 4px;
 }
 
@@ -1770,7 +1770,7 @@ table a:hover {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--agent-accent);
+  background: var(--accent);
   animation: agentPulse 2s ease-in-out infinite;
 }
 
@@ -1778,7 +1778,7 @@ table a:hover {
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 1px;
-  color: var(--agent-accent);
+  color: var(--accent);
   font-family: 'SF Mono', 'Fira Code', monospace;
 }
 
@@ -1819,7 +1819,7 @@ table a:hover {
   align-items: center;
   justify-content: space-between;
   padding: 16px 24px;
-  border-bottom: 1px solid var(--agent-border);
+  border-bottom: 1px solid var(--border);
 }
 
 .canvas-panel-breadcrumb {
@@ -1830,8 +1830,8 @@ table a:hover {
 
 .canvas-panel-back {
   background: none;
-  border: 1px solid var(--agent-border);
-  color: var(--agent-text-secondary);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
   width: 28px;
   height: 28px;
   border-radius: 4px;
@@ -1844,22 +1844,22 @@ table a:hover {
 }
 
 .canvas-panel-back:hover {
-  background: var(--agent-accent-dim);
+  background: var(--accent-dim);
   border-color: var(--accent-border);
-  color: var(--agent-accent);
+  color: var(--accent);
 }
 
 .canvas-panel-title {
   font-size: 18px;
   font-weight: 600;
   margin: 0;
-  color: var(--agent-text);
+  color: var(--text);
 }
 
 .canvas-panel-dismiss {
   background: none;
-  border: 1px solid var(--agent-border);
-  color: var(--agent-text-secondary);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
   width: 28px;
   height: 28px;
   border-radius: 4px;
@@ -1889,7 +1889,7 @@ table a:hover {
   left: 0;
   right: 0;
   padding: 0 24px 16px;
-  background: linear-gradient(transparent, var(--agent-bg) 40%);
+  background: linear-gradient(transparent, var(--input-bg) 40%);
   z-index: 50;
 }
 
@@ -1909,7 +1909,7 @@ table a:hover {
 .canvas-summary-strip {
   display: flex;
   gap: 0;
-  border: 1px solid var(--agent-border);
+  border: 1px solid var(--border);
   border-radius: 8px;
   overflow: hidden;
   margin-bottom: 24px;
@@ -1921,8 +1921,8 @@ table a:hover {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  border-right: 1px solid var(--agent-border);
-  background: var(--agent-surface);
+  border-right: 1px solid var(--border);
+  background: var(--surface);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
 }
@@ -1934,14 +1934,14 @@ table a:hover {
 .canvas-summary-value {
   font-size: 24px;
   font-weight: 700;
-  color: var(--agent-text);
+  color: var(--text);
 }
 
 .canvas-summary-label {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  color: var(--agent-text-muted);
+  color: var(--text-muted);
 }
 
 /* ---- Canvas sections ---- */
@@ -1955,7 +1955,7 @@ table a:hover {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  color: var(--agent-text-muted);
+  color: var(--text-muted);
   margin: 0 0 12px 0;
 }
 
@@ -1973,13 +1973,13 @@ table a:hover {
   text-align: left;
   padding: 16px;
   border-radius: 8px;
-  border: 1px solid var(--agent-border);
-  background: var(--agent-surface);
+  border: 1px solid var(--border);
+  background: var(--surface);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   cursor: pointer;
   transition: all 0.15s;
-  color: var(--agent-text);
+  color: var(--text);
 }
 
 .canvas-signal-card:hover {
@@ -2014,12 +2014,12 @@ table a:hover {
   font-size: 14px;
   font-weight: 600;
   margin-bottom: 4px;
-  color: var(--agent-text);
+  color: var(--text);
 }
 
 .canvas-signal-detail {
   font-size: 12px;
-  color: var(--agent-text-secondary);
+  color: var(--text-muted);
   line-height: 1.4;
 }
 
@@ -2037,13 +2037,13 @@ table a:hover {
   text-align: left;
   padding: 16px;
   border-radius: 8px;
-  border: 1px solid var(--agent-border);
-  background: var(--agent-surface);
+  border: 1px solid var(--border);
+  background: var(--surface);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   cursor: pointer;
   transition: all 0.15s;
-  color: var(--agent-text);
+  color: var(--text);
 }
 
 .canvas-partition-card:hover {
@@ -2062,8 +2062,8 @@ table a:hover {
   width: 32px;
   height: 32px;
   border-radius: 6px;
-  background: var(--agent-accent-dim);
-  color: var(--agent-accent);
+  background: var(--accent-dim);
+  color: var(--accent);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2102,7 +2102,7 @@ table a:hover {
   transition: background 0.15s;
   width: 100%;
   text-align: left;
-  color: var(--agent-text);
+  color: var(--text);
   font-size: 13px;
 }
 
@@ -2118,17 +2118,17 @@ table a:hover {
 
 .canvas-activity-artifact,
 .canvas-activity-partition {
-  color: var(--agent-text-secondary);
+  color: var(--text-muted);
   min-width: 100px;
 }
 
 .canvas-activity-env {
-  color: var(--agent-text-secondary);
+  color: var(--text-muted);
   min-width: 80px;
 }
 
 .canvas-activity-time {
-  color: var(--agent-text-muted);
+  color: var(--text-muted);
   font-size: 12px;
   margin-left: auto;
 }
@@ -2144,7 +2144,7 @@ table a:hover {
 /* ---- Variable table ---- */
 
 .canvas-var-table {
-  border: 1px solid var(--agent-border);
+  border: 1px solid var(--border);
   border-radius: 6px;
   overflow: hidden;
 }
@@ -2153,7 +2153,7 @@ table a:hover {
   display: flex;
   gap: 24px;
   padding: 8px 12px;
-  border-bottom: 1px solid var(--agent-border);
+  border-bottom: 1px solid var(--border);
   font-size: 13px;
 }
 
@@ -2164,11 +2164,11 @@ table a:hover {
 .canvas-var-row .mono:first-child {
   font-weight: 600;
   min-width: 160px;
-  color: var(--agent-accent);
+  color: var(--accent);
 }
 
 .canvas-var-row .mono:last-child {
-  color: var(--agent-text-secondary);
+  color: var(--text-muted);
 }
 
 /* ---- Environment grid ---- */
@@ -2212,13 +2212,13 @@ table a:hover {
   gap: 16px;
   margin-bottom: 24px;
   font-size: 13px;
-  color: var(--agent-text-secondary);
+  color: var(--text-muted);
 }
 
 .canvas-meta-link {
   background: none;
   border: none;
-  color: var(--agent-accent);
+  color: var(--accent);
   cursor: pointer;
   font-size: 13px;
   padding: 0;
@@ -2227,7 +2227,7 @@ table a:hover {
 }
 
 .canvas-meta-link:hover {
-  text-decoration-color: var(--agent-accent);
+  text-decoration-color: var(--accent);
 }
 
 /* ---- Failure card ---- */
@@ -2243,7 +2243,7 @@ table a:hover {
   font-size: 13px;
   margin-bottom: 8px;
   line-height: 1.5;
-  color: var(--agent-text);
+  color: var(--text);
 }
 
 .canvas-failure-row:last-child {
@@ -2261,7 +2261,7 @@ table a:hover {
   flex-direction: column;
   gap: 0;
   padding-left: 12px;
-  border-left: 2px solid var(--agent-border);
+  border-left: 2px solid var(--border);
 }
 
 .canvas-timeline-entry {
@@ -2272,7 +2272,7 @@ table a:hover {
   border: none;
   cursor: pointer;
   text-align: left;
-  color: var(--agent-text);
+  color: var(--text);
   width: 100%;
   position: relative;
   transition: background 0.15s;
@@ -2308,19 +2308,19 @@ table a:hover {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  color: var(--agent-text-muted);
+  color: var(--text-muted);
 }
 
 .canvas-timeline-time {
   font-size: 11px;
-  color: var(--agent-text-muted);
+  color: var(--text-muted);
   margin-left: auto;
 }
 
 .canvas-timeline-decision {
   font-size: 13px;
   line-height: 1.5;
-  color: var(--agent-text);
+  color: var(--text);
 }
 
 .canvas-timeline-reasoning {
@@ -2330,7 +2330,7 @@ table a:hover {
   background: var(--surface-hover);
   font-size: 12px;
   line-height: 1.5;
-  color: var(--agent-text-secondary);
+  color: var(--text-muted);
 }
 
 /* ---- Canvas empty state ---- */
@@ -2342,7 +2342,7 @@ table a:hover {
   justify-content: center;
   padding: 64px 24px;
   text-align: center;
-  color: var(--agent-text-muted);
+  color: var(--text-muted);
 }
 
 .canvas-empty p {
@@ -2354,18 +2354,18 @@ table a:hover {
 .canvas-signal-detail-card {
   padding: 24px;
   border-radius: 8px;
-  border: 1px solid var(--agent-border);
-  background: var(--agent-surface);
+  border: 1px solid var(--border);
+  background: var(--surface);
   margin-bottom: 24px;
 }
 
 .canvas-signal-detail-card h3 {
   margin: 12px 0 8px;
-  color: var(--agent-text);
+  color: var(--text);
 }
 
 .canvas-signal-detail-card p {
-  color: var(--agent-text-secondary);
+  color: var(--text-muted);
   line-height: 1.5;
   margin: 0;
 }
@@ -2383,16 +2383,16 @@ table a:hover {
   border-radius: 4px;
   font-size: 11px;
   font-weight: 600;
-  background: var(--agent-accent-dim);
-  color: var(--agent-accent);
+  background: var(--accent-dim);
+  color: var(--accent);
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 
 .canvas-entity-link {
   background: none;
-  border: 1px solid var(--agent-border);
-  color: var(--agent-accent);
+  border: 1px solid var(--border);
+  color: var(--accent);
   padding: 12px 16px;
   border-radius: 6px;
   cursor: pointer;
@@ -2403,17 +2403,17 @@ table a:hover {
 }
 
 .canvas-entity-link:hover {
-  background: var(--agent-accent-dim);
+  background: var(--accent-dim);
   border-color: var(--accent-border);
 }
 
 /* ---- Deployment authoring ---- */
 
 .canvas-resolved-config {
-  border: 1px solid var(--agent-border);
+  border: 1px solid var(--border);
   border-radius: 8px;
   padding: 20px;
-  background: var(--agent-surface);
+  background: var(--surface);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
 }
@@ -2428,36 +2428,36 @@ table a:hover {
 .canvas-resolved-header h3 {
   margin: 0;
   font-size: 16px;
-  color: var(--agent-text);
+  color: var(--text);
 }
 
 .canvas-interpreting {
   text-align: center;
   padding: 32px;
-  color: var(--agent-text-secondary);
+  color: var(--text-muted);
   font-size: 14px;
 }
 
 /* ---- Canvas intent bar overrides ---- */
 
 .canvas-intent-bar .intent-bar-inner {
-  background: var(--agent-surface);
+  background: var(--surface);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border-color: var(--accent-border);
 }
 
 .canvas-intent-bar .intent-bar-icon {
-  color: var(--agent-accent);
+  color: var(--accent);
 }
 
 .canvas-intent-bar .intent-bar-input {
-  color: var(--agent-text);
+  color: var(--text);
 }
 
 .canvas-intent-bar .intent-bar-submit {
-  background: var(--agent-accent-dim);
-  color: var(--agent-accent);
+  background: var(--accent-dim);
+  color: var(--accent);
 }
 
 .canvas-intent-bar .intent-bar-submit:hover {
@@ -3728,7 +3728,7 @@ table a:hover {
 .synth-channel-panel {
   overflow: hidden;
   transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-  background: linear-gradient(180deg, rgba(8,11,20,0.97), rgba(12,16,28,0.99));
+  background: var(--surface);
   border-top: 1px solid var(--accent-dim);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
@@ -3745,21 +3745,21 @@ table a:hover {
 .synth-channel-scope-label {
   font-family: var(--font-mono);
   font-size: 9px;
-  color: #4b5563;
+  color: var(--text-muted);
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
 .synth-channel-collapse-btn {
   margin-left: auto;
-  background: rgba(107,114,128,0.1);
-  border: 1px solid rgba(107,114,128,0.15);
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
   border-radius: 6px;
   padding: 4px 12px;
   cursor: pointer;
   font-family: var(--font-mono);
   font-size: 10px;
-  color: #6b7280;
+  color: var(--text-muted);
 }
 
 .synth-channel-messages {
@@ -3778,13 +3778,13 @@ table a:hover {
 }
 
 .synth-channel-msg-you {
-  background: rgba(99,225,190,0.03);
-  border-color: rgba(99,225,190,0.06);
+  background: var(--accent-dim);
+  border-color: var(--accent-border);
 }
 
 .synth-channel-msg-command {
-  background: rgba(15,20,30,0.5);
-  border-color: rgba(107,114,128,0.06);
+  background: var(--surface-alt);
+  border-color: var(--border);
 }
 
 .synth-channel-msg-header {
@@ -3805,19 +3805,19 @@ table a:hover {
 }
 
 .speaker-you {
-  color: #63e1be;
-  background: rgba(99,225,190,0.08);
+  color: var(--accent);
+  background: var(--accent-dim);
 }
 
 .speaker-command {
-  color: #818cf8;
-  background: rgba(129,140,248,0.08);
+  color: var(--text-muted);
+  background: var(--surface-alt);
 }
 
 .synth-channel-time {
   font-family: var(--font-mono);
   font-size: 9px;
-  color: #374151;
+  color: var(--text-muted);
 }
 
 .synth-channel-entities {
@@ -3829,13 +3829,13 @@ table a:hover {
 .synth-channel-msg-text {
   font-family: var(--font);
   font-size: 13px;
-  color: #9ca3af;
+  color: var(--text-muted);
   line-height: 1.6;
   padding-left: 2px;
 }
 
 .synth-channel-msg-you .synth-channel-msg-text {
-  color: #cbd5e1;
+  color: var(--text);
 }
 
 .synth-channel-typing-dots {
@@ -3847,14 +3847,14 @@ table a:hover {
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: #818cf8;
+  background: var(--accent);
   animation: typingDot 1.2s ease-in-out infinite;
 }
 
-/* Command channel input bar */
+/* Synth channel input bar */
 .synth-channel-bar {
-  background: rgba(12,16,28,0.98);
-  border-top: 1px solid rgba(99,225,190,0.08);
+  background: var(--bg);
+  border-top: 1px solid var(--border);
   padding: 12px 32px;
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
@@ -3864,8 +3864,8 @@ table a:hover {
   display: flex;
   align-items: center;
   gap: 12px;
-  background: rgba(15,20,30,0.6);
-  border: 1px solid rgba(99,225,190,0.1);
+  background: var(--input-bg);
+  border: 1px solid var(--border);
   border-radius: 14px;
   padding: 4px 6px 4px 16px;
 }
@@ -3873,7 +3873,7 @@ table a:hover {
 .synth-channel-prefix {
   font-family: var(--font-mono);
   font-size: 11px;
-  color: #63e1be;
+  color: var(--accent);
   letter-spacing: 0.08em;
   font-weight: 700;
   opacity: 0.6;
@@ -3886,21 +3886,21 @@ table a:hover {
   background: transparent;
   border: none;
   outline: none;
-  color: #e2e8f0;
+  color: var(--text);
   font-family: var(--font);
   font-size: 14px;
   padding: 10px 0;
 }
 
 .synth-channel-toggle-btn {
-  background: rgba(99,225,190,0.06);
-  border: 1px solid rgba(99,225,190,0.1);
+  background: var(--accent-dim);
+  border: 1px solid var(--accent-border);
   border-radius: 8px;
   padding: 6px 10px;
   cursor: pointer;
   font-family: var(--font-mono);
   font-size: 10px;
-  color: #63e1be;
+  color: var(--accent);
   display: flex;
   align-items: center;
   gap: 6px;
@@ -3924,7 +3924,7 @@ table a:hover {
   margin-top: 6px;
   font-family: var(--font);
   font-size: 11px;
-  color: #374151;
+  color: var(--text-muted);
 }
 
 /* ---- Canvas panel header override for v2 ---- */
@@ -3986,8 +3986,8 @@ table a:hover {
 .v2-signal-card {
   display: flex;
   border-radius: 8px;
-  border: 1px solid var(--agent-border);
-  background: var(--agent-surface);
+  border: 1px solid var(--border);
+  background: var(--surface);
   cursor: pointer;
   transition: all 0.15s;
   overflow: hidden;
@@ -4032,7 +4032,7 @@ table a:hover {
 .v2-signal-type-label {
   font-size: 11px;
   font-weight: 500;
-  color: var(--agent-text-muted);
+  color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.3px;
 }
@@ -4040,19 +4040,19 @@ table a:hover {
 .v2-signal-title {
   font-size: 14px;
   font-weight: 600;
-  color: var(--agent-text);
+  color: var(--text);
   margin-bottom: 4px;
 }
 
 .v2-signal-detail {
   font-size: 12px;
-  color: var(--agent-text-secondary);
+  color: var(--text-muted);
   line-height: 1.4;
 }
 
 .v2-signal-entity {
   font-size: 11px;
-  color: var(--agent-text-muted);
+  color: var(--text-muted);
   margin-top: 6px;
   font-family: var(--font-mono);
 }
@@ -4085,13 +4085,13 @@ table a:hover {
 .signal-detail-type-badge {
   font-size: 12px;
   font-weight: 500;
-  color: var(--agent-text-secondary);
+  color: var(--text-muted);
 }
 
 .signal-detail-title {
   font-size: 20px;
   font-weight: 700;
-  color: var(--agent-text);
+  color: var(--text);
   margin: 0;
   line-height: 1.3;
 }
@@ -4101,7 +4101,7 @@ table a:hover {
 }
 
 .signal-detail-context {
-  border: 1px solid var(--agent-border);
+  border: 1px solid var(--border);
   border-radius: 6px;
   overflow: hidden;
 }
@@ -4110,7 +4110,7 @@ table a:hover {
   display: flex;
   gap: 16px;
   padding: 10px 14px;
-  border-bottom: 1px solid var(--agent-border);
+  border-bottom: 1px solid var(--border);
   font-size: 13px;
   line-height: 1.5;
 }
@@ -4121,14 +4121,14 @@ table a:hover {
 
 .signal-detail-context-label {
   font-weight: 600;
-  color: var(--agent-text-muted);
+  color: var(--text-muted);
   min-width: 140px;
   flex-shrink: 0;
   text-transform: capitalize;
 }
 
 .signal-detail-context-value {
-  color: var(--agent-text);
+  color: var(--text);
 }
 
 .signal-detail-steps {
@@ -4147,8 +4147,8 @@ table a:hover {
   position: relative;
   font-size: 13px;
   line-height: 1.5;
-  color: var(--agent-text);
-  border-bottom: 1px solid var(--agent-border);
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
 }
 
 .signal-detail-step:last-child {
@@ -4163,8 +4163,8 @@ table a:hover {
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  background: var(--agent-accent-dim);
-  color: var(--agent-accent);
+  background: var(--accent-dim);
+  color: var(--accent);
   font-size: 12px;
   font-weight: 700;
   display: flex;

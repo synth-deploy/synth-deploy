@@ -99,7 +99,7 @@ export default function DeploymentAuthoringPanel({ title, preselectedArtifactId 
 
           {/* Artifact selection */}
           <div style={{ marginBottom: 12 }}>
-            <label style={{ fontSize: 12, fontWeight: 600, color: "var(--agent-text-muted)", display: "block", marginBottom: 4 }}>
+            <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", display: "block", marginBottom: 4 }}>
               Artifact
             </label>
             <select
@@ -115,7 +115,7 @@ export default function DeploymentAuthoringPanel({ title, preselectedArtifactId 
               ))}
             </select>
             {selectedArtifact && selectedArtifact.analysis.summary && (
-              <div style={{ fontSize: 12, color: "var(--agent-text-muted)", marginTop: 4, padding: "4px 8px", background: "rgba(255,255,255,0.03)", borderRadius: 4 }}>
+              <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4, padding: "4px 8px", background: "rgba(255,255,255,0.03)", borderRadius: 4 }}>
                 {selectedArtifact.analysis.summary}
               </div>
             )}
@@ -131,7 +131,7 @@ export default function DeploymentAuthoringPanel({ title, preselectedArtifactId 
                 style={{
                   background: "none",
                   border: "none",
-                  color: "var(--agent-accent)",
+                  color: "var(--accent)",
                   cursor: "pointer",
                   fontSize: 11,
                   padding: "4px 0",
@@ -146,7 +146,7 @@ export default function DeploymentAuthoringPanel({ title, preselectedArtifactId 
           {/* Environment selection */}
           {environmentsEnabled && (
             <div style={{ marginBottom: 12 }}>
-              <label style={{ fontSize: 12, fontWeight: 600, color: "var(--agent-text-muted)", display: "block", marginBottom: 4 }}>
+              <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", display: "block", marginBottom: 4 }}>
                 Target Environment
               </label>
               <select
@@ -162,7 +162,7 @@ export default function DeploymentAuthoringPanel({ title, preselectedArtifactId 
                 ))}
               </select>
               {(envoys ?? []).length > 0 && (
-                <div style={{ fontSize: 11, color: "var(--agent-text-muted)", marginTop: 4 }}>
+                <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>
                   {(envoys ?? []).filter((e) => e.health === "OK").length} / {(envoys ?? []).length} envoy{(envoys ?? []).length !== 1 ? "s" : ""} healthy
                 </div>
               )}
@@ -172,7 +172,7 @@ export default function DeploymentAuthoringPanel({ title, preselectedArtifactId 
           {/* Partition selection (optional) */}
           {(partitions ?? []).length > 0 && (
             <div style={{ marginBottom: 12 }}>
-              <label style={{ fontSize: 12, fontWeight: 600, color: "var(--agent-text-muted)", display: "block", marginBottom: 4 }}>
+              <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", display: "block", marginBottom: 4 }}>
                 Partition (optional)
               </label>
               <select
@@ -192,7 +192,7 @@ export default function DeploymentAuthoringPanel({ title, preselectedArtifactId 
 
           {/* Version */}
           <div style={{ marginBottom: 16 }}>
-            <label style={{ fontSize: 12, fontWeight: 600, color: "var(--agent-text-muted)", display: "block", marginBottom: 4 }}>
+            <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", display: "block", marginBottom: 4 }}>
               Version
             </label>
             <input
@@ -221,7 +221,7 @@ export default function DeploymentAuthoringPanel({ title, preselectedArtifactId 
               <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>
                 Deployment Summary
               </div>
-              <div style={{ fontSize: 13, color: "var(--agent-text-muted)" }}>
+              <div style={{ fontSize: 13, color: "var(--text-muted)" }}>
                 <div>
                   <strong>Artifact:</strong> {selectedArtifact?.name ?? selectedArtifactId.slice(0, 8)}
                 </div>

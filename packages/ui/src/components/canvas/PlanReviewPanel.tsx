@@ -223,11 +223,11 @@ export default function PlanReviewPanel({ deploymentId, title }: Props) {
                   {enrichment.conflictingDeployments.length} other deployment(s) in progress for this environment
                 </div>
               )}
-              <div style={{ fontSize: 13, color: "var(--agent-text-muted)" }}>
+              <div style={{ fontSize: 13, color: "var(--text-muted)" }}>
                 {enrichment.recentDeploymentsToEnv} deployment(s) to this environment in the last 24h
               </div>
               {enrichment.lastDeploymentToEnv && (
-                <div style={{ fontSize: 13, color: "var(--agent-text-muted)" }}>
+                <div style={{ fontSize: 13, color: "var(--text-muted)" }}>
                   Last deployment: v{enrichment.lastDeploymentToEnv.version} ({enrichment.lastDeploymentToEnv.status})
                 </div>
               )}
@@ -241,12 +241,12 @@ export default function PlanReviewPanel({ deploymentId, title }: Props) {
             <h3 className="canvas-section-title">What&apos;s Changing</h3>
             <pre style={{
               fontSize: 12,
-              background: "var(--agent-surface-2, #1a1a2e)",
+              background: "var(--surface-alt)",
               padding: 12,
               borderRadius: 6,
               overflow: "auto",
               whiteSpace: "pre-wrap",
-              color: "var(--agent-text-muted)",
+              color: "var(--text-muted)",
             }}>
               {plan.diffFromCurrent}
             </pre>
@@ -258,7 +258,7 @@ export default function PlanReviewPanel({ deploymentId, title }: Props) {
             <h3 className="canvas-section-title">Changes From Previous Plan</h3>
             <pre style={{
               fontSize: 12,
-              background: "var(--agent-surface-2, #1a1a2e)",
+              background: "var(--surface-alt)",
               padding: 12,
               borderRadius: 6,
               overflow: "auto",
@@ -274,7 +274,7 @@ export default function PlanReviewPanel({ deploymentId, title }: Props) {
         {plan && (
           <div className="canvas-section">
             <h3 className="canvas-section-title">Reasoning</h3>
-            <div style={{ fontSize: 13, color: "var(--agent-text-muted)", lineHeight: 1.5 }}>
+            <div style={{ fontSize: 13, color: "var(--text-muted)", lineHeight: 1.5 }}>
               {plan.reasoning}
             </div>
           </div>
@@ -312,11 +312,11 @@ export default function PlanReviewPanel({ deploymentId, title }: Props) {
               }}>
                 {recommendation.verdict === "proceed" ? "Proceed" : recommendation.verdict === "caution" ? "Proceed with Caution" : "Hold"}
               </div>
-              <div style={{ fontSize: 13, color: "var(--agent-text-muted)", marginBottom: 6 }}>
+              <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 6 }}>
                 {recommendation.summary}
               </div>
               {recommendation.factors.length > 0 && (
-                <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, color: "var(--agent-text-muted)" }}>
+                <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, color: "var(--text-muted)" }}>
                   {recommendation.factors.map((f, i) => (
                     <li key={i}>{f}</li>
                   ))}
@@ -350,7 +350,7 @@ export default function PlanReviewPanel({ deploymentId, title }: Props) {
                       </div>
                     )}
                     {step.rollbackAction && (
-                      <div style={{ fontSize: 11, color: "var(--agent-text-muted)", marginTop: 2 }}>
+                      <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>
                         Rollback: {step.rollbackAction}
                       </div>
                     )}
@@ -365,7 +365,7 @@ export default function PlanReviewPanel({ deploymentId, title }: Props) {
         {mode === "review" && deployment.rollbackPlan && (
           <div className="canvas-section">
             <h3 className="canvas-section-title">Rollback Plan</h3>
-            <div style={{ fontSize: 13, color: "var(--agent-text-muted)", marginBottom: 8 }}>
+            <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 8 }}>
               {deployment.rollbackPlan.reasoning}
             </div>
             <div className="canvas-timeline">
@@ -392,13 +392,13 @@ export default function PlanReviewPanel({ deploymentId, title }: Props) {
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               {modifiedSteps.map((step, i) => (
                 <div key={i} style={{
-                  background: "var(--agent-surface-2, #1a1a2e)",
+                  background: "var(--surface-alt)",
                   padding: 12,
                   borderRadius: 8,
-                  border: "1px solid var(--agent-border, #2a2a3e)",
+                  border: "1px solid var(--border)",
                 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: "var(--agent-text)" }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>
                       Step {i + 1}
                     </span>
                     <button
@@ -438,7 +438,7 @@ export default function PlanReviewPanel({ deploymentId, title }: Props) {
                     style={{ fontSize: 12, marginTop: 8, width: "100%", boxSizing: "border-box" }}
                   />
                   <div style={{ display: "flex", gap: 8, marginTop: 8, alignItems: "center" }}>
-                    <label style={{ fontSize: 12, color: "var(--agent-text-muted)", display: "flex", alignItems: "center", gap: 4 }}>
+                    <label style={{ fontSize: 12, color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 4 }}>
                       <input
                         type="checkbox"
                         checked={step.reversible}
@@ -466,7 +466,7 @@ export default function PlanReviewPanel({ deploymentId, title }: Props) {
                 + Add Step
               </button>
               <div style={{ marginTop: 8 }}>
-                <label style={{ fontSize: 12, color: "var(--agent-text-muted)", display: "block", marginBottom: 4 }}>
+                <label style={{ fontSize: 12, color: "var(--text-muted)", display: "block", marginBottom: 4 }}>
                   Reason for modification
                 </label>
                 <textarea
@@ -487,7 +487,7 @@ export default function PlanReviewPanel({ deploymentId, title }: Props) {
           <div className="canvas-section">
             <h3 className="canvas-section-title">Reject Deployment</h3>
             <div style={{ marginBottom: 8 }}>
-              <label style={{ fontSize: 12, color: "var(--agent-text-muted)", display: "block", marginBottom: 4 }}>
+              <label style={{ fontSize: 12, color: "var(--text-muted)", display: "block", marginBottom: 4 }}>
                 Reason for rejection
               </label>
               <textarea
@@ -525,7 +525,7 @@ export default function PlanReviewPanel({ deploymentId, title }: Props) {
           gap: 12,
           marginTop: 16,
           paddingTop: 16,
-          borderTop: "1px solid var(--agent-border, #2a2a3e)",
+          borderTop: "1px solid var(--border)",
         }}>
           {mode === "review" && (
             <>

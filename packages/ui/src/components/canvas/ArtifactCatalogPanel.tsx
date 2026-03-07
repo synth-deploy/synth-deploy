@@ -3,6 +3,7 @@ import { listArtifacts, createArtifact } from "../../api.js";
 import type { Artifact } from "../../types.js";
 import { useCanvas } from "../../context/CanvasContext.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
+import ConfidenceIndicator from "../ConfidenceIndicator.js";
 import { useQuery, invalidate } from "../../hooks/useQuery.js";
 
 interface Props {
@@ -17,21 +18,8 @@ function getConfidenceLevel(confidence: number): ConfidenceLevel {
   return "low";
 }
 
-function getConfidenceColor(level: ConfidenceLevel): string {
-  switch (level) {
-    case "high": return "#16a34a";
-    case "medium": return "#ca8a04";
-    case "low": return "#dc2626";
-  }
-}
-
-function getConfidenceLabel(level: ConfidenceLevel): string {
-  switch (level) {
-    case "high": return "HIGH";
-    case "medium": return "MEDIUM";
-    case "low": return "LOW";
-  }
-}
+const confColors: Record<ConfidenceLevel, string> = { high: "var(--status-succeeded)", medium: "var(--status-warning)", low: "var(--status-failed)" };
+const confLabels: Record<ConfidenceLevel, string> = { high: "HIGH", medium: "MEDIUM", low: "LOW" };
 
 export default function ArtifactCatalogPanel({ title }: Props) {
   const { pushPanel } = useCanvas();
@@ -116,19 +104,15 @@ export default function ArtifactCatalogPanel({ title }: Props) {
     fontSize: 11,
     padding: "4px 10px",
     borderRadius: 12,
-    border: `1px solid ${active ? "var(--agent-accent, #63e1be)" : "var(--agent-border)"}`,
-    background: active ? "rgba(99,225,190,0.15)" : "transparent",
-    color: active ? "var(--agent-accent, #63e1be)" : "var(--agent-text-muted)",
+    border: `1px solid ${active ? "var(--accent)" : "var(--border)"}`,
+    background: active ? "var(--accent-dim)" : "transparent",
+    color: active ? "var(--accent)" : "var(--text-muted)",
     cursor: "pointer",
     fontWeight: active ? 600 : 400,
     whiteSpace: "nowrap" as const,
   });
 
   function renderArtifactRow(art: Artifact) {
-    const level = getConfidenceLevel(art.analysis.confidence);
-    const color = getConfidenceColor(level);
-    const label = getConfidenceLabel(level);
-
     return (
       <div
         key={art.id}
@@ -139,34 +123,22 @@ export default function ArtifactCatalogPanel({ title }: Props) {
           gap: 12,
           padding: "12px 16px",
           borderRadius: 8,
-          border: "1px solid var(--agent-border)",
-          background: "var(--agent-card-bg)",
+          border: "1px solid var(--border)",
+          background: "var(--surface)",
           cursor: "pointer",
         }}
       >
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ fontWeight: 600, fontSize: 14, color: "var(--agent-text)" }}>
+            <span style={{ fontWeight: 600, fontSize: 14, color: "var(--text)" }}>
               {art.name}
             </span>
-            <span
-              style={{
-                fontSize: 10,
-                fontWeight: 600,
-                padding: "2px 6px",
-                borderRadius: 4,
-                background: `${color}22`,
-                color,
-                letterSpacing: "0.04em",
-              }}
-            >
-              {label}
-            </span>
+            <ConfidenceIndicator value={art.analysis.confidence} />
           </div>
           <div
             style={{
               fontSize: 11,
-              color: "var(--agent-text-muted)",
+              color: "var(--text-muted)",
               textTransform: "uppercase",
               letterSpacing: "0.05em",
               marginTop: 2,
@@ -178,7 +150,7 @@ export default function ArtifactCatalogPanel({ title }: Props) {
             <div
               style={{
                 fontSize: 12,
-                color: "var(--agent-text-muted)",
+                color: "var(--text-muted)",
                 marginTop: 6,
                 lineHeight: 1.4,
                 overflow: "hidden",
@@ -195,14 +167,14 @@ export default function ArtifactCatalogPanel({ title }: Props) {
               gap: 12,
               marginTop: 6,
               fontSize: 11,
-              color: "var(--agent-text-muted)",
+              color: "var(--text-muted)",
             }}
           >
             <span>{art.annotations.length} annotation{art.annotations.length !== 1 ? "s" : ""}</span>
             <span>Updated {new Date(art.updatedAt).toLocaleDateString()}</span>
           </div>
         </div>
-        <span style={{ fontSize: 11, color: "var(--agent-text-muted)", flexShrink: 0 }}>
+        <span style={{ fontSize: 11, color: "var(--text-muted)", flexShrink: 0 }}>
           View &rarr;
         </span>
       </div>
@@ -214,19 +186,22 @@ export default function ArtifactCatalogPanel({ title }: Props) {
       <div className="canvas-detail">
         <div style={{ padding: "0 16px" }}>
           {/* Header row */}
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
-            <h3 style={{ fontSize: 15, fontWeight: 600, margin: 0 }}>
-              Artifact Catalog
-              <span style={{ fontSize: 12, fontWeight: 400, color: "var(--agent-text-muted)", marginLeft: 8 }}>
-                {(artifacts ?? []).length} artifact{(artifacts ?? []).length !== 1 ? "s" : ""}
-              </span>
-            </h3>
-            <button
-              className="btn btn-primary"
-              onClick={() => setShowAddForm(!showAddForm)}
-              style={{ fontSize: 12, padding: "6px 14px" }}
-            >
-              {showAddForm ? "Cancel" : "+ Add Artifact"}
+          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 16 }}>
+            <div>
+              <h1 className="v6-page-title">Artifact Catalog</h1>
+              <p className="v6-page-subtitle">
+                Synth's understanding of your deployable artifacts. Review, correct, and teach.
+                <span style={{ marginLeft: 8, color: "var(--text-muted)" }}>
+                  {(artifacts ?? []).length} artifact{(artifacts ?? []).length !== 1 ? "s" : ""}
+                </span>
+              </p>
+            </div>
+            <button className="btn-accent-outline" onClick={() => setShowAddForm(!showAddForm)}>
+              <svg className="icon-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+              {showAddForm ? "Cancel" : "Add Artifact"}
             </button>
           </div>
 
@@ -236,8 +211,8 @@ export default function ArtifactCatalogPanel({ title }: Props) {
               style={{
                 padding: 12,
                 borderRadius: 8,
-                border: "1px solid var(--agent-border)",
-                background: "var(--agent-card-bg)",
+                border: "1px solid var(--border)",
+                background: "var(--surface)",
                 marginBottom: 16,
                 display: "flex",
                 gap: 8,
@@ -246,7 +221,7 @@ export default function ArtifactCatalogPanel({ title }: Props) {
               }}
             >
               <div style={{ flex: "1 1 200px" }}>
-                <label style={{ fontSize: 11, fontWeight: 600, color: "var(--agent-text-muted)", display: "block", marginBottom: 3 }}>
+                <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", display: "block", marginBottom: 3 }}>
                   Name
                 </label>
                 <input
@@ -259,14 +234,14 @@ export default function ArtifactCatalogPanel({ title }: Props) {
                     fontSize: 13,
                     padding: "6px 10px",
                     borderRadius: 6,
-                    border: "1px solid var(--agent-border)",
-                    background: "var(--agent-bg)",
-                    color: "var(--agent-text)",
+                    border: "1px solid var(--border)",
+                    background: "var(--input-bg)",
+                    color: "var(--text)",
                   }}
                 />
               </div>
               <div style={{ flex: "0 0 150px" }}>
-                <label style={{ fontSize: 11, fontWeight: 600, color: "var(--agent-text-muted)", display: "block", marginBottom: 3 }}>
+                <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", display: "block", marginBottom: 3 }}>
                   Type
                 </label>
                 <select
@@ -277,9 +252,9 @@ export default function ArtifactCatalogPanel({ title }: Props) {
                     fontSize: 13,
                     padding: "6px 10px",
                     borderRadius: 6,
-                    border: "1px solid var(--agent-border)",
-                    background: "var(--agent-bg)",
-                    color: "var(--agent-text)",
+                    border: "1px solid var(--border)",
+                    background: "var(--input-bg)",
+                    color: "var(--text)",
                   }}
                 >
                   <option value="docker">Docker Image</option>
@@ -298,7 +273,7 @@ export default function ArtifactCatalogPanel({ title }: Props) {
                 {creating ? "Creating..." : "Create"}
               </button>
               {createError && (
-                <div style={{ width: "100%", color: "#dc2626", fontSize: 12 }}>{createError}</div>
+                <div style={{ width: "100%", color: "var(--status-failed)", fontSize: 12 }}>{createError}</div>
               )}
             </div>
           )}
@@ -314,9 +289,9 @@ export default function ArtifactCatalogPanel({ title }: Props) {
               fontSize: 13,
               padding: "8px 12px",
               borderRadius: 6,
-              border: "1px solid var(--agent-border)",
-              background: "var(--agent-bg)",
-              color: "var(--agent-text)",
+              border: "1px solid var(--border)",
+              background: "var(--input-bg)",
+              color: "var(--text)",
               marginBottom: 12,
               boxSizing: "border-box",
             }}
@@ -337,34 +312,31 @@ export default function ArtifactCatalogPanel({ title }: Props) {
 
             {/* Divider */}
             {artifactTypes.length > 0 && (
-              <span style={{ borderLeft: "1px solid var(--agent-border)", margin: "0 4px" }} />
+              <span style={{ borderLeft: "1px solid var(--border)", margin: "0 4px" }} />
             )}
 
             {/* Confidence filters */}
-            {(["high", "medium", "low"] as const).map((level) => {
-              const color = getConfidenceColor(level);
-              return (
-                <button
-                  key={level}
-                  style={{
-                    ...chipStyle(confidenceFilter === level),
-                    borderColor: confidenceFilter === level ? color : "var(--agent-border)",
-                    color: confidenceFilter === level ? color : "var(--agent-text-muted)",
-                    background: confidenceFilter === level ? `${color}15` : "transparent",
-                  }}
-                  onClick={() => setConfidenceFilter(confidenceFilter === level ? null : level)}
-                >
-                  {getConfidenceLabel(level)}
-                </button>
-              );
-            })}
+            {(["high", "medium", "low"] as const).map((level) => (
+              <button
+                key={level}
+                style={{
+                  ...chipStyle(confidenceFilter === level),
+                  borderColor: confidenceFilter === level ? confColors[level] : "var(--border)",
+                  color: confidenceFilter === level ? confColors[level] : "var(--text-muted)",
+                  background: confidenceFilter === level ? confColors[level] + "15" : "transparent",
+                }}
+                onClick={() => setConfidenceFilter(confidenceFilter === level ? null : level)}
+              >
+                {confLabels[level]}
+              </button>
+            ))}
           </div>
 
           {/* Content */}
           {filtered.length === 0 && (
             <div className="text-muted" style={{ fontSize: 13, padding: "20px 0" }}>
               {(artifacts ?? []).length === 0
-                ? "No artifacts yet. Use the Command Channel to create one, or click Add Artifact above."
+                ? "No artifacts yet. Use the Synth Channel to create one, or click Add Artifact above."
                 : "No artifacts match your filters."}
             </div>
           )}
@@ -376,8 +348,8 @@ export default function ArtifactCatalogPanel({ title }: Props) {
                 style={{
                   padding: "10px 14px",
                   borderRadius: 8,
-                  background: "rgba(220,38,38,0.08)",
-                  border: "1px solid rgba(220,38,38,0.25)",
+                  background: "color-mix(in srgb, var(--status-failed) 8%, transparent)",
+                  border: "1px solid color-mix(in srgb, var(--status-failed) 25%, transparent)",
                   marginBottom: 10,
                   display: "flex",
                   alignItems: "center",
@@ -385,10 +357,10 @@ export default function ArtifactCatalogPanel({ title }: Props) {
                 }}
               >
                 <span style={{ fontSize: 14 }}>!</span>
-                <span style={{ fontSize: 13, color: "#dc2626", fontWeight: 500 }}>
+                <span style={{ fontSize: 13, color: "var(--status-failed)", fontWeight: 500 }}>
                   Needs Review
                 </span>
-                <span style={{ fontSize: 12, color: "var(--agent-text-muted)" }}>
+                <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
                   {needsReview.length} artifact{needsReview.length !== 1 ? "s" : ""} with low confidence analysis
                 </span>
               </div>

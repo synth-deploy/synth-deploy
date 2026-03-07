@@ -198,12 +198,12 @@ export default function SynthChannel({ scope, onAgentResult }: SynthChannelProps
             disabled={!inputValue.trim()}
             style={{
               background: inputValue.trim()
-                ? "rgba(99,225,190,0.12)"
-                : "rgba(107,114,128,0.06)",
+                ? "var(--accent-dim)"
+                : "transparent",
               borderColor: inputValue.trim()
-                ? "rgba(99,225,190,0.25)"
-                : "rgba(107,114,128,0.1)",
-              color: inputValue.trim() ? "#63e1be" : "#374151",
+                ? "var(--accent-border)"
+                : "var(--border)",
+              color: inputValue.trim() ? "var(--accent)" : "var(--text-muted)",
             }}
           >
             &#8629;

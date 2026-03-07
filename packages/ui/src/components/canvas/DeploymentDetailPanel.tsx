@@ -153,7 +153,7 @@ function LiveProgressSection({ events, stale }: { events: ProgressEvent[]; stale
 
       {/* Progress bar */}
       <div style={{
-        background: "var(--agent-bg-secondary, #1e1e2e)",
+        background: "var(--surface-alt)",
         borderRadius: 4,
         height: 8,
         marginBottom: 12,
@@ -167,7 +167,7 @@ function LiveProgressSection({ events, stale }: { events: ProgressEvent[]; stale
           borderRadius: 4,
         }} />
       </div>
-      <div style={{ fontSize: 11, color: "var(--agent-text-muted)", marginBottom: 8, textAlign: "right" }}>
+      <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 8, textAlign: "right" }}>
         {overallProgress}%
       </div>
 
@@ -218,7 +218,7 @@ function LiveProgressSection({ events, stale }: { events: ProgressEvent[]; stale
                   </div>
                   <div className="canvas-timeline-decision">{event.stepDescription}</div>
                   {event.output && (
-                    <div style={{ fontSize: 11, color: "var(--agent-text-muted)", marginTop: 2 }}>
+                    <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>
                       {event.output}
                     </div>
                   )}
@@ -262,12 +262,12 @@ function LiveProgressSection({ events, stale }: { events: ProgressEvent[]; stale
             marginTop: 10,
             maxHeight: 200,
             overflowY: "auto",
-            background: "var(--agent-bg-secondary, #0d0d14)",
+            background: "var(--surface-alt)",
             borderRadius: 4,
             padding: "8px 10px",
             fontSize: 11,
             fontFamily: "monospace",
-            color: "var(--agent-text-muted)",
+            color: "var(--text-muted)",
             lineHeight: 1.6,
           }}
         >
@@ -403,7 +403,7 @@ export default function DeploymentDetailPanel({ deploymentId, title }: Props) {
         {deployment.plan && (
           <div className="canvas-section">
             <h3 className="canvas-section-title">Deployment Plan</h3>
-            <div style={{ fontSize: 13, color: "var(--agent-text-muted)", marginBottom: 8 }}>
+            <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 8 }}>
               {deployment.plan.reasoning}
             </div>
             <div className="canvas-timeline">
@@ -445,7 +445,7 @@ export default function DeploymentDetailPanel({ deploymentId, title }: Props) {
                       </div>
                       <div className="canvas-timeline-decision">{step.description}</div>
                       {step.output && (
-                        <div style={{ fontSize: 11, color: "var(--agent-text-muted)", marginTop: 2 }}>{step.output}</div>
+                        <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>{step.output}</div>
                       )}
                       {step.error && (
                         <div style={{ fontSize: 11, color: "#dc2626", marginTop: 2 }}>{step.error}</div>
