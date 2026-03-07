@@ -1,13 +1,13 @@
 export type EntityType = "Envoy" | "Partition" | "Artifact" | "Deployment" | "Debrief" | "Synth" | "Command";
 
 const ENTITY_COLORS: Record<EntityType, { color: string; bg: string; border: string }> = {
-  Envoy: { color: "#34d399", bg: "rgba(52, 211, 153, 0.1)", border: "rgba(52, 211, 153, 0.2)" },
-  Partition: { color: "#818cf8", bg: "rgba(129, 140, 248, 0.1)", border: "rgba(129, 140, 248, 0.2)" },
-  Artifact: { color: "#6b7280", bg: "rgba(107, 114, 128, 0.1)", border: "rgba(107, 114, 128, 0.2)" },
-  Deployment: { color: "#f59e0b", bg: "rgba(245, 158, 11, 0.1)", border: "rgba(245, 158, 11, 0.2)" },
-  Debrief: { color: "#e879f9", bg: "rgba(232, 121, 249, 0.1)", border: "rgba(232, 121, 249, 0.2)" },
-  Synth: { color: "#63e1be", bg: "rgba(99, 225, 190, 0.1)", border: "rgba(99, 225, 190, 0.2)" },
-  Command: { color: "#63e1be", bg: "rgba(99, 225, 190, 0.1)", border: "rgba(99, 225, 190, 0.2)" },
+  Envoy: { color: "var(--status-succeeded)", bg: "color-mix(in srgb, var(--status-succeeded) 10%, transparent)", border: "color-mix(in srgb, var(--status-succeeded) 20%, transparent)" },
+  Partition: { color: "var(--accent)", bg: "color-mix(in srgb, var(--accent) 10%, transparent)", border: "color-mix(in srgb, var(--accent) 20%, transparent)" },
+  Artifact: { color: "var(--text-muted)", bg: "color-mix(in srgb, var(--text-muted) 10%, transparent)", border: "color-mix(in srgb, var(--text-muted) 20%, transparent)" },
+  Deployment: { color: "var(--status-warning)", bg: "color-mix(in srgb, var(--status-warning) 10%, transparent)", border: "color-mix(in srgb, var(--status-warning) 20%, transparent)" },
+  Debrief: { color: "var(--accent)", bg: "color-mix(in srgb, var(--accent) 10%, transparent)", border: "color-mix(in srgb, var(--accent) 20%, transparent)" },
+  Synth: { color: "var(--accent)", bg: "var(--accent-dim)", border: "var(--accent-border)" },
+  Command: { color: "var(--accent)", bg: "var(--accent-dim)", border: "var(--accent-border)" },
 };
 
 interface EntityTagProps {

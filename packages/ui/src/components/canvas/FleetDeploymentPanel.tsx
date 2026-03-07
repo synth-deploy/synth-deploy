@@ -21,16 +21,16 @@ interface Props {
 // ---------------------------------------------------------------------------
 
 const statusConfig: Record<FleetDeploymentStatus, { color: string; label: string }> = {
-  selecting_representatives: { color: "#8b5cf6", label: "Selecting Representatives" },
+  selecting_representatives: { color: "var(--accent)", label: "Selecting Representatives" },
   planning: { color: "#6366f1", label: "Planning" },
-  awaiting_approval: { color: "#f59e0b", label: "Awaiting Approval" },
+  awaiting_approval: { color: "var(--status-warning)", label: "Awaiting Approval" },
   validating: { color: "#06b6d4", label: "Validating" },
   validated: { color: "#10b981", label: "Validated" },
-  executing: { color: "#3b82f6", label: "Executing" },
-  paused: { color: "#ca8a04", label: "Paused" },
-  completed: { color: "#16a34a", label: "Completed" },
-  failed: { color: "#dc2626", label: "Failed" },
-  rolled_back: { color: "#dc2626", label: "Rolled Back" },
+  executing: { color: "var(--accent)", label: "Executing" },
+  paused: { color: "var(--status-warning)", label: "Paused" },
+  completed: { color: "var(--status-succeeded)", label: "Completed" },
+  failed: { color: "var(--status-failed)", label: "Failed" },
+  rolled_back: { color: "var(--status-failed)", label: "Rolled Back" },
 };
 
 const strategyLabels: Record<string, string> = {
@@ -76,7 +76,7 @@ export default function FleetDeploymentPanel({ fleetDeploymentId, title }: Props
   if (error && !fleet) {
     return (
       <CanvasPanelHost title={title}>
-        <div style={{ color: "#dc2626", padding: 16 }}>{error.message}</div>
+        <div style={{ color: "var(--status-failed)", padding: 16 }}>{error.message}</div>
       </CanvasPanelHost>
     );
   }
@@ -141,7 +141,7 @@ export default function FleetDeploymentPanel({ fleetDeploymentId, title }: Props
                 width: `${progressPercent}%`,
                 background: progress.failed > 0
                   ? "linear-gradient(90deg, #16a34a, #dc2626)"
-                  : "#16a34a",
+                  : "var(--status-succeeded)",
                 transition: "width 0.3s ease",
               }}
             />
@@ -172,9 +172,9 @@ export default function FleetDeploymentPanel({ fleetDeploymentId, title }: Props
                       height: 4,
                       borderRadius: 2,
                       background: isPast
-                        ? "#16a34a"
+                        ? "var(--status-succeeded)"
                         : isCurrent
-                          ? "#3b82f6"
+                          ? "var(--accent)"
                           : "rgba(255,255,255,0.08)",
                     }}
                   />
@@ -259,7 +259,7 @@ export default function FleetDeploymentPanel({ fleetDeploymentId, title }: Props
                       width: 8,
                       height: 8,
                       borderRadius: "50%",
-                      background: result.validated ? "#16a34a" : "#dc2626",
+                      background: result.validated ? "var(--status-succeeded)" : "var(--status-failed)",
                       flexShrink: 0,
                     }}
                   />
@@ -273,16 +273,16 @@ export default function FleetDeploymentPanel({ fleetDeploymentId, title }: Props
                     style={{
                       fontSize: 10,
                       fontWeight: 600,
-                      color: result.validated ? "#16a34a" : "#dc2626",
+                      color: result.validated ? "var(--status-succeeded)" : "var(--status-failed)",
                       padding: "2px 8px",
-                      border: `1px solid ${result.validated ? "#16a34a" : "#dc2626"}30`,
+                      border: `1px solid ${result.validated ? "var(--status-succeeded)" : "var(--status-failed)"}30`,
                       borderRadius: 10,
                     }}
                   >
                     {result.validated ? "Validated" : "Failed"}
                   </span>
                   {result.issues && result.issues.length > 0 && (
-                    <div style={{ width: "100%", marginTop: 4, paddingLeft: 18, color: "#f87171", fontSize: 11 }}>
+                    <div style={{ width: "100%", marginTop: 4, paddingLeft: 18, color: "var(--status-failed)", fontSize: 11 }}>
                       {result.issues.map((issue, i) => (
                         <div key={i}>{issue}</div>
                       ))}
@@ -323,7 +323,7 @@ export default function FleetDeploymentPanel({ fleetDeploymentId, title }: Props
               disabled={actionLoading}
               onClick={() => handleAction(() => executeFleetDeployment(fleet.id))}
               style={{
-                background: "#16a34a",
+                background: "var(--status-succeeded)",
                 color: "#fff",
                 border: "none",
                 borderRadius: 6,
@@ -345,7 +345,7 @@ export default function FleetDeploymentPanel({ fleetDeploymentId, title }: Props
               onClick={() => handleAction(() => pauseFleetDeployment(fleet.id))}
               style={{
                 background: "transparent",
-                color: "#ca8a04",
+                color: "var(--status-warning)",
                 border: "1px solid #ca8a04",
                 borderRadius: 6,
                 padding: "8px 16px",
@@ -369,7 +369,7 @@ export default function FleetDeploymentPanel({ fleetDeploymentId, title }: Props
               background: "rgba(220,38,38,0.08)",
               border: "1px solid rgba(220,38,38,0.2)",
               borderRadius: 6,
-              color: "#f87171",
+              color: "var(--status-failed)",
               fontSize: 12,
             }}
           >

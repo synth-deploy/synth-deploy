@@ -14,9 +14,9 @@ function envClass(name: string): string {
 
 function envColor(name: string): { dot: string; text: string } {
   const lower = name.toLowerCase();
-  if (lower.includes("prod")) return { dot: "#dc2626", text: "#dc2626" };
-  if (lower.includes("stag")) return { dot: "#ca8a04", text: "#ca8a04" };
-  return { dot: "#2563eb", text: "#2563eb" };
+  if (lower.includes("prod")) return { dot: "var(--status-failed)", text: "var(--status-failed)" };
+  if (lower.includes("stag")) return { dot: "var(--status-warning)", text: "var(--status-warning)" };
+  return { dot: "var(--accent)", text: "var(--accent)" };
 }
 
 export default function EnvBadge({ name, agentData }: { name: string; agentData?: EnvAgentData }) {
@@ -29,9 +29,9 @@ export default function EnvBadge({ name, agentData }: { name: string; agentData?
   }
 
   const colors = envColor(name);
-  const healthColor = agentData.envoyHealth === "OK" ? "#16a34a"
-    : agentData.envoyHealth === "Degraded" ? "#ca8a04"
-    : "#dc2626";
+  const healthColor = agentData.envoyHealth === "OK" ? "var(--status-succeeded)"
+    : agentData.envoyHealth === "Degraded" ? "var(--status-warning)"
+    : "var(--status-failed)";
 
   return (
     <div className={`env-badge-expanded ${envClass(name)}`}>

@@ -35,6 +35,10 @@ export default function DeploymentListPanel({ title, filterStatus, filterPartiti
   return (
     <CanvasPanelHost title={title}>
       <div className="canvas-detail">
+        <div style={{ padding: "0 16px", marginBottom: 16 }}>
+          <h1 className="v6-page-title">Debriefs</h1>
+          <p className="v6-page-subtitle">Every deployment decision, logged and explained.</p>
+        </div>
         <div className="canvas-summary-strip">
           <div className="canvas-summary-item">
             <span className="canvas-summary-value">{deployments.length}</span>

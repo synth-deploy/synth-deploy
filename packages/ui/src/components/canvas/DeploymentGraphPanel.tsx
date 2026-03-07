@@ -132,10 +132,10 @@ async function updateGraph(
 
 const statusColor = (s: string) => {
   switch (s) {
-    case "completed": return "#16a34a";
-    case "executing": return "#2563eb";
-    case "failed": return "#dc2626";
-    case "rolled_back": return "#ca8a04";
+    case "completed": return "var(--status-succeeded)";
+    case "executing": return "var(--accent)";
+    case "failed": return "var(--status-failed)";
+    case "rolled_back": return "var(--status-warning)";
     case "awaiting_approval": return "#9333ea";
     case "planning": return "#0891b2";
     case "draft": return "#6b7280";
@@ -186,7 +186,7 @@ function GraphListView({ title }: { title: string }) {
     <CanvasPanelHost title={title}>
       <div className="canvas-detail">
         <SectionHeader
-          color="#8b5cf6"
+          color="var(--accent)"
           shape="diamond"
           label="Deployment Graphs"
           subtitle="orchestrated multi-envoy deployments"
@@ -406,7 +406,7 @@ function GraphDetailView({ title, graphId }: { title: string; graphId: string })
       <div className="canvas-detail">
         {/* Header */}
         <SectionHeader
-          color="#8b5cf6"
+          color="var(--accent)"
           shape="diamond"
           label={graph.name}
           subtitle={`${graph.approvalMode} approval mode`}
@@ -427,7 +427,7 @@ function GraphDetailView({ title, graphId }: { title: string; graphId: string })
                   marginLeft: "auto", fontSize: 11, padding: "2px 10px",
                   borderRadius: 4, border: `1px solid ${editMode ? "#dc262640" : "#8b5cf640"}`,
                   background: editMode ? "#dc262615" : "#8b5cf615",
-                  color: editMode ? "#dc2626" : "#8b5cf6",
+                  color: editMode ? "var(--status-failed)" : "var(--accent)",
                   cursor: "pointer",
                 }}
               >
@@ -442,7 +442,7 @@ function GraphDetailView({ title, graphId }: { title: string; graphId: string })
                 style={{
                   marginLeft: canEdit ? 0 : "auto", fontSize: 11, padding: "2px 10px",
                   borderRadius: 4, border: "1px solid #16a34a40",
-                  background: "#16a34a15", color: "#16a34a", cursor: "pointer",
+                  background: "#16a34a15", color: "var(--status-succeeded)", cursor: "pointer",
                 }}
               >
                 Approve Remaining
@@ -456,7 +456,7 @@ function GraphDetailView({ title, graphId }: { title: string; graphId: string })
               style={{
                 fontSize: 12, padding: "4px 16px", borderRadius: 4,
                 border: "1px solid #16a34a40", background: "#16a34a20",
-                color: "#16a34a", cursor: "pointer", marginBottom: 8,
+                color: "var(--status-succeeded)", cursor: "pointer", marginBottom: 8,
               }}
             >
               Save Changes
@@ -474,7 +474,7 @@ function GraphDetailView({ title, graphId }: { title: string; graphId: string })
         </div>
 
         {actionError && (
-          <div style={{ color: "#dc2626", fontSize: 12, marginBottom: 8, padding: "6px 10px", background: "#dc262610", borderRadius: 6 }}>
+          <div style={{ color: "var(--status-failed)", fontSize: 12, marginBottom: 8, padding: "6px 10px", background: "#dc262610", borderRadius: 6 }}>
             {actionError}
           </div>
         )}
@@ -501,7 +501,7 @@ function GraphDetailView({ title, graphId }: { title: string; graphId: string })
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <span style={{
                     width: 22, height: 22, borderRadius: "50%",
-                    background: "rgba(139,92,246,0.15)", color: "#8b5cf6",
+                    background: "rgba(139,92,246,0.15)", color: "var(--accent)",
                     display: "flex", alignItems: "center", justifyContent: "center",
                     fontSize: 11, fontWeight: 700, flexShrink: 0,
                   }}>
@@ -535,7 +535,7 @@ function GraphDetailView({ title, graphId }: { title: string; graphId: string })
                         style={{
                           fontSize: 11, padding: "2px 10px",
                           borderRadius: 4, border: "1px solid #2563eb40",
-                          background: "#2563eb15", color: "#2563eb", cursor: "pointer",
+                          background: "#2563eb15", color: "var(--accent)", cursor: "pointer",
                         }}
                       >
                         Retry
@@ -545,7 +545,7 @@ function GraphDetailView({ title, graphId }: { title: string; graphId: string })
                         style={{
                           fontSize: 11, padding: "2px 10px",
                           borderRadius: 4, border: "1px solid #ca8a0440",
-                          background: "#ca8a0415", color: "#ca8a04", cursor: "pointer",
+                          background: "#ca8a0415", color: "var(--status-warning)", cursor: "pointer",
                         }}
                       >
                         Skip
@@ -562,7 +562,7 @@ function GraphDetailView({ title, graphId }: { title: string; graphId: string })
                         Input: <code style={{ color: "#c084fc" }}>${b.variable}</code>{" "}
                         from node {b.sourceNodeId.slice(0, 8)}...
                         {b.resolvedValue && (
-                          <span style={{ color: "#16a34a" }}> = {b.resolvedValue}</span>
+                          <span style={{ color: "var(--status-succeeded)" }}> = {b.resolvedValue}</span>
                         )}
                       </div>
                     ))}
@@ -574,7 +574,7 @@ function GraphDetailView({ title, graphId }: { title: string; graphId: string })
                   <div style={{ marginTop: 4, paddingLeft: 30 }}>
                     {node.outputBindings.map((b, i) => (
                       <div key={i} style={{ fontSize: 11, color: "#888" }}>
-                        Output: <code style={{ color: "#38bdf8" }}>{b.name}</code>{" "}
+                        Output: <code style={{ color: "var(--accent)" }}>{b.name}</code>{" "}
                         ({b.source})
                       </div>
                     ))}
@@ -623,17 +623,17 @@ function GraphDetailView({ title, graphId }: { title: string; graphId: string })
                             />
                           </>
                         )}
-                        <button onClick={() => handleAddBinding(node.id)} style={smallBtnStyle("#16a34a")}>
+                        <button onClick={() => handleAddBinding(node.id)} style={smallBtnStyle("var(--status-succeeded)")}>
                           Add
                         </button>
-                        <button onClick={() => setBindingNodeId(null)} style={smallBtnStyle("#dc2626")}>
+                        <button onClick={() => setBindingNodeId(null)} style={smallBtnStyle("var(--status-failed)")}>
                           Cancel
                         </button>
                       </div>
                     ) : (
                       <button
                         onClick={() => setBindingNodeId(node.id)}
-                        style={{ ...smallBtnStyle("#38bdf8"), marginTop: 2 }}
+                        style={{ ...smallBtnStyle("var(--accent)"), marginTop: 2 }}
                       >
                         + Add Binding
                       </button>
@@ -664,7 +664,7 @@ function GraphDetailView({ title, graphId }: { title: string; graphId: string })
                 <span style={{ fontWeight: 500, color: "#ccc" }}>
                   {fromNode?.artifactName ?? edge.from.slice(0, 8)}
                 </span>
-                <span style={{ color: edge.type === "data_flow" ? "#38bdf8" : "#8b5cf6" }}>
+                <span style={{ color: edge.type === "data_flow" ? "var(--accent)" : "var(--accent)" }}>
                   {edge.type === "data_flow" ? "-- data -->" : "-- depends -->"}
                 </span>
                 <span style={{ fontWeight: 500, color: "#ccc" }}>
@@ -681,7 +681,7 @@ function GraphDetailView({ title, graphId }: { title: string; graphId: string })
                     style={{
                       marginLeft: "auto", fontSize: 10, padding: "1px 6px",
                       borderRadius: 3, border: "1px solid #dc262640",
-                      background: "#dc262610", color: "#dc2626", cursor: "pointer",
+                      background: "#dc262610", color: "var(--status-failed)", cursor: "pointer",
                     }}
                   >
                     Remove
@@ -742,7 +742,7 @@ function GraphDetailView({ title, graphId }: { title: string; graphId: string })
                     />
                   </>
                 )}
-                <button onClick={handleAddEdge} style={smallBtnStyle("#16a34a")}>
+                <button onClick={handleAddEdge} style={smallBtnStyle("var(--status-succeeded)")}>
                   Add
                 </button>
               </div>
@@ -818,14 +818,14 @@ function ProgressBar({
         height: 6, borderRadius: 3, background: "#333", overflow: "hidden",
         display: "flex", marginBottom: 4,
       }}>
-        <div style={{ width: `${pctComplete}%`, background: "#16a34a", transition: "width 0.3s" }} />
-        <div style={{ width: `${pctExecuting}%`, background: "#2563eb", transition: "width 0.3s" }} />
-        <div style={{ width: `${pctFailed}%`, background: "#dc2626", transition: "width 0.3s" }} />
+        <div style={{ width: `${pctComplete}%`, background: "var(--status-succeeded)", transition: "width 0.3s" }} />
+        <div style={{ width: `${pctExecuting}%`, background: "var(--accent)", transition: "width 0.3s" }} />
+        <div style={{ width: `${pctFailed}%`, background: "var(--status-failed)", transition: "width 0.3s" }} />
       </div>
       <div style={{ fontSize: 11, color: "#888" }}>
         {completed}/{total} completed
-        {failed > 0 && <span style={{ color: "#dc2626" }}> · {failed} failed</span>}
-        {executing > 0 && <span style={{ color: "#2563eb" }}> · {executing} executing</span>}
+        {failed > 0 && <span style={{ color: "var(--status-failed)" }}> · {failed} failed</span>}
+        {executing > 0 && <span style={{ color: "var(--accent)" }}> · {executing} executing</span>}
       </div>
     </div>
   );

@@ -221,8 +221,8 @@ function EmptyState({ onComplete }: { onComplete: () => void }) {
     width: 28, height: 28, borderRadius: "50%",
     display: "flex", alignItems: "center", justifyContent: "center",
     fontSize: 13, fontWeight: 700,
-    background: step > s ? "#34d399" : step === s ? "rgba(99, 225, 190, 0.2)" : "rgba(107, 114, 128, 0.15)",
-    color: step > s ? "#0f1420" : step === s ? "#63e1be" : "#6b7280",
+    background: step > s ? "var(--status-succeeded)" : step === s ? "rgba(99, 225, 190, 0.2)" : "rgba(107, 114, 128, 0.15)",
+    color: step > s ? "#0f1420" : step === s ? "var(--accent)" : "#6b7280",
   });
 
   const statusLabel: Record<string, string> = {
@@ -283,7 +283,7 @@ function EmptyState({ onComplete }: { onComplete: () => void }) {
               <option value="config">Configuration Bundle</option>
               <option value="other">Other</option>
             </select>
-            {step1Error && <div style={{ color: "#dc2626", fontSize: 12 }}>{step1Error}</div>}
+            {step1Error && <div style={{ color: "var(--status-failed)", fontSize: 12 }}>{step1Error}</div>}
             <button
               className="btn btn-primary"
               onClick={handleCreateArtifact}
@@ -297,13 +297,13 @@ function EmptyState({ onComplete }: { onComplete: () => void }) {
 
         {step > 1 && createdArtifact && (
           <div>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#34d399" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--status-succeeded)" }}>
               <span style={{ fontWeight: 600 }}>{createdArtifact.name}</span>
               <span style={{ color: "var(--agent-text-muted)" }}>({createdArtifact.type})</span>
             </div>
             {analysisPolling && !analysisSummary && (
               <div style={{ fontSize: 12, color: "var(--agent-text-muted)", marginTop: 6, display: "flex", alignItems: "center", gap: 6 }}>
-                <span className="v2-envoy-spinner" style={{ width: 12, height: 12, border: "2px solid rgba(99,225,190,0.2)", borderTopColor: "#63e1be", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
+                <span className="v2-envoy-spinner" style={{ width: 12, height: 12, border: "2px solid rgba(99,225,190,0.2)", borderTopColor: "var(--accent)", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
                 Analyzing artifact...
               </div>
             )}
@@ -344,15 +344,15 @@ function EmptyState({ onComplete }: { onComplete: () => void }) {
               <div style={{ color: "var(--agent-text-muted)", lineHeight: 1.5 }}>
                 Install and start an envoy on your target machine. It will connect back to this Synth instance automatically.
               </div>
-              <div style={{ marginTop: 12, fontFamily: "var(--font-mono)", fontSize: 12, color: "#63e1be", background: "rgba(0,0,0,0.3)", padding: "8px 12px", borderRadius: 6, wordBreak: "break-all" }}>
+              <div style={{ marginTop: 12, fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--accent)", background: "rgba(0,0,0,0.3)", padding: "8px 12px", borderRadius: 6, wordBreak: "break-all" }}>
                 npx @synth-deploy/envoy --command-url {window.location.origin}
               </div>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--agent-text-muted)" }}>
-              <span className="v2-envoy-spinner" style={{ width: 14, height: 14, border: "2px solid rgba(99,225,190,0.2)", borderTopColor: "#63e1be", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
+              <span className="v2-envoy-spinner" style={{ width: 14, height: 14, border: "2px solid rgba(99,225,190,0.2)", borderTopColor: "var(--accent)", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
               Waiting for envoy connection...
               {envoys.length > 0 && (
-                <span style={{ color: "#f59e0b" }}>
+                <span style={{ color: "var(--status-warning)" }}>
                   ({envoys.length} envoy{envoys.length !== 1 ? "s" : ""} found, none healthy yet)
                 </span>
               )}
@@ -371,7 +371,7 @@ function EmptyState({ onComplete }: { onComplete: () => void }) {
         )}
 
         {step > 2 && connectedEnvoy && (
-          <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#34d399" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--status-succeeded)" }}>
             <span style={{ fontWeight: 600 }}>{connectedEnvoy.hostname ?? connectedEnvoy.id.slice(0, 8)}</span>
             <span style={{ color: "var(--agent-text-muted)" }}>({connectedEnvoy.url})</span>
             <span className="v2-synth-status-badge" style={{ fontSize: 10 }}>OK</span>
@@ -431,7 +431,7 @@ function EmptyState({ onComplete }: { onComplete: () => void }) {
               style={{ fontSize: 13, padding: "8px 12px", borderRadius: 6, border: "1px solid var(--agent-border)", background: "var(--agent-bg)", color: "var(--agent-text)" }}
             />
 
-            {step3Error && <div style={{ color: "#dc2626", fontSize: 12 }}>{step3Error}</div>}
+            {step3Error && <div style={{ color: "var(--status-failed)", fontSize: 12 }}>{step3Error}</div>}
             <button
               className="btn btn-primary"
               onClick={handleDeploy}
@@ -448,7 +448,7 @@ function EmptyState({ onComplete }: { onComplete: () => void }) {
             {/* Deployment status indicator */}
             {deploymentStatus && deploymentStatus !== "succeeded" && deploymentStatus !== "failed" && deploymentStatus !== "rolled_back" && (
               <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--agent-text-muted)" }}>
-                <span className="v2-envoy-spinner" style={{ width: 14, height: 14, border: "2px solid rgba(99,225,190,0.2)", borderTopColor: "#63e1be", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
+                <span className="v2-envoy-spinner" style={{ width: 14, height: 14, border: "2px solid rgba(99,225,190,0.2)", borderTopColor: "var(--accent)", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
                 {statusLabel[deploymentStatus] ?? "Processing..."}
               </div>
             )}
@@ -461,7 +461,7 @@ function EmptyState({ onComplete }: { onComplete: () => void }) {
                 </div>
                 {deploymentDebrief.map((entry) => (
                   <div key={entry.id} style={{ fontSize: 12, color: "var(--agent-text-muted)", padding: "4px 0", borderBottom: "1px solid rgba(107,114,128,0.1)" }}>
-                    <span style={{ color: entry.agent === "envoy" ? "#34d399" : "#63e1be", fontWeight: 500 }}>
+                    <span style={{ color: entry.agent === "envoy" ? "var(--status-succeeded)" : "var(--accent)", fontWeight: 500 }}>
                       {entry.agent === "envoy" ? "Envoy" : "Synth"}
                     </span>
                     {" \u2014 "}

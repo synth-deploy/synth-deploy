@@ -21,9 +21,9 @@ interface Props {
 type TabKey = "analysis" | "annotations" | "learning" | "versions" | "deployments";
 
 function confidenceColor(c: number): string {
-  if (c >= 0.7) return "#16a34a";
-  if (c >= 0.5) return "#ca8a04";
-  return "#dc2626";
+  if (c >= 0.7) return "var(--status-succeeded)";
+  if (c >= 0.5) return "var(--status-warning)";
+  return "var(--status-failed)";
 }
 
 function confidenceLabel(c: number): string {
@@ -149,7 +149,7 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
               borderRadius: 8,
               margin: "0 16px 16px",
               fontSize: 13,
-              color: "#dc2626",
+              color: "var(--status-failed)",
               lineHeight: 1.5,
             }}
           >
@@ -241,7 +241,7 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
         {activeTab === "analysis" && (
           <div style={{ padding: "16px" }}>
             {/* Summary */}
-            <SectionHeader color="#63e1be" shape="circle" label="Summary" />
+            <SectionHeader color="var(--accent)" shape="circle" label="Summary" />
             <div
               style={{
                 fontSize: 13,
@@ -272,7 +272,7 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
             )}
 
             {/* Configuration Expectations */}
-            <SectionHeader color="#f59e0b" shape="square" label="Configuration Expectations" />
+            <SectionHeader color="var(--status-warning)" shape="square" label="Configuration Expectations" />
             {configEntries.length > 0 ? (
               <div className="canvas-var-table" style={{ marginBottom: 20 }}>
                 {configEntries.map(([key, val]) => (
@@ -313,7 +313,7 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
         {/* --- Annotations Tab --- */}
         {activeTab === "annotations" && (
           <div style={{ padding: "16px" }}>
-            <SectionHeader color="#f59e0b" shape="diamond" label="Corrections & Annotations" />
+            <SectionHeader color="var(--status-warning)" shape="diamond" label="Corrections & Annotations" />
 
             {/* Add correction form */}
             <div
@@ -383,7 +383,7 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
                 </button>
               </div>
               {annotationError && (
-                <div style={{ color: "#dc2626", fontSize: 12, marginTop: 6 }}>{annotationError}</div>
+                <div style={{ color: "var(--status-failed)", fontSize: 12, marginTop: 6 }}>{annotationError}</div>
               )}
             </div>
 
@@ -405,7 +405,7 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
                         style={{
                           fontSize: 11,
                           fontWeight: 600,
-                          color: "#f59e0b",
+                          color: "var(--status-warning)",
                           textTransform: "uppercase",
                           letterSpacing: "0.04em",
                         }}
@@ -593,7 +593,7 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
                   {versionSubmitting ? "Adding..." : "Add"}
                 </button>
                 {versionError && (
-                  <div style={{ width: "100%", color: "#dc2626", fontSize: 12 }}>{versionError}</div>
+                  <div style={{ width: "100%", color: "var(--status-failed)", fontSize: 12 }}>{versionError}</div>
                 )}
               </div>
             )}
@@ -649,7 +649,7 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
         {/* --- Deployments Tab --- */}
         {activeTab === "deployments" && (
           <div style={{ padding: "16px" }}>
-            <SectionHeader color="#34d399" shape="circle" label="Related Deployments" />
+            <SectionHeader color="var(--status-succeeded)" shape="circle" label="Related Deployments" />
 
             {sortedDeployments.length > 0 ? (
               <div className="v2-scoped-list">

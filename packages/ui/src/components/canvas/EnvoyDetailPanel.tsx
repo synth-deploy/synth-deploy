@@ -29,10 +29,10 @@ export default function EnvoyDetailPanel({ envoyId, title }: Props) {
 
   const healthColor =
     envoy.health === "OK"
-      ? "#16a34a"
+      ? "var(--status-succeeded)"
       : envoy.health === "Degraded"
-        ? "#ca8a04"
-        : "#dc2626";
+        ? "var(--status-warning)"
+        : "var(--status-failed)";
 
   return (
     <CanvasPanelHost title={title}>
@@ -95,7 +95,7 @@ export default function EnvoyDetailPanel({ envoyId, title }: Props) {
                 <span
                   className="mono"
                   style={{
-                    color: envoy.readiness.ready ? "#16a34a" : "#dc2626",
+                    color: envoy.readiness.ready ? "var(--status-succeeded)" : "var(--status-failed)",
                   }}
                 >
                   {envoy.readiness.ready ? "READY" : "NOT READY"}
@@ -115,19 +115,19 @@ export default function EnvoyDetailPanel({ envoyId, title }: Props) {
             <div className="canvas-var-table">
               <div className="canvas-var-row">
                 <span className="mono">Succeeded</span>
-                <span className="mono" style={{ color: "#16a34a" }}>
+                <span className="mono" style={{ color: "var(--status-succeeded)" }}>
                   {envoy.summary.succeeded}
                 </span>
               </div>
               <div className="canvas-var-row">
                 <span className="mono">Failed</span>
-                <span className="mono" style={{ color: "#dc2626" }}>
+                <span className="mono" style={{ color: "var(--status-failed)" }}>
                   {envoy.summary.failed}
                 </span>
               </div>
               <div className="canvas-var-row">
                 <span className="mono">Executing</span>
-                <span className="mono" style={{ color: "#63e1be" }}>
+                <span className="mono" style={{ color: "var(--accent)" }}>
                   {envoy.summary.executing}
                 </span>
               </div>

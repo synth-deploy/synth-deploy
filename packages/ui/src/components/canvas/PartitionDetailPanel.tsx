@@ -106,7 +106,7 @@ export default function PartitionDetailPanel({ partitionId, title }: Props) {
           <div className="v2-detail-columns">
             <div className="v2-detail-main">
               {/* Recent deployments */}
-              <SectionHeader color="#34d399" shape="circle" label="Recent Deployments" subtitle={`for ${partition.name}`} />
+              <SectionHeader color="var(--status-succeeded)" shape="circle" label="Recent Deployments" subtitle={`for ${partition.name}`} />
               <div className="v2-scoped-list">
                 {sortedDeploys.slice(0, 10).map((d) => {
                   const envName = (environments ?? []).find((e) => e.id === d.environmentId)?.name ?? d.environmentId;
@@ -146,7 +146,7 @@ export default function PartitionDetailPanel({ partitionId, title }: Props) {
               <div className="v2-scoped-list">
                 {(debriefEntries ?? []).length > 0 ? (debriefEntries ?? []).slice(0, 5).map((entry) => (
                   <div key={entry.id} className="v2-debrief-row v2-debrief-compact">
-                    <div className="v2-debrief-status-bar" style={{ background: "#63e1be" }} />
+                    <div className="v2-debrief-status-bar" style={{ background: "var(--accent)" }} />
                     <div className="v2-debrief-content">
                       <div className="v2-debrief-body">
                         <div className="v2-debrief-header">

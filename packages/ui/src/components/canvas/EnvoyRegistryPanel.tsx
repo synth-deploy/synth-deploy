@@ -2,7 +2,6 @@ import { listEnvoys } from "../../api.js";
 import type { EnvoyRegistryEntry } from "../../api.js";
 import { useCanvas } from "../../context/CanvasContext.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
-import SectionHeader from "../SectionHeader.js";
 import { useQuery } from "../../hooks/useQuery.js";
 
 interface Props {
@@ -10,7 +9,7 @@ interface Props {
 }
 
 const healthColor = (h: EnvoyRegistryEntry["health"]) =>
-  h === "OK" ? "#16a34a" : h === "Degraded" ? "#ca8a04" : "#dc2626";
+  h === "OK" ? "var(--status-succeeded)" : h === "Degraded" ? "var(--status-warning)" : "var(--status-failed)";
 
 export default function EnvoyRegistryPanel({ title }: Props) {
   const { pushPanel } = useCanvas();
@@ -27,17 +26,21 @@ export default function EnvoyRegistryPanel({ title }: Props) {
   return (
     <CanvasPanelHost title={title}>
       <div className="canvas-detail">
-        <SectionHeader
-          color="#34d399"
-          shape="circle"
-          label="Registered Envoys"
-          subtitle="agents executing deployments"
-        />
-        <div className="v2-envoys-list">
+        <div style={{ padding: "0 16px", marginBottom: 16 }}>
+          <h1 className="v6-page-title">Envoy Fleet</h1>
+          <p className="v6-page-subtitle">
+            Agents executing deployments on your infrastructure.
+            <span style={{ marginLeft: 8, color: "var(--text-muted)" }}>
+              {(envoys ?? []).length} registered
+            </span>
+          </p>
+        </div>
+        <div style={{ borderRadius: 10, border: "1px solid var(--border)", background: "var(--surface)", overflow: "hidden", margin: "0 16px" }}>
           {(envoys ?? []).map((envoy) => (
-            <div
+            <button
               key={envoy.id}
-              className="v2-envoy-row"
+              className="canvas-activity-row"
+              style={{ borderBottom: "1px solid var(--border)" }}
               onClick={() =>
                 pushPanel({
                   type: "envoy-detail",
@@ -45,39 +48,24 @@ export default function EnvoyRegistryPanel({ title }: Props) {
                   params: { id: envoy.id },
                 })
               }
-              style={{
-                background: "rgba(52,211,153,0.04)",
-                borderColor: "rgba(52,211,153,0.15)",
-                border: "1px solid rgba(52,211,153,0.15)",
-                borderRadius: 8,
-                padding: "12px 16px",
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                gap: 12,
-                marginBottom: 8,
-              }}
             >
-              <div
+              <span
+                className="status-pip"
                 style={{
-                  width: 10,
-                  height: 10,
-                  borderRadius: "50%",
                   background: healthColor(envoy.health),
                   opacity: envoy.health === "Unreachable" ? 0.3 : 0.8,
-                  flexShrink: 0,
                 }}
               />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-                  <span style={{ fontWeight: 600, fontSize: 14 }}>
+                  <span style={{ fontWeight: 600, fontSize: 14, fontFamily: "var(--font-mono)" }}>
                     {envoy.hostname ?? envoy.id}
                   </span>
-                  <span style={{ fontSize: 12, color: "#888", fontFamily: "monospace" }}>
+                  <span style={{ fontSize: 12, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
                     {envoy.url}
                   </span>
                 </div>
-                <div style={{ fontSize: 11, color: "#666", marginTop: 2 }}>
+                <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>
                   {envoy.lastSeen
                     ? `Last seen: ${new Date(envoy.lastSeen).toLocaleString()}`
                     : "Never connected"}
@@ -85,24 +73,21 @@ export default function EnvoyRegistryPanel({ title }: Props) {
                     ` · ${envoy.summary.totalDeployments} deployments · ${envoy.summary.environments} environments`}
                 </div>
               </div>
-              <div
+              <span
                 style={{
                   fontSize: 11,
                   fontWeight: 600,
                   color: healthColor(envoy.health),
-                  border: `1px solid ${healthColor(envoy.health)}30`,
-                  background: `${healthColor(envoy.health)}15`,
-                  borderRadius: 12,
-                  padding: "2px 10px",
+                  fontFamily: "var(--font-mono)",
                 }}
               >
                 {envoy.health}
-              </div>
-            </div>
+              </span>
+            </button>
           ))}
           {(envoys ?? []).length === 0 && (
-            <div style={{ color: "#666", fontSize: 13, padding: "16px 0" }}>
-              No Envoys configured. Add an Envoy URL in Settings.
+            <div className="empty-state">
+              <p>No Envoys configured. Add an Envoy URL in Settings.</p>
             </div>
           )}
         </div>

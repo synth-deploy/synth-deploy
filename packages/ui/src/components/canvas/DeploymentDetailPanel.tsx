@@ -7,24 +7,24 @@ import CanvasPanelHost from "./CanvasPanelHost.js";
 
 const decisionTypeColors: Record<string, string> = {
   "pipeline-plan": "#6366f1",
-  "configuration-resolved": "#8b5cf6",
-  "variable-conflict": "#f59e0b",
+  "configuration-resolved": "var(--accent)",
+  "variable-conflict": "var(--status-warning)",
   "health-check": "#06b6d4",
-  "deployment-execution": "#3b82f6",
+  "deployment-execution": "var(--accent)",
   "deployment-verification": "#10b981",
-  "deployment-completion": "#16a34a",
-  "deployment-failure": "#dc2626",
+  "deployment-completion": "var(--status-succeeded)",
+  "deployment-failure": "var(--status-failed)",
   "diagnostic-investigation": "#ec4899",
   "environment-scan": "#14b8a6",
   system: "#6b7280",
   "llm-call": "#6b7280",
   "artifact-analysis": "#ec4899",
   "plan-generation": "#6366f1",
-  "plan-approval": "#16a34a",
-  "plan-rejection": "#dc2626",
-  "rollback-execution": "#dc2626",
+  "plan-approval": "var(--status-succeeded)",
+  "plan-rejection": "var(--status-failed)",
+  "rollback-execution": "var(--status-failed)",
   "cross-system-context": "#14b8a6",
-  "plan-modification": "#8b5cf6",
+  "plan-modification": "var(--accent)",
 };
 
 // ---------------------------------------------------------------------------
@@ -160,7 +160,7 @@ function LiveProgressSection({ events, stale }: { events: ProgressEvent[]; stale
         overflow: "hidden",
       }}>
         <div style={{
-          background: latestEvent.status === "failed" ? "#dc2626" : "#3b82f6",
+          background: latestEvent.status === "failed" ? "var(--status-failed)" : "var(--accent)",
           height: "100%",
           width: `${overallProgress}%`,
           transition: "width 0.3s ease-out",
@@ -174,12 +174,12 @@ function LiveProgressSection({ events, stale }: { events: ProgressEvent[]; stale
       {/* Stale indicator */}
       {stale && (
         <div style={{
-          background: "#f59e0b22",
-          border: "1px solid #f59e0b44",
+          background: "color-mix(in srgb, var(--status-warning) 13%, transparent)",
+          border: "1px solid color-mix(in srgb, var(--status-warning) 27%, transparent)",
           borderRadius: 4,
           padding: "6px 10px",
           fontSize: 12,
-          color: "#f59e0b",
+          color: "var(--status-warning)",
           marginBottom: 10,
         }}>
           Connection to envoy lost — deployment may still be in progress
@@ -196,10 +196,10 @@ function LiveProgressSection({ events, stale }: { events: ProgressEvent[]; stale
             const isCompleted = event.type === "step-completed";
 
             const dotColor = isCompleted
-              ? "#16a34a"
+              ? "var(--status-succeeded)"
               : isFailed
-                ? "#dc2626"
-                : "#3b82f6";
+                ? "var(--status-failed)"
+                : "var(--accent)";
 
             return (
               <div key={idx} className="canvas-timeline-entry" style={{ cursor: "default" }}>
@@ -223,7 +223,7 @@ function LiveProgressSection({ events, stale }: { events: ProgressEvent[]; stale
                     </div>
                   )}
                   {event.error && (
-                    <div style={{ fontSize: 11, color: "#dc2626", marginTop: 2 }}>
+                    <div style={{ fontSize: 11, color: "var(--status-failed)", marginTop: 2 }}>
                       {event.error}
                     </div>
                   )}
@@ -241,7 +241,7 @@ function LiveProgressSection({ events, stale }: { events: ProgressEvent[]; stale
             .map((event, i) => (
               <div key={`rb-${i}`} className="canvas-timeline-entry" style={{ cursor: "default" }}>
                 <div className="canvas-timeline-dot" style={{
-                  background: event.type === "rollback-completed" ? "#f59e0b" : "#dc2626",
+                  background: event.type === "rollback-completed" ? "var(--status-warning)" : "var(--status-failed)",
                 }} />
                 <div className="canvas-timeline-content">
                   <div className="canvas-timeline-header">
@@ -409,7 +409,7 @@ export default function DeploymentDetailPanel({ deploymentId, title }: Props) {
             <div className="canvas-timeline">
               {deployment.plan.steps.map((step, i) => (
                 <div key={i} className="canvas-timeline-entry" style={{ cursor: "default" }}>
-                  <div className="canvas-timeline-dot" style={{ background: step.reversible ? "#16a34a" : "#f59e0b" }} />
+                  <div className="canvas-timeline-dot" style={{ background: step.reversible ? "var(--status-succeeded)" : "var(--status-warning)" }} />
                   <div className="canvas-timeline-content">
                     <div className="canvas-timeline-header">
                       <span className="canvas-timeline-type">{step.action}</span>
@@ -417,7 +417,7 @@ export default function DeploymentDetailPanel({ deploymentId, title }: Props) {
                     </div>
                     <div className="canvas-timeline-decision">{step.description}</div>
                     {!step.reversible && (
-                      <div style={{ fontSize: 11, color: "#f59e0b", marginTop: 2 }}>Non-reversible</div>
+                      <div style={{ fontSize: 11, color: "var(--status-warning)", marginTop: 2 }}>Non-reversible</div>
                     )}
                   </div>
                 </div>
@@ -432,7 +432,7 @@ export default function DeploymentDetailPanel({ deploymentId, title }: Props) {
             <h3 className="canvas-section-title">Execution Record</h3>
             <div className="canvas-timeline">
               {deployment.executionRecord.steps.map((step, i) => {
-                const stepColor = step.status === "completed" ? "#16a34a" : step.status === "failed" ? "#dc2626" : "#f59e0b";
+                const stepColor = step.status === "completed" ? "var(--status-succeeded)" : step.status === "failed" ? "var(--status-failed)" : "var(--status-warning)";
                 return (
                   <div key={i} className="canvas-timeline-entry" style={{ cursor: "default" }}>
                     <div className="canvas-timeline-dot" style={{ background: stepColor }} />
@@ -448,7 +448,7 @@ export default function DeploymentDetailPanel({ deploymentId, title }: Props) {
                         <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>{step.output}</div>
                       )}
                       {step.error && (
-                        <div style={{ fontSize: 11, color: "#dc2626", marginTop: 2 }}>{step.error}</div>
+                        <div style={{ fontSize: 11, color: "var(--status-failed)", marginTop: 2 }}>{step.error}</div>
                       )}
                     </div>
                   </div>

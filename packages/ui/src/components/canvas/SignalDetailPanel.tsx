@@ -19,7 +19,7 @@ const SEVERITY_CONFIG: Record<string, { color: string; bg: string; border: strin
     label: "CRITICAL",
   },
   warning: {
-    color: "#f59e0b",
+    color: "var(--status-warning)",
     bg: "rgba(245, 158, 11, 0.1)",
     border: "rgba(245, 158, 11, 0.3)",
     label: "WARNING",

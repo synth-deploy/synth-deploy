@@ -206,7 +206,7 @@ export default function PlanReviewPanel({ deploymentId, title }: Props) {
                   border: "1px solid rgba(220, 38, 38, 0.3)",
                   borderRadius: 6,
                   fontSize: 13,
-                  color: "#dc2626",
+                  color: "var(--status-failed)",
                 }}>
                   Warning: This artifact version was previously rolled back
                 </div>
@@ -218,7 +218,7 @@ export default function PlanReviewPanel({ deploymentId, title }: Props) {
                   border: "1px solid rgba(245, 158, 11, 0.3)",
                   borderRadius: 6,
                   fontSize: 13,
-                  color: "#f59e0b",
+                  color: "var(--status-warning)",
                 }}>
                   {enrichment.conflictingDeployments.length} other deployment(s) in progress for this environment
                 </div>
@@ -263,7 +263,7 @@ export default function PlanReviewPanel({ deploymentId, title }: Props) {
               borderRadius: 6,
               overflow: "auto",
               whiteSpace: "pre-wrap",
-              color: "#f59e0b",
+              color: "var(--status-warning)",
             }}>
               {plan.diffFromPreviousPlan}
             </pre>
@@ -304,10 +304,10 @@ export default function PlanReviewPanel({ deploymentId, title }: Props) {
                 fontSize: 14,
                 fontWeight: 600,
                 color: recommendation.verdict === "proceed"
-                  ? "#16a34a"
+                  ? "var(--status-succeeded)"
                   : recommendation.verdict === "caution"
-                  ? "#f59e0b"
-                  : "#dc2626",
+                  ? "var(--status-warning)"
+                  : "var(--status-failed)",
                 marginBottom: 4,
               }}>
                 {recommendation.verdict === "proceed" ? "Proceed" : recommendation.verdict === "caution" ? "Proceed with Caution" : "Hold"}
@@ -334,7 +334,7 @@ export default function PlanReviewPanel({ deploymentId, title }: Props) {
               {plan.steps.map((step, i) => (
                 <div key={i} className="canvas-timeline-entry" style={{ cursor: "default" }}>
                   <div className="canvas-timeline-dot" style={{
-                    background: step.reversible ? "#16a34a" : "#f59e0b",
+                    background: step.reversible ? "var(--status-succeeded)" : "var(--status-warning)",
                   }} />
                   <div className="canvas-timeline-content">
                     <div className="canvas-timeline-header">
@@ -345,7 +345,7 @@ export default function PlanReviewPanel({ deploymentId, title }: Props) {
                     </div>
                     <div className="canvas-timeline-decision">{step.description}</div>
                     {!step.reversible && (
-                      <div style={{ fontSize: 11, color: "#f59e0b", marginTop: 2 }}>
+                      <div style={{ fontSize: 11, color: "var(--status-warning)", marginTop: 2 }}>
                         Non-reversible
                       </div>
                     )}
@@ -406,7 +406,7 @@ export default function PlanReviewPanel({ deploymentId, title }: Props) {
                       style={{
                         background: "transparent",
                         border: "none",
-                        color: "#dc2626",
+                        color: "var(--status-failed)",
                         cursor: "pointer",
                         fontSize: 12,
                       }}
@@ -511,7 +511,7 @@ export default function PlanReviewPanel({ deploymentId, title }: Props) {
             border: "1px solid rgba(220, 38, 38, 0.3)",
             borderRadius: 6,
             fontSize: 13,
-            color: "#dc2626",
+            color: "var(--status-failed)",
             marginTop: 8,
           }}>
             {error}
