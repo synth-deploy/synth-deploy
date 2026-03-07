@@ -95,7 +95,7 @@ export default function ArtifactCatalogPanel({ title }: Props) {
 
   if (loading)
     return (
-      <CanvasPanelHost title={title}>
+      <CanvasPanelHost title={title} noBreadcrumb>
         <div className="loading">Loading...</div>
       </CanvasPanelHost>
     );
@@ -185,7 +185,7 @@ export default function ArtifactCatalogPanel({ title }: Props) {
   const sidePanelConfidence = selectedArtifact?.analysis.confidence ?? 0;
 
   return (
-    <CanvasPanelHost title={title}>
+    <CanvasPanelHost title={title} noBreadcrumb>
       <div className="canvas-detail" style={{ display: "flex", gap: 0 }}>
         <div style={{ flex: selectedArtifact ? "1 1 55%" : "1 1 100%", minWidth: 0, padding: "0 16px", transition: "flex 0.2s" }}>
           {/* Header row */}

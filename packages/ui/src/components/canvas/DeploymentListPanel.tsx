@@ -26,14 +26,14 @@ export default function DeploymentListPanel({ title, filterStatus, filterPartiti
     ? (rawDeployments ?? []).filter((dep) => dep.status === filterStatus)
     : (rawDeployments ?? []);
 
-  if (loading) return <CanvasPanelHost title={title}><div className="loading">Loading...</div></CanvasPanelHost>;
+  if (loading) return <CanvasPanelHost title={title} noBreadcrumb><div className="loading">Loading...</div></CanvasPanelHost>;
 
   const sorted = [...deployments].sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
   );
 
   return (
-    <CanvasPanelHost title={title}>
+    <CanvasPanelHost title={title} noBreadcrumb>
       <div className="canvas-detail">
         <div style={{ padding: "0 16px", marginBottom: 16 }}>
           <h1 className="v6-page-title">Debriefs</h1>

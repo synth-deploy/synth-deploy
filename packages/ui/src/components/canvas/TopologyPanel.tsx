@@ -34,7 +34,7 @@ export default function TopologyPanel({ title }: { title?: string }) {
         : "Add Partition";
 
   return (
-    <CanvasPanelHost title={title ?? "Topology"}>
+    <CanvasPanelHost title={title ?? "Topology"} noBreadcrumb>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 16 }}>
         <div>
           <h1 className="v6-page-title">Topology</h1>

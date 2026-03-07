@@ -234,10 +234,12 @@ export default function AgentCanvas() {
           </div>
         </div>
       )}
-      <SynthChannel
-        scope={scope}
-        onAgentResult={handleAgentResult}
-      />
+      {currentPanel.type !== "deployment-authoring" && (
+        <SynthChannel
+          scope={scope}
+          onAgentResult={handleAgentResult}
+        />
+      )}
     </div>
   );
 }

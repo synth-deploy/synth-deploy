@@ -4,10 +4,11 @@ import { useSettings } from "../../context/SettingsContext.js";
 interface CanvasPanelHostProps {
   title: string;
   dismissible?: boolean;
+  noBreadcrumb?: boolean;
   children: React.ReactNode;
 }
 
-export default function CanvasPanelHost({ title, dismissible = true, children }: CanvasPanelHostProps) {
+export default function CanvasPanelHost({ title, dismissible = true, noBreadcrumb = false, children }: CanvasPanelHostProps) {
   const { popPanel, resetToOverview, depth, panels } = useCanvas();
   const { settings } = useSettings();
   const coBranding = settings?.coBranding;
@@ -37,6 +38,16 @@ export default function CanvasPanelHost({ title, dismissible = true, children }:
         : undefined,
     };
   });
+
+  if (noBreadcrumb) {
+    return (
+      <div className="canvas-panel">
+        <div className="canvas-panel-body">
+          {children}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="canvas-panel">

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import {
   listArtifacts,
   listPartitions,
@@ -6,6 +6,7 @@ import {
   listEnvoys,
   createDeployment,
   recordPreFlightResponse,
+  queryAgent,
 } from "../../api.js";
 import type { Artifact, Partition, Environment } from "../../types.js";
 import type { EnvoyRegistryEntry, PreFlightContext } from "../../api.js";
@@ -22,6 +23,8 @@ interface Props {
   preselectedArtifactId?: string;
 }
 
+type DeployScope = "environment" | "envoy" | "partition";
+
 export default function DeploymentAuthoringPanel({ title, preselectedArtifactId }: Props) {
   const { pushPanel } = useCanvas();
   const { settings: appSettings } = useSettings();
@@ -32,18 +35,23 @@ export default function DeploymentAuthoringPanel({ title, preselectedArtifactId 
   const { data: environments, loading: l3 } = useQuery<Environment[]>("list:environments", listEnvironments);
   const { data: envoys, loading: l4 } = useQuery<EnvoyRegistryEntry[]>("list:envoys", () => listEnvoys().catch(() => [] as EnvoyRegistryEntry[]));
   const loading = l1 || l2 || l3 || l4;
+
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Selection state
   const [selectedArtifactIds, setSelectedArtifactIds] = useState<string[]>(
     preselectedArtifactId ? [preselectedArtifactId] : [],
   );
+  const [deployScope, setDeployScope] = useState<DeployScope>("environment");
   const [selectedEnvironmentId, setSelectedEnvironmentId] = useState<string>("");
   const [selectedPartitionId, setSelectedPartitionId] = useState<string>("");
   const [selectedEnvoyId, setSelectedEnvoyId] = useState<string>("");
-  const [deployScope, setDeployScope] = useState<"environment" | "envoy" | "partition">("environment");
   const [preFlightRec, setPreFlightRec] = useState<PreFlightContext["recommendation"] | null>(null);
+
+  const [askQuestion, setAskQuestion] = useState("");
+  const [askTyping, setAskTyping] = useState(false);
+  const [askResponse, setAskResponse] = useState<string | null>(null);
+  const askConvId = useRef(crypto.randomUUID());
 
   function toggleArtifact(id: string) {
     setSelectedArtifactIds((prev) =>
@@ -54,14 +62,12 @@ export default function DeploymentAuthoringPanel({ title, preselectedArtifactId 
   const primaryArtifactId = selectedArtifactIds[0] ?? "";
   const hasTarget = !!(selectedEnvironmentId || selectedPartitionId || selectedEnvoyId);
 
-  async function handleDeploy() {
+  async function handleRequestPlan() {
     if (!primaryArtifactId || (environmentsEnabled && !hasTarget)) return;
-
     setSubmitting(true);
     setError(null);
 
     try {
-      // Record user's pre-flight decision (fire-and-forget)
       if (preFlightRec) {
         recordPreFlightResponse({
           artifactId: primaryArtifactId,
@@ -76,7 +82,6 @@ export default function DeploymentAuthoringPanel({ title, preselectedArtifactId 
         artifactId: primaryArtifactId,
         environmentId: environmentsEnabled ? selectedEnvironmentId : undefined,
         partitionId: selectedPartitionId || undefined,
-        version: undefined,
       });
 
       pushPanel({
@@ -91,7 +96,29 @@ export default function DeploymentAuthoringPanel({ title, preselectedArtifactId 
     }
   }
 
-  // Derive target name for summary
+  async function handleAsk() {
+    if (!askQuestion.trim()) return;
+    const q = askQuestion.trim();
+    setAskTyping(true);
+    setAskResponse(null);
+    setAskQuestion("");
+    try {
+      const result = await queryAgent(q, askConvId.current);
+      setAskResponse(result.title ?? "Let me look into that.");
+    } catch {
+      setAskResponse("Unable to reach the agent right now.");
+    } finally {
+      setAskTyping(false);
+    }
+  }
+
+  function getOverallHealth(): "healthy" | "degraded" | "unhealthy" {
+    const list = envoys ?? [];
+    if (list.some((e) => e.health === "Unreachable")) return "unhealthy";
+    if (list.some((e) => e.health === "Degraded")) return "degraded";
+    return "healthy";
+  }
+
   function getTargetName(): string {
     if (deployScope === "environment") {
       return (environments ?? []).find((e) => e.id === selectedEnvironmentId)?.name ?? "";
@@ -106,328 +133,438 @@ export default function DeploymentAuthoringPanel({ title, preselectedArtifactId 
     return "";
   }
 
-  function getScopeHint(): string {
-    if (deployScope === "environment") return "Synth will select the best envoy for this environment.";
-    if (deployScope === "envoy") return "Deployment will target this specific envoy directly.";
-    if (deployScope === "partition") return "Scoped to partition variables and constraints.";
+  function getContextHint(): string {
+    const envoyCount = (envoys ?? []).length;
+    const targetName = getTargetName();
+    if (deployScope === "environment" && selectedEnvironmentId) {
+      return `Synth will coordinate deployment across all ${envoyCount} envoy${envoyCount !== 1 ? "s" : ""} in ${targetName}. A representative plan will be generated for your review.`;
+    }
+    if (deployScope === "envoy" && selectedEnvoyId) {
+      return `Deploying directly to ${targetName}. The envoy will produce a plan specific to this host.`;
+    }
+    if (deployScope === "partition" && selectedPartitionId) {
+      return `Deploying across all environments in ${targetName}. Partition-scoped variables will be applied. Synth will generate plans per environment.`;
+    }
     return "";
   }
 
-  if (loading)
+  if (loading) {
     return (
-      <CanvasPanelHost title={title}>
+      <CanvasPanelHost title={title} noBreadcrumb>
         <div className="loading">Loading...</div>
       </CanvasPanelHost>
     );
+  }
 
-  const selectedArtifactNames = selectedArtifactIds
-    .map((id) => (artifacts ?? []).find((a) => a.id === id)?.name)
-    .filter(Boolean);
+  const envoyList = envoys ?? [];
+  const envList = environments ?? [];
+  const partList = partitions ?? [];
+  const artList = artifacts ?? [];
 
-  const summaryText =
-    selectedArtifactNames.length === 1
-      ? `Deploy ${selectedArtifactNames[0]} to ${getTargetName()}`
-      : `Deploy ${selectedArtifactNames.length} artifacts to ${getTargetName()}`;
+  const selectedArtifactObjects = selectedArtifactIds
+    .map((id) => artList.find((a) => a.id === id))
+    .filter(Boolean) as Artifact[];
+
+  const canDeploy = selectedArtifactIds.length > 0 && hasTarget;
+  const contextHint = getContextHint();
 
   return (
-    <CanvasPanelHost title={title}>
-      <div className="canvas-detail">
+    <CanvasPanelHost title={title} noBreadcrumb>
+      <div style={{ padding: "0 4px" }}>
         {error && <div className="error-msg">{error}</div>}
 
-        <div style={{ padding: "0 16px" }}>
-          {/* v6 page header */}
-          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 22 }}>
-            <div>
-              <h1 className="v6-page-title">New Deployment</h1>
-              <p className="v6-page-subtitle">Select what and where. Synth and the envoy figure out how.</p>
-            </div>
-          </div>
+        {/* Page title */}
+        <div style={{ marginBottom: 22 }}>
+          <h1 className="v6-page-title">New Deployment</h1>
+          <p className="v6-page-subtitle">
+            Select what and where. Synth and the envoy figure out how.
+          </p>
+        </div>
 
-          {/* Two-column layout */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18 }}>
-            {/* Left column — What */}
-            <div>
-              <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--text-muted)", marginBottom: 8 }}>
-                What
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                {(artifacts ?? []).length === 0 && (
-                  <div style={{ fontSize: 13, color: "var(--text-muted)", padding: "12px 0" }}>
-                    No artifacts registered.
-                  </div>
-                )}
-                {(artifacts ?? []).map((art) => {
-                  const selected = selectedArtifactIds.includes(art.id);
-                  return (
-                    <div
-                      key={art.id}
-                      onClick={() => toggleArtifact(art.id)}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 10,
-                        padding: "10px 12px",
-                        borderRadius: 8,
-                        cursor: "pointer",
-                        border: selected
-                          ? "1px solid var(--accent-border)"
-                          : "1px solid var(--border)",
-                        background: selected ? "var(--accent-dim)" : "var(--surface)",
-                        transition: "border-color 0.15s, background 0.15s",
-                      }}
-                    >
-                      {/* Checkbox indicator */}
-                      <div
-                        style={{
-                          width: 16,
-                          height: 16,
-                          borderRadius: 4,
-                          border: selected
-                            ? "2px solid var(--accent)"
-                            : "2px solid var(--border)",
-                          background: selected ? "var(--accent)" : "transparent",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          flexShrink: 0,
-                          transition: "all 0.15s",
-                        }}
-                      >
-                        {selected && (
-                          <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                            <path d="M2 5L4.5 7.5L8 3" stroke="var(--bg)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                          </svg>
-                        )}
-                      </div>
-
-                      {/* Artifact info */}
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                          <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>
-                            {art.name}
-                          </span>
-                          <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
-                            {art.type}
-                          </span>
-                        </div>
-                        {art.analysis.summary && (
-                          <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                            {art.analysis.summary}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Confidence */}
-                      <ConfidenceIndicator value={art.analysis.confidence} />
-                    </div>
-                  );
-                })}
-              </div>
+        {/* Two-column layout */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 22 }}>
+          {/* WHAT column */}
+          <div>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                marginBottom: 10,
+              }}
+            >
+              <div className="section-label">What</div>
+              {selectedArtifactIds.length > 1 && (
+                <span
+                  style={{
+                    fontSize: 11,
+                    color: "var(--accent)",
+                    fontFamily: "var(--font-mono)",
+                    fontWeight: 600,
+                  }}
+                >
+                  {selectedArtifactIds.length} artifacts · coordinated deploy
+                </span>
+              )}
             </div>
 
-            {/* Right column — Where */}
-            <div>
-              <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--text-muted)", marginBottom: 8 }}>
-                Where
-              </div>
-
-              {/* Scope tabs */}
-              <div style={{ display: "flex", gap: 0, marginBottom: 10, borderRadius: 6, overflow: "hidden", border: "1px solid var(--border)" }}>
-                {(["environment", "envoy", "partition"] as const).map((scope) => (
-                  <button
-                    key={scope}
-                    onClick={() => setDeployScope(scope)}
-                    style={{
-                      flex: 1,
-                      padding: "6px 0",
-                      fontSize: 12,
-                      fontWeight: 600,
-                      border: "none",
-                      cursor: "pointer",
-                      background: deployScope === scope ? "var(--accent)" : "var(--surface)",
-                      color: deployScope === scope ? "var(--bg)" : "var(--text-muted)",
-                      transition: "all 0.15s",
-                    }}
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {artList.map((art) => {
+                const isSelected = selectedArtifactIds.includes(art.id);
+                return (
+                  <div
+                    key={art.id}
+                    onClick={() => toggleArtifact(art.id)}
+                    className={`nd-artifact-card${isSelected ? " nd-artifact-card-selected" : ""}`}
                   >
-                    {scope === "environment" ? "Environment" : scope === "envoy" ? "Envoy" : "Partition"}
-                  </button>
-                ))}
-              </div>
-
-              {/* Scope content */}
-              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                {deployScope === "environment" && (
-                  <>
-                    {(environments ?? []).length === 0 && (
-                      <div style={{ fontSize: 13, color: "var(--text-muted)", padding: "12px 0" }}>
-                        No environments configured.
-                      </div>
-                    )}
-                    {(environments ?? []).map((env) => {
-                      const active = selectedEnvironmentId === env.id;
-                      return (
-                        <div
-                          key={env.id}
-                          onClick={() => {
-                            setSelectedEnvironmentId(active ? "" : env.id);
-                            setSelectedEnvoyId("");
-                            setSelectedPartitionId("");
-                          }}
+                    <span
+                      className={`nd-artifact-check${isSelected ? " nd-artifact-check-selected" : ""}`}
+                    >
+                      {isSelected ? "✓" : ""}
+                    </span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+                        <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>
+                          {art.name}
+                        </span>
+                        <span
                           style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 10,
-                            padding: "10px 12px",
-                            borderRadius: 8,
-                            cursor: "pointer",
-                            border: active
-                              ? "1px solid var(--accent-border)"
-                              : "1px solid var(--border)",
-                            background: active ? "var(--accent-dim)" : "var(--surface)",
-                            transition: "border-color 0.15s, background 0.15s",
+                            fontSize: 11,
+                            color: "var(--text-muted)",
+                            fontFamily: "var(--font-mono)",
                           }}
                         >
-                          <div style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--accent)", flexShrink: 0, opacity: active ? 1 : 0.3 }} />
-                          <span style={{ fontSize: 13, fontWeight: 500, color: "var(--text)" }}>{env.name}</span>
-                        </div>
-                      );
-                    })}
-                  </>
-                )}
-
-                {deployScope === "envoy" && (
-                  <>
-                    {(envoys ?? []).length === 0 && (
-                      <div style={{ fontSize: 13, color: "var(--text-muted)", padding: "12px 0" }}>
-                        No envoys registered.
+                          {art.type}
+                        </span>
                       </div>
-                    )}
-                    {(envoys ?? []).map((envoy) => {
-                      const active = selectedEnvoyId === envoy.id;
-                      const healthColor =
-                        envoy.health === "OK"
-                          ? "var(--status-succeeded)"
-                          : envoy.health === "Degraded"
-                            ? "var(--status-warning)"
-                            : "var(--status-failed)";
-                      return (
+                      {art.analysis.summary && (
                         <div
-                          key={envoy.id}
-                          onClick={() => {
-                            setSelectedEnvoyId(active ? "" : envoy.id);
-                            setSelectedEnvironmentId("");
-                            setSelectedPartitionId("");
-                          }}
                           style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 10,
-                            padding: "10px 12px",
-                            borderRadius: 8,
-                            cursor: "pointer",
-                            border: active
-                              ? "1px solid var(--accent-border)"
-                              : "1px solid var(--border)",
-                            background: active ? "var(--accent-dim)" : "var(--surface)",
-                            transition: "border-color 0.15s, background 0.15s",
+                            fontSize: 11,
+                            color: "var(--text-muted)",
+                            marginTop: 2,
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
                           }}
                         >
-                          <div style={{ width: 8, height: 8, borderRadius: "50%", background: healthColor, flexShrink: 0 }} />
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text)" }}>
-                              {envoy.hostname ?? envoy.url}
-                            </div>
-                            <div style={{ fontSize: 11, color: "var(--text-muted)" }}>
-                              {envoy.health}
-                            </div>
-                          </div>
+                          {art.analysis.summary}
                         </div>
-                      );
-                    })}
-                  </>
-                )}
-
-                {deployScope === "partition" && (
-                  <>
-                    {(partitions ?? []).length === 0 && (
-                      <div style={{ fontSize: 13, color: "var(--text-muted)", padding: "12px 0" }}>
-                        No partitions defined.
+                      )}
+                      <div style={{ marginTop: 3 }}>
+                        <ConfidenceIndicator
+                          value={art.analysis.confidence}
+                          qualifier="understanding"
+                        />
                       </div>
-                    )}
-                    {(partitions ?? []).map((part) => {
-                      const active = selectedPartitionId === part.id;
-                      return (
-                        <div
-                          key={part.id}
-                          onClick={() => {
-                            setSelectedPartitionId(active ? "" : part.id);
-                            setSelectedEnvironmentId("");
-                            setSelectedEnvoyId("");
-                          }}
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 10,
-                            padding: "10px 12px",
-                            borderRadius: 8,
-                            cursor: "pointer",
-                            border: active
-                              ? "1px solid var(--accent-border)"
-                              : "1px solid var(--border)",
-                            background: active ? "var(--accent-dim)" : "var(--surface)",
-                            transition: "border-color 0.15s, background 0.15s",
-                          }}
-                        >
-                          <div style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--accent)", flexShrink: 0, opacity: active ? 1 : 0.3 }} />
-                          <span style={{ fontSize: 13, fontWeight: 500, color: "var(--text)" }}>{part.name}</span>
-                        </div>
-                      );
-                    })}
-                  </>
-                )}
-              </div>
+                    </div>
+                  </div>
+                );
+              })}
 
-              {/* Context hint when target selected */}
-              {hasTarget && (
-                <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 8, fontStyle: "italic" }}>
-                  {getScopeHint()}
-                </div>
+              {artList.length === 0 && (
+                <div className="nd-empty">No artifacts registered</div>
               )}
             </div>
           </div>
 
-          {/* Pre-flight context — auto-fetched when artifact + environment selected */}
-          {primaryArtifactId && (!environmentsEnabled || selectedEnvironmentId) && (
-            <PreFlightDisplay
-              artifactId={primaryArtifactId}
-              environmentId={selectedEnvironmentId}
-              partitionId={selectedPartitionId || undefined}
-              version={undefined}
-              onLoaded={(rec) => setPreFlightRec(rec)}
-            />
-          )}
-
-          {/* Deploy action bar */}
-          {selectedArtifactIds.length > 0 && (selectedEnvironmentId || selectedPartitionId || selectedEnvoyId) && (
-            <div style={{ marginTop: 22, padding: "18px 22px", borderRadius: 10, background: "var(--surface)", border: "1px solid var(--border)" }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <SynthMark size={20} />
-                  <div>
-                    <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>
-                      {summaryText}
-                    </div>
-                    <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 1 }}>
-                      {getScopeHint()}
-                    </div>
-                  </div>
-                </div>
-                <button className="btn btn-primary" onClick={handleDeploy} disabled={submitting}>
-                  {submitting ? "Creating..." : selectedArtifactIds.length > 1 ? "Request Coordinated Plan" : "Request Plan"}
-                </button>
+          {/* WHERE column */}
+          {environmentsEnabled && (
+            <div>
+              <div className="section-label" style={{ marginBottom: 10 }}>
+                Where
               </div>
+
+              {/* Scope tabs */}
+              <div
+                className="segmented-control"
+                style={{ width: "100%", marginBottom: 10 }}
+              >
+                {(
+                  [
+                    { id: "environment" as DeployScope, label: "Environment" },
+                    { id: "envoy" as DeployScope, label: "Envoy" },
+                    { id: "partition" as DeployScope, label: "Partition" },
+                  ]
+                ).map((s) => (
+                  <button
+                    key={s.id}
+                    className={`segmented-control-btn${deployScope === s.id ? " segmented-control-btn-active" : ""}`}
+                    style={{ flex: 1, justifyContent: "center" }}
+                    onClick={() => {
+                      setDeployScope(s.id);
+                      setSelectedEnvironmentId("");
+                      setSelectedPartitionId("");
+                      setSelectedEnvoyId("");
+                    }}
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Target list */}
+              <div className="nd-target-list">
+                {/* Environment scope */}
+                {deployScope === "environment" &&
+                  envList.map((env) => {
+                    const active = selectedEnvironmentId === env.id;
+                    return (
+                      <div
+                        key={env.id}
+                        onClick={() => {
+                          setSelectedEnvironmentId(active ? "" : env.id);
+                          setSelectedPartitionId("");
+                          setSelectedEnvoyId("");
+                        }}
+                        className={`nd-target-row${active ? " nd-target-row-selected" : ""}`}
+                      >
+                        <span className={`status-pip status-pip-${getOverallHealth()}`} />
+                        <div style={{ flex: 1 }}>
+                          <span style={{ fontSize: 13, fontWeight: 500, color: "var(--text)" }}>
+                            {env.name}
+                          </span>
+                          <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 1 }}>
+                            {envoyList.length} envoy{envoyList.length !== 1 ? "s" : ""}
+                          </div>
+                        </div>
+                        <span
+                          style={{
+                            fontSize: 11,
+                            color: "var(--text-muted)",
+                            fontFamily: "var(--font-mono)",
+                          }}
+                        >
+                          {envoyList.length} target{envoyList.length !== 1 ? "s" : ""}
+                        </span>
+                      </div>
+                    );
+                  })}
+
+                {/* Envoy scope */}
+                {deployScope === "envoy" &&
+                  envoyList.map((envoy) => {
+                    const active = selectedEnvoyId === envoy.id;
+                    const health =
+                      envoy.health === "OK"
+                        ? "healthy"
+                        : envoy.health === "Degraded"
+                          ? "degraded"
+                          : "unhealthy";
+                    return (
+                      <div
+                        key={envoy.id}
+                        onClick={() => {
+                          setSelectedEnvoyId(active ? "" : envoy.id);
+                          setSelectedEnvironmentId("");
+                          setSelectedPartitionId("");
+                        }}
+                        className={`nd-target-row${active ? " nd-target-row-selected" : ""}`}
+                      >
+                        <span className={`status-pip status-pip-${health}`} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <span
+                            style={{
+                              fontSize: 13,
+                              fontWeight: 500,
+                              color: "var(--text)",
+                              fontFamily: "var(--font-mono)",
+                            }}
+                          >
+                            {envoy.hostname ?? envoy.url}
+                          </span>
+                          {envoy.lastSeen && (
+                            <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 1 }}>
+                              {envoy.lastSeen}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                {/* Partition scope */}
+                {deployScope === "partition" &&
+                  partList.map((part) => {
+                    const active = selectedPartitionId === part.id;
+                    const varCount = Object.keys(part.variables).length;
+                    return (
+                      <div
+                        key={part.id}
+                        onClick={() => {
+                          setSelectedPartitionId(active ? "" : part.id);
+                          setSelectedEnvironmentId("");
+                          setSelectedEnvoyId("");
+                        }}
+                        className={`nd-target-row${active ? " nd-target-row-selected" : ""}`}
+                      >
+                        <span className="status-pip status-pip-healthy" />
+                        <div style={{ flex: 1 }}>
+                          <span style={{ fontSize: 13, fontWeight: 500, color: "var(--text)" }}>
+                            {part.name}
+                          </span>
+                          <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 1 }}>
+                            {varCount} scoped variable{varCount !== 1 ? "s" : ""}
+                          </div>
+                        </div>
+                        <span
+                          style={{
+                            fontSize: 11,
+                            color: "var(--text-muted)",
+                            fontFamily: "var(--font-mono)",
+                          }}
+                        >
+                          {envoyList.length} envoy{envoyList.length !== 1 ? "s" : ""}
+                        </span>
+                      </div>
+                    );
+                  })}
+
+                {deployScope === "environment" && envList.length === 0 && (
+                  <div className="nd-empty">No environments configured</div>
+                )}
+                {deployScope === "envoy" && envoyList.length === 0 && (
+                  <div className="nd-empty">No envoys connected</div>
+                )}
+                {deployScope === "partition" && partList.length === 0 && (
+                  <div className="nd-empty">No partitions configured</div>
+                )}
+              </div>
+
+              {/* Context hint */}
+              {contextHint && <div className="nd-context-hint">{contextHint}</div>}
             </div>
           )}
+        </div>
+
+        {/* Pre-flight (auto-fetched when artifact + environment selected) */}
+        {primaryArtifactId && (!environmentsEnabled || selectedEnvironmentId) && (
+          <PreFlightDisplay
+            artifactId={primaryArtifactId}
+            environmentId={selectedEnvironmentId}
+            partitionId={selectedPartitionId || undefined}
+            version={undefined}
+            onLoaded={(rec) => setPreFlightRec(rec)}
+          />
+        )}
+
+        {/* Deploy action bar */}
+        {canDeploy && (
+          <div className="nd-action-bar">
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <SynthMark size={20} />
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>
+                    {selectedArtifactObjects.length === 1 ? (
+                      <>
+                        {selectedArtifactObjects[0].name} → {getTargetName()}
+                      </>
+                    ) : (
+                      <>
+                        {selectedArtifactObjects.length} artifacts → {getTargetName()}
+                      </>
+                    )}
+                    {deployScope !== "envoy" && (
+                      <span style={{ fontSize: 12, fontWeight: 400, color: "var(--text-muted)" }}>
+                        {" "}
+                        ({deployScope})
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 1 }}>
+                    {deployScope === "environment" &&
+                      `Synth will request a representative plan from one of ${envoyList.length} envoys.`}
+                    {deployScope === "envoy" &&
+                      "Synth will request a deployment plan from this envoy."}
+                    {deployScope === "partition" &&
+                      `Synth will generate plans for each environment in ${getTargetName()}.`}
+                  </div>
+                </div>
+              </div>
+              <button
+                className="nd-request-plan-btn"
+                disabled={submitting}
+                onClick={handleRequestPlan}
+              >
+                {submitting
+                  ? "Requesting…"
+                  : selectedArtifactIds.length > 1
+                    ? "Request Coordinated Plan"
+                    : "Request Plan"}
+              </button>
+            </div>
+
+            {/* Multi-artifact order preview */}
+            {selectedArtifactObjects.length > 1 && (
+              <div className="nd-order-preview">
+                <div className="nd-order-preview-label">
+                  Deployment Order (Synth will verify)
+                </div>
+                {selectedArtifactObjects.map((art, i) => (
+                  <div
+                    key={art.id}
+                    style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0" }}
+                  >
+                    <span className="nd-order-number">{i + 1}</span>
+                    <span style={{ fontSize: 13, color: "var(--text)", fontWeight: 500 }}>
+                      {art.name}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Ask bar */}
+        <div className="nd-ask-bar">
+          <div style={{ display: "flex", gap: 8 }}>
+            <input
+              className="nd-ask-input"
+              value={askQuestion}
+              onChange={(e) => setAskQuestion(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleAsk();
+              }}
+              placeholder="Ask Synth about your systems…"
+            />
+            <button
+              className="nd-ask-btn"
+              onClick={handleAsk}
+              disabled={!askQuestion.trim()}
+            >
+              <svg
+                width="13"
+                height="13"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <line x1="22" y1="2" x2="11" y2="13" />
+                <polygon points="22 2 15 22 11 13 2 9 22 2" />
+              </svg>
+              Ask
+            </button>
+          </div>
+          {askTyping && (
+            <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 8 }}>
+              <SynthMark size={14} active />
+              <span style={{ fontSize: 13, color: "var(--text-muted)", fontStyle: "italic" }}>
+                Reasoning…
+              </span>
+            </div>
+          )}
+          {askResponse && <div className="nd-ask-response">{askResponse}</div>}
         </div>
       </div>
     </CanvasPanelHost>

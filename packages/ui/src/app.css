@@ -4960,3 +4960,226 @@ table a:hover {
   background: var(--accent-dim);
 }
 
+/* ---- New Deployment page (nd-*) ---- */
+
+.nd-artifact-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  margin-bottom: 6px;
+}
+
+.nd-artifact-card:hover {
+  border-color: var(--border-strong);
+}
+
+.nd-artifact-card-selected {
+  background: var(--accent-dim);
+  border-color: var(--accent-border);
+}
+
+.nd-artifact-check {
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid var(--border);
+  background: transparent;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+
+.nd-artifact-check-selected {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.nd-target-list {
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  padding: 6px;
+  transition: background 0.3s;
+}
+
+.nd-target-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+  border: 1px solid transparent;
+}
+
+.nd-target-row:hover {
+  background: var(--surface-alt);
+}
+
+.nd-target-row-selected {
+  background: var(--status-succeeded-bg);
+  border-color: var(--status-succeeded-border);
+}
+
+.nd-target-row-selected:hover {
+  background: var(--status-succeeded-bg);
+}
+
+.nd-context-hint {
+  margin-top: 8px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.nd-empty {
+  padding: 16px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.nd-action-bar {
+  margin-top: 22px;
+  padding: 18px 22px;
+  border-radius: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  transition: background 0.3s;
+}
+
+.nd-request-plan-btn {
+  padding: 11px 24px;
+  border-radius: 7px;
+  border: none;
+  cursor: pointer;
+  background: var(--accent);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  white-space: nowrap;
+  transition: opacity 0.15s;
+}
+
+.nd-request-plan-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.nd-request-plan-btn:not(:disabled):hover {
+  opacity: 0.9;
+}
+
+.nd-order-preview {
+  margin-top: 14px;
+  padding: 12px 16px;
+  border-radius: 8px;
+  background: var(--accent-dim);
+  border: 1px solid var(--accent-border);
+}
+
+.nd-order-preview-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  font-family: var(--font-mono);
+  margin-bottom: 8px;
+}
+
+.nd-order-number {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent-border);
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  flex-shrink: 0;
+}
+
+.nd-ask-bar {
+  margin-top: 24px;
+  padding: 18px 22px;
+  border-radius: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  transition: background 0.3s;
+}
+
+.nd-ask-input {
+  flex: 1;
+  padding: 9px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--input-bg);
+  color: var(--text);
+  font-size: 13px;
+  outline: none;
+  font-family: var(--font);
+  transition: background 0.3s, border-color 0.3s, color 0.3s;
+  width: 100%;
+}
+
+.nd-ask-input:focus {
+  border-color: var(--accent-border);
+}
+
+.nd-ask-btn {
+  padding: 9px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  border: 1.5px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+
+.nd-ask-btn:hover:not(:disabled) {
+  background: var(--accent-dim);
+}
+
+.nd-ask-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.nd-ask-response {
+  margin-top: 12px;
+  padding: 12px 16px;
+  border-radius: 8px;
+  background: var(--accent-dim);
+  border: 1px solid var(--accent-border);
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.6;
+  transition: background 0.3s;
+}
+
