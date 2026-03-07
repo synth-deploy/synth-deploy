@@ -68,13 +68,6 @@ export class EnvoyRegistry {
   }
 
   /**
-   * Get a specific Envoy registration.
-   */
-  get(id: string): EnvoyRegistration | undefined {
-    return this.envoys.get(id);
-  }
-
-  /**
    * List all registered Envoys.
    */
   list(): EnvoyRegistration[] {
