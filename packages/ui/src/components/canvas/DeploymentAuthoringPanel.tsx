@@ -12,7 +12,8 @@ import type { EnvoyRegistryEntry, PreFlightContext } from "../../api.js";
 import { useSettings } from "../../context/SettingsContext.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
 import { useCanvas } from "../../context/CanvasContext.js";
-import EnvBadge from "../EnvBadge.js";
+import ConfidenceIndicator from "../ConfidenceIndicator.js";
+import SynthMark from "../SynthMark.js";
 import PreFlightDisplay from "./PreFlightDisplay.js";
 import { useQuery } from "../../hooks/useQuery.js";
 
@@ -35,14 +36,26 @@ export default function DeploymentAuthoringPanel({ title, preselectedArtifactId 
   const [error, setError] = useState<string | null>(null);
 
   // Selection state
-  const [selectedArtifactId, setSelectedArtifactId] = useState<string>(preselectedArtifactId ?? "");
+  const [selectedArtifactIds, setSelectedArtifactIds] = useState<string[]>(
+    preselectedArtifactId ? [preselectedArtifactId] : [],
+  );
   const [selectedEnvironmentId, setSelectedEnvironmentId] = useState<string>("");
   const [selectedPartitionId, setSelectedPartitionId] = useState<string>("");
-  const [version, setVersion] = useState<string>("");
+  const [selectedEnvoyId, setSelectedEnvoyId] = useState<string>("");
+  const [deployScope, setDeployScope] = useState<"environment" | "envoy" | "partition">("environment");
   const [preFlightRec, setPreFlightRec] = useState<PreFlightContext["recommendation"] | null>(null);
 
+  function toggleArtifact(id: string) {
+    setSelectedArtifactIds((prev) =>
+      prev.includes(id) ? prev.filter((a) => a !== id) : [...prev, id],
+    );
+  }
+
+  const primaryArtifactId = selectedArtifactIds[0] ?? "";
+  const hasTarget = !!(selectedEnvironmentId || selectedPartitionId || selectedEnvoyId);
+
   async function handleDeploy() {
-    if (!selectedArtifactId || (environmentsEnabled && !selectedEnvironmentId)) return;
+    if (!primaryArtifactId || (environmentsEnabled && !hasTarget)) return;
 
     setSubmitting(true);
     setError(null);
@@ -51,7 +64,7 @@ export default function DeploymentAuthoringPanel({ title, preselectedArtifactId 
       // Record user's pre-flight decision (fire-and-forget)
       if (preFlightRec) {
         recordPreFlightResponse({
-          artifactId: selectedArtifactId,
+          artifactId: primaryArtifactId,
           environmentId: selectedEnvironmentId,
           partitionId: selectedPartitionId || undefined,
           action: "proceeded",
@@ -60,10 +73,10 @@ export default function DeploymentAuthoringPanel({ title, preselectedArtifactId 
       }
 
       const result = await createDeployment({
-        artifactId: selectedArtifactId,
+        artifactId: primaryArtifactId,
         environmentId: environmentsEnabled ? selectedEnvironmentId : undefined,
         partitionId: selectedPartitionId || undefined,
-        version: version || undefined,
+        version: undefined,
       });
 
       pushPanel({
@@ -78,7 +91,27 @@ export default function DeploymentAuthoringPanel({ title, preselectedArtifactId 
     }
   }
 
-  const selectedArtifact = (artifacts ?? []).find((a) => a.id === selectedArtifactId);
+  // Derive target name for summary
+  function getTargetName(): string {
+    if (deployScope === "environment") {
+      return (environments ?? []).find((e) => e.id === selectedEnvironmentId)?.name ?? "";
+    }
+    if (deployScope === "envoy") {
+      const envoy = (envoys ?? []).find((e) => e.id === selectedEnvoyId);
+      return envoy?.hostname ?? envoy?.url ?? "";
+    }
+    if (deployScope === "partition") {
+      return (partitions ?? []).find((p) => p.id === selectedPartitionId)?.name ?? "";
+    }
+    return "";
+  }
+
+  function getScopeHint(): string {
+    if (deployScope === "environment") return "Synth will select the best envoy for this environment.";
+    if (deployScope === "envoy") return "Deployment will target this specific envoy directly.";
+    if (deployScope === "partition") return "Scoped to partition variables and constraints.";
+    return "";
+  }
 
   if (loading)
     return (
@@ -87,167 +120,312 @@ export default function DeploymentAuthoringPanel({ title, preselectedArtifactId 
       </CanvasPanelHost>
     );
 
+  const selectedArtifactNames = selectedArtifactIds
+    .map((id) => (artifacts ?? []).find((a) => a.id === id)?.name)
+    .filter(Boolean);
+
+  const summaryText =
+    selectedArtifactNames.length === 1
+      ? `Deploy ${selectedArtifactNames[0]} to ${getTargetName()}`
+      : `Deploy ${selectedArtifactNames.length} artifacts to ${getTargetName()}`;
+
   return (
     <CanvasPanelHost title={title}>
       <div className="canvas-detail">
         {error && <div className="error-msg">{error}</div>}
 
         <div style={{ padding: "0 16px" }}>
-          <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 16 }}>
-            Compose a Deployment
-          </h3>
-
-          {/* Artifact selection */}
-          <div style={{ marginBottom: 12 }}>
-            <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", display: "block", marginBottom: 4 }}>
-              Artifact
-            </label>
-            <select
-              value={selectedArtifactId}
-              onChange={(e) => setSelectedArtifactId(e.target.value)}
-              style={{ fontSize: 13, padding: "6px 8px", width: "100%" }}
-            >
-              <option value="">Select artifact...</option>
-              {(artifacts ?? []).map((art) => (
-                <option key={art.id} value={art.id}>
-                  {art.name} ({art.type})
-                </option>
-              ))}
-            </select>
-            {selectedArtifact && selectedArtifact.analysis.summary && (
-              <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4, padding: "4px 8px", background: "rgba(255,255,255,0.03)", borderRadius: 4 }}>
-                {selectedArtifact.analysis.summary}
-              </div>
-            )}
-            {selectedArtifact && (
-              <button
-                onClick={() =>
-                  pushPanel({
-                    type: "artifact-detail",
-                    title: selectedArtifact.name,
-                    params: { artifactId: selectedArtifact.id },
-                  })
-                }
-                style={{
-                  background: "none",
-                  border: "none",
-                  color: "var(--accent)",
-                  cursor: "pointer",
-                  fontSize: 11,
-                  padding: "4px 0",
-                  marginTop: 2,
-                }}
-              >
-                View artifact details &rarr;
-              </button>
-            )}
+          {/* v6 page header */}
+          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 22 }}>
+            <div>
+              <h1 className="v6-page-title">New Deployment</h1>
+              <p className="v6-page-subtitle">Select what and where. Synth and the envoy figure out how.</p>
+            </div>
           </div>
 
-          {/* Environment selection */}
-          {environmentsEnabled && (
-            <div style={{ marginBottom: 12 }}>
-              <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", display: "block", marginBottom: 4 }}>
-                Target Environment
-              </label>
-              <select
-                value={selectedEnvironmentId}
-                onChange={(e) => setSelectedEnvironmentId(e.target.value)}
-                style={{ fontSize: 13, padding: "6px 8px", width: "100%" }}
-              >
-                <option value="">Select environment...</option>
-                {(environments ?? []).map((env) => (
-                  <option key={env.id} value={env.id}>
-                    {env.name}
-                  </option>
+          {/* Two-column layout */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18 }}>
+            {/* Left column — What */}
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--text-muted)", marginBottom: 8 }}>
+                What
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                {(artifacts ?? []).length === 0 && (
+                  <div style={{ fontSize: 13, color: "var(--text-muted)", padding: "12px 0" }}>
+                    No artifacts registered.
+                  </div>
+                )}
+                {(artifacts ?? []).map((art) => {
+                  const selected = selectedArtifactIds.includes(art.id);
+                  return (
+                    <div
+                      key={art.id}
+                      onClick={() => toggleArtifact(art.id)}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 10,
+                        padding: "10px 12px",
+                        borderRadius: 8,
+                        cursor: "pointer",
+                        border: selected
+                          ? "1px solid var(--accent-border)"
+                          : "1px solid var(--border)",
+                        background: selected ? "var(--accent-dim)" : "var(--surface)",
+                        transition: "border-color 0.15s, background 0.15s",
+                      }}
+                    >
+                      {/* Checkbox indicator */}
+                      <div
+                        style={{
+                          width: 16,
+                          height: 16,
+                          borderRadius: 4,
+                          border: selected
+                            ? "2px solid var(--accent)"
+                            : "2px solid var(--border)",
+                          background: selected ? "var(--accent)" : "transparent",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          flexShrink: 0,
+                          transition: "all 0.15s",
+                        }}
+                      >
+                        {selected && (
+                          <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                            <path d="M2 5L4.5 7.5L8 3" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        )}
+                      </div>
+
+                      {/* Artifact info */}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>
+                            {art.name}
+                          </span>
+                          <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
+                            {art.type}
+                          </span>
+                        </div>
+                        {art.analysis.summary && (
+                          <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {art.analysis.summary}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Confidence */}
+                      <ConfidenceIndicator value={art.analysis.confidence} />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Right column — Where */}
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--text-muted)", marginBottom: 8 }}>
+                Where
+              </div>
+
+              {/* Scope tabs */}
+              <div style={{ display: "flex", gap: 0, marginBottom: 10, borderRadius: 6, overflow: "hidden", border: "1px solid var(--border)" }}>
+                {(["environment", "envoy", "partition"] as const).map((scope) => (
+                  <button
+                    key={scope}
+                    onClick={() => setDeployScope(scope)}
+                    style={{
+                      flex: 1,
+                      padding: "6px 0",
+                      fontSize: 12,
+                      fontWeight: 600,
+                      border: "none",
+                      cursor: "pointer",
+                      background: deployScope === scope ? "var(--accent)" : "var(--surface)",
+                      color: deployScope === scope ? "#fff" : "var(--text-muted)",
+                      transition: "all 0.15s",
+                    }}
+                  >
+                    {scope === "environment" ? "Environment" : scope === "envoy" ? "Envoy" : "Partition"}
+                  </button>
                 ))}
-              </select>
-              {(envoys ?? []).length > 0 && (
-                <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>
-                  {(envoys ?? []).filter((e) => e.health === "OK").length} / {(envoys ?? []).length} envoy{(envoys ?? []).length !== 1 ? "s" : ""} healthy
+              </div>
+
+              {/* Scope content */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                {deployScope === "environment" && (
+                  <>
+                    {(environments ?? []).length === 0 && (
+                      <div style={{ fontSize: 13, color: "var(--text-muted)", padding: "12px 0" }}>
+                        No environments configured.
+                      </div>
+                    )}
+                    {(environments ?? []).map((env) => {
+                      const active = selectedEnvironmentId === env.id;
+                      return (
+                        <div
+                          key={env.id}
+                          onClick={() => {
+                            setSelectedEnvironmentId(active ? "" : env.id);
+                            setSelectedEnvoyId("");
+                            setSelectedPartitionId("");
+                          }}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 10,
+                            padding: "10px 12px",
+                            borderRadius: 8,
+                            cursor: "pointer",
+                            border: active
+                              ? "1px solid var(--accent-border)"
+                              : "1px solid var(--border)",
+                            background: active ? "var(--accent-dim)" : "var(--surface)",
+                            transition: "border-color 0.15s, background 0.15s",
+                          }}
+                        >
+                          <div style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--accent)", flexShrink: 0, opacity: active ? 1 : 0.3 }} />
+                          <span style={{ fontSize: 13, fontWeight: 500, color: "var(--text)" }}>{env.name}</span>
+                        </div>
+                      );
+                    })}
+                  </>
+                )}
+
+                {deployScope === "envoy" && (
+                  <>
+                    {(envoys ?? []).length === 0 && (
+                      <div style={{ fontSize: 13, color: "var(--text-muted)", padding: "12px 0" }}>
+                        No envoys registered.
+                      </div>
+                    )}
+                    {(envoys ?? []).map((envoy) => {
+                      const active = selectedEnvoyId === envoy.id;
+                      const healthColor =
+                        envoy.health === "OK"
+                          ? "#34d399"
+                          : envoy.health === "Degraded"
+                            ? "#fbbf24"
+                            : "#ef4444";
+                      return (
+                        <div
+                          key={envoy.id}
+                          onClick={() => {
+                            setSelectedEnvoyId(active ? "" : envoy.id);
+                            setSelectedEnvironmentId("");
+                            setSelectedPartitionId("");
+                          }}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 10,
+                            padding: "10px 12px",
+                            borderRadius: 8,
+                            cursor: "pointer",
+                            border: active
+                              ? "1px solid var(--accent-border)"
+                              : "1px solid var(--border)",
+                            background: active ? "var(--accent-dim)" : "var(--surface)",
+                            transition: "border-color 0.15s, background 0.15s",
+                          }}
+                        >
+                          <div style={{ width: 8, height: 8, borderRadius: "50%", background: healthColor, flexShrink: 0 }} />
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text)" }}>
+                              {envoy.hostname ?? envoy.url}
+                            </div>
+                            <div style={{ fontSize: 11, color: "var(--text-muted)" }}>
+                              {envoy.health}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </>
+                )}
+
+                {deployScope === "partition" && (
+                  <>
+                    {(partitions ?? []).length === 0 && (
+                      <div style={{ fontSize: 13, color: "var(--text-muted)", padding: "12px 0" }}>
+                        No partitions defined.
+                      </div>
+                    )}
+                    {(partitions ?? []).map((part) => {
+                      const active = selectedPartitionId === part.id;
+                      return (
+                        <div
+                          key={part.id}
+                          onClick={() => {
+                            setSelectedPartitionId(active ? "" : part.id);
+                            setSelectedEnvironmentId("");
+                            setSelectedEnvoyId("");
+                          }}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 10,
+                            padding: "10px 12px",
+                            borderRadius: 8,
+                            cursor: "pointer",
+                            border: active
+                              ? "1px solid var(--accent-border)"
+                              : "1px solid var(--border)",
+                            background: active ? "var(--accent-dim)" : "var(--surface)",
+                            transition: "border-color 0.15s, background 0.15s",
+                          }}
+                        >
+                          <div style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--accent)", flexShrink: 0, opacity: active ? 1 : 0.3 }} />
+                          <span style={{ fontSize: 13, fontWeight: 500, color: "var(--text)" }}>{part.name}</span>
+                        </div>
+                      );
+                    })}
+                  </>
+                )}
+              </div>
+
+              {/* Context hint when target selected */}
+              {hasTarget && (
+                <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 8, fontStyle: "italic" }}>
+                  {getScopeHint()}
                 </div>
               )}
             </div>
-          )}
-
-          {/* Partition selection (optional) */}
-          {(partitions ?? []).length > 0 && (
-            <div style={{ marginBottom: 12 }}>
-              <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", display: "block", marginBottom: 4 }}>
-                Partition (optional)
-              </label>
-              <select
-                value={selectedPartitionId}
-                onChange={(e) => setSelectedPartitionId(e.target.value)}
-                style={{ fontSize: 13, padding: "6px 8px", width: "100%" }}
-              >
-                <option value="">No partition</option>
-                {(partitions ?? []).map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          {/* Version */}
-          <div style={{ marginBottom: 16 }}>
-            <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", display: "block", marginBottom: 4 }}>
-              Version
-            </label>
-            <input
-              type="text"
-              placeholder="e.g. 1.2.3"
-              value={version}
-              onChange={(e) => setVersion(e.target.value)}
-              style={{ fontSize: 13, padding: "6px 8px", width: "100%" }}
-            />
           </div>
 
           {/* Pre-flight context — auto-fetched when artifact + environment selected */}
-          {selectedArtifactId && (!environmentsEnabled || selectedEnvironmentId) && (
+          {primaryArtifactId && (!environmentsEnabled || selectedEnvironmentId) && (
             <PreFlightDisplay
-              artifactId={selectedArtifactId}
+              artifactId={primaryArtifactId}
               environmentId={selectedEnvironmentId}
               partitionId={selectedPartitionId || undefined}
-              version={version || undefined}
+              version={undefined}
               onLoaded={(rec) => setPreFlightRec(rec)}
             />
           )}
 
-          {/* Summary + deploy */}
-          {selectedArtifactId && (!environmentsEnabled || selectedEnvironmentId) && (
-            <div className="card" style={{ padding: 16, marginBottom: 16 }}>
-              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>
-                Deployment Summary
-              </div>
-              <div style={{ fontSize: 13, color: "var(--text-muted)" }}>
-                <div>
-                  <strong>Artifact:</strong> {selectedArtifact?.name ?? selectedArtifactId.slice(0, 8)}
-                </div>
-                <div>
-                  <strong>Environment:</strong>{" "}
-                  <EnvBadge name={(environments ?? []).find((e) => e.id === selectedEnvironmentId)?.name ?? selectedEnvironmentId.slice(0, 8)} />
-                </div>
-                {selectedPartitionId && (
+          {/* Deploy action bar */}
+          {selectedArtifactIds.length > 0 && (selectedEnvironmentId || selectedPartitionId || selectedEnvoyId) && (
+            <div style={{ marginTop: 22, padding: "18px 22px", borderRadius: 10, background: "var(--surface)", border: "1px solid var(--border)" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <SynthMark size={20} />
                   <div>
-                    <strong>Partition:</strong> {(partitions ?? []).find((p) => p.id === selectedPartitionId)?.name ?? selectedPartitionId.slice(0, 8)}
+                    <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>
+                      {summaryText}
+                    </div>
+                    <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 1 }}>
+                      {getScopeHint()}
+                    </div>
                   </div>
-                )}
-                {version && (
-                  <div>
-                    <strong>Version:</strong> {version}
-                  </div>
-                )}
+                </div>
+                <button className="btn btn-primary" onClick={handleDeploy} disabled={submitting}>
+                  {submitting ? "Creating..." : selectedArtifactIds.length > 1 ? "Request Coordinated Plan" : "Request Plan"}
+                </button>
               </div>
-              <button
-                className="btn btn-primary"
-                disabled={submitting}
-                onClick={handleDeploy}
-                style={{ marginTop: 12 }}
-              >
-                {submitting ? "Creating deployment..." : "Deploy"}
-              </button>
             </div>
           )}
         </div>

@@ -1391,18 +1391,6 @@ table a:hover {
    Agent Mode — Physical UI Transformation
    ===================================================================== */
 
-/* ---- Agent-mode variable aliases (canvas components reference these) ---- */
-
-:root, [data-theme="light"], [data-theme="dark"] {
-  --agent-accent: var(--accent);
-  --agent-accent-dim: var(--accent-dim);
-  --agent-bg: var(--bg);
-  --agent-surface: var(--surface);
-  --agent-border: var(--border);
-  --agent-text: var(--text);
-  --agent-text-secondary: var(--text-secondary);
-  --agent-text-muted: var(--text-muted);
-}
 
 /* ---- Agent banner ---- */
 
@@ -3543,11 +3531,11 @@ table a:hover {
   border-radius: 50%;
 }
 
-.v2-deploy-succeeded { background: #34d399; }
-.v2-deploy-failed { background: #f87171; box-shadow: 0 0 6px rgba(248,113,113,0.4); }
-.v2-deploy-running { background: #63e1be; }
-.v2-deploy-pending { background: #6b7280; }
-.v2-deploy-rolled_back { background: #ea580c; }
+.v2-deploy-succeeded { background: var(--status-succeeded); }
+.v2-deploy-failed { background: var(--status-failed); box-shadow: 0 0 6px color-mix(in srgb, var(--status-failed) 40%, transparent); }
+.v2-deploy-running { background: var(--accent); }
+.v2-deploy-pending { background: var(--text-muted); }
+.v2-deploy-rolled_back { background: var(--status-warning); }
 
 .v2-deploy-info {
   flex: 1;
@@ -3710,8 +3698,8 @@ table a:hover {
   border-radius: 50%;
 }
 
-.v2-dot-success { background: #34d399; }
-.v2-dot-failed { background: #f87171; box-shadow: 0 0 6px rgba(248,113,113,0.4); }
+.v2-dot-success { background: var(--status-succeeded); }
+.v2-dot-failed { background: var(--status-failed); box-shadow: 0 0 6px color-mix(in srgb, var(--status-failed) 40%, transparent); }
 
 /* ---- v2 Command Channel ---- */
 
@@ -3998,9 +3986,9 @@ table a:hover {
   background: rgba(255, 255, 255, 0.02);
 }
 
-.v2-signal-critical:hover { border-color: rgba(220, 38, 38, 0.4); }
-.v2-signal-warning:hover { border-color: rgba(245, 158, 11, 0.4); }
-.v2-signal-info:hover { border-color: rgba(37, 99, 235, 0.4); }
+.v2-signal-critical:hover { border-color: color-mix(in srgb, var(--status-failed) 40%, transparent); }
+.v2-signal-warning:hover { border-color: color-mix(in srgb, var(--status-warning) 40%, transparent); }
+.v2-signal-info:hover { border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
 
 .v2-signal-accent-bar {
   width: 4px;
