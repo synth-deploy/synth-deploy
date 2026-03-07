@@ -11,15 +11,15 @@ interface Props {
 }
 
 const SEVERITY_COLORS = {
-  proceed: { bg: "rgba(46, 160, 67, 0.12)", border: "#2ea043", text: "#3fb950" },
-  wait: { bg: "rgba(210, 153, 34, 0.12)", border: "#d29922", text: "#e3b341" },
-  investigate: { bg: "rgba(218, 54, 51, 0.12)", border: "#da3633", text: "#f85149" },
+  proceed: { bg: "color-mix(in srgb, var(--status-succeeded) 12%, transparent)", border: "var(--status-succeeded)", text: "var(--status-succeeded)" },
+  wait: { bg: "color-mix(in srgb, var(--status-warning) 12%, transparent)", border: "var(--status-warning)", text: "var(--status-warning)" },
+  investigate: { bg: "color-mix(in srgb, var(--status-failed) 12%, transparent)", border: "var(--status-failed)", text: "var(--status-failed)" },
 } as const;
 
 const STATUS_COLORS = {
-  healthy: { bg: "rgba(46, 160, 67, 0.12)", text: "#3fb950", label: "Healthy" },
-  degraded: { bg: "rgba(210, 153, 34, 0.12)", text: "#e3b341", label: "Degraded" },
-  unreachable: { bg: "rgba(218, 54, 51, 0.12)", text: "#f85149", label: "Unreachable" },
+  healthy: { bg: "color-mix(in srgb, var(--status-succeeded) 12%, transparent)", text: "var(--status-succeeded)", label: "Healthy" },
+  degraded: { bg: "color-mix(in srgb, var(--status-warning) 12%, transparent)", text: "var(--status-warning)", label: "Degraded" },
+  unreachable: { bg: "color-mix(in srgb, var(--status-failed) 12%, transparent)", text: "var(--status-failed)", label: "Unreachable" },
 } as const;
 
 export default function PreFlightDisplay({ artifactId, environmentId, partitionId, version, onLoaded }: Props) {
@@ -139,7 +139,7 @@ export default function PreFlightDisplay({ artifactId, environmentId, partitionI
           <div style={{ fontWeight: 600, color: "var(--text)", marginBottom: 2 }}>
             {context.recentHistory.deploymentsToday} today
             {context.recentHistory.recentFailures > 0 && (
-              <span style={{ color: "#f85149", marginLeft: 6 }}>
+              <span style={{ color: "var(--status-failed)", marginLeft: 6 }}>
                 {context.recentHistory.recentFailures} failed (7d)
               </span>
             )}
@@ -160,7 +160,7 @@ export default function PreFlightDisplay({ artifactId, environmentId, partitionI
               fontSize: 12,
             }}
           >
-            <div style={{ fontWeight: 600, color: "#e3b341", marginBottom: 2 }}>
+            <div style={{ fontWeight: 600, color: "var(--status-warning)", marginBottom: 2 }}>
               {context.crossSystemContext.length} signal{context.crossSystemContext.length !== 1 ? "s" : ""}
             </div>
             <div style={{ color: "var(--text-muted)", fontSize: 11 }}>

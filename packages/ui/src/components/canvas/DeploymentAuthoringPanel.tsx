@@ -306,10 +306,10 @@ export default function DeploymentAuthoringPanel({ title, preselectedArtifactId 
                       const active = selectedEnvoyId === envoy.id;
                       const healthColor =
                         envoy.health === "OK"
-                          ? "#34d399"
+                          ? "var(--status-succeeded)"
                           : envoy.health === "Degraded"
-                            ? "#fbbf24"
-                            : "#ef4444";
+                            ? "var(--status-warning)"
+                            : "var(--status-failed)";
                       return (
                         <div
                           key={envoy.id}

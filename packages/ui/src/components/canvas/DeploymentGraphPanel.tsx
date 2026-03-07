@@ -136,10 +136,10 @@ const statusColor = (s: string) => {
     case "executing": return "var(--accent)";
     case "failed": return "var(--status-failed)";
     case "rolled_back": return "var(--status-warning)";
-    case "awaiting_approval": return "#9333ea";
-    case "planning": return "#0891b2";
-    case "draft": return "#6b7280";
-    default: return "#6b7280";
+    case "awaiting_approval": return "var(--accent)";
+    case "planning": return "var(--accent)";
+    case "draft": return "var(--text-muted)";
+    default: return "var(--text-muted)";
   }
 };
 
@@ -520,8 +520,8 @@ function GraphDetailView({ title, graphId }: { title: string; graphId: string })
                       onClick={() => handleApproveNode(node.id)}
                       style={{
                         marginLeft: "auto", fontSize: 11, padding: "2px 10px",
-                        borderRadius: 4, border: "1px solid #9333ea40",
-                        background: "#9333ea15", color: "#9333ea", cursor: "pointer",
+                        borderRadius: 4, border: "1px solid var(--accent-border)",
+                        background: "var(--accent-dim)", color: "var(--accent)", cursor: "pointer",
                       }}
                     >
                       Approve
@@ -559,7 +559,7 @@ function GraphDetailView({ title, graphId }: { title: string; graphId: string })
                   <div style={{ marginTop: 6, paddingLeft: 30 }}>
                     {node.inputBindings.map((b, i) => (
                       <div key={i} style={{ fontSize: 11, color: "#888" }}>
-                        Input: <code style={{ color: "#c084fc" }}>${b.variable}</code>{" "}
+                        Input: <code style={{ color: "var(--accent)" }}>${b.variable}</code>{" "}
                         from node {b.sourceNodeId.slice(0, 8)}...
                         {b.resolvedValue && (
                           <span style={{ color: "var(--status-succeeded)" }}> = {b.resolvedValue}</span>
@@ -760,7 +760,7 @@ function GraphDetailView({ title, graphId }: { title: string; graphId: string })
 
 const inputStyle: React.CSSProperties = {
   fontSize: 11, padding: "2px 6px", borderRadius: 3,
-  border: "1px solid #444", background: "#1a1a1a", color: "#ccc",
+  border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text-muted)",
   outline: "none", minWidth: 80,
 };
 

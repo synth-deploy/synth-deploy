@@ -204,11 +204,11 @@ function EmptyState({ onComplete }: { onComplete: () => void }) {
   }
 
   const stepStyle = (s: number): React.CSSProperties => ({
-    border: "1px solid var(--agent-border)",
+    border: "1px solid var(--border)",
     borderRadius: 10,
     padding: 20,
     marginBottom: 12,
-    background: step > s ? "rgba(52, 211, 153, 0.04)" : step === s ? "var(--agent-card-bg)" : "rgba(107, 114, 128, 0.04)",
+    background: step > s ? "color-mix(in srgb, var(--status-succeeded) 4%, transparent)" : step === s ? "var(--surface)" : "color-mix(in srgb, var(--text-muted) 4%, transparent)",
     opacity: step < s ? 0.5 : 1,
     transition: "all 0.2s",
   });
@@ -221,8 +221,8 @@ function EmptyState({ onComplete }: { onComplete: () => void }) {
     width: 28, height: 28, borderRadius: "50%",
     display: "flex", alignItems: "center", justifyContent: "center",
     fontSize: 13, fontWeight: 700,
-    background: step > s ? "var(--status-succeeded)" : step === s ? "rgba(99, 225, 190, 0.2)" : "rgba(107, 114, 128, 0.15)",
-    color: step > s ? "#0f1420" : step === s ? "var(--accent)" : "#6b7280",
+    background: step > s ? "var(--status-succeeded)" : step === s ? "color-mix(in srgb, var(--accent) 20%, transparent)" : "color-mix(in srgb, var(--text-muted) 15%, transparent)",
+    color: step > s ? "var(--bg)" : step === s ? "var(--accent)" : "var(--text-muted)",
   });
 
   const statusLabel: Record<string, string> = {
@@ -239,10 +239,10 @@ function EmptyState({ onComplete }: { onComplete: () => void }) {
     <div className="v2-dashboard">
       <div style={{ textAlign: "center", padding: "32px 20px 24px" }}>
         <SynthEye />
-        <h2 style={{ color: "var(--agent-text)", fontSize: 22, fontWeight: 700, marginTop: 16, marginBottom: 8 }}>
+        <h2 style={{ color: "var(--text)", fontSize: 22, fontWeight: 700, marginTop: 16, marginBottom: 8 }}>
           Welcome to Synth
         </h2>
-        <p style={{ color: "var(--agent-text-muted)", fontSize: 14, maxWidth: 460, margin: "0 auto" }}>
+        <p style={{ color: "var(--text-muted)", fontSize: 14, maxWidth: 460, margin: "0 auto" }}>
           Let&rsquo;s set up your first intelligent deployment. Three steps &mdash; then you&rsquo;re operational.
         </p>
       </div>
@@ -254,10 +254,10 @@ function EmptyState({ onComplete }: { onComplete: () => void }) {
             {step > 1 ? "\u2713" : "1"}
           </div>
           <div>
-            <div style={{ fontWeight: 600, fontSize: 15, color: "var(--agent-text)" }}>
+            <div style={{ fontWeight: 600, fontSize: 15, color: "var(--text)" }}>
               What are you deploying?
             </div>
-            <div style={{ fontSize: 12, color: "var(--agent-text-muted)" }}>
+            <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
               An artifact is what you&rsquo;re deploying &mdash; a container image, package, binary, or config bundle. Synth will analyze it.
             </div>
           </div>
@@ -270,12 +270,12 @@ function EmptyState({ onComplete }: { onComplete: () => void }) {
               value={artifactName}
               onChange={(e) => setArtifactName(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleCreateArtifact()}
-              style={{ fontSize: 13, padding: "8px 12px", borderRadius: 6, border: "1px solid var(--agent-border)", background: "var(--agent-bg)", color: "var(--agent-text)" }}
+              style={{ fontSize: 13, padding: "8px 12px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--bg)", color: "var(--text)" }}
             />
             <select
               value={artifactType}
               onChange={(e) => setArtifactType(e.target.value)}
-              style={{ fontSize: 13, padding: "8px 12px", borderRadius: 6, border: "1px solid var(--agent-border)", background: "var(--agent-bg)", color: "var(--agent-text)" }}
+              style={{ fontSize: 13, padding: "8px 12px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--bg)", color: "var(--text)" }}
             >
               <option value="docker">Docker Image</option>
               <option value="binary">Binary / Executable</option>
@@ -299,16 +299,16 @@ function EmptyState({ onComplete }: { onComplete: () => void }) {
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--status-succeeded)" }}>
               <span style={{ fontWeight: 600 }}>{createdArtifact.name}</span>
-              <span style={{ color: "var(--agent-text-muted)" }}>({createdArtifact.type})</span>
+              <span style={{ color: "var(--text-muted)" }}>({createdArtifact.type})</span>
             </div>
             {analysisPolling && !analysisSummary && (
-              <div style={{ fontSize: 12, color: "var(--agent-text-muted)", marginTop: 6, display: "flex", alignItems: "center", gap: 6 }}>
-                <span className="v2-envoy-spinner" style={{ width: 12, height: 12, border: "2px solid rgba(99,225,190,0.2)", borderTopColor: "var(--accent)", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
+              <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 6, display: "flex", alignItems: "center", gap: 6 }}>
+                <span className="v2-envoy-spinner" style={{ width: 12, height: 12, border: "2px solid color-mix(in srgb, var(--accent) 20%, transparent)", borderTopColor: "var(--accent)", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
                 Analyzing artifact...
               </div>
             )}
             {analysisSummary && (
-              <div style={{ fontSize: 12, color: "var(--agent-text-muted)", marginTop: 6, padding: "6px 10px", background: "rgba(99,225,190,0.05)", borderRadius: 6, borderLeft: "2px solid rgba(99,225,190,0.3)" }}>
+              <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 6, padding: "6px 10px", background: "color-mix(in srgb, var(--accent) 5%, transparent)", borderRadius: 6, borderLeft: "2px solid color-mix(in srgb, var(--accent) 30%, transparent)" }}>
                 {analysisSummary}
               </div>
             )}
@@ -323,10 +323,10 @@ function EmptyState({ onComplete }: { onComplete: () => void }) {
             {step > 2 ? "\u2713" : "2"}
           </div>
           <div>
-            <div style={{ fontWeight: 600, fontSize: 15, color: "var(--agent-text)" }}>
+            <div style={{ fontWeight: 600, fontSize: 15, color: "var(--text)" }}>
               Where are you deploying to?
             </div>
-            <div style={{ fontSize: 12, color: "var(--agent-text-muted)" }}>
+            <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
               An envoy runs on your target machine. It scans the system, produces deployment plans, and executes them.
             </div>
           </div>
@@ -335,21 +335,21 @@ function EmptyState({ onComplete }: { onComplete: () => void }) {
         {step === 2 && (
           <div style={{ maxWidth: 500 }}>
             <div style={{
-              background: "rgba(99, 225, 190, 0.05)", border: "1px solid rgba(99, 225, 190, 0.15)",
+              background: "color-mix(in srgb, var(--accent) 5%, transparent)", border: "1px solid color-mix(in srgb, var(--accent) 15%, transparent)",
               borderRadius: 8, padding: 16, marginBottom: 12, fontSize: 13,
             }}>
-              <div style={{ fontWeight: 600, color: "var(--agent-text)", marginBottom: 8 }}>
+              <div style={{ fontWeight: 600, color: "var(--text)", marginBottom: 8 }}>
                 Register an Envoy
               </div>
-              <div style={{ color: "var(--agent-text-muted)", lineHeight: 1.5 }}>
+              <div style={{ color: "var(--text-muted)", lineHeight: 1.5 }}>
                 Install and start an envoy on your target machine. It will connect back to this Synth instance automatically.
               </div>
-              <div style={{ marginTop: 12, fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--accent)", background: "rgba(0,0,0,0.3)", padding: "8px 12px", borderRadius: 6, wordBreak: "break-all" }}>
+              <div style={{ marginTop: 12, fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--accent)", background: "color-mix(in srgb, var(--bg) 70%, transparent)", padding: "8px 12px", borderRadius: 6, wordBreak: "break-all" }}>
                 npx @synth-deploy/envoy --command-url {window.location.origin}
               </div>
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--agent-text-muted)" }}>
-              <span className="v2-envoy-spinner" style={{ width: 14, height: 14, border: "2px solid rgba(99,225,190,0.2)", borderTopColor: "var(--accent)", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
+            <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--text-muted)" }}>
+              <span className="v2-envoy-spinner" style={{ width: 14, height: 14, border: "2px solid color-mix(in srgb, var(--accent) 20%, transparent)", borderTopColor: "var(--accent)", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
               Waiting for envoy connection...
               {envoys.length > 0 && (
                 <span style={{ color: "var(--status-warning)" }}>
@@ -373,12 +373,12 @@ function EmptyState({ onComplete }: { onComplete: () => void }) {
         {step > 2 && connectedEnvoy && (
           <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--status-succeeded)" }}>
             <span style={{ fontWeight: 600 }}>{connectedEnvoy.hostname ?? connectedEnvoy.id.slice(0, 8)}</span>
-            <span style={{ color: "var(--agent-text-muted)" }}>({connectedEnvoy.url})</span>
+            <span style={{ color: "var(--text-muted)" }}>({connectedEnvoy.url})</span>
             <span className="v2-synth-status-badge" style={{ fontSize: 10 }}>OK</span>
           </div>
         )}
         {step > 2 && !connectedEnvoy && (
-          <div style={{ fontSize: 13, color: "var(--agent-text-muted)", fontStyle: "italic" }}>
+          <div style={{ fontSize: 13, color: "var(--text-muted)", fontStyle: "italic" }}>
             Skipped &mdash; no envoy connected
           </div>
         )}
@@ -391,10 +391,10 @@ function EmptyState({ onComplete }: { onComplete: () => void }) {
             {deploymentStatus === "succeeded" ? "\u2713" : "3"}
           </div>
           <div>
-            <div style={{ fontWeight: 600, fontSize: 15, color: "var(--agent-text)" }}>
+            <div style={{ fontWeight: 600, fontSize: 15, color: "var(--text)" }}>
               {deploymentId ? (statusLabel[deploymentStatus ?? "pending"] ?? "Processing...") : "Ready for your first intelligent deployment"}
             </div>
-            <div style={{ fontSize: 12, color: "var(--agent-text-muted)" }}>
+            <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
               {deploymentId
                 ? "Watch the plan, execution, and debrief unfold below."
                 : "Deploy your artifact. Synth will analyze it, generate a plan, and execute it."}
@@ -405,7 +405,7 @@ function EmptyState({ onComplete }: { onComplete: () => void }) {
         {step === 3 && !deploymentId && (
           <div style={{ display: "flex", flexDirection: "column", gap: 10, maxWidth: 400 }}>
             {createdArtifact && (
-              <div style={{ fontSize: 13, color: "var(--agent-text)" }}>
+              <div style={{ fontSize: 13, color: "var(--text)" }}>
                 <strong>Artifact:</strong> {createdArtifact.name} ({createdArtifact.type})
               </div>
             )}
@@ -414,7 +414,7 @@ function EmptyState({ onComplete }: { onComplete: () => void }) {
               <select
                 value={selectedEnvId}
                 onChange={(e) => setSelectedEnvId(e.target.value)}
-                style={{ fontSize: 13, padding: "8px 12px", borderRadius: 6, border: "1px solid var(--agent-border)", background: "var(--agent-bg)", color: "var(--agent-text)" }}
+                style={{ fontSize: 13, padding: "8px 12px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--bg)", color: "var(--text)" }}
               >
                 <option value="">Select Environment</option>
                 {environments.map((e) => (
@@ -428,7 +428,7 @@ function EmptyState({ onComplete }: { onComplete: () => void }) {
               value={version}
               onChange={(e) => setVersion(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleDeploy()}
-              style={{ fontSize: 13, padding: "8px 12px", borderRadius: 6, border: "1px solid var(--agent-border)", background: "var(--agent-bg)", color: "var(--agent-text)" }}
+              style={{ fontSize: 13, padding: "8px 12px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--bg)", color: "var(--text)" }}
             />
 
             {step3Error && <div style={{ color: "var(--status-failed)", fontSize: 12 }}>{step3Error}</div>}
@@ -447,8 +447,8 @@ function EmptyState({ onComplete }: { onComplete: () => void }) {
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {/* Deployment status indicator */}
             {deploymentStatus && deploymentStatus !== "succeeded" && deploymentStatus !== "failed" && deploymentStatus !== "rolled_back" && (
-              <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--agent-text-muted)" }}>
-                <span className="v2-envoy-spinner" style={{ width: 14, height: 14, border: "2px solid rgba(99,225,190,0.2)", borderTopColor: "var(--accent)", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
+              <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--text-muted)" }}>
+                <span className="v2-envoy-spinner" style={{ width: 14, height: 14, border: "2px solid color-mix(in srgb, var(--accent) 20%, transparent)", borderTopColor: "var(--accent)", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
                 {statusLabel[deploymentStatus] ?? "Processing..."}
               </div>
             )}
@@ -456,11 +456,11 @@ function EmptyState({ onComplete }: { onComplete: () => void }) {
             {/* Debrief entries — live during deployment */}
             {deploymentDebrief.length > 0 && (
               <div style={{ marginTop: 4 }}>
-                <div style={{ fontSize: 11, fontWeight: 600, color: "var(--agent-text-muted)", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.05em" }}>
                   Debrief
                 </div>
                 {deploymentDebrief.map((entry) => (
-                  <div key={entry.id} style={{ fontSize: 12, color: "var(--agent-text-muted)", padding: "4px 0", borderBottom: "1px solid rgba(107,114,128,0.1)" }}>
+                  <div key={entry.id} style={{ fontSize: 12, color: "var(--text-muted)", padding: "4px 0", borderBottom: "1px solid color-mix(in srgb, var(--text-muted) 10%, transparent)" }}>
                     <span style={{ color: entry.agent === "envoy" ? "var(--status-succeeded)" : "var(--accent)", fontWeight: 500 }}>
                       {entry.agent === "envoy" ? "Envoy" : "Synth"}
                     </span>

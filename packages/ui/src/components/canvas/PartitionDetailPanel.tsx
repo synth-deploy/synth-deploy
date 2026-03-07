@@ -142,7 +142,7 @@ export default function PartitionDetailPanel({ partitionId, title }: Props) {
 
             {/* Right: Debriefs */}
             <div className="v2-detail-sidebar">
-              <SectionHeader color="#e879f9" shape="diamond" label="Recent Debriefs" />
+              <SectionHeader color="var(--accent)" shape="diamond" label="Recent Debriefs" />
               <div className="v2-scoped-list">
                 {(debriefEntries ?? []).length > 0 ? (debriefEntries ?? []).slice(0, 5).map((entry) => (
                   <div key={entry.id} className="v2-debrief-row v2-debrief-compact">

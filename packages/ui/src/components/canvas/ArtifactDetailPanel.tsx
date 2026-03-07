@@ -258,7 +258,7 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
             </div>
 
             {/* Dependencies */}
-            <SectionHeader color="#6366f1" shape="diamond" label="Dependencies" />
+            <SectionHeader color="var(--accent)" shape="diamond" label="Dependencies" />
             {artifact.analysis.dependencies.length > 0 ? (
               <ul style={{ margin: "0 0 20px", paddingLeft: 20, fontSize: 13, color: "var(--text)", lineHeight: 1.8 }}>
                 {artifact.analysis.dependencies.map((dep, i) => (
@@ -291,7 +291,7 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
             {/* Deployment Intent */}
             {artifact.analysis.deploymentIntent && (
               <>
-                <SectionHeader color="#e879f9" shape="circle" label="Deployment Intent" />
+                <SectionHeader color="var(--accent)" shape="circle" label="Deployment Intent" />
                 <div
                   style={{
                     fontSize: 13,
@@ -438,7 +438,7 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
         {/* --- Learning History Tab --- */}
         {activeTab === "learning" && (
           <div style={{ padding: "16px" }}>
-            <SectionHeader color="#e879f9" shape="circle" label="Learning History" />
+            <SectionHeader color="var(--accent)" shape="circle" label="Learning History" />
 
             {artifact.learningHistory.length > 0 ? (
               <div style={{ position: "relative", paddingLeft: 20 }}>
@@ -466,7 +466,7 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
                           width: 10,
                           height: 10,
                           borderRadius: "50%",
-                          background: "#e879f9",
+                          background: "var(--accent)",
                           border: "2px solid var(--input-bg)",
                         }}
                       />
@@ -495,7 +495,7 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
                               marginTop: 6,
                               fontSize: 10,
                               fontWeight: 600,
-                              color: "#e879f9",
+                              color: "var(--accent)",
                               textTransform: "uppercase",
                               letterSpacing: "0.04em",
                             }}
@@ -520,7 +520,7 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
         {activeTab === "versions" && (
           <div style={{ padding: "16px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-              <SectionHeader color="#6366f1" shape="square" label="Versions" />
+              <SectionHeader color="var(--accent)" shape="square" label="Versions" />
               <button
                 className="btn btn-primary"
                 onClick={() => setShowVersionForm(!showVersionForm)}
@@ -618,7 +618,7 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
                       style={{
                         fontWeight: 600,
                         fontSize: 14,
-                        color: "#6366f1",
+                        color: "var(--accent)",
                         fontFamily: "monospace",
                       }}
                     >

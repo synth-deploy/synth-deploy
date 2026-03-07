@@ -170,7 +170,7 @@ export default function DeploymentDetail() {
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 13 }}>{s.description}</div>
                     {s.output && <div className="text-secondary" style={{ fontSize: 12, marginTop: 2, fontFamily: "var(--font-mono)" }}>{s.output}</div>}
-                    {s.error && <div style={{ fontSize: 12, marginTop: 2, color: "#dc2626" }}>{s.error}</div>}
+                    {s.error && <div style={{ fontSize: 12, marginTop: 2, color: "var(--status-failed)" }}>{s.error}</div>}
                   </div>
                   {s.completedAt && s.startedAt && (() => {
                     const ms = new Date(s.completedAt).getTime() - new Date(s.startedAt).getTime();

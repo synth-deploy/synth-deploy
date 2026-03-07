@@ -371,7 +371,7 @@ export default function PlanReviewPanel({ deploymentId, title }: Props) {
             <div className="canvas-timeline">
               {deployment.rollbackPlan.steps.map((step, i) => (
                 <div key={i} className="canvas-timeline-entry" style={{ cursor: "default" }}>
-                  <div className="canvas-timeline-dot" style={{ background: "#6366f1" }} />
+                  <div className="canvas-timeline-dot" style={{ background: "var(--accent)" }} />
                   <div className="canvas-timeline-content">
                     <div className="canvas-timeline-header">
                       <span className="canvas-timeline-type">{step.action}</span>

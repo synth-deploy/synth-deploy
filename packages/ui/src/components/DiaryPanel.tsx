@@ -44,8 +44,8 @@ function DiaryEntry({ entry }: { entry: DebriefEntry }) {
         <span
           className="diary-panel-entry-agent"
           style={{
-            color: entry.agent === "command" ? "#7c3aed" : "#0891b2",
-            background: entry.agent === "command" ? "rgba(124,58,237,0.1)" : "rgba(8,145,178,0.1)",
+            color: "var(--accent)",
+            background: "var(--accent-dim)",
           }}
         >
           {entry.agent}

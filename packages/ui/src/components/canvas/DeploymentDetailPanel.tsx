@@ -275,7 +275,7 @@ function LiveProgressSection({ events, stale }: { events: ProgressEvent[]; stale
             .filter((e) => e.output)
             .map((e, i) => (
               <div key={i}>
-                <span style={{ color: "#6b7280" }}>[{new Date(e.timestamp).toLocaleTimeString()}]</span>{" "}
+                <span style={{ color: "var(--text-muted)" }}>[{new Date(e.timestamp).toLocaleTimeString()}]</span>{" "}
                 {e.output}
               </div>
             ))}
