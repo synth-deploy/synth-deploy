@@ -4,7 +4,10 @@ import type { EnvoyRegistryEntry } from "../../api.js";
 import type { Partition, Environment } from "../../types.js";
 import { useCanvas } from "../../context/CanvasContext.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
+import AddEnvoyModal from "../AddEnvoyModal.js";
 import { useQuery } from "../../hooks/useQuery.js";
+
+
 
 const SECTIONS = [
   { id: "envoys", label: "Envoys" },
@@ -16,6 +19,7 @@ type Section = (typeof SECTIONS)[number]["id"];
 
 export default function TopologyPanel({ title }: { title?: string }) {
   const [section, setSection] = useState<Section>("envoys");
+  const [showAddEnvoy, setShowAddEnvoy] = useState(false);
   const { pushPanel } = useCanvas();
 
   const { data: envoys } = useQuery<EnvoyRegistryEntry[]>("list:envoys", listEnvoys);
@@ -36,7 +40,12 @@ export default function TopologyPanel({ title }: { title?: string }) {
           <h1 className="v6-page-title">Topology</h1>
           <p className="v6-page-subtitle">Your deployment infrastructure — envoys, environments, and partitions.</p>
         </div>
-        <button className="btn-accent-outline">
+        <button
+          className="btn-accent-outline"
+          onClick={() => {
+            if (section === "envoys") setShowAddEnvoy(true);
+          }}
+        >
           <svg className="icon-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
             <line x1="12" y1="5" x2="12" y2="19" />
             <line x1="5" y1="12" x2="19" y2="12" />
@@ -118,6 +127,7 @@ export default function TopologyPanel({ title }: { title?: string }) {
           )}
         </div>
       )}
+      {showAddEnvoy && <AddEnvoyModal onClose={() => setShowAddEnvoy(false)} />}
     </CanvasPanelHost>
   );
 }
