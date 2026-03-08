@@ -467,10 +467,11 @@ export async function recordPreFlightResponse(params: {
 // --- Canvas Query ---
 
 export interface CanvasQueryResult {
-  action: "navigate" | "data";
+  action: "navigate" | "data" | "create" | "answer";
   view: string;
   params: Record<string, string>;
   title?: string;
+  content?: string;
 }
 
 export async function queryAgent(query: string, conversationId?: string): Promise<CanvasQueryResult> {

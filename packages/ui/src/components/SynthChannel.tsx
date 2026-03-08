@@ -1,6 +1,9 @@
 import { useState, useRef, useEffect } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { queryAgent } from "../api.js";
 import type { CanvasQueryResult } from "../api.js";
+import { detectStructuredContent } from "../utils/detectStructuredContent.js";
 import EntityTag from "./EntityTag.js";
 import type { EntityType } from "./EntityTag.js";
 
@@ -15,9 +18,10 @@ interface Message {
 interface SynthChannelProps {
   scope?: string;
   onAgentResult?: (result: CanvasQueryResult) => void;
+  onStructuredContent?: (text: string) => void;
 }
 
-export default function SynthChannel({ scope, onAgentResult }: SynthChannelProps) {
+export default function SynthChannel({ scope, onAgentResult, onStructuredContent }: SynthChannelProps) {
   const [expanded, setExpanded] = useState(false);
   const [inputValue, setInputValue] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
@@ -52,18 +56,29 @@ export default function SynthChannel({ scope, onAgentResult }: SynthChannelProps
       const result = await queryAgent(text, conversationIdRef.current);
 
       setTyping(false);
+
+      // For "answer" action, use the full content as the message body
+      const responseText = result.action === "answer" && result.content
+        ? result.content
+        : (result.title ?? "Understood. Navigating.");
+
       setMessages((prev) => [
         ...prev,
         {
           id: `msg-${Date.now()}-r`,
           speaker: "command",
           time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false }),
-          text: result.title ?? "Understood. Navigating.",
+          text: responseText,
           entities: [],
         },
       ]);
 
-      if (onAgentResult) {
+      // Emit structured content for split canvas if detected
+      if (onStructuredContent && detectStructuredContent(responseText)) {
+        onStructuredContent(responseText);
+      }
+
+      if (onAgentResult && result.action !== "answer") {
         onAgentResult(result);
       }
     } catch {
@@ -137,7 +152,17 @@ export default function SynthChannel({ scope, onAgentResult }: SynthChannelProps
                     </div>
                   )}
                 </div>
-                <div className="synth-channel-msg-text">{msg.text}</div>
+                <div className="synth-channel-msg-text">
+                  {isYou ? (
+                    msg.text
+                  ) : (
+                    <div className="synth-channel-md">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {msg.text}
+                      </ReactMarkdown>
+                    </div>
+                  )}
+                </div>
               </div>
             );
           })}

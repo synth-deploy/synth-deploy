@@ -1,7 +1,9 @@
+import { useState } from "react";
 import { useCanvas } from "../context/CanvasContext.js";
 import type { CanvasQueryResult } from "../api.js";
 import SynthChannel from "./SynthChannel.js";
 import SynthMark from "./SynthMark.js";
+import StructuredOutputPanel from "./StructuredOutputPanel.js";
 import OperationalOverview from "./canvas/OperationalOverview.js";
 import PartitionDetailPanel from "./canvas/PartitionDetailPanel.js";
 import EnvironmentDetailPanel from "./canvas/EnvironmentDetailPanel.js";
@@ -24,6 +26,7 @@ import ErrorBoundary from "./ErrorBoundary.js";
 
 export default function AgentCanvas() {
   const { currentPanel, pushPanel } = useCanvas();
+  const [splitContent, setSplitContent] = useState<string | null>(null);
 
   function handleAgentResult(result: CanvasQueryResult) {
     switch (result.action) {
@@ -196,7 +199,7 @@ export default function AgentCanvas() {
 
   const { minimizedDeployment, restoreDeployment } = useCanvas();
 
-  return (
+  const mainContent = (
     <div style={{ display: "flex", flexDirection: "column", minHeight: "100%" }}>
       <ErrorBoundary>
         {renderPanel()}
@@ -238,8 +241,25 @@ export default function AgentCanvas() {
         <SynthChannel
           scope={scope}
           onAgentResult={handleAgentResult}
+          onStructuredContent={(text) => setSplitContent(text)}
         />
       )}
     </div>
   );
+
+  if (splitContent !== null) {
+    return (
+      <div className="canvas-split-layout">
+        <div className="canvas-split-main">
+          {mainContent}
+        </div>
+        <StructuredOutputPanel
+          content={splitContent}
+          onDismiss={() => setSplitContent(null)}
+        />
+      </div>
+    );
+  }
+
+  return mainContent;
 }

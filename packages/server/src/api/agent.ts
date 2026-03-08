@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import type { IPartitionStore, IEnvironmentStore, IArtifactStore, ISettingsStore, ITelemetryStore, DebriefWriter, DebriefReader, Artifact, Partition, Environment } from "@synth-deploy/core";
+import type { IPartitionStore, IEnvironmentStore, IArtifactStore, ISettingsStore, ITelemetryStore, DebriefWriter, DebriefReader, Artifact, Partition, Environment, Deployment } from "@synth-deploy/core";
 import type { LlmClient } from "@synth-deploy/core";
 import type { SynthAgent, DeploymentStore } from "../agent/synth-agent.js";
 import type { EnvoyRegistry } from "../agent/envoy-registry.js";
@@ -317,16 +317,36 @@ export function registerAgentRoutes(
         deployments, debrief, queryEntityExposure !== "none",
       );
       if (llmAction) {
-        debrief.record({
-          partitionId: null,
-          deploymentId: null,
-          agent: "command",
-          decisionType: "system",
-          decision: `Canvas query classified as ${llmAction.action}: ${llmAction.view}`,
-          reasoning: `LLM classified "${query}" → ${llmAction.action}/${llmAction.view}`,
-          context: { query, action: llmAction },
-        });
-        return llmAction;
+        // For "answer" action: fetch real data and generate a markdown response
+        if (llmAction.action === "answer") {
+          const answered = await answerQueryWithData(
+            llm, query, deployments.list(), allArtifacts, allPartitions, allEnvironments,
+          );
+          if (answered) {
+            debrief.record({
+              partitionId: null,
+              deploymentId: null,
+              agent: "command",
+              decisionType: "system",
+              decision: `Canvas query answered analytically`,
+              reasoning: `LLM classified "${query}" as analytical answer, responded with ${answered.content.length} chars of markdown`,
+              context: { query, action: "answer" },
+            });
+            return answered;
+          }
+          // Fall through to regex fallback if answer generation failed
+        } else {
+          debrief.record({
+            partitionId: null,
+            deploymentId: null,
+            agent: "command",
+            decisionType: "system",
+            decision: `Canvas query classified as ${llmAction.action}: ${llmAction.view}`,
+            reasoning: `LLM classified "${query}" → ${llmAction.action}/${llmAction.view}`,
+            context: { query, action: llmAction },
+          });
+          return llmAction;
+        }
       }
     }
 
@@ -774,16 +794,17 @@ function buildQueryClassificationPrompt(): string {
 1. "navigate" — The user wants to see details about a specific entity (e.g., "show partition Alpha", "environment staging")
 2. "data" — The user wants to see a list or filtered view of data (e.g., "what failed", "recent deployments", "deployment history for Alpha")
 3. "create" — The user wants to create a new entity (e.g., "create partition Acme Corp", "create operation api-service")
+4. "answer" — The user wants an analytical or explanatory response that cannot be answered by navigating to a view (e.g., "how many deployments succeeded last week", "compare envoy health across environments", "show me plan durations for payments-api", "what is the success rate for artifact X", "summarize recent deployment activity"). Use this when the question requires aggregation, comparison, or narrative explanation of data.
 
 Return a JSON object with this exact schema:
 {
-  "action": "navigate" | "data" | "create",
-  "view": "<view-name>",
+  "action": "navigate" | "data" | "create" | "answer",
+  "view": "<view-name or empty string for answer>",
   "params": { ... },
-  "title": "<human-readable title for the panel>"
+  "title": "<human-readable title>"
 }
 
-View names:
+View names (for navigate/data/create):
 - "partition-detail" — show specific partition (params: { "id": "<partition-name>" })
 - "environment-detail" — show specific environment (params: { "id": "<environment-name>" })
 - "deployment-detail" — show specific deployment (params: { "id": "<deployment-id>" })
@@ -801,6 +822,7 @@ Rules:
 - If the query mentions an entity, return its name in the params.
 - If the query is ambiguous, default to "overview".
 - For "create" actions, include the entity name in params: { "name": "..." } and use view "partition-list" for partitions or "operation-list" for operations.
+- For "answer" actions, set view to "" and params to {}.
 - Return ONLY valid JSON, no markdown, no explanation.`;
 }
 
@@ -868,4 +890,85 @@ async function classifyQueryWithLlm(
   } catch {
     return null;
   }
+}
+
+// ---------------------------------------------------------------------------
+// LLM-powered analytical answer with real DB data
+// ---------------------------------------------------------------------------
+
+async function answerQueryWithData(
+  llm: LlmClient,
+  query: string,
+  allDeployments: Deployment[],
+  allArtifacts: Artifact[],
+  allPartitions: Partition[],
+  allEnvironments: Environment[],
+): Promise<{ action: "answer"; view: string; params: Record<string, string>; title: string; content: string } | null> {
+  const now = Date.now();
+
+  // Build a concise data context from real records (last 50 deployments)
+  const recentDeployments = [...allDeployments]
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .slice(0, 50);
+
+  const artifactMap = new Map(allArtifacts.map((a) => [a.id, a.name]));
+  const environmentMap = new Map(allEnvironments.map((e) => [e.id, e.name]));
+  const partitionMap = new Map(allPartitions.map((p) => [p.id, p.name]));
+
+  const deploymentRows = recentDeployments.map((d) => {
+    const ageMs = now - new Date(d.createdAt).getTime();
+    const ageHours = Math.round(ageMs / (1000 * 60 * 60));
+    const age = ageHours < 24 ? `${ageHours}h ago` : `${Math.round(ageHours / 24)}d ago`;
+    return `- ${artifactMap.get(d.artifactId) ?? d.artifactId} v${d.version} → ${environmentMap.get(d.environmentId) ?? d.environmentId}${d.partitionId ? ` (${partitionMap.get(d.partitionId) ?? d.partitionId})` : ""}: ${d.status} (${age})`;
+  }).join("\n");
+
+  const artifactRows = allArtifacts.map((a) => `- ${a.name} (${a.type})`).join("\n");
+  const partitionRows = allPartitions.map((p) => `- ${p.name}`).join("\n");
+  const environmentRows = allEnvironments.map((e) => `- ${e.name}`).join("\n");
+
+  const contextBlock = [
+    `<deployments-recent count="${recentDeployments.length}">`,
+    deploymentRows || "(none)",
+    `</deployments-recent>`,
+    `<artifacts count="${allArtifacts.length}">`,
+    artifactRows || "(none)",
+    `</artifacts>`,
+    `<environments count="${allEnvironments.length}">`,
+    environmentRows || "(none)",
+    `</environments>`,
+    `<partitions count="${allPartitions.length}">`,
+    partitionRows || "(none)",
+    `</partitions>`,
+  ].join("\n");
+
+  const systemPrompt = `You are Synth, an intelligent deployment system. A deployment engineer has asked you a question. Answer it using the real deployment data provided — do not fabricate records or invent names.
+
+Format your response as markdown:
+- Use tables for tabular/comparative data
+- Use numbered lists for sequences or steps
+- Use code blocks for configs, IDs, or technical strings
+- Be specific and factual — reference actual artifact names, environments, and statuses from the data
+- If the data doesn't contain enough information to answer precisely, say so clearly
+
+Keep the response concise and directly useful to an engineer.`;
+
+  const prompt = [
+    `<user-query>${sanitizeUserInput(query)}</user-query>`,
+    contextBlock,
+  ].join("\n");
+
+  const llmResult = await llm.reason({
+    prompt,
+    systemPrompt,
+    promptSummary: `Analytical answer for: "${query}"`,
+    partitionId: null,
+    maxTokens: 2048,
+  });
+
+  if (!llmResult.ok) return null;
+
+  const content = llmResult.text.trim();
+  const title = query.length > 60 ? query.slice(0, 57) + "..." : query;
+
+  return { action: "answer", view: "", params: {}, title, content };
 }
