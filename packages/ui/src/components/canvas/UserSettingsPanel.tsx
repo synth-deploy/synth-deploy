@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useAuth } from "../../context/AuthContext.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
 import {
@@ -390,6 +390,24 @@ export default function UserSettingsPanel({ title }: Props) {
     } catch { /* ignore */ }
   }
 
+  // Profile photo state
+  const [photo, setPhoto] = useState<string | null>(() => localStorage.getItem("synth_user_photo"));
+  const [photoHovered, setPhotoHovered] = useState(false);
+  const photoInputRef = useRef<HTMLInputElement>(null);
+
+  function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      setPhoto(dataUrl);
+      localStorage.setItem("synth_user_photo", dataUrl);
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  }
+
   const isAdmin = permissions.includes("settings.manage") || permissions.includes("users.manage");
   const roleLabel = isAdmin ? "Admin" : "Member";
   const initials = user ? deriveInitials(user.name) : "??";
@@ -414,16 +432,44 @@ export default function UserSettingsPanel({ title }: Props) {
 
         {/* Avatar + name header */}
         <div style={{ display: "flex", alignItems: "center", gap: 18, marginBottom: 24 }}>
-          <div style={{
-            width: 56, height: 56, borderRadius: 12,
-            background: "var(--accent-dim)", border: "2px solid var(--accent-border)",
-            display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-          }}>
-            <span style={{ fontSize: 22, fontWeight: 700, color: "var(--accent)", fontFamily: "var(--font-mono)" }}>
-              {initials}
-            </span>
+          <div
+            onClick={() => photoInputRef.current?.click()}
+            onMouseEnter={() => setPhotoHovered(true)}
+            onMouseLeave={() => setPhotoHovered(false)}
+            style={{
+              width: 56, height: 56, borderRadius: 12,
+              background: "var(--accent-dim)", border: "2px solid var(--accent-border)",
+              display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+              cursor: "pointer", position: "relative", overflow: "hidden",
+            }}
+          >
+            {photo ? (
+              <img src={photo} alt="Profile" style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 10 }} />
+            ) : (
+              <span style={{ fontSize: 22, fontWeight: 700, color: "var(--accent)", fontFamily: "var(--font-mono)" }}>
+                {initials}
+              </span>
+            )}
+            {photoHovered && (
+              <div style={{
+                position: "absolute", inset: 0, background: "rgba(0,0,0,0.45)",
+                display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 10,
+              }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                  <circle cx="12" cy="13" r="4"/>
+                </svg>
+              </div>
+            )}
           </div>
-          <div>
+          <input
+            ref={photoInputRef}
+            type="file"
+            accept="image/*"
+            onChange={handlePhotoChange}
+            style={{ display: "none" }}
+          />
+          <div style={{ flex: 1 }}>
             <h1 style={{ fontSize: 24, fontWeight: 500, color: "var(--text)", margin: "0 0 2px 0", fontFamily: "var(--font-display)" }}>
               {user?.name ?? "—"}
             </h1>
@@ -432,6 +478,17 @@ export default function UserSettingsPanel({ title }: Props) {
               <Pill text={roleLabel} color="var(--accent)" />
             </div>
           </div>
+          <button
+            onClick={logout}
+            style={{
+              padding: "7px 16px", borderRadius: 6, flexShrink: 0,
+              border: `1px solid ${DANGER_BORDER}`,
+              background: DANGER_SOFT, color: DANGER,
+              fontSize: 12, fontWeight: 600, fontFamily: "var(--font-mono)", cursor: "pointer",
+            }}
+          >
+            Sign Out
+          </button>
         </div>
 
         {/* Segmented control */}
@@ -1034,20 +1091,6 @@ export default function UserSettingsPanel({ title }: Props) {
           </>
         )}
 
-        {/* Sign Out */}
-        <div style={{ marginTop: 24, display: "flex", justifyContent: "flex-end" }}>
-          <button
-            onClick={logout}
-            style={{
-              padding: "10px 24px", borderRadius: 6,
-              border: `1px solid ${DANGER_BORDER}`,
-              background: DANGER_SOFT, color: DANGER,
-              fontSize: 13, fontWeight: 600, fontFamily: "var(--font-mono)", cursor: "pointer",
-            }}
-          >
-            Sign Out
-          </button>
-        </div>
 
       </div>
     </CanvasPanelHost>
