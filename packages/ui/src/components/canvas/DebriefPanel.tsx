@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { getRecentDebrief, getDeployment, listPartitions, listArtifacts, listEnvironments } from "../../api.js";
+import { getRecentDebrief, getDeployment, listDeployments, listPartitions, listArtifacts, listEnvironments } from "../../api.js";
 import type { DebriefEntry, Partition, Deployment, Artifact, Environment, DecisionType } from "../../types.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
 import DebriefTimeline from "../DebriefTimeline.js";
@@ -19,10 +19,39 @@ const DECISION_TYPES: { value: DecisionType; label: string }[] = [
   { value: "system", label: "System" },
 ];
 
-interface Props {
-  title: string;
-  filterPartitionId?: string;
-  filterDecisionType?: string;
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function timeAgo(iso: string): string {
+  const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+  if (diff < 60) return `${diff}s ago`;
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  return `${Math.floor(diff / 86400)}d ago`;
+}
+
+function formatDuration(start: string, end: string | null): string | null {
+  if (!end) return null;
+  const secs = Math.round((new Date(end).getTime() - new Date(start).getTime()) / 1000);
+  const m = Math.floor(secs / 60);
+  const s = secs % 60;
+  return m > 0 ? `${m}m ${s}s` : `${s}s`;
+}
+
+function statusLabel(status: string): string {
+  const map: Record<string, string> = {
+    succeeded: "Success",
+    failed: "Failed",
+    rolled_back: "Rolled Back",
+    running: "Running",
+    pending: "Pending",
+    planning: "Planning",
+    awaiting_approval: "Awaiting Approval",
+    approved: "Approved",
+    rejected: "Rejected",
+  };
+  return map[status] ?? status;
 }
 
 // ---------------------------------------------------------------------------
@@ -224,140 +253,190 @@ function DeploymentDebriefDetail({ deploymentId, onBack }: { deploymentId: strin
 // Main component
 // ---------------------------------------------------------------------------
 
+type TabId = "deployments" | "diagnostics" | "health" | "fulllog";
+
+const TABS: { id: TabId; label: string }[] = [
+  { id: "deployments", label: "Deployments" },
+  { id: "diagnostics", label: "Diagnostics" },
+  { id: "health",      label: "Health" },
+  { id: "fulllog",     label: "Full Log" },
+];
+
+interface Props {
+  title: string;
+  filterPartitionId?: string;
+  filterDecisionType?: string;
+}
+
 export default function DebriefPanel({ title, filterPartitionId, filterDecisionType }: Props) {
+  const [tab, setTab] = useState<TabId>("deployments");
   const [filterPartition, setFilterPartition] = useState(filterPartitionId ?? "");
   const [filterType, setFilterType] = useState(filterDecisionType ?? "");
   const [selectedDeploymentId, setSelectedDeploymentId] = useState<string | null>(null);
 
   const debriefKey = `debrief:${filterPartition}:${filterType}`;
   const { data: entries, loading: l1, error } = useQuery<DebriefEntry[]>(debriefKey, () =>
-    getRecentDebrief({
-      limit: 100,
-      partitionId: filterPartition || undefined,
-      decisionType: filterType || undefined,
-    }),
+    getRecentDebrief({ limit: 100, partitionId: filterPartition || undefined, decisionType: filterType || undefined }),
   );
-  const { data: partitions, loading: l2 } = useQuery<Partition[]>("list:partitions", listPartitions);
+  const { data: deployments, loading: l2 } = useQuery<Deployment[]>("list:deployments", listDeployments);
+  const { data: partitions } = useQuery<Partition[]>("list:partitions", listPartitions);
+  const { data: artifacts } = useQuery<Artifact[]>("list:artifacts", listArtifacts);
+  const { data: environments } = useQuery<Environment[]>("list:environments", listEnvironments);
+
   const loading = l1 || l2;
-
   const safeEntries = entries ?? [];
-
-  const uniquePartitions = new Set(
-    safeEntries.filter((e) => e.partitionId).map((e) => e.partitionId),
+  const safeDeployments = (deployments ?? []).slice().sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
   );
-  const uniqueDeployments = new Set(
-    safeEntries.filter((e) => e.deploymentId).map((e) => e.deploymentId),
-  );
-  const typeBreakdown = new Map<string, number>();
-  for (const entry of safeEntries) {
-    typeBreakdown.set(entry.decisionType, (typeBreakdown.get(entry.decisionType) ?? 0) + 1);
-  }
 
-  // Group entries by deployment for drill-in list
-  const deploymentGroups = new Map<string, { entries: DebriefEntry[]; latest: string }>();
-  for (const entry of safeEntries) {
-    if (!entry.deploymentId) continue;
-    const group = deploymentGroups.get(entry.deploymentId);
-    if (group) {
-      group.entries.push(entry);
-      if (entry.timestamp > group.latest) group.latest = entry.timestamp;
-    } else {
-      deploymentGroups.set(entry.deploymentId, { entries: [entry], latest: entry.timestamp });
-    }
-  }
+  const diagnosticEntries = safeEntries.filter((e) =>
+    !e.deploymentId && ["diagnostic-investigation", "variable-conflict"].includes(e.decisionType),
+  );
+  const healthEntries = safeEntries.filter((e) =>
+    ["health-check", "environment-scan"].includes(e.decisionType),
+  );
+
+  const tabCounts: Record<TabId, number> = {
+    deployments: safeDeployments.length,
+    diagnostics: diagnosticEntries.length,
+    health: healthEntries.length,
+    fulllog: safeEntries.length,
+  };
+
+  const FINISHED_STATUSES = new Set(["succeeded", "failed", "rolled_back"]);
 
   return (
     <CanvasPanelHost title={title}>
       <div className="canvas-detail">
-        <div className="canvas-summary-strip">
-          <div className="canvas-summary-item">
-            <span className="canvas-summary-value">{safeEntries.length}</span>
-            <span className="canvas-summary-label">Decisions</span>
-          </div>
-          <div className="canvas-summary-item">
-            <span className="canvas-summary-value">{uniquePartitions.size}</span>
-            <span className="canvas-summary-label">Partitions</span>
-          </div>
-          <div className="canvas-summary-item">
-            <span className="canvas-summary-value">{uniqueDeployments.size}</span>
-            <span className="canvas-summary-label">Deployments</span>
-          </div>
-          <div className="canvas-summary-item">
-            <span className="canvas-summary-value">{typeBreakdown.size}</span>
-            <span className="canvas-summary-label">Types</span>
-          </div>
-        </div>
-
         {!selectedDeploymentId && (
           <>
-            <div className="card" style={{ margin: "0 16px 16px", padding: "12px 16px" }}>
-              <div className="flex gap-8 items-center">
-                <span className="text-muted" style={{ fontSize: 12 }}>Filter:</span>
-                <select
-                  value={filterPartition}
-                  onChange={(e) => setFilterPartition(e.target.value)}
-                  style={{ fontSize: 13, padding: "4px 8px" }}
-                >
-                  <option value="">All Partitions</option>
-                  {(partitions ?? []).map((t) => (
-                    <option key={t.id} value={t.id}>{t.name}</option>
-                  ))}
-                </select>
-                <select
-                  value={filterType}
-                  onChange={(e) => setFilterType(e.target.value)}
-                  style={{ fontSize: 13, padding: "4px 8px" }}
-                >
-                  <option value="">All Types</option>
-                  {DECISION_TYPES.map((dt) => (
-                    <option key={dt.value} value={dt.value}>{dt.label}</option>
-                  ))}
-                </select>
-              </div>
+            <div style={{ marginBottom: 20 }}>
+              <h1 style={{ fontSize: 24, fontWeight: 500, color: "var(--text)", margin: "0 0 4px 0" }}>Debriefs</h1>
+              <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>
+                Operational records of what was done, by whom, and what informed each decision.
+              </p>
             </div>
 
-            {/* Deployment group cards for drill-in */}
-            {deploymentGroups.size > 0 && (
-              <div style={{ padding: "0 16px", marginBottom: 16 }}>
-                <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>
-                  Deployment Debriefs
-                </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                  {[...deploymentGroups.entries()]
-                    .sort(([, a], [, b]) => b.latest.localeCompare(a.latest))
-                    .slice(0, 20)
-                    .map(([depId, group]) => (
-                      <button
-                        key={depId}
-                        className="canvas-activity-row"
-                        style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px" }}
-                        onClick={() => setSelectedDeploymentId(depId)}
-                      >
-                        <span style={{ fontSize: 12, fontWeight: 500, color: "var(--text)" }}>
-                          {depId.slice(0, 8)}
+            {/* Segmented tab control */}
+            <div className="segmented-control" style={{ marginBottom: 20 }}>
+              {TABS.map((t) => (
+                <button
+                  key={t.id}
+                  className={`segmented-control-btn ${tab === t.id ? "segmented-control-btn-active" : ""}`}
+                  onClick={() => setTab(t.id)}
+                >
+                  {t.label}
+                  <span className="segmented-control-count">{tabCounts[t.id]}</span>
+                </button>
+              ))}
+            </div>
+
+            {loading && <div className="loading">Loading...</div>}
+            {error && <div className="error-msg">{error.message}</div>}
+
+            {/* ── Deployments tab ─────────────────────────────────────────── */}
+            {tab === "deployments" && !loading && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {safeDeployments.length === 0 && (
+                  <div style={{ fontSize: 13, color: "var(--text-muted)", padding: "12px 0" }}>No deployments recorded.</div>
+                )}
+                {safeDeployments.map((dep) => {
+                  const artName = (artifacts ?? []).find((a) => a.id === dep.artifactId)?.name ?? dep.artifactId.slice(0, 8);
+                  const envName = (environments ?? []).find((e) => e.id === dep.environmentId)?.name ?? dep.environmentId.slice(0, 8);
+                  const duration = formatDuration(dep.createdAt, dep.completedAt);
+                  const isFinished = FINISHED_STATUSES.has(dep.status);
+                  return (
+                    <div
+                      key={dep.id}
+                      onClick={() => isFinished && setSelectedDeploymentId(dep.id)}
+                      style={{
+                        padding: "16px 20px",
+                        borderRadius: 10,
+                        background: "var(--surface)",
+                        border: "1px solid var(--border)",
+                        cursor: isFinished ? "pointer" : "default",
+                        transition: "background 0.15s",
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                        <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+                          <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{artName}</span>
+                          <span style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>{dep.version}</span>
+                          <span style={{ color: "var(--text-muted)" }}>→</span>
+                          <span style={{ fontSize: 12, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>{envName}</span>
+                        </div>
+                        <span
+                          className={`badge badge-${dep.status}`}
+                          style={{
+                            borderRadius: 4,
+                            fontFamily: "var(--font-mono)",
+                            letterSpacing: "0.03em",
+                            textTransform: "uppercase",
+                            fontSize: 10,
+                            border: "1px solid currentColor",
+                          }}
+                        >
+                          {statusLabel(dep.status)}
                         </span>
-                        <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
-                          {group.entries.length} decision{group.entries.length !== 1 ? "s" : ""}
-                        </span>
-                        <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--text-muted)" }}>
-                          {new Date(group.latest).toLocaleString()}
-                        </span>
-                        <span style={{ fontSize: 12, color: "var(--accent)" }}>→</span>
-                      </button>
-                    ))}
-                </div>
+                      </div>
+                      <div style={{ display: "flex", gap: 20, fontSize: 12, color: "var(--text-muted)" }}>
+                        <span>{timeAgo(dep.createdAt)}</span>
+                        {duration && <span>Duration: {duration}</span>}
+                        {isFinished && (
+                          <span style={{ color: "var(--accent)", fontWeight: 500 }}>View full debrief →</span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
 
-            {error && <div className="error-msg" style={{ margin: "0 16px 12px" }}>{error.message}</div>}
+            {/* ── Diagnostics tab ─────────────────────────────────────────── */}
+            {tab === "diagnostics" && !loading && (
+              diagnosticEntries.length === 0
+                ? <div style={{ fontSize: 13, color: "var(--text-muted)", padding: "12px 0" }}>No diagnostic investigations recorded.</div>
+                : <DebriefTimeline entries={diagnosticEntries} />
+            )}
 
-            <div style={{ padding: "0 16px" }}>
-              {loading ? (
-                <div className="loading">Loading...</div>
-              ) : (
-                <DebriefTimeline entries={safeEntries} />
-              )}
-            </div>
+            {/* ── Health tab ───────────────────────────────────────────────── */}
+            {tab === "health" && !loading && (
+              healthEntries.length === 0
+                ? <div style={{ fontSize: 13, color: "var(--text-muted)", padding: "12px 0" }}>No health or scan events recorded.</div>
+                : <DebriefTimeline entries={healthEntries} />
+            )}
+
+            {/* ── Full Log tab ─────────────────────────────────────────────── */}
+            {tab === "fulllog" && (
+              <>
+                <div className="card" style={{ marginBottom: 16, padding: "12px 16px" }}>
+                  <div className="flex gap-8 items-center">
+                    <span className="text-muted" style={{ fontSize: 12 }}>Filter:</span>
+                    <select
+                      value={filterPartition}
+                      onChange={(e) => setFilterPartition(e.target.value)}
+                      style={{ fontSize: 13, padding: "4px 8px" }}
+                    >
+                      <option value="">All Partitions</option>
+                      {(partitions ?? []).map((t) => (
+                        <option key={t.id} value={t.id}>{t.name}</option>
+                      ))}
+                    </select>
+                    <select
+                      value={filterType}
+                      onChange={(e) => setFilterType(e.target.value)}
+                      style={{ fontSize: 13, padding: "4px 8px" }}
+                    >
+                      <option value="">All Types</option>
+                      {DECISION_TYPES.map((dt) => (
+                        <option key={dt.value} value={dt.value}>{dt.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                {!loading && <DebriefTimeline entries={safeEntries} />}
+              </>
+            )}
           </>
         )}
 
