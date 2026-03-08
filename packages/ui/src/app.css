@@ -2125,7 +2125,7 @@ table a:hover {
 
 .canvas-detail {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   gap: 0;
 }
 

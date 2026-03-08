@@ -112,71 +112,66 @@ export default function ArtifactCatalogPanel({ title }: Props) {
     whiteSpace: "nowrap" as const,
   });
 
+  const typeIcons: Record<string, string> = {
+    docker: "◉",
+    container: "◉",
+    helm: "⎈",
+    nodejs: "▣",
+    binary: "▣",
+    jar: "▣",
+    zip: "◇",
+  };
+
+  function getTypeIcon(type: string): string {
+    const key = type.toLowerCase();
+    return Object.entries(typeIcons).find(([k]) => key.includes(k))?.[1] ?? "◇";
+  }
+
   function renderArtifactRow(art: Artifact) {
+    const isSelected = selectedArtifact?.id === art.id;
     return (
       <div
         key={art.id}
         onClick={() => handleArtifactClick(art)}
         style={{
           display: "flex",
-          alignItems: "flex-start",
+          alignItems: "center",
           gap: 12,
-          padding: "12px 16px",
+          padding: "14px 16px",
           borderRadius: 8,
-          border: "1px solid var(--border)",
-          background: "var(--surface)",
+          border: `1px solid ${isSelected ? "var(--accent-border)" : "var(--border)"}`,
+          background: isSelected ? "var(--accent-dim)" : "var(--surface)",
           cursor: "pointer",
+          transition: "all 0.15s",
         }}
       >
+        <span style={{
+          width: 34,
+          height: 34,
+          borderRadius: 7,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          background: isSelected ? "var(--accent-border)" : "var(--surface-alt)",
+          fontSize: 16,
+          color: isSelected ? "var(--accent)" : "var(--text-muted)",
+          flexShrink: 0,
+        }}>
+          {getTypeIcon(art.type)}
+        </span>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
             <span style={{ fontWeight: 600, fontSize: 14, color: "var(--text)" }}>
               {art.name}
             </span>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 3 }}>
+            <span style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+              {art.type}
+            </span>
             <ConfidenceIndicator value={art.analysis.confidence} />
           </div>
-          <div
-            style={{
-              fontSize: 11,
-              color: "var(--text-muted)",
-              textTransform: "uppercase",
-              letterSpacing: "0.05em",
-              marginTop: 2,
-            }}
-          >
-            {art.type}
-          </div>
-          {art.analysis.summary && (
-            <div
-              style={{
-                fontSize: 12,
-                color: "var(--text-muted)",
-                marginTop: 6,
-                lineHeight: 1.4,
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-              }}
-            >
-              {art.analysis.summary}
-            </div>
-          )}
-          <div
-            style={{
-              display: "flex",
-              gap: 12,
-              marginTop: 6,
-              fontSize: 11,
-              color: "var(--text-muted)",
-            }}
-          >
-            <span>{art.annotations.length} annotation{art.annotations.length !== 1 ? "s" : ""}</span>
-            <span>Updated {new Date(art.updatedAt).toLocaleDateString()}</span>
-          </div>
         </div>
-        <span style={{ fontSize: 11, color: "var(--text-muted)", flexShrink: 0 }}>
-          View &rarr;
-        </span>
       </div>
     );
   }
@@ -186,87 +181,82 @@ export default function ArtifactCatalogPanel({ title }: Props) {
 
   return (
     <CanvasPanelHost title={title} noBreadcrumb>
-      <div className="canvas-detail" style={{ display: "flex", gap: 0 }}>
-        <div style={{ flex: selectedArtifact ? "1 1 55%" : "1 1 100%", minWidth: 0, padding: "0 16px", transition: "flex 0.2s" }}>
-          {/* Header row */}
-          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 16 }}>
-            <div>
-              <h1 className="v6-page-title">Artifact Catalog</h1>
-              <p className="v6-page-subtitle">
-                Synth's understanding of your deployable artifacts. Review, correct, and teach.
-                <span style={{ marginLeft: 8, color: "var(--text-muted)" }}>
-                  {(artifacts ?? []).length} artifact{(artifacts ?? []).length !== 1 ? "s" : ""}
-                </span>
-              </p>
-            </div>
-            <button className="btn-accent-outline" onClick={() => setShowAddModal(true)}>
-              <svg className="icon-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                <line x1="12" y1="5" x2="12" y2="19" />
-                <line x1="5" y1="12" x2="19" y2="12" />
-              </svg>
-              Add Artifact
+      {/* Header, search, filters — full width above the split */}
+      <div style={{ padding: "0 16px" }}>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 16 }}>
+          <div>
+            <h1 className="v6-page-title">Artifact Catalog</h1>
+            <p className="v6-page-subtitle">
+              Synth's understanding of your deployable artifacts. Review, correct, and teach.
+              <span style={{ marginLeft: 8, color: "var(--text-muted)" }}>
+                {(artifacts ?? []).length} artifact{(artifacts ?? []).length !== 1 ? "s" : ""}
+              </span>
+            </p>
+          </div>
+          <button className="btn-accent-outline" onClick={() => setShowAddModal(true)}>
+            <svg className="icon-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+            Add Artifact
+          </button>
+        </div>
+
+        {showAddModal && (
+          <AddArtifactModal onClose={() => setShowAddModal(false)} />
+        )}
+
+        <input
+          type="text"
+          placeholder="Search artifacts..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          style={{
+            width: "100%",
+            fontSize: 13,
+            padding: "8px 12px",
+            borderRadius: 6,
+            border: "1px solid var(--border)",
+            background: "var(--input-bg)",
+            color: "var(--text)",
+            marginBottom: 12,
+            boxSizing: "border-box",
+          }}
+        />
+
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 16 }}>
+          {artifactTypes.map((t) => (
+            <button
+              key={t}
+              style={chipStyle(typeFilter === t)}
+              onClick={() => setTypeFilter(typeFilter === t ? null : t)}
+            >
+              {t}
             </button>
-          </div>
-
-          {/* Add artifact modal */}
-          {showAddModal && (
-            <AddArtifactModal onClose={() => setShowAddModal(false)} />
+          ))}
+          {artifactTypes.length > 0 && (
+            <span style={{ borderLeft: "1px solid var(--border)", margin: "0 4px" }} />
           )}
+          {(["high", "medium", "low"] as const).map((level) => (
+            <button
+              key={level}
+              style={{
+                ...chipStyle(confidenceFilter === level),
+                borderColor: confidenceFilter === level ? confColors[level] : "var(--border)",
+                color: confidenceFilter === level ? confColors[level] : "var(--text-muted)",
+                background: confidenceFilter === level ? confColors[level] + "15" : "transparent",
+              }}
+              onClick={() => setConfidenceFilter(confidenceFilter === level ? null : level)}
+            >
+              {confLabels[level]}
+            </button>
+          ))}
+        </div>
+      </div>
 
-          {/* Search bar */}
-          <input
-            type="text"
-            placeholder="Search artifacts..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            style={{
-              width: "100%",
-              fontSize: 13,
-              padding: "8px 12px",
-              borderRadius: 6,
-              border: "1px solid var(--border)",
-              background: "var(--input-bg)",
-              color: "var(--text)",
-              marginBottom: 12,
-              boxSizing: "border-box",
-            }}
-          />
-
-          {/* Filter chips */}
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 16 }}>
-            {/* Type filters */}
-            {artifactTypes.map((t) => (
-              <button
-                key={t}
-                style={chipStyle(typeFilter === t)}
-                onClick={() => setTypeFilter(typeFilter === t ? null : t)}
-              >
-                {t}
-              </button>
-            ))}
-
-            {/* Divider */}
-            {artifactTypes.length > 0 && (
-              <span style={{ borderLeft: "1px solid var(--border)", margin: "0 4px" }} />
-            )}
-
-            {/* Confidence filters */}
-            {(["high", "medium", "low"] as const).map((level) => (
-              <button
-                key={level}
-                style={{
-                  ...chipStyle(confidenceFilter === level),
-                  borderColor: confidenceFilter === level ? confColors[level] : "var(--border)",
-                  color: confidenceFilter === level ? confColors[level] : "var(--text-muted)",
-                  background: confidenceFilter === level ? confColors[level] + "15" : "transparent",
-                }}
-                onClick={() => setConfidenceFilter(confidenceFilter === level ? null : level)}
-              >
-                {confLabels[level]}
-              </button>
-            ))}
-          </div>
-
+      {/* Cards + side panel — horizontally split */}
+      <div className="canvas-detail" style={{ display: "flex", gap: 0, alignItems: "flex-start" }}>
+        <div style={{ flex: 1, minWidth: 0, padding: "0 16px" }}>
           {/* Content */}
           {filtered.length === 0 && (
             <div className="text-muted" style={{ fontSize: 13, padding: "20px 0" }}>
@@ -316,73 +306,85 @@ export default function ArtifactCatalogPanel({ title }: Props) {
         {/* Side panel — quick analysis view */}
         {selectedArtifact && (
           <div style={{
-            flex: "0 0 45%",
-            borderLeft: "1px solid var(--border)",
-            padding: 16,
-            overflowY: "auto",
+            width: 320,
+            flexShrink: 0,
+            padding: "20px 22px",
+            borderRadius: 10,
+            border: "1px solid var(--border)",
             background: "var(--surface)",
+            margin: "0 16px 16px 0",
           }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <SynthMark size={18} active />
-                <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>
-                  Synth&rsquo;s Analysis
-                </span>
-              </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+              <SynthMark size={16} active />
+              <span style={{
+                fontSize: 10,
+                fontWeight: 700,
+                color: "var(--accent)",
+                textTransform: "uppercase",
+                letterSpacing: 1.2,
+                fontFamily: "var(--font-mono, monospace)",
+              }}>
+                Synth&rsquo;s Analysis
+              </span>
               <button
-                style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: 16, padding: "0 4px" }}
+                style={{ marginLeft: "auto", background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: 14, padding: "0 2px", lineHeight: 1 }}
                 onClick={() => setSelectedArtifact(null)}
               >
                 ✕
               </button>
             </div>
 
-            <div style={{ marginBottom: 12 }}>
-              <div style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>
-                {selectedArtifact.type}
-              </div>
-              {technologies.length > 0 && (
-                <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 8 }}>
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 11, color: "var(--text-faint, var(--text-muted))", marginBottom: 3 }}>Type</div>
+              <div style={{ fontSize: 14, fontWeight: 500, color: "var(--text)" }}>{selectedArtifact.type}</div>
+            </div>
+
+            {technologies.length > 0 && (
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ fontSize: 11, color: "var(--text-faint, var(--text-muted))", marginBottom: 5 }}>Detected Technologies</div>
+                <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
                   {technologies.slice(0, 6).map((dep, i) => (
                     <span key={i} style={{
-                      fontSize: 10, padding: "2px 8px", borderRadius: 12,
-                      background: "var(--accent-dim)", color: "var(--accent)", border: "1px solid var(--accent-border)",
+                      padding: "2px 9px", borderRadius: 4,
+                      fontSize: 11, background: "var(--surface-alt)",
+                      color: "var(--text-muted)",
+                      border: "1px solid var(--border)",
+                      fontFamily: "var(--font-mono, monospace)",
                     }}>
                       {dep}
                     </span>
                   ))}
                 </div>
-              )}
-              <ConfidenceIndicator value={sidePanelConfidence} qualifier="confidence" wide />
+              </div>
+            )}
+
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 11, color: "var(--text-faint, var(--text-muted))", marginBottom: 3 }}>Synth&rsquo;s Understanding</div>
+              <ConfidenceIndicator value={sidePanelConfidence} qualifier="understanding" wide />
             </div>
 
             {sidePanelConfidence < 0.7 && (
               <div style={{
-                padding: "8px 12px", borderRadius: 6, marginBottom: 12,
+                padding: "11px 14px", borderRadius: 8, marginBottom: 14,
                 background: "color-mix(in srgb, var(--status-warning) 8%, transparent)",
                 border: "1px solid color-mix(in srgb, var(--status-warning) 20%, transparent)",
-                fontSize: 12, color: "var(--status-warning)",
+                fontSize: 12, color: "var(--status-warning)", lineHeight: 1.5,
               }}>
                 Low confidence — consider annotating this artifact to improve Synth&rsquo;s understanding.
               </div>
             )}
 
-            {selectedArtifact.analysis.summary && (
-              <div style={{ fontSize: 13, color: "var(--text)", lineHeight: 1.5, marginBottom: 12 }}>
-                {selectedArtifact.analysis.summary}
-              </div>
-            )}
-
-            {selectedArtifact.analysis.deploymentIntent && (
-              <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 12, padding: "8px 10px", borderRadius: 6, background: "var(--surface-alt)" }}>
-                <strong style={{ color: "var(--text)" }}>Deployment pattern:</strong> {selectedArtifact.analysis.deploymentIntent}
-              </div>
-            )}
-
-            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 16 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 14 }}>
               <button
-                className="btn btn-primary"
-                style={{ fontSize: 12 }}
+                style={{
+                  width: "100%", padding: "10px 0", borderRadius: 6,
+                  border: "1px solid var(--accent-border)",
+                  background: "var(--accent-dim)",
+                  color: "var(--accent)",
+                  fontSize: 13, fontWeight: 600,
+                  fontFamily: "var(--font-mono, monospace)",
+                  cursor: "pointer",
+                }}
                 onClick={() => pushPanel({
                   type: "artifact-detail",
                   title: selectedArtifact.name,
@@ -392,8 +394,15 @@ export default function ArtifactCatalogPanel({ title }: Props) {
                 Examine Full Analysis →
               </button>
               <button
-                className="btn"
-                style={{ fontSize: 12 }}
+                style={{
+                  width: "100%", padding: "10px 0", borderRadius: 6,
+                  border: "1px solid var(--status-succeeded-border)",
+                  background: "var(--status-succeeded-bg)",
+                  color: "var(--status-succeeded)",
+                  fontSize: 13, fontWeight: 600,
+                  fontFamily: "var(--font-mono, monospace)",
+                  cursor: "pointer",
+                }}
                 onClick={() => pushPanel({
                   type: "deployment-authoring",
                   title: "New Deployment",
