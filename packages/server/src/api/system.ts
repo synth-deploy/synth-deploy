@@ -45,6 +45,12 @@ export interface SignalInvestigation {
     status: string;
     time: string;
   }>;
+  driftConflicts?: Array<{
+    variable: string;
+    partitionValue: string;
+    violatedRule: string;
+    affectedEnvoy: string;
+  }>;
 }
 
 export interface AlertSignal {
@@ -426,6 +432,32 @@ export function registerSystemRoutes(
                   target: env.name,
                   status: d.status,
                   time: timeAgo(d.createdAt),
+                };
+              }),
+              driftConflicts: conflicts.map((key) => {
+                const val = String(partition.variables[key] ?? "(empty)");
+                const envLower = env.name.toLowerCase();
+                const hasProd = /\bprod/i.test(val);
+                const hasStag = /\bstag/i.test(val);
+                let rule: string;
+                if (envLower === "development") {
+                  rule = hasProd ? `Must not reference production tier in development` : `Must not reference staging tier in development`;
+                } else if (envLower === "staging") {
+                  rule = `Must not reference production tier in staging`;
+                } else if (envLower === "production") {
+                  rule = hasStag ? `Must not reference staging tier in production` : `Must not reference development tier in production`;
+                } else {
+                  rule = `Value conflicts with expected ${env.name} environment pattern`;
+                }
+                // Find most recent envoy that executed a deployment to this environment
+                const affectedEnvoyName = recentToEnv
+                  .map((d) => d.envoyId ? allEnvoys.find((e) => e.id === d.envoyId)?.name : null)
+                  .find(Boolean) ?? env.name;
+                return {
+                  variable: key,
+                  partitionValue: val,
+                  violatedRule: rule,
+                  affectedEnvoy: affectedEnvoyName,
                 };
               }),
             },

@@ -389,6 +389,7 @@ export interface AlertSignal {
     recommendations: Array<{ action: string; detail: string; priority: "high" | "medium" | "low" }>;
     timeline: Array<{ time: string; event: string }>;
     relatedDeployments: Array<{ artifact: string; version: string; target: string; status: string; time: string }>;
+    driftConflicts?: Array<{ variable: string; partitionValue: string; violatedRule: string; affectedEnvoy: string }>;
   };
 }
 

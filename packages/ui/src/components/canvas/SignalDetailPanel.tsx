@@ -111,6 +111,75 @@ export default function SignalDetailPanel({ signal, title }: Props) {
           </p>
         </div>
 
+        {/* ── Configuration Drift ── */}
+        {inv.driftConflicts && inv.driftConflicts.length > 0 && (
+          <>
+            <div className="v6-section-label" style={{ marginBottom: 12 }}>Configuration Drift</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 24 }}>
+              {inv.driftConflicts.map((conflict, i) => (
+                <div
+                  key={i}
+                  style={{
+                    borderRadius: 10,
+                    border: `1px solid ${severityBorder}`,
+                    background: severityBg,
+                    padding: "16px 20px",
+                  }}
+                >
+                  <div style={{
+                    fontSize: 14, fontWeight: 700, fontFamily: "var(--font-mono)",
+                    color: "var(--text)", marginBottom: 14, letterSpacing: "0.02em",
+                  }}>
+                    {conflict.variable}
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 }}>
+                    <div style={{
+                      borderRadius: 8, padding: "12px 14px",
+                      background: "color-mix(in srgb, var(--status-succeeded) 6%, var(--canvas))",
+                      border: "1px solid color-mix(in srgb, var(--status-succeeded) 18%, transparent)",
+                    }}>
+                      <div style={{
+                        fontSize: 9, fontWeight: 700, fontFamily: "var(--font-mono)",
+                        textTransform: "uppercase", letterSpacing: "0.1em",
+                        color: "var(--status-succeeded)", marginBottom: 8,
+                      }}>
+                        In Partition
+                      </div>
+                      <div style={{
+                        fontSize: 12, fontFamily: "var(--font-mono)", color: "var(--text)", lineHeight: 1.5,
+                        wordBreak: "break-all",
+                      }}>
+                        {conflict.partitionValue}
+                      </div>
+                    </div>
+                    <div style={{
+                      borderRadius: 8, padding: "12px 14px",
+                      background: "color-mix(in srgb, var(--status-warning) 6%, var(--canvas))",
+                      border: "1px solid color-mix(in srgb, var(--status-warning) 18%, transparent)",
+                    }}>
+                      <div style={{
+                        fontSize: 9, fontWeight: 700, fontFamily: "var(--font-mono)",
+                        textTransform: "uppercase", letterSpacing: "0.1em",
+                        color: "var(--status-warning)", marginBottom: 8,
+                      }}>
+                        Violated Rule
+                      </div>
+                      <div style={{
+                        fontSize: 12, fontFamily: "var(--font-mono)", color: "var(--text)", lineHeight: 1.5,
+                      }}>
+                        {conflict.violatedRule}
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                    Affected: <span style={{ fontFamily: "var(--font-mono)", fontWeight: 600, color: "var(--text)" }}>{conflict.affectedEnvoy}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
         {/* ── Evidence ── */}
         {inv.evidence.length > 0 && (
           <>
