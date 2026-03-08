@@ -14,14 +14,12 @@ import type {
   DeploymentEnrichment,
   DeploymentRecommendation,
   PlannedStep,
-  DebriefEntry,
-  Environment,
-  Artifact,
-  Partition,
 } from "../../types.js";
 import { useCanvas } from "../../context/CanvasContext.js";
 import { useQuery } from "../../hooks/useQuery.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
+import SynthMark from "../SynthMark.js";
+import ConfidenceIndicator from "../ConfidenceIndicator.js";
 
 interface Props {
   deploymentId: string;
@@ -30,25 +28,55 @@ interface Props {
 
 type ReviewMode = "review" | "refine" | "modify" | "reject-prompt";
 
+function verdictToConfidence(verdict: string): number {
+  return verdict === "proceed" ? 0.9 : verdict === "caution" ? 0.65 : 0.3;
+}
+
+function buildContextText(enrichment: DeploymentEnrichment | null, envName: string): string {
+  if (!enrichment) return `Deploying to ${envName}`;
+  const parts: string[] = [];
+  if (enrichment.recentDeploymentsToEnv > 0) {
+    parts.push(
+      `${enrichment.recentDeploymentsToEnv} deployment${enrichment.recentDeploymentsToEnv !== 1 ? "s" : ""} to ${envName} in last 24h`
+    );
+  } else {
+    parts.push(`First deployment to ${envName} today`);
+  }
+  if (enrichment.lastDeploymentToEnv) {
+    parts.push(
+      `Previous version (${enrichment.lastDeploymentToEnv.version}) ${enrichment.lastDeploymentToEnv.status}`
+    );
+  }
+  if (enrichment.previouslyRolledBack) {
+    parts.push("This version was previously rolled back");
+  }
+  if (enrichment.conflictingDeployments.length > 0) {
+    parts.push(
+      `${enrichment.conflictingDeployments.length} other deployment${enrichment.conflictingDeployments.length !== 1 ? "s" : ""} in progress`
+    );
+  }
+  return parts.join(" · ");
+}
+
 export default function PlanReviewPanel({ deploymentId, title }: Props) {
   const { replacePanel } = useCanvas();
 
   const { data: result, loading: l1 } = useQuery(`deployment:${deploymentId}`, () => getDeployment(deploymentId));
-  const { data: enrichCtx, loading: l2 } = useQuery(`deploymentEnrichment:${deploymentId}`, () => getDeploymentEnrichment(deploymentId).catch(() => ({ enrichment: null }) as { enrichment: null; recommendation?: DeploymentRecommendation }));
+  const { data: enrichCtx, loading: l2 } = useQuery(
+    `deploymentEnrichment:${deploymentId}`,
+    () => getDeploymentEnrichment(deploymentId).catch(() => ({ enrichment: null }) as { enrichment: null; recommendation?: DeploymentRecommendation })
+  );
   const { data: environments, loading: l3 } = useQuery("list:environments", () => listEnvironments());
   const { data: artifacts, loading: l4 } = useQuery("list:artifacts", () => listArtifacts());
   const { data: partitions, loading: l5 } = useQuery("list:partitions", () => listPartitions());
   const loading = l1 || l2 || l3 || l4 || l5;
 
   const [deployment, setDeployment] = useState<Deployment | null>(null);
-  const debrief = result?.debrief ?? [];
   const enrichment = enrichCtx?.enrichment ?? null;
   const recommendation = enrichCtx?.recommendation ?? result?.deployment?.recommendation ?? null;
 
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // Review mode state
   const [mode, setMode] = useState<ReviewMode>("review");
   const [rejectReason, setRejectReason] = useState("");
   const [modifiedSteps, setModifiedSteps] = useState<PlannedStep[]>([]);
@@ -57,7 +85,6 @@ export default function PlanReviewPanel({ deploymentId, title }: Props) {
   const [refining, setRefining] = useState(false);
   const [revised, setRevised] = useState(false);
 
-  // Sync deployment from query result and initialize modifiedSteps
   useEffect(() => {
     if (result?.deployment) {
       setDeployment(result.deployment);
@@ -93,8 +120,10 @@ export default function PlanReviewPanel({ deploymentId, title }: Props) {
     );
   }
 
-  const envName = (environments ?? []).find((e) => e.id === deployment.environmentId)?.name ?? deployment.environmentId;
-  const artName = (artifacts ?? []).find((a) => a.id === deployment.artifactId)?.name ?? deployment.artifactId.slice(0, 8);
+  const envName =
+    (environments ?? []).find((e) => e.id === deployment.environmentId)?.name ?? deployment.environmentId;
+  const artName =
+    (artifacts ?? []).find((a) => a.id === deployment.artifactId)?.name ?? deployment.artifactId.slice(0, 8);
   const partName = deployment.partitionId
     ? ((partitions ?? []).find((p) => p.id === deployment.partitionId)?.name ?? deployment.partitionId.slice(0, 8))
     : null;
@@ -105,11 +134,11 @@ export default function PlanReviewPanel({ deploymentId, title }: Props) {
     setActionLoading(true);
     setError(null);
     try {
-      const result = await approveDeployment(deploymentId, { approvedBy: "user" });
+      const res = await approveDeployment(deploymentId, { approvedBy: "user" });
       replacePanel({
         type: "deployment-detail",
-        title: `Deployment ${result.deployment.id.slice(0, 8)}`,
-        params: { id: result.deployment.id },
+        title: `Deployment ${res.deployment.id.slice(0, 8)}`,
+        params: { id: res.deployment.id },
       });
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to approve deployment");
@@ -125,11 +154,11 @@ export default function PlanReviewPanel({ deploymentId, title }: Props) {
     setActionLoading(true);
     setError(null);
     try {
-      const result = await rejectDeployment(deploymentId, { reason: rejectReason.trim() });
+      const res = await rejectDeployment(deploymentId, { reason: rejectReason.trim() });
       replacePanel({
         type: "deployment-detail",
-        title: `Deployment ${result.deployment.id.slice(0, 8)}`,
-        params: { id: result.deployment.id },
+        title: `Deployment ${res.deployment.id.slice(0, 8)}`,
+        params: { id: res.deployment.id },
       });
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to reject deployment");
@@ -149,11 +178,11 @@ export default function PlanReviewPanel({ deploymentId, title }: Props) {
     setActionLoading(true);
     setError(null);
     try {
-      const result = await modifyDeploymentPlan(deploymentId, {
+      const res = await modifyDeploymentPlan(deploymentId, {
         steps: modifiedSteps,
         reason: modifyReason.trim(),
       });
-      setDeployment(result.deployment);
+      setDeployment(res.deployment);
       setMode("review");
       setActionLoading(false);
     } catch (err: unknown) {
@@ -170,13 +199,11 @@ export default function PlanReviewPanel({ deploymentId, title }: Props) {
     setRefining(true);
     setError(null);
     try {
-      // #191: wire to POST /api/deployments/:id/plan/refine (Envoy reasoning loop)
-      // Temporarily using modifyDeploymentPlan until the refine endpoint ships
-      const result = await modifyDeploymentPlan(deploymentId, {
+      const res = await modifyDeploymentPlan(deploymentId, {
         steps: deployment!.plan!.steps,
         reason: `Refine request: ${refineFeedback.trim()}`,
       });
-      setDeployment(result.deployment);
+      setDeployment(res.deployment);
       setMode("review");
       setRefineFeedback("");
       setRevised(true);
@@ -208,217 +235,134 @@ export default function PlanReviewPanel({ deploymentId, title }: Props) {
 
   return (
     <CanvasPanelHost title={title}>
-      <div className="canvas-detail">
-        {/* Header */}
-        <div className="canvas-deploy-header">
-          <span className="badge badge-awaiting_approval">awaiting approval</span>
-          <span className="canvas-deploy-version">{deployment.version}</span>
-        </div>
+      <div style={{ display: "flex", flexDirection: "column" }}>
 
-        <div className="canvas-deploy-meta">
-          <span>Artifact: {artName}</span>
-          {partName && <span>Partition: {partName}</span>}
-          <span>Environment: {envName}</span>
-          <span>Created: {new Date(deployment.createdAt).toLocaleString()}</span>
-        </div>
-
-        {/* Cross-system enrichment warnings */}
-        {enrichment && (
-          <div className="canvas-section">
-            <h3 className="canvas-section-title">Cross-System Context</h3>
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              {enrichment.previouslyRolledBack && (
-                <div style={{
-                  padding: "8px 12px",
-                  background: "color-mix(in srgb, var(--status-failed) 12%, transparent)",
-                  border: "1px solid color-mix(in srgb, var(--status-failed) 30%, transparent)",
-                  borderRadius: 6,
-                  fontSize: 13,
-                  color: "var(--status-failed)",
-                }}>
-                  Warning: This artifact version was previously rolled back
-                </div>
-              )}
-              {enrichment.conflictingDeployments.length > 0 && (
-                <div style={{
-                  padding: "8px 12px",
-                  background: "color-mix(in srgb, var(--status-warning) 12%, transparent)",
-                  border: "1px solid color-mix(in srgb, var(--status-warning) 30%, transparent)",
-                  borderRadius: 6,
-                  fontSize: 13,
-                  color: "var(--status-warning)",
-                }}>
-                  {enrichment.conflictingDeployments.length} other deployment(s) in progress for this environment
-                </div>
-              )}
-              <div style={{ fontSize: 13, color: "var(--text-muted)" }}>
-                {enrichment.recentDeploymentsToEnv} deployment(s) to this environment in the last 24h
-              </div>
-              {enrichment.lastDeploymentToEnv && (
-                <div style={{ fontSize: 13, color: "var(--text-muted)" }}>
-                  Last deployment: v{enrichment.lastDeploymentToEnv.version} ({enrichment.lastDeploymentToEnv.status})
-                </div>
-              )}
-            </div>
+        {/* ── Plan header ── */}
+        <div style={{ marginBottom: 24 }}>
+          <div style={{
+            fontSize: 10,
+            color: "var(--text-muted)",
+            textTransform: "uppercase",
+            letterSpacing: "1.5px",
+            fontWeight: 700,
+            fontFamily: "var(--font-mono)",
+            marginBottom: 6,
+          }}>
+            Deployment Plan
+            {revised && <span style={{ color: "var(--accent)", marginLeft: 6 }}>· Revised</span>}
           </div>
-        )}
-
-        {/* Diffs */}
-        {plan?.diffFromCurrent && (
-          <div className="canvas-section">
-            <h3 className="canvas-section-title">What&apos;s Changing</h3>
-            <pre style={{
-              fontSize: 12,
-              background: "var(--surface-alt)",
-              padding: 12,
-              borderRadius: 6,
-              overflow: "auto",
-              whiteSpace: "pre-wrap",
+          <h2 style={{
+            fontSize: 22,
+            fontWeight: 500,
+            color: "var(--text)",
+            margin: 0,
+            fontFamily: "var(--font-display)",
+          }}>
+            {artName}{" "}
+            <span style={{
               color: "var(--text-muted)",
+              fontWeight: 400,
+              fontSize: 15,
+              fontFamily: "var(--font-mono)",
             }}>
-              {plan.diffFromCurrent}
-            </pre>
+              {deployment.version}
+            </span>
+          </h2>
+          <div style={{ fontSize: 13, color: "var(--text-secondary)", marginTop: 3 }}>
+            → {envName}{partName ? ` · ${partName}` : ""}
           </div>
-        )}
+        </div>
 
-        {plan?.diffFromPreviousPlan && (
-          <div className="canvas-section">
-            <h3 className="canvas-section-title">Changes From Previous Plan</h3>
-            <pre style={{
-              fontSize: 12,
-              background: "var(--surface-alt)",
-              padding: 12,
-              borderRadius: 6,
-              overflow: "auto",
-              whiteSpace: "pre-wrap",
-              color: "var(--status-warning)",
-            }}>
-              {plan.diffFromPreviousPlan}
-            </pre>
-          </div>
-        )}
-
-        {/* Plan reasoning */}
-        {plan && (
-          <div className="canvas-section">
-            <h3 className="canvas-section-title">Reasoning</h3>
-            <div style={{ fontSize: 13, color: "var(--text-muted)", lineHeight: 1.5 }}>
-              {plan.reasoning}
-            </div>
-          </div>
-        )}
-
-        {/* Combined recommendation */}
+        {/* ── Synth Assessment ── */}
         {recommendation && (
-          <div className="canvas-section">
-            <h3 className="canvas-section-title">Recommendation</h3>
+          <div className="synth-assessment">
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+              <SynthMark size={16} />
+              <span className="synth-assessment-label">Synth Assessment</span>
+              <ConfidenceIndicator value={verdictToConfidence(recommendation.verdict)} qualifier="confidence" />
+            </div>
+            <p style={{ fontSize: 13, color: "var(--text)", lineHeight: 1.6, margin: 0 }}>
+              {recommendation.summary}
+            </p>
+            {recommendation.factors.length > 0 && (
+              <ul style={{ margin: "8px 0 0 0", paddingLeft: 18, fontSize: 12, color: "var(--text-secondary)" }}>
+                {recommendation.factors.map((f, i) => <li key={i}>{f}</li>)}
+              </ul>
+            )}
+          </div>
+        )}
+
+        {/* ── Envoy's Plan (review mode) ── */}
+        {mode !== "modify" && plan && (
+          <div style={{ marginBottom: 22 }}>
             <div style={{
-              padding: "10px 14px",
-              background: recommendation.verdict === "proceed"
-                ? "color-mix(in srgb, var(--status-succeeded) 12%, transparent)"
-                : recommendation.verdict === "caution"
-                ? "color-mix(in srgb, var(--status-warning) 12%, transparent)"
-                : "color-mix(in srgb, var(--status-failed) 12%, transparent)",
-              border: `1px solid ${
-                recommendation.verdict === "proceed"
-                  ? "color-mix(in srgb, var(--status-succeeded) 30%, transparent)"
-                  : recommendation.verdict === "caution"
-                  ? "color-mix(in srgb, var(--status-warning) 30%, transparent)"
-                  : "color-mix(in srgb, var(--status-failed) 30%, transparent)"
-              }`,
-              borderRadius: 6,
+              fontSize: 10,
+              color: "var(--text-muted)",
+              fontWeight: 700,
+              textTransform: "uppercase",
+              letterSpacing: "1.5px",
+              fontFamily: "var(--font-mono)",
+              marginBottom: 10,
             }}>
-              <div style={{
-                fontSize: 14,
-                fontWeight: 600,
-                color: recommendation.verdict === "proceed"
-                  ? "var(--status-succeeded)"
-                  : recommendation.verdict === "caution"
-                  ? "var(--status-warning)"
-                  : "var(--status-failed)",
-                marginBottom: 4,
-              }}>
-                {recommendation.verdict === "proceed" ? "Proceed" : recommendation.verdict === "caution" ? "Proceed with Caution" : "Hold"}
-              </div>
-              <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 6 }}>
-                {recommendation.summary}
-              </div>
-              {recommendation.factors.length > 0 && (
-                <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, color: "var(--text-muted)" }}>
-                  {recommendation.factors.map((f, i) => (
-                    <li key={i}>{f}</li>
-                  ))}
-                </ul>
-              )}
+              Envoy&apos;s Plan{revised && " (Revised)"}
             </div>
-          </div>
-        )}
-
-        {/* Plan steps — review mode */}
-        {mode === "review" && plan && (
-          <div className="canvas-section">
-            <h3 className="canvas-section-title">
-              Proposed Plan ({plan.steps.length} steps)
-              {revised && (
-                <span style={{ marginLeft: 8, fontSize: 11, color: "var(--accent)", fontWeight: 500 }}>· Revised</span>
-              )}
-            </h3>
-            <div className="canvas-timeline">
-              {plan.steps.map((step, i) => (
-                <div key={i} className="canvas-timeline-entry" style={{ cursor: "default" }}>
-                  <div className="canvas-timeline-dot" style={{
-                    background: step.reversible ? "var(--status-succeeded)" : "var(--status-warning)",
-                  }} />
-                  <div className="canvas-timeline-content">
-                    <div className="canvas-timeline-header">
-                      <span className="canvas-timeline-type">
-                        {i + 1}. {step.action}
-                      </span>
-                      <span className="canvas-timeline-time">{step.target}</span>
+            {plan.steps.map((step, i) => {
+              const risk = !step.reversible ? "high" : step.rollbackAction ? "low" : "none";
+              return (
+                <div key={i} className="plan-step-row">
+                  <span className="plan-step-num">{i + 1}</span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13, color: "var(--text)" }}>
+                      {step.description || step.action}
                     </div>
-                    <div className="canvas-timeline-decision">{step.description}</div>
-                    {!step.reversible && (
-                      <div style={{ fontSize: 11, color: "var(--status-warning)", marginTop: 2 }}>
-                        Non-reversible
-                      </div>
-                    )}
-                    {step.rollbackAction && (
-                      <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>
-                        Rollback: {step.rollbackAction}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Rollback plan */}
-        {mode === "review" && deployment.rollbackPlan && (
-          <div className="canvas-section">
-            <h3 className="canvas-section-title">Rollback Plan</h3>
-            <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 8 }}>
-              {deployment.rollbackPlan.reasoning}
-            </div>
-            <div className="canvas-timeline">
-              {deployment.rollbackPlan.steps.map((step, i) => (
-                <div key={i} className="canvas-timeline-entry" style={{ cursor: "default" }}>
-                  <div className="canvas-timeline-dot" style={{ background: "var(--accent)" }} />
-                  <div className="canvas-timeline-content">
-                    <div className="canvas-timeline-header">
-                      <span className="canvas-timeline-type">{step.action}</span>
-                      <span className="canvas-timeline-time">{step.target}</span>
+                    <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>
+                      ↩ {step.rollbackAction || "—"}
                     </div>
-                    <div className="canvas-timeline-decision">{step.description}</div>
                   </div>
+                  <span style={{
+                    fontSize: 10,
+                    fontFamily: "var(--font-mono)",
+                    fontWeight: 600,
+                    alignSelf: "center",
+                    color: risk === "none"
+                      ? "var(--text-muted)"
+                      : risk === "high"
+                        ? "var(--status-failed)"
+                        : "var(--status-succeeded)",
+                  }}>
+                    {risk}
+                  </span>
                 </div>
-              ))}
-            </div>
+              );
+            })}
           </div>
         )}
 
-        {/* Modify mode — inline step editor */}
+        {/* ── Cross-System Context ── */}
+        <div style={{
+          padding: "12px 16px",
+          borderRadius: 8,
+          marginBottom: 20,
+          background: "var(--surface-alt)",
+          border: "1px solid var(--border)",
+        }}>
+          <div style={{
+            fontSize: 10,
+            color: "var(--text-muted)",
+            fontWeight: 600,
+            marginBottom: 6,
+            fontFamily: "var(--font-mono)",
+            textTransform: "uppercase",
+            letterSpacing: "1px",
+          }}>
+            Cross-System Context
+          </div>
+          <div style={{ fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.65 }}>
+            {buildContextText(enrichment, envName)}
+          </div>
+        </div>
+
+        {/* ── Modify mode ── */}
         {mode === "modify" && (
           <div className="canvas-section">
             <h3 className="canvas-section-title">Edit Plan Steps</h3>
@@ -431,18 +375,10 @@ export default function PlanReviewPanel({ deploymentId, title }: Props) {
                   border: "1px solid var(--border)",
                 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>
-                      Step {i + 1}
-                    </span>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>Step {i + 1}</span>
                     <button
                       onClick={() => removeStep(i)}
-                      style={{
-                        background: "transparent",
-                        border: "none",
-                        color: "var(--status-failed)",
-                        cursor: "pointer",
-                        fontSize: 12,
-                      }}
+                      style={{ background: "transparent", border: "none", color: "var(--status-failed)", cursor: "pointer", fontSize: 12 }}
                     >
                       Remove
                     </button>
@@ -468,7 +404,7 @@ export default function PlanReviewPanel({ deploymentId, title }: Props) {
                     onChange={(e) => updateStep(i, "description", e.target.value)}
                     placeholder="Description"
                     className="v2-input"
-                    style={{ fontSize: 12, marginTop: 8, width: "100%", boxSizing: "border-box" }}
+                    style={{ fontSize: 12, marginTop: 8 }}
                   />
                   <div style={{ display: "flex", gap: 8, marginTop: 8, alignItems: "center" }}>
                     <label style={{ fontSize: 12, color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 4 }}>
@@ -491,14 +427,10 @@ export default function PlanReviewPanel({ deploymentId, title }: Props) {
                   </div>
                 </div>
               ))}
-              <button
-                onClick={addStep}
-                className="v2-btn v2-btn-secondary"
-                style={{ alignSelf: "flex-start", fontSize: 12 }}
-              >
+              <button onClick={addStep} className="v2-btn" style={{ alignSelf: "flex-start" }}>
                 + Add Step
               </button>
-              <div style={{ marginTop: 8 }}>
+              <div>
                 <label style={{ fontSize: 12, color: "var(--text-muted)", display: "block", marginBottom: 4 }}>
                   Reason for modification
                 </label>
@@ -508,60 +440,108 @@ export default function PlanReviewPanel({ deploymentId, title }: Props) {
                   placeholder="Why are you modifying this plan?"
                   className="v2-input"
                   rows={2}
-                  style={{ fontSize: 12, width: "100%", boxSizing: "border-box", resize: "vertical" }}
+                  style={{ resize: "vertical" }}
                 />
               </div>
             </div>
           </div>
         )}
 
-        {/* Refine mode — feedback for re-reasoning */}
+        {/* ── Refine mode — inline above action buttons ── */}
         {mode === "refine" && (
-          <div className="canvas-section">
-            <h3 className="canvas-section-title">Refine Plan</h3>
-            <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 8, lineHeight: 1.5 }}>
-              Describe what Synth should reconsider. It will re-reason and produce a revised plan.
+          <div style={{
+            padding: "16px 18px",
+            borderRadius: 10,
+            marginBottom: 16,
+            background: "var(--accent-dim)",
+            border: "1px solid var(--accent-border)",
+          }}>
+            <div style={{
+              fontSize: 12,
+              fontWeight: 600,
+              color: "var(--accent)",
+              marginBottom: 8,
+              fontFamily: "var(--font-mono)",
+            }}>
+              What should Synth reconsider?
             </div>
+            <p style={{ fontSize: 12, color: "var(--text-secondary)", margin: "0 0 10px 0", lineHeight: 1.5 }}>
+              Describe what&apos;s wrong or what&apos;s missing. Synth will regenerate the plan incorporating your
+              feedback. This also improves future plans for this artifact.
+            </p>
             <textarea
               value={refineFeedback}
               onChange={(e) => setRefineFeedback(e.target.value)}
-              placeholder="e.g. The database migration should run before the app deployment, not after..."
+              placeholder="e.g. CACHE_TTL also changed in this version — make sure that's applied. Also verify the /v2 endpoint responds after deploy, not just /health."
               className="v2-input"
               rows={3}
-              style={{ fontSize: 12, width: "100%", boxSizing: "border-box", resize: "vertical" }}
+              style={{ resize: "vertical" }}
               autoFocus
             />
             {refining && (
               <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 8, fontSize: 12, color: "var(--accent)" }}>
-                <span style={{ width: 12, height: 12, borderRadius: "50%", border: "2px solid var(--accent)", borderTopColor: "transparent", animation: "spin 1s linear infinite", display: "inline-block" }} />
+                <SynthMark size={14} active />
                 Re-reasoning...
               </div>
             )}
-          </div>
-        )}
-
-        {/* Reject prompt */}
-        {mode === "reject-prompt" && (
-          <div className="canvas-section">
-            <h3 className="canvas-section-title">Reject Deployment</h3>
-            <div style={{ marginBottom: 8 }}>
-              <label style={{ fontSize: 12, color: "var(--text-muted)", display: "block", marginBottom: 4 }}>
-                Reason for rejection
-              </label>
-              <textarea
-                value={rejectReason}
-                onChange={(e) => setRejectReason(e.target.value)}
-                placeholder="Why is this plan being rejected?"
-                className="v2-input"
-                rows={3}
-                style={{ fontSize: 12, width: "100%", boxSizing: "border-box", resize: "vertical" }}
-                autoFocus
-              />
+            <div style={{ display: "flex", gap: 8, marginTop: 10, justifyContent: "flex-end" }}>
+              <button
+                onClick={() => { setMode("review"); setError(null); setRefineFeedback(""); }}
+                disabled={refining}
+                style={{
+                  padding: "8px 14px",
+                  borderRadius: 6,
+                  border: "1px solid var(--border)",
+                  background: "transparent",
+                  color: "var(--text-muted)",
+                  fontSize: 12,
+                  fontFamily: "var(--font-mono)",
+                  cursor: "pointer",
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleRefine}
+                disabled={refining}
+                style={{
+                  padding: "8px 18px",
+                  borderRadius: 6,
+                  border: "none",
+                  background: "var(--accent)",
+                  color: "#fff",
+                  fontSize: 12,
+                  fontWeight: 600,
+                  fontFamily: "var(--font-mono)",
+                  cursor: "pointer",
+                  opacity: refining ? 0.6 : 1,
+                }}
+              >
+                {refining ? "Revising..." : "Revise Plan"}
+              </button>
             </div>
           </div>
         )}
 
-        {/* Error display */}
+        {/* ── Reject prompt ── */}
+        {mode === "reject-prompt" && (
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ fontSize: 12, color: "var(--text-muted)", display: "block", marginBottom: 4 }}>
+              Reason for rejection
+            </label>
+            <textarea
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              placeholder="Why is this plan being rejected?"
+              className="v2-input"
+              rows={3}
+              style={{ resize: "vertical" }}
+              autoFocus
+            />
+          </div>
+        )}
+
+        {/* ── Error ── */}
         {error && (
           <div style={{
             padding: "8px 12px",
@@ -570,128 +550,110 @@ export default function PlanReviewPanel({ deploymentId, title }: Props) {
             borderRadius: 6,
             fontSize: 13,
             color: "var(--status-failed)",
-            marginTop: 8,
+            marginBottom: 12,
           }}>
             {error}
           </div>
         )}
 
-        {/* Action buttons */}
-        <div style={{
-          display: "flex",
-          justifyContent: "space-between",
-          gap: 12,
-          marginTop: 16,
-          paddingTop: 16,
-          borderTop: "1px solid var(--border)",
-        }}>
-          {mode === "review" && (
-            <>
+        {/* ── Primary action buttons ── */}
+        {(mode === "review" || mode === "refine") && (
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              className="plan-btn plan-btn-greenlight"
+              onClick={handleGreenlight}
+              disabled={actionLoading}
+            >
+              ✓ Greenlight
+            </button>
+            {mode === "review" && (
               <button
-                className="v2-btn v2-btn-danger"
-                onClick={() => { setMode("reject-prompt"); setError(null); }}
-                disabled={actionLoading}
-                style={{ fontSize: 13 }}
-              >
-                Reject
-              </button>
-              <button
-                className="v2-btn v2-btn-secondary"
+                className="plan-btn plan-btn-refine"
                 onClick={() => { setMode("refine"); setError(null); setRefineFeedback(""); }}
                 disabled={actionLoading}
-                style={{ fontSize: 13 }}
               >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 20h9" />
+                  <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
+                </svg>
                 Refine
               </button>
-              <button
-                className="v2-btn v2-btn-secondary"
-                onClick={() => { setMode("modify"); setError(null); }}
-                disabled={actionLoading}
-                style={{ fontSize: 13 }}
-              >
-                Modify Plan
-              </button>
-              <button
-                className="v2-btn v2-btn-primary"
-                onClick={handleGreenlight}
-                disabled={actionLoading}
-                style={{ fontSize: 13 }}
-              >
-                {actionLoading ? "Approving..." : "Greenlight"}
-              </button>
-            </>
-          )}
+            )}
+            <button
+              className="plan-btn plan-btn-reject"
+              onClick={() => { setMode("reject-prompt"); setError(null); }}
+              disabled={actionLoading}
+            >
+              Reject
+            </button>
+          </div>
+        )}
 
-          {mode === "refine" && (
-            <>
-              <button
-                className="v2-btn v2-btn-secondary"
-                onClick={() => { setMode("review"); setError(null); setRefineFeedback(""); }}
-                disabled={refining}
-                style={{ fontSize: 13 }}
-              >
-                Cancel
-              </button>
-              <button
-                className="v2-btn v2-btn-primary"
-                onClick={handleRefine}
-                disabled={refining}
-                style={{ fontSize: 13 }}
-              >
-                {refining ? "Revising..." : "Revise Plan"}
-              </button>
-            </>
-          )}
+        {mode === "reject-prompt" && (
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+            <button
+              className="plan-btn plan-btn-reject"
+              onClick={() => { setMode("review"); setError(null); setRejectReason(""); }}
+              disabled={actionLoading}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleReject}
+              disabled={actionLoading}
+              style={{
+                padding: "13px 20px",
+                borderRadius: 8,
+                border: "none",
+                background: "var(--status-failed)",
+                color: "#fff",
+                fontSize: 14,
+                fontFamily: "var(--font-mono)",
+                fontWeight: 600,
+                cursor: "pointer",
+                opacity: actionLoading ? 0.5 : 1,
+              }}
+            >
+              {actionLoading ? "Rejecting..." : "Confirm Rejection"}
+            </button>
+          </div>
+        )}
 
-          {mode === "modify" && (
-            <>
-              <button
-                className="v2-btn v2-btn-secondary"
-                onClick={() => {
-                  setMode("review");
-                  setError(null);
-                  if (deployment.plan) {
-                    setModifiedSteps(deployment.plan.steps.map((s) => ({ ...s })));
-                  }
-                  setModifyReason("");
-                }}
-                disabled={actionLoading}
-                style={{ fontSize: 13 }}
-              >
-                Cancel
-              </button>
-              <button
-                className="v2-btn v2-btn-primary"
-                onClick={handleSaveModifications}
-                disabled={actionLoading}
-                style={{ fontSize: 13 }}
-              >
-                {actionLoading ? "Saving..." : "Save Modifications"}
-              </button>
-            </>
-          )}
+        {mode === "modify" && (
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 8 }}>
+            <button
+              className="plan-btn plan-btn-reject"
+              onClick={() => {
+                setMode("review");
+                setError(null);
+                if (deployment.plan) setModifiedSteps(deployment.plan.steps.map((s) => ({ ...s })));
+                setModifyReason("");
+              }}
+              disabled={actionLoading}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSaveModifications}
+              disabled={actionLoading}
+              style={{
+                padding: "13px 20px",
+                borderRadius: 8,
+                border: "none",
+                background: "var(--accent)",
+                color: "#fff",
+                fontSize: 14,
+                fontFamily: "var(--font-mono)",
+                fontWeight: 600,
+                cursor: "pointer",
+                opacity: actionLoading ? 0.5 : 1,
+              }}
+            >
+              {actionLoading ? "Saving..." : "Save Modifications"}
+            </button>
+          </div>
+        )}
 
-          {mode === "reject-prompt" && (
-            <>
-              <button
-                className="v2-btn v2-btn-secondary"
-                onClick={() => { setMode("review"); setError(null); setRejectReason(""); }}
-                disabled={actionLoading}
-                style={{ fontSize: 13 }}
-              >
-                Cancel
-              </button>
-              <button
-                className="v2-btn v2-btn-danger"
-                onClick={handleReject}
-                disabled={actionLoading}
-                style={{ fontSize: 13 }}
-              >
-                {actionLoading ? "Rejecting..." : "Confirm Rejection"}
-              </button>
-            </>
-          )}
-        </div>
       </div>
     </CanvasPanelHost>
   );

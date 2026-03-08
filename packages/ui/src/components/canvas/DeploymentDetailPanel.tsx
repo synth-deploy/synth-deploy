@@ -4,6 +4,7 @@ import type { Deployment, DebriefEntry, Environment, Artifact, Partition, Postmo
 import { useCanvas } from "../../context/CanvasContext.js";
 import { useQuery } from "../../hooks/useQuery.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
+import SynthMark from "../SynthMark.js";
 
 const decisionTypeColors: Record<string, string> = {
   "pipeline-plan": "var(--dt-plan)",
@@ -345,75 +346,147 @@ export default function DeploymentDetailPanel({ deploymentId, title }: Props) {
     });
   }
 
+  // Build step state map from progress events (used in running view)
+  const stepMap = new Map<number, ProgressEvent>();
+  for (const event of progressEvents) {
+    if (event.type === "step-started" || event.type === "step-completed" || event.type === "step-failed") {
+      stepMap.set(event.stepIndex, event);
+    }
+  }
+  const overallProgress = progressEvents.length > 0
+    ? progressEvents[progressEvents.length - 1].overallProgress
+    : 0;
+
   return (
     <CanvasPanelHost title={title}>
-      <div className="canvas-detail">
-        {/* Header info */}
-        <div className="canvas-deploy-header">
-          <span className={`badge badge-${deployment.status}`}>{deployment.status}</span>
-          <span className="canvas-deploy-version">{deployment.version}</span>
-        </div>
+      <div style={{ display: "flex", flexDirection: "column" }}>
 
-        {/* Review Plan action for awaiting_approval */}
-        {deployment.status === "awaiting_approval" && (
-          <div style={{ marginBottom: 12 }}>
-            <button
-              className="v2-btn v2-btn-primary"
-              onClick={() => pushPanel({
-                type: "plan-review",
-                title: `Review Plan`,
-                params: { id: deployment.id },
-              })}
-              style={{ fontSize: 13 }}
-            >
-              Review Plan
-            </button>
-          </div>
+        {isRunning ? (
+          <>
+            {/* ── Execution header ── */}
+            <div className="exec-header">
+              <div className="exec-title-block">
+                <SynthMark size={22} active />
+                <div>
+                  <div className="exec-title">Deploying {artName} {deployment.version}</div>
+                  <div className="exec-subtitle">→ {envName}</div>
+                </div>
+              </div>
+              <button
+                className="btn btn-sm"
+                onClick={() => minimizeDeployment({ deploymentId, artifactName: artName })}
+                style={{ fontSize: 12, whiteSpace: "nowrap" }}
+              >
+                Minimize ↓
+              </button>
+            </div>
+
+            {/* Progress bar */}
+            <div className="exec-progress-bar">
+              <div className="exec-progress-fill" style={{ width: `${overallProgress}%` }} />
+            </div>
+
+            {/* Stale indicator */}
+            {stale && (
+              <div style={{
+                background: "color-mix(in srgb, var(--status-warning) 13%, transparent)",
+                border: "1px solid color-mix(in srgb, var(--status-warning) 27%, transparent)",
+                borderRadius: 4,
+                padding: "6px 10px",
+                fontSize: 12,
+                color: "var(--status-warning)",
+                marginBottom: 12,
+              }}>
+                Connection to envoy lost — deployment may still be in progress
+              </div>
+            )}
+
+            {/* Step list — prefer plan steps, fall back to events */}
+            {deployment.plan ? (
+              <div style={{ marginBottom: 24 }}>
+                {deployment.plan.steps.map((step, i) => {
+                  const evt = stepMap.get(i);
+                  const isCompleted = evt?.type === "step-completed";
+                  const isActive = evt?.type === "step-started";
+                  return (
+                    <div
+                      key={i}
+                      className="exec-step-row"
+                      style={{ opacity: isCompleted || isActive ? 1 : 0.3 }}
+                    >
+                      <span className={`exec-step-badge ${isCompleted ? "exec-step-badge-done" : isActive ? "exec-step-badge-active" : "exec-step-badge-pending"}`}>
+                        {isCompleted ? "✓" : i + 1}
+                      </span>
+                      <span style={{
+                        fontSize: 13,
+                        color: isCompleted
+                          ? "var(--status-succeeded)"
+                          : isActive
+                            ? "var(--text)"
+                            : "var(--text-muted)",
+                      }}>
+                        {step.description || step.action}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : progressEvents.length > 0 ? (
+              <LiveProgressSection events={progressEvents} stale={false} />
+            ) : null}
+          </>
+        ) : (
+          <>
+            {/* ── Non-running header ── */}
+            <div className="canvas-deploy-header">
+              <span className={`badge badge-${deployment.status}`}>{deployment.status}</span>
+              <span className="canvas-deploy-version">{deployment.version}</span>
+            </div>
+
+            {/* Review Plan action for awaiting_approval */}
+            {deployment.status === "awaiting_approval" && (
+              <div style={{ marginBottom: 12 }}>
+                <button
+                  className="btn btn-sm"
+                  onClick={() => pushPanel({
+                    type: "plan-review",
+                    title: "Review Plan",
+                    params: { id: deployment.id },
+                  })}
+                  style={{ fontSize: 13 }}
+                >
+                  Review Plan
+                </button>
+              </div>
+            )}
+
+            <div className="canvas-deploy-meta">
+              <span>Artifact: {artName}</span>
+              {partName && (
+                <button className="canvas-meta-link" onClick={() => pushPanel({
+                  type: "partition-detail", title: partName, params: { id: deployment.partitionId! },
+                })}>
+                  Partition: {partName}
+                </button>
+              )}
+              <button className="canvas-meta-link" onClick={() => pushPanel({
+                type: "environment-detail", title: envName, params: { id: deployment.environmentId },
+              })}>
+                Environment: {envName}
+              </button>
+              <span>Started: {new Date(deployment.createdAt).toLocaleString()}</span>
+              {deployment.completedAt && (
+                <span>Completed: {new Date(deployment.completedAt).toLocaleString()}</span>
+              )}
+              {deployment.approvedBy && (
+                <span>Approved by: {deployment.approvedBy}</span>
+              )}
+            </div>
+          </>
         )}
 
-        <div className="canvas-deploy-meta">
-          <span>Artifact: {artName}</span>
-          {partName && (
-            <button className="canvas-meta-link" onClick={() => pushPanel({
-              type: "partition-detail", title: partName, params: { id: deployment.partitionId! },
-            })}>
-              Partition: {partName}
-            </button>
-          )}
-          <button className="canvas-meta-link" onClick={() => pushPanel({
-            type: "environment-detail", title: envName, params: { id: deployment.environmentId },
-          })}>
-            Environment: {envName}
-          </button>
-          <span>Started: {new Date(deployment.createdAt).toLocaleString()}</span>
-          {deployment.completedAt && (
-            <span>Completed: {new Date(deployment.completedAt).toLocaleString()}</span>
-          )}
-          {deployment.approvedBy && (
-            <span>Approved by: {deployment.approvedBy}</span>
-          )}
-        </div>
-
-        {/* Minimize button for running deployments */}
-        {isRunning && (
-          <div style={{ marginBottom: 12 }}>
-            <button
-              className="btn btn-sm"
-              onClick={() => minimizeDeployment({ deploymentId, artifactName: artName })}
-              style={{ fontSize: 12 }}
-            >
-              Minimize ↓
-            </button>
-          </div>
-        )}
-
-        {/* Live execution progress (only for running deployments) */}
-        {isRunning && progressEvents.length > 0 && (
-          <LiveProgressSection events={progressEvents} stale={stale} />
-        )}
-
-        {/* Deployment Plan */}
-        {deployment.plan && (
+        {/* Deployment Plan — only for non-running deployments */}
+        {!isRunning && deployment.plan && (
           <div className="canvas-section">
             <h3 className="canvas-section-title">Deployment Plan</h3>
             <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 8 }}>
