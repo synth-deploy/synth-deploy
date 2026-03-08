@@ -54,8 +54,18 @@ export interface SignalInvestigation {
 }
 
 export interface AlertSignal {
-  type: "envoy-health" | "deployment-failure" | "drift";
-  severity: "warning" | "critical";
+  type:
+    | "envoy-health"
+    | "deployment-failure-pattern"
+    | "drift"
+    | "new-version-failure-context"
+    | "cross-environment-inconsistency"
+    | "security-boundary-violation"
+    | "dependency-conflict"
+    | "stale-deployment"
+    | "envoy-knowledge-gap"
+    | "scheduled-maintenance-conflict";
+  severity: "critical" | "warning" | "info";
   title: string;
   detail: string;
   relatedEntity?: { type: string; id: string; name: string };
@@ -268,103 +278,287 @@ export function registerSystemRoutes(
       }
     }
 
-    // 2. Deployment failures in last 24h without subsequent success
-    for (const failedDep of failed24h) {
-      const hasSubsequentSuccess = allDeployments.some(
-        (d) =>
-          d.artifactId === failedDep.artifactId &&
-          d.environmentId === failedDep.environmentId &&
-          d.status === "succeeded" &&
-          new Date(d.createdAt).getTime() > new Date(failedDep.createdAt).getTime(),
-      );
+    // 2. Deployment failure pattern signals — only raised when multiple failures occur to the
+    // same artifact+environment without a successful recovery (not on individual failures,
+    // which are visible in the deployment list and debrief).
+    const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
+    const recentFailures = allDeployments.filter(
+      (d) => d.status === "failed" && new Date(d.createdAt).getTime() > sevenDaysAgo,
+    );
 
-      if (!hasSubsequentSuccess) {
-        const envName = allEnvironments.find((e) => e.id === failedDep.environmentId)?.name ?? "unknown";
-        const artifactName = allArtifacts.find((a) => a.id === failedDep.artifactId)?.name ?? "unknown";
-        const hasReason = Boolean(failedDep.failureReason);
-
-        const prevSuccessful = allDeployments
-          .filter(
-            (d) =>
-              d.artifactId === failedDep.artifactId &&
-              d.environmentId === failedDep.environmentId &&
-              d.status === "succeeded",
-          )
-          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-          .slice(0, 1);
-
-        signals.push({
-          type: "deployment-failure",
-          severity: "critical",
-          title: `Failed deployment: ${artifactName} v${failedDep.version}`,
-          detail: `Deployment to ${envName} failed${failedDep.failureReason ? `: ${failedDep.failureReason}` : ""} — no successful retry yet.`,
-          relatedEntity: { type: "deployment", id: failedDep.id, name: `${artifactName} v${failedDep.version}` },
-          investigation: {
-            title: `Failed Deployment — ${artifactName} v${failedDep.version}`,
-            entity: artifactName,
-            entityType: "artifact",
-            status: "active",
-            detectedAt: failedDep.createdAt ? new Date(failedDep.createdAt).toISOString().replace("T", " ").slice(0, 19) + " UTC" : nowIso(),
-            synthAssessment: {
-              confidence: hasReason ? 0.85 : 0.62,
-              summary: hasReason
-                ? `Deployment of ${artifactName} v${failedDep.version} to ${envName} failed with: ${failedDep.failureReason}. No successful retry has been attempted. ${prevSuccessful.length > 0 ? `The previous successful deployment to this environment was ${timeAgo(prevSuccessful[0].createdAt)}.` : "This was the first deployment to this environment."}`
-                : `Deployment of ${artifactName} v${failedDep.version} to ${envName} failed without a specific reason recorded. This may indicate an infrastructure issue, a timeout, or an envoy-side failure. Review the debrief logs for the full execution trace.`,
-            },
-            evidence: [
-              { label: "Deployment status", value: `Failed · ${timeAgo(failedDep.createdAt)}`, status: "warning" },
-              { label: "Target environment", value: `${envName} — no successful retry`, status: "info" },
-              { label: "Version deployed", value: `v${failedDep.version}`, status: "info" },
-              ...(failedDep.failureReason
-                ? [{ label: "Failure reason", value: failedDep.failureReason, status: "warning" as const }]
-                : [{ label: "Failure reason", value: "Unknown — check debrief for trace", status: "warning" as const }]),
-              ...(prevSuccessful.length > 0
-                ? [{ label: "Last successful deploy", value: `${timeAgo(prevSuccessful[0].createdAt)} (${artifactName} v${prevSuccessful[0].version})`, status: "info" as const }]
-                : [{ label: "Prior deployments", value: "None to this environment", status: "info" as const }]),
-            ],
-            recommendations: [
-              {
-                action: "Review the deployment debrief",
-                detail: `Open the deployment detail for ${artifactName} v${failedDep.version} to review the full execution trace, including which step failed and what the envoy logged.`,
-                priority: "high",
-              },
-              {
-                action: "Check the target environment",
-                detail: `Verify that the ${envName} environment is reachable and that its envoy is healthy before attempting a retry.`,
-                priority: "medium",
-              },
-              {
-                action: "Fix root cause before retrying",
-                detail: hasReason
-                  ? `Address the reported failure reason before deploying again. Retrying without fixing the root cause will likely produce the same result.`
-                  : "Identify the root cause from the debrief logs before retrying. Blind retries rarely succeed and may leave the environment in an inconsistent state.",
-                priority: "high",
-              },
-            ],
-            timeline: [
-              { time: fmtTime(failedDep.createdAt), event: `Deployment started: ${artifactName} v${failedDep.version} → ${envName}` },
-              { time: fmtTime(failedDep.createdAt), event: failedDep.failureReason ? `Deployment failed: ${failedDep.failureReason}` : "Deployment failed" },
-              { time: nowTime(), event: "Signal raised — no successful retry detected" },
-            ],
-            relatedDeployments: [
-              {
-                artifact: artifactName,
-                version: failedDep.version,
-                target: envName,
-                status: "failed",
-                time: timeAgo(failedDep.createdAt),
-              },
-              ...prevSuccessful.map((d) => ({
-                artifact: artifactName,
-                version: d.version,
-                target: envName,
-                status: d.status,
-                time: timeAgo(d.createdAt),
-              })),
-            ],
-          },
-        });
+    // Group by artifactId+environmentId
+    type FailureGroup = { artifactId: string; environmentId: string; failures: typeof recentFailures };
+    const failureGroups = new Map<string, FailureGroup>();
+    for (const dep of recentFailures) {
+      const key = `${dep.artifactId}::${dep.environmentId}`;
+      if (!failureGroups.has(key)) {
+        failureGroups.set(key, { artifactId: dep.artifactId, environmentId: dep.environmentId, failures: [] });
       }
+      failureGroups.get(key)!.failures.push(dep);
+    }
+
+    for (const group of failureGroups.values()) {
+      if (group.failures.length < 2) continue; // Single failure = not a signal
+
+      const hasRecovery = allDeployments.some(
+        (d) =>
+          d.artifactId === group.artifactId &&
+          d.environmentId === group.environmentId &&
+          d.status === "succeeded" &&
+          new Date(d.createdAt).getTime() > new Date(group.failures[0].createdAt).getTime(),
+      );
+      if (hasRecovery) continue;
+
+      const envName = allEnvironments.find((e) => e.id === group.environmentId)?.name ?? "unknown";
+      const artifactName = allArtifacts.find((a) => a.id === group.artifactId)?.name ?? "unknown";
+      const n = group.failures.length;
+      const sorted = [...group.failures].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      const mostRecent = sorted[0];
+      const reasons = [...new Set(sorted.map((d) => d.failureReason).filter(Boolean))];
+
+      const prevSuccessful = allDeployments
+        .filter(
+          (d) =>
+            d.artifactId === group.artifactId &&
+            d.environmentId === group.environmentId &&
+            d.status === "succeeded",
+        )
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+        .slice(0, 1);
+
+      signals.push({
+        type: "deployment-failure-pattern",
+        severity: "critical",
+        title: `Repeated failure: ${artifactName} → ${envName}`,
+        detail: `${n} failures in 7 days with no successful recovery. ${reasons.length > 0 ? `Last reason: ${reasons[0]}` : "No failure reason recorded."}`,
+        relatedEntity: { type: "artifact", id: group.artifactId, name: artifactName },
+        investigation: {
+          title: `Deployment Failure Pattern — ${artifactName} → ${envName}`,
+          entity: artifactName,
+          entityType: "artifact",
+          status: "active",
+          detectedAt: nowIso(),
+          synthAssessment: {
+            confidence: reasons.length > 0 ? 0.88 : 0.65,
+            summary: `${artifactName} has failed to deploy to ${envName} ${n} times in the past 7 days without a successful recovery. ${reasons.length > 0 ? `The recurring failure reason is: ${reasons.join("; ")}. ` : ""}This is a pattern, not an isolated incident — retrying without addressing the root cause will likely produce the same result. The environment may be in a degraded state.`,
+          },
+          evidence: [
+            { label: "Failure count", value: `${n} failures in the last 7 days`, status: "warning" },
+            { label: "Most recent failure", value: timeAgo(mostRecent.createdAt), status: "warning" },
+            { label: "Target environment", value: `${envName} — no successful recovery`, status: "warning" },
+            ...(reasons.length > 0
+              ? reasons.map((r) => ({ label: "Failure reason", value: r!, status: "warning" as const }))
+              : [{ label: "Failure reason", value: "Unknown — check debrief for trace", status: "warning" as const }]),
+            ...(prevSuccessful.length > 0
+              ? [{ label: "Last success", value: `${timeAgo(prevSuccessful[0].createdAt)} (v${prevSuccessful[0].version})`, status: "info" as const }]
+              : [{ label: "Prior successes", value: "No successful deployments on record", status: "info" as const }]),
+          ],
+          recommendations: [
+            {
+              action: "Review debriefs for all failed deployments",
+              detail: `Each failed deployment has a debrief with the full execution trace. Compare them to identify whether the failure mode is consistent or varying.`,
+              priority: "high",
+            },
+            {
+              action: "Check environment health before retrying",
+              detail: `Verify that the ${envName} environment is in a known good state. Repeated failures may have left partial state that will block future deployments.`,
+              priority: "high",
+            },
+            {
+              action: "Address root cause before next attempt",
+              detail: reasons.length > 0
+                ? `The failure reason "${reasons[0]}" has recurred. Fix it at the source before scheduling another deployment.`
+                : "Identify the root cause from the debrief logs. Blind retries on a recurring failure pattern waste time and may worsen environment state.",
+              priority: "medium",
+            },
+          ],
+          timeline: [
+            ...sorted.slice().reverse().map((d) => ({ time: fmtTime(d.createdAt), event: `Deployment failed: ${artifactName} v${d.version}${d.failureReason ? ` — ${d.failureReason}` : ""}` })),
+            { time: nowTime(), event: `Signal raised — ${n} failures, no recovery` },
+          ],
+          relatedDeployments: sorted.map((d) => ({
+            artifact: artifactName,
+            version: d.version,
+            target: envName,
+            status: d.status,
+            time: timeAgo(d.createdAt),
+          })),
+        },
+      });
+    }
+
+    // 4. Stale deployment signals — artifact has been running significantly longer than
+    // its average deployment lifecycle with newer versions deployed elsewhere.
+    const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
+    const succeededDeps = allDeployments.filter((d) => d.status === "succeeded");
+
+    // Group succeeded deployments by artifactId+environmentId to find "currently running"
+    type EnvLatest = { dep: (typeof succeededDeps)[0]; envName: string };
+    const latestByTarget = new Map<string, EnvLatest>();
+    for (const dep of succeededDeps) {
+      const key = `${dep.artifactId}::${dep.environmentId}`;
+      const existing = latestByTarget.get(key);
+      if (!existing || new Date(dep.createdAt) > new Date(existing.dep.createdAt)) {
+        const envName = allEnvironments.find((e) => e.id === dep.environmentId)?.name ?? "unknown";
+        latestByTarget.set(key, { dep, envName });
+      }
+    }
+
+    for (const { dep, envName } of latestByTarget.values()) {
+      if (new Date(dep.createdAt).getTime() > thirtyDaysAgo) continue; // Not stale yet
+
+      const artifactName = allArtifacts.find((a) => a.id === dep.artifactId)?.name ?? "unknown";
+      const weeksAgo = Math.floor((now - new Date(dep.createdAt).getTime()) / (7 * 24 * 60 * 60 * 1000));
+
+      // Check if newer versions of this artifact have been deployed to any other environment
+      const newerElsewhere = succeededDeps.filter(
+        (d) =>
+          d.artifactId === dep.artifactId &&
+          d.environmentId !== dep.environmentId &&
+          new Date(d.createdAt).getTime() > new Date(dep.createdAt).getTime(),
+      );
+      if (newerElsewhere.length === 0) continue; // No newer deployments anywhere — not actionable
+
+      const newerVersions = [...new Set(newerElsewhere.map((d) => d.version))];
+
+      signals.push({
+        type: "stale-deployment",
+        severity: "info",
+        title: `Stale deployment: ${artifactName} in ${envName}`,
+        detail: `v${dep.version} deployed ${weeksAgo}w ago. ${newerVersions.length} newer version${newerVersions.length > 1 ? "s" : ""} running elsewhere. May be intentional.`,
+        relatedEntity: { type: "artifact", id: dep.artifactId, name: artifactName },
+        investigation: {
+          title: `Stale Deployment — ${artifactName} in ${envName}`,
+          entity: `${artifactName} in ${envName}`,
+          entityType: "artifact",
+          status: "active",
+          detectedAt: nowIso(),
+          synthAssessment: {
+            confidence: 0.72,
+            summary: `${artifactName} v${dep.version} has been running in ${envName} for ${weeksAgo} weeks without an update. ${newerVersions.length} newer version${newerVersions.length > 1 ? "s have" : " has"} been deployed to other environments: ${newerVersions.join(", ")}. This may be intentional for stable workloads, or it may indicate a missed promotion. Synth is not recommending action — only confirming you're aware.`,
+          },
+          evidence: [
+            { label: "Running version", value: `v${dep.version} — deployed ${weeksAgo}w ago`, status: "info" },
+            { label: "Environment", value: envName, status: "info" },
+            { label: "Newer versions elsewhere", value: newerVersions.join(", "), status: "info" },
+            { label: "Last deployment", value: timeAgo(dep.createdAt), status: "info" },
+          ],
+          recommendations: [
+            {
+              action: "Confirm this is intentional",
+              detail: `If ${artifactName} in ${envName} is a stable workload that intentionally lags behind, no action needed. If newer versions should have been promoted, schedule a deployment.`,
+              priority: "low",
+            },
+            {
+              action: "Review changes in newer versions",
+              detail: `Check what changed between v${dep.version} and ${newerVersions[newerVersions.length - 1]} before promoting to ${envName}.`,
+              priority: "low",
+            },
+          ],
+          timeline: [
+            { time: fmtTime(dep.createdAt), event: `${artifactName} v${dep.version} deployed to ${envName}` },
+            { time: nowTime(), event: `Signal raised — ${weeksAgo}w without update, newer versions exist` },
+          ],
+          relatedDeployments: [
+            { artifact: artifactName, version: dep.version, target: envName, status: "succeeded", time: timeAgo(dep.createdAt) },
+            ...newerElsewhere.slice(0, 3).map((d) => {
+              const env = allEnvironments.find((e) => e.id === d.environmentId)?.name ?? "unknown";
+              return { artifact: artifactName, version: d.version, target: env, status: d.status, time: timeAgo(d.createdAt) };
+            }),
+          ],
+        },
+      });
+    }
+
+    // 5. Cross-environment inconsistency — same artifact running across environments in a
+    // pattern that suggests a missed or skipped promotion.
+    const artifactEnvVersions = new Map<string, Map<string, { version: string; deployedAt: Date }>>();
+    for (const { dep, envName } of latestByTarget.values()) {
+      if (!artifactEnvVersions.has(dep.artifactId)) {
+        artifactEnvVersions.set(dep.artifactId, new Map());
+      }
+      artifactEnvVersions.get(dep.artifactId)!.set(envName, {
+        version: dep.version,
+        deployedAt: new Date(dep.createdAt),
+      });
+    }
+
+    for (const [artifactId, envMap] of artifactEnvVersions.entries()) {
+      if (envMap.size < 2) continue; // Only relevant with 2+ environments
+
+      const entries = [...envMap.entries()];
+      const artifactName = allArtifacts.find((a) => a.id === artifactId)?.name ?? "unknown";
+
+      // Find the most-recently-updated environment (the "ahead" env)
+      const sorted = entries.sort((a, b) => b[1].deployedAt.getTime() - a[1].deployedAt.getTime());
+      const [aheadEnv, aheadData] = sorted[0];
+      const [behindEnv, behindData] = sorted[sorted.length - 1];
+
+      if (aheadData.version === behindData.version) continue; // Same version everywhere — OK
+
+      // Only flag if the behind environment hasn't been updated in 14+ days while the ahead env has newer
+      const daysBehind = Math.floor((aheadData.deployedAt.getTime() - behindData.deployedAt.getTime()) / (24 * 60 * 60 * 1000));
+      if (daysBehind < 14) continue;
+
+      // Also require that the ahead env has more recent deployments of this artifact (not just same artifact)
+      const aheadHasMultiple = succeededDeps.filter(
+        (d) => d.artifactId === artifactId &&
+          allEnvironments.find((e) => e.id === d.environmentId)?.name === aheadEnv,
+      ).length >= 2;
+      if (!aheadHasMultiple) continue;
+
+      signals.push({
+        type: "cross-environment-inconsistency",
+        severity: "warning",
+        title: `Version gap: ${artifactName} (${behindEnv} vs ${aheadEnv})`,
+        detail: `${behindEnv} is on v${behindData.version}, ${aheadEnv} has v${aheadData.version} (${daysBehind}d ahead). Promotion may have been missed.`,
+        relatedEntity: { type: "artifact", id: artifactId, name: artifactName },
+        investigation: {
+          title: `Cross-Environment Version Gap — ${artifactName}`,
+          entity: artifactName,
+          entityType: "artifact",
+          status: "active",
+          detectedAt: nowIso(),
+          synthAssessment: {
+            confidence: 0.76,
+            summary: `${artifactName} is running different versions across environments in a pattern that may indicate a missed promotion. ${aheadEnv} has v${aheadData.version} (updated ${timeAgo(aheadData.deployedAt)}), while ${behindEnv} is still on v${behindData.version} (updated ${timeAgo(behindData.deployedAt)}, ${daysBehind} days behind). Normal staging-to-production lag is expected, but a ${daysBehind}-day gap with active updates in ${aheadEnv} suggests the ${behindEnv} promotion may have been overlooked.`,
+          },
+          evidence: [
+            { label: `${aheadEnv} version`, value: `v${aheadData.version} — updated ${timeAgo(aheadData.deployedAt)}`, status: "healthy" },
+            { label: `${behindEnv} version`, value: `v${behindData.version} — updated ${timeAgo(behindData.deployedAt)}`, status: "warning" },
+            { label: "Version gap", value: `${daysBehind} days between last promotions`, status: "warning" },
+            ...entries.slice(2).map(([env, data]) => ({
+              label: `${env} version`,
+              value: `v${data.version} — updated ${timeAgo(data.deployedAt)}`,
+              status: "info" as const,
+            })),
+          ],
+          recommendations: [
+            {
+              action: `Review changes before promoting to ${behindEnv}`,
+              detail: `Check what changed between v${behindData.version} and v${aheadData.version} before scheduling the promotion. ${daysBehind} days of changes may require careful review.`,
+              priority: "medium",
+            },
+            {
+              action: `Promote ${artifactName} to ${behindEnv}`,
+              detail: `If the version gap is unintentional, schedule a deployment of ${artifactName} v${aheadData.version} to ${behindEnv}.`,
+              priority: "low",
+            },
+          ],
+          timeline: [
+            { time: fmtTime(behindData.deployedAt), event: `${artifactName} v${behindData.version} deployed to ${behindEnv}` },
+            { time: fmtTime(aheadData.deployedAt), event: `${artifactName} v${aheadData.version} deployed to ${aheadEnv}` },
+            { time: nowTime(), event: `Signal raised — ${daysBehind}-day version gap detected` },
+          ],
+          relatedDeployments: entries.map(([env, data]) => ({
+            artifact: artifactName,
+            version: data.version,
+            target: env,
+            status: "succeeded",
+            time: timeAgo(data.deployedAt),
+          })),
+        },
+      });
     }
 
     // 3. Configuration drift signals
@@ -466,14 +660,15 @@ export function registerSystemRoutes(
       }
     }
 
-    const state = signals.length > 0 ? "alert" : "normal";
+    const critical = signals.filter((s) => s.severity === "critical");
+    const warnings = signals.filter((s) => s.severity === "warning");
+    const infos = signals.filter((s) => s.severity === "info");
+
+    const state = (critical.length > 0 || warnings.length > 0) ? "alert" : "normal";
 
     // Derive editorial assessment
     let headline: string;
     let detail: string;
-
-    const critical = signals.filter((s) => s.severity === "critical");
-    const warnings = signals.filter((s) => s.severity === "warning");
 
     if (critical.length > 0) {
       headline = critical.length === 1 ? "One thing before you deploy." : `${critical.length} issues need your attention.`;
@@ -481,6 +676,9 @@ export function registerSystemRoutes(
     } else if (warnings.length > 0) {
       headline = warnings.length === 1 ? "One thing to keep in mind." : `${warnings.length} signals worth reviewing.`;
       detail = warnings[0].detail;
+    } else if (infos.length > 0) {
+      headline = "Systems clear. A few things worth knowing.";
+      detail = infos[0].detail;
     } else if (activeDeployments.length > 0) {
       const d = activeDeployments[0];
       const artName = allArtifacts.find((a) => a.id === d.artifactId)?.name ?? "A deployment";

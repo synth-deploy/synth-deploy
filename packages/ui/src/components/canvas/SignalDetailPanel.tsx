@@ -18,14 +18,21 @@ export default function SignalDetailPanel({ signal, title }: Props) {
   const [driftResolving, setDriftResolving] = useState(false);
   const [driftResolved, setDriftResolved] = useState(false);
   const inv = signal.investigation;
-  const isWarn = signal.severity === "warning" || signal.severity === "critical";
-  const severityColor = isWarn ? "var(--status-warning)" : "var(--accent)";
-  const severityBg = isWarn
-    ? "color-mix(in srgb, var(--status-warning) 8%, transparent)"
-    : "color-mix(in srgb, var(--accent) 8%, transparent)";
-  const severityBorder = isWarn
-    ? "color-mix(in srgb, var(--status-warning) 22%, transparent)"
-    : "color-mix(in srgb, var(--accent) 22%, transparent)";
+  const severityColor = signal.severity === "critical"
+    ? "var(--status-failed)"
+    : signal.severity === "warning"
+      ? "var(--status-warning)"
+      : "var(--accent)";
+  const severityBg = signal.severity === "critical"
+    ? "color-mix(in srgb, var(--status-failed) 6%, transparent)"
+    : signal.severity === "warning"
+      ? "color-mix(in srgb, var(--status-warning) 8%, transparent)"
+      : "color-mix(in srgb, var(--accent) 8%, transparent)";
+  const severityBorder = signal.severity === "critical"
+    ? "color-mix(in srgb, var(--status-failed) 22%, transparent)"
+    : signal.severity === "warning"
+      ? "color-mix(in srgb, var(--status-warning) 22%, transparent)"
+      : "color-mix(in srgb, var(--accent) 22%, transparent)";
 
   const evidenceColor = (status: string) => {
     if (status === "warning") return "var(--status-warning)";

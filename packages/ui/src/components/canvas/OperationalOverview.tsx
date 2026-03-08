@@ -599,22 +599,34 @@ function NormalState({ stats: _stats, signals, assessment }: { stats: SystemStat
             marginBottom: 10,
           }}>Signals</div>
           {signals.map((signal, i) => {
-            const isWarn = signal.severity === "warning" || signal.severity === "critical";
+            const dotColor = signal.severity === "critical"
+              ? "var(--status-failed)"
+              : signal.severity === "warning"
+                ? "var(--status-warning)"
+                : "var(--accent)";
+            const bgColor = signal.severity === "critical"
+              ? "color-mix(in srgb, var(--status-failed) 6%, transparent)"
+              : signal.severity === "warning"
+                ? "color-mix(in srgb, var(--status-warning) 8%, transparent)"
+                : "transparent";
+            const borderColor = signal.severity === "critical"
+              ? "color-mix(in srgb, var(--status-failed) 22%, transparent)"
+              : signal.severity === "warning"
+                ? "color-mix(in srgb, var(--status-warning) 25%, transparent)"
+                : "var(--border)";
             return (
               <div
                 key={i}
                 style={{
                   display: "flex", gap: 12, padding: "12px 16px", borderRadius: 8,
-                  background: isWarn
-                    ? "color-mix(in srgb, var(--status-warning) 8%, transparent)"
-                    : "transparent",
-                  border: `1px solid ${isWarn ? "color-mix(in srgb, var(--status-warning) 25%, transparent)" : "var(--border)"}`,
+                  background: bgColor,
+                  border: `1px solid ${borderColor}`,
                   marginBottom: i < signals.length - 1 ? 8 : 0,
                 }}
               >
                 <span style={{
                   width: 6, height: 6, borderRadius: "50%", marginTop: 6, flexShrink: 0,
-                  background: isWarn ? "var(--status-warning)" : "var(--accent)",
+                  background: dotColor,
                   display: "inline-block",
                 }} />
                 <div style={{ flex: 1 }}>
@@ -624,13 +636,7 @@ function NormalState({ stats: _stats, signals, assessment }: { stats: SystemStat
                 <button
                   className="btn btn-secondary"
                   style={{ fontSize: 11, padding: "5px 12px", flexShrink: 0, alignSelf: "center", fontFamily: "var(--font-mono)" }}
-                  onClick={() => {
-                    if (signal.type === "deployment-failure" && signal.relatedEntity?.type === "deployment") {
-                      pushPanel({ type: "debrief", title: "Debriefs", params: { deploymentId: signal.relatedEntity.id } });
-                    } else {
-                      pushPanel({ type: "signal-detail", title: signal.investigation.title, params: { signal: JSON.stringify(signal) } });
-                    }
-                  }}
+                  onClick={() => pushPanel({ type: "signal-detail", title: signal.investigation.title, params: { signal: JSON.stringify(signal) } })}
                 >
                   Investigate →
                 </button>

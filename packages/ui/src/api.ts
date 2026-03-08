@@ -373,8 +373,18 @@ export async function verifyTaskModel(
 // --- System State ---
 
 export interface AlertSignal {
-  type: "envoy-health" | "deployment-failure" | "drift";
-  severity: "warning" | "critical";
+  type:
+    | "envoy-health"
+    | "deployment-failure-pattern"
+    | "drift"
+    | "new-version-failure-context"
+    | "cross-environment-inconsistency"
+    | "security-boundary-violation"
+    | "dependency-conflict"
+    | "stale-deployment"
+    | "envoy-knowledge-gap"
+    | "scheduled-maintenance-conflict";
+  severity: "critical" | "warning" | "info";
   title: string;
   detail: string;
   relatedEntity?: { type: string; id: string; name: string };
