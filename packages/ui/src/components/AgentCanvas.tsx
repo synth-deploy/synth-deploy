@@ -16,6 +16,7 @@ import SignalDetailPanel from "./canvas/SignalDetailPanel.js";
 import EnvoyRegistryPanel from "./canvas/EnvoyRegistryPanel.js";
 import EnvoyDetailPanel from "./canvas/EnvoyDetailPanel.js";
 import SettingsPanel from "./canvas/SettingsPanel.js";
+import UserSettingsPanel from "./canvas/UserSettingsPanel.js";
 import ArtifactCatalogPanel from "./canvas/ArtifactCatalogPanel.js";
 import ArtifactDetailPanel from "./canvas/ArtifactDetailPanel.js";
 import PlanReviewPanel from "./canvas/PlanReviewPanel.js";
@@ -246,6 +247,9 @@ export default function AgentCanvas() {
 
       case "settings":
         return <SettingsPanel key="settings" title={panel.title} />;
+
+      case "user-settings":
+        return <UserSettingsPanel key="user-settings" title={panel.title} />;
 
       default:
         return (

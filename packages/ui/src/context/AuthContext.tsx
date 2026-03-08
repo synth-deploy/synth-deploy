@@ -5,6 +5,7 @@ interface UserPublic {
   id: string;
   email: string;
   name: string;
+  authSource: "local" | string;
   createdAt: string;
   updatedAt: string;
 }

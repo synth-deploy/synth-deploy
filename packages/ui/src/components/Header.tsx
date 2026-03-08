@@ -72,7 +72,14 @@ export default function Header() {
             <circle cx="12" cy="12" r="3" />
           </svg>
         </button>
-        <button className="synth-header-user-btn" title="User">
+        <button
+          className="synth-header-user-btn"
+          title="User settings"
+          onClick={() => {
+            resetToOverview();
+            pushPanel({ type: "user-settings", title: "User Settings", params: {} });
+          }}
+        >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
             <path d="M4 21c0-4.42 3.58-8 8-8s8 3.58 8 8M12 13a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
           </svg>

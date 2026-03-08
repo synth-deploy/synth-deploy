@@ -72,12 +72,20 @@ export async function authRefresh(refreshToken: string): Promise<{ token: string
   });
 }
 
-export async function authMe(): Promise<{ user: { id: string; email: string; name: string; createdAt: string; updatedAt: string }; permissions: string[] }> {
+export async function authMe(): Promise<{ user: { id: string; email: string; name: string; authSource: string; createdAt: string; updatedAt: string }; permissions: string[] }> {
   return fetchJson("/api/auth/me");
 }
 
 export async function authStatus(): Promise<{ needsSetup: boolean }> {
   return fetchJson("/api/auth/status");
+}
+
+export async function authUpdateMe(data: { name?: string; email?: string }): Promise<{ user: { id: string; email: string; name: string; authSource: string; createdAt: string; updatedAt: string } }> {
+  return fetchJson("/api/auth/me", { method: "PUT", body: JSON.stringify(data) });
+}
+
+export async function authChangePassword(data: { currentPassword: string; newPassword: string }): Promise<void> {
+  await fetchJson("/api/auth/me/password", { method: "POST", body: JSON.stringify(data) });
 }
 
 // --- Artifacts ---
