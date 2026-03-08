@@ -2,6 +2,15 @@ import { useState } from "react";
 import { createArtifact, manualUploadArtifact, createIntakeChannel } from "../api.js";
 import { invalidate } from "../hooks/useQuery.js";
 import ModalOverlay from "./ModalOverlay.js";
+import SelectField from "./SelectField.js";
+
+const ARTIFACT_TYPE_OPTIONS = [
+  { value: "docker", label: "Docker Image" },
+  { value: "binary", label: "Binary" },
+  { value: "archive", label: "Archive" },
+  { value: "script", label: "Script" },
+  { value: "helm-chart", label: "Helm Chart" },
+];
 
 interface Props {
   onClose: () => void;
@@ -109,46 +118,40 @@ export default function AddArtifactModal({ onClose }: Props) {
       {path === "upload" && !success && (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           <div>
-            <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", display: "block", marginBottom: 3 }}>Name</label>
+            <label className="modal-form-label">Name</label>
             <input
+              className="modal-form-input"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. my-web-app"
-              style={{ width: "100%", fontSize: 13, padding: "6px 10px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--input-bg)", color: "var(--text)", boxSizing: "border-box" }}
             />
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             <div style={{ flex: 1 }}>
-              <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", display: "block", marginBottom: 3 }}>Type</label>
-              <select
+              <label className="modal-form-label">Type</label>
+              <SelectField
                 value={type}
-                onChange={(e) => setType(e.target.value)}
-                style={{ width: "100%", fontSize: 13, padding: "6px 10px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--input-bg)", color: "var(--text)" }}
-              >
-                <option value="docker">Docker Image</option>
-                <option value="binary">Binary</option>
-                <option value="archive">Archive</option>
-                <option value="script">Script</option>
-                <option value="helm-chart">Helm Chart</option>
-              </select>
+                onChange={setType}
+                options={ARTIFACT_TYPE_OPTIONS}
+              />
             </div>
             <div style={{ flex: 1 }}>
-              <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", display: "block", marginBottom: 3 }}>Version</label>
+              <label className="modal-form-label">Version</label>
               <input
+                className="modal-form-input"
                 value={version}
                 onChange={(e) => setVersion(e.target.value)}
                 placeholder="1.0.0"
-                style={{ width: "100%", fontSize: 13, padding: "6px 10px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--input-bg)", color: "var(--text)", boxSizing: "border-box" }}
               />
             </div>
           </div>
           <div>
-            <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", display: "block", marginBottom: 3 }}>Source (optional)</label>
+            <label className="modal-form-label">Source (optional)</label>
             <input
+              className="modal-form-input"
               value={source}
               onChange={(e) => setSource(e.target.value)}
               placeholder="e.g. docker.io/myorg/myapp"
-              style={{ width: "100%", fontSize: 13, padding: "6px 10px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--input-bg)", color: "var(--text)", boxSizing: "border-box" }}
             />
           </div>
           <button
@@ -165,25 +168,25 @@ export default function AddArtifactModal({ onClose }: Props) {
       {/* Registry path */}
       {path === "registry" && !success && (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          <p style={{ fontSize: 12, color: "var(--text-muted)", margin: 0 }}>
+          <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>
             Connect a container registry. Synth will watch for new images and ingest them automatically.
           </p>
           <div>
-            <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", display: "block", marginBottom: 3 }}>Channel Name</label>
+            <label className="modal-form-label">Channel Name</label>
             <input
+              className="modal-form-input"
               value={channelName}
               onChange={(e) => setChannelName(e.target.value)}
               placeholder="e.g. production-registry"
-              style={{ width: "100%", fontSize: 13, padding: "6px 10px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--input-bg)", color: "var(--text)", boxSizing: "border-box" }}
             />
           </div>
           <div>
-            <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", display: "block", marginBottom: 3 }}>Registry URL</label>
+            <label className="modal-form-label">Registry URL</label>
             <input
+              className="modal-form-input"
               value={channelUrl}
               onChange={(e) => setChannelUrl(e.target.value)}
               placeholder="e.g. docker.io/myorg"
-              style={{ width: "100%", fontSize: 13, padding: "6px 10px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--input-bg)", color: "var(--text)", boxSizing: "border-box" }}
             />
           </div>
           <button
@@ -200,25 +203,25 @@ export default function AddArtifactModal({ onClose }: Props) {
       {/* Pipeline path */}
       {path === "pipeline" && !success && (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          <p style={{ fontSize: 12, color: "var(--text-muted)", margin: 0 }}>
+          <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>
             Set up a CI/CD webhook. Your pipeline will push artifacts to Synth on each build.
           </p>
           <div>
-            <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", display: "block", marginBottom: 3 }}>Channel Name</label>
+            <label className="modal-form-label">Channel Name</label>
             <input
+              className="modal-form-input"
               value={channelName}
               onChange={(e) => setChannelName(e.target.value)}
               placeholder="e.g. github-actions-prod"
-              style={{ width: "100%", fontSize: 13, padding: "6px 10px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--input-bg)", color: "var(--text)", boxSizing: "border-box" }}
             />
           </div>
           <div>
-            <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", display: "block", marginBottom: 3 }}>Webhook URL (optional)</label>
+            <label className="modal-form-label">Webhook URL (optional)</label>
             <input
+              className="modal-form-input"
               value={channelUrl}
               onChange={(e) => setChannelUrl(e.target.value)}
               placeholder="Auto-generated if blank"
-              style={{ width: "100%", fontSize: 13, padding: "6px 10px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--input-bg)", color: "var(--text)", boxSizing: "border-box" }}
             />
           </div>
           <button

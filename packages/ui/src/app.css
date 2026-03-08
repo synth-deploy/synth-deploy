@@ -4884,6 +4884,100 @@ table a:hover {
   justify-content: center;
 }
 
+/* ---- Modal form controls ---- */
+
+.modal-form-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 5px;
+}
+
+.modal-form-input,
+.modal-form-select {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 13px;
+  font-family: var(--font);
+  color: var(--text);
+  background: var(--bg);
+  box-sizing: border-box;
+  transition: border-color 0.15s;
+  outline: none;
+}
+
+.modal-form-input::placeholder {
+  color: var(--text-muted);
+}
+
+.modal-form-input:focus,
+.modal-form-select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-dim);
+}
+
+.synth-select-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+}
+
+.synth-select-trigger.synth-select-open {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-dim);
+}
+
+.synth-select-arrow {
+  color: var(--text-muted);
+  font-size: 13px;
+  flex-shrink: 0;
+  margin-left: 8px;
+}
+
+.synth-select-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  z-index: 100;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.synth-select-option {
+  padding: 8px 12px;
+  font-size: 13px;
+  font-family: var(--font);
+  color: var(--text);
+  background: transparent;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.synth-select-option:hover {
+  background: var(--surface-alt);
+}
+
+.synth-select-option-active {
+  color: var(--accent);
+  font-weight: 500;
+}
+
 /* ---- Breadcrumb (v6) ---- */
 
 .v6-breadcrumb {
