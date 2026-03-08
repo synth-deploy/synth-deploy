@@ -21,7 +21,7 @@ function getConfidenceLevel(confidence: number): ConfidenceLevel {
 }
 
 const confColors: Record<ConfidenceLevel, string> = { high: "var(--status-succeeded)", medium: "var(--status-warning)", low: "var(--status-failed)" };
-const confLabels: Record<ConfidenceLevel, string> = { high: "HIGH", medium: "MEDIUM", low: "LOW" };
+const confLabels: Record<ConfidenceLevel, string> = { high: "High", medium: "Medium", low: "Low" };
 
 export default function ArtifactCatalogPanel({ title }: Props) {
   const { pushPanel } = useCanvas();
@@ -100,17 +100,6 @@ export default function ArtifactCatalogPanel({ title }: Props) {
       </CanvasPanelHost>
     );
 
-  const chipStyle = (active: boolean): React.CSSProperties => ({
-    fontSize: 11,
-    padding: "4px 10px",
-    borderRadius: 12,
-    border: `1px solid ${active ? "var(--accent)" : "var(--border)"}`,
-    background: active ? "var(--accent-dim)" : "transparent",
-    color: active ? "var(--accent)" : "var(--text-muted)",
-    cursor: "pointer",
-    fontWeight: active ? 600 : 400,
-    whiteSpace: "nowrap" as const,
-  });
 
   const typeIcons: Record<string, string> = {
     docker: "◉",
@@ -206,51 +195,49 @@ export default function ArtifactCatalogPanel({ title }: Props) {
           <AddArtifactModal onClose={() => setShowAddModal(false)} />
         )}
 
-        <input
-          type="text"
-          placeholder="Search artifacts..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          style={{
-            width: "100%",
-            fontSize: 13,
-            padding: "8px 12px",
-            borderRadius: 6,
-            border: "1px solid var(--border)",
-            background: "var(--input-bg)",
-            color: "var(--text)",
-            marginBottom: 12,
-            boxSizing: "border-box",
-          }}
-        />
-
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 16 }}>
-          {artifactTypes.map((t) => (
-            <button
-              key={t}
-              style={chipStyle(typeFilter === t)}
-              onClick={() => setTypeFilter(typeFilter === t ? null : t)}
-            >
-              {t}
-            </button>
-          ))}
-          {artifactTypes.length > 0 && (
-            <span style={{ borderLeft: "1px solid var(--border)", margin: "0 4px" }} />
+        <div className="search-bar">
+          <span className="search-bar-prefix">SEARCH ›</span>
+          <input
+            type="text"
+            className="search-bar-input"
+            placeholder="Search artifacts..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          {search && (
+            <button className="search-bar-clear" onClick={() => setSearch("")}>✕</button>
           )}
-          {(["high", "medium", "low"] as const).map((level) => (
-            <button
-              key={level}
-              style={{
-                ...chipStyle(confidenceFilter === level),
-                borderColor: confidenceFilter === level ? confColors[level] : "var(--border)",
-                color: confidenceFilter === level ? confColors[level] : "var(--text-muted)",
-                background: confidenceFilter === level ? confColors[level] + "15" : "transparent",
-              }}
-              onClick={() => setConfidenceFilter(confidenceFilter === level ? null : level)}
-            >
-              {confLabels[level]}
-            </button>
-          ))}
+        </div>
+
+        <div className="filter-bar">
+          {artifactTypes.length > 0 && (
+            <div className="filter-group">
+              <span className="filter-group-label">Type</span>
+              {artifactTypes.map((t) => (
+                <button
+                  key={t}
+                  className={`filter-chip ${typeFilter === t ? "filter-chip-active" : ""}`}
+                  onClick={() => setTypeFilter(typeFilter === t ? null : t)}
+                >
+                  {getTypeIcon(t)} {t}
+                </button>
+              ))}
+            </div>
+          )}
+          <div className="filter-group">
+            <span className="filter-group-label">Confidence</span>
+            {(["high", "medium", "low"] as const).map((level) => (
+              <button
+                key={level}
+                className={`filter-chip ${confidenceFilter === level ? "filter-chip-active" : ""}`}
+                style={confidenceFilter === level ? { color: confColors[level] } : {}}
+                onClick={() => setConfidenceFilter(confidenceFilter === level ? null : level)}
+              >
+                <span className="filter-chip-dot" style={{ background: confColors[level] }} />
+                {confLabels[level]}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 

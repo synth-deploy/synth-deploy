@@ -4682,6 +4682,136 @@ table a:hover {
   font-weight: 400;
 }
 
+/* ---- Search bar (channel-style pill, standalone) ---- */
+
+.search-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 4px 10px 4px 16px;
+  margin-bottom: 12px;
+  transition: border-color 0.15s;
+}
+
+.search-bar:focus-within {
+  border-color: var(--accent-border);
+}
+
+.search-bar-prefix {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--accent);
+  letter-spacing: 0.08em;
+  font-weight: 700;
+  opacity: 0.65;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.search-bar-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 14px;
+  padding: 8px 0;
+}
+
+.search-bar-input::placeholder {
+  color: var(--text-muted);
+}
+
+.search-bar-clear {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  line-height: 1;
+  opacity: 0.6;
+  flex-shrink: 0;
+}
+
+.search-bar-clear:hover {
+  opacity: 1;
+  color: var(--text);
+}
+
+/* ---- Filter bar + chip groups (Artifact Catalog and similar) ---- */
+
+.filter-bar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.filter-group {
+  display: flex;
+  gap: 3px;
+  align-items: center;
+  padding: 3px;
+  border-radius: 7px;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+}
+
+.filter-group-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-faint, var(--text-muted));
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 0 6px 0 6px;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+}
+
+.filter-chip {
+  padding: 5px 11px;
+  border-radius: 5px;
+  border: none;
+  cursor: pointer;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 400;
+  font-family: var(--font-mono);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  transition: background 0.12s, color 0.12s, box-shadow 0.12s;
+  white-space: nowrap;
+}
+
+.filter-chip:hover {
+  background: var(--surface);
+  color: var(--text);
+}
+
+.filter-chip-active {
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 600;
+  box-shadow: 0 1px 3px var(--border);
+}
+
+.filter-chip-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
 /* ---- Modal overlay ---- */
 
 .modal-overlay {
