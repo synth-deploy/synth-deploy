@@ -593,7 +593,11 @@ function NormalState({ stats: _stats, signals, assessment }: { stats: SystemStat
       {/* --- Signals --- */}
       {signals && signals.length > 0 && (
         <div>
-          <div className="v6-section-label" style={{ marginBottom: 8 }}>Signals</div>
+          <div style={{
+            fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 600,
+            letterSpacing: "0.05em", color: "var(--text-muted)", textTransform: "uppercase",
+            marginBottom: 10,
+          }}>Signals</div>
           {signals.map((signal, i) => {
             const isWarn = signal.severity === "warning" || signal.severity === "critical";
             return (
