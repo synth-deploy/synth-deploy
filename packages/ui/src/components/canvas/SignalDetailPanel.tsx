@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useCanvas } from "../../context/CanvasContext.js";
 import type { AlertSignal } from "../../api.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
@@ -12,6 +13,10 @@ interface Props {
 
 export default function SignalDetailPanel({ signal, title }: Props) {
   const { popPanel, pushPanel } = useCanvas();
+  const [showResolveDrift, setShowResolveDrift] = useState(false);
+  const [driftResolution, setDriftResolution] = useState<string | null>(null);
+  const [driftResolving, setDriftResolving] = useState(false);
+  const [driftResolved, setDriftResolved] = useState(false);
   const inv = signal.investigation;
   const isWarn = signal.severity === "warning" || signal.severity === "critical";
   const severityColor = isWarn ? "var(--status-warning)" : "var(--accent)";
@@ -53,7 +58,37 @@ export default function SignalDetailPanel({ signal, title }: Props) {
     ...priorityStyle(p),
   });
 
+  const driftConflict = inv.driftConflicts?.[0];
+
+  const resolutionOptions = driftConflict ? [
+    {
+      id: "partition",
+      title: "Accept partition value",
+      desc: "The host value is wrong. On the next deployment to this envoy, Synth will apply the partition-scoped value and overwrite the manual change.",
+      detail: `${driftConflict.variable} → ${driftConflict.partitionValue}`,
+      tag: "Corrects on next deploy",
+      tagColor: "var(--status-succeeded)",
+    },
+    {
+      id: "override",
+      title: "Create envoy override",
+      desc: `The host value is intentional for this envoy. Create an envoy-level variable override so Synth treats this as the expected value and stops flagging it as drift.`,
+      detail: `${driftConflict.affectedEnvoy}: ${driftConflict.variable} → ${driftConflict.violatedRule}`,
+      tag: "Preserves current value",
+      tagColor: "var(--accent)",
+    },
+    {
+      id: "migrate",
+      title: "Migrate now",
+      desc: "Apply the partition value to this envoy immediately without waiting for a deployment. Synth will update the config, verify the service health, and record the change in the debrief.",
+      detail: `Immediate: ${driftConflict.violatedRule} → ${driftConflict.partitionValue}`,
+      tag: "Immediate action",
+      tagColor: "var(--status-warning)",
+    },
+  ] : [];
+
   return (
+    <>
     <CanvasPanelHost title={title}>
       <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
 
@@ -359,6 +394,11 @@ export default function SignalDetailPanel({ signal, title }: Props) {
                   background: severityBg,
                   color: severityColor, fontSize: 12, fontWeight: 600, fontFamily: "var(--font-mono)",
                 }}
+                onClick={() => {
+                  setShowResolveDrift(true);
+                  setDriftResolution(null);
+                  setDriftResolved(false);
+                }}
               >
                 Resolve Drift →
               </button>
@@ -382,5 +422,148 @@ export default function SignalDetailPanel({ signal, title }: Props) {
 
       </div>
     </CanvasPanelHost>
+
+    {showResolveDrift && driftConflict && (
+      <div style={{
+        position: "fixed", inset: 0, zIndex: 100,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        background: "var(--overlay-bg)", backdropFilter: "blur(20px)",
+        WebkitBackdropFilter: "blur(20px)",
+      }}>
+        <div style={{
+          width: "100%", maxWidth: 580, maxHeight: "85vh", overflow: "auto",
+          background: "var(--surface)", borderRadius: 14,
+          border: "1px solid var(--border-strong, rgba(128,128,128,0.18))",
+          padding: "30px 34px", boxShadow: "var(--modal-shadow)",
+        }}>
+          {/* Header */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24 }}>
+            <div>
+              <div style={{ fontSize: 10, color: "var(--status-warning)", textTransform: "uppercase", letterSpacing: 1.5, fontWeight: 700, fontFamily: "var(--font-mono)", marginBottom: 6 }}>
+                Resolve Configuration Drift
+              </div>
+              <h2 style={{ fontSize: 20, fontWeight: 500, color: "var(--text)", margin: 0, fontFamily: "var(--font-display)" }}>
+                {driftConflict.variable}
+              </h2>
+              <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4, fontFamily: "var(--font-mono)" }}>
+                {driftConflict.affectedEnvoy} · {inv.entity}
+              </div>
+            </div>
+            <button
+              onClick={() => setShowResolveDrift(false)}
+              style={{ width: 30, height: 30, borderRadius: 6, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text-muted)", fontSize: 16, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
+            >×</button>
+          </div>
+
+          {/* Side-by-side comparison */}
+          <div style={{ display: "flex", gap: 10, marginBottom: 24 }}>
+            <div style={{ flex: 1, padding: "12px 14px", borderRadius: 8, background: "color-mix(in srgb, var(--status-succeeded) 8%, transparent)", border: "1px solid color-mix(in srgb, var(--status-succeeded) 22%, transparent)" }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "var(--status-succeeded)", fontFamily: "var(--font-mono)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>Partition Value</div>
+              <div style={{ fontSize: 11, fontFamily: "var(--font-mono)", color: "var(--text)", wordBreak: "break-all", lineHeight: 1.5 }}>{driftConflict.partitionValue}</div>
+            </div>
+            <div style={{ flex: 1, padding: "12px 14px", borderRadius: 8, background: "color-mix(in srgb, var(--status-warning) 8%, transparent)", border: "1px solid color-mix(in srgb, var(--status-warning) 22%, transparent)" }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "var(--status-warning)", fontFamily: "var(--font-mono)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>Current on Host</div>
+              <div style={{ fontSize: 11, fontFamily: "var(--font-mono)", color: "var(--text)", wordBreak: "break-all", lineHeight: 1.5 }}>{driftConflict.violatedRule}</div>
+            </div>
+          </div>
+
+          {driftResolved ? (
+            <div style={{ padding: "20px 22px", borderRadius: 10, background: "color-mix(in srgb, var(--status-succeeded) 8%, transparent)", border: "1px solid color-mix(in srgb, var(--status-succeeded) 22%, transparent)", textAlign: "center", marginBottom: 20 }}>
+              <div style={{ fontSize: 16, fontWeight: 700, color: "var(--status-succeeded)", marginBottom: 4 }}>Drift Resolved</div>
+              <div style={{ fontSize: 13, color: "var(--text-muted)" }}>
+                {driftResolution === "partition" && `${driftConflict.variable} on ${driftConflict.affectedEnvoy} will be corrected to the partition value on next deployment.`}
+                {driftResolution === "override" && `Envoy-level override created for ${driftConflict.affectedEnvoy}. The current value is now the expected value.`}
+                {driftResolution === "migrate" && `${driftConflict.variable} will update to the partition value immediately and the debrief will record the change.`}
+              </div>
+              <button
+                onClick={() => { setShowResolveDrift(false); popPanel(); }}
+                style={{ marginTop: 14, padding: "9px 20px", borderRadius: 6, border: "none", cursor: "pointer", background: "var(--status-succeeded)", color: "#fff", fontSize: 13, fontWeight: 600, fontFamily: "var(--font-mono)" }}
+              >Done</button>
+            </div>
+          ) : (
+            <>
+              <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.5, color: "var(--text-faint, var(--text-muted))", fontFamily: "var(--font-mono)", marginBottom: 10 }}>
+                Choose Resolution
+              </div>
+
+              {resolutionOptions.map(opt => (
+                <div
+                  key={opt.id}
+                  onClick={() => setDriftResolution(opt.id)}
+                  style={{
+                    padding: "16px 18px", borderRadius: 10, marginBottom: 8, cursor: "pointer",
+                    background: driftResolution === opt.id ? "color-mix(in srgb, var(--accent) 8%, transparent)" : "var(--surface-alt, var(--surface))",
+                    border: `1.5px solid ${driftResolution === opt.id ? "color-mix(in srgb, var(--accent) 30%, transparent)" : "var(--border)"}`,
+                    transition: "all 0.15s",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <div style={{
+                        width: 18, height: 18, borderRadius: "50%",
+                        border: `2px solid ${driftResolution === opt.id ? "var(--accent)" : "var(--border)"}`,
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        flexShrink: 0,
+                      }}>
+                        {driftResolution === opt.id && <div style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--accent)" }} />}
+                      </div>
+                      <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{opt.title}</span>
+                    </div>
+                    <span style={{
+                      padding: "2px 8px", borderRadius: 3, fontSize: 9, fontWeight: 700, fontFamily: "var(--font-mono)",
+                      textTransform: "uppercase", color: opt.tagColor,
+                      background: `color-mix(in srgb, ${opt.tagColor} 10%, transparent)`,
+                      border: `1px solid color-mix(in srgb, ${opt.tagColor} 25%, transparent)`,
+                      flexShrink: 0,
+                    }}>{opt.tag}</span>
+                  </div>
+                  <div style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.5, marginLeft: 28 }}>{opt.desc}</div>
+                  <div style={{ fontSize: 11, fontFamily: "var(--font-mono)", color: "var(--text-muted)", marginTop: 6, marginLeft: 28, opacity: 0.7 }}>{opt.detail}</div>
+                </div>
+              ))}
+
+              {/* Synth context note */}
+              {inv.synthAssessment?.summary && (
+                <div style={{ padding: "12px 16px", borderRadius: 8, marginTop: 16, marginBottom: 20, background: "color-mix(in srgb, var(--accent) 8%, transparent)", border: "1px solid color-mix(in srgb, var(--accent) 22%, transparent)" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                    <SynthMark size={14} active />
+                    <span style={{ fontSize: 10, fontWeight: 700, color: "var(--accent)", fontFamily: "var(--font-mono)", textTransform: "uppercase", letterSpacing: 1 }}>Context</span>
+                  </div>
+                  <p style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.55, margin: 0 }}>
+                    {inv.synthAssessment.summary}
+                  </p>
+                </div>
+              )}
+
+              {/* Actions */}
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  disabled={!driftResolution || driftResolving}
+                  onClick={() => {
+                    setDriftResolving(true);
+                    setTimeout(() => { setDriftResolving(false); setDriftResolved(true); }, 1500);
+                  }}
+                  style={{
+                    flex: 1, padding: "12px 20px", borderRadius: 7, border: "none",
+                    cursor: driftResolution ? "pointer" : "not-allowed",
+                    background: driftResolution ? "var(--status-succeeded)" : "var(--surface-alt, var(--surface))",
+                    color: driftResolution ? "#fff" : "var(--text-muted)",
+                    fontSize: 14, fontWeight: 700, fontFamily: "var(--font-mono)",
+                    opacity: driftResolving ? 0.7 : 1, transition: "all 0.2s",
+                  }}
+                >
+                  {driftResolving ? "Resolving…" : "Apply Resolution"}
+                </button>
+                <button
+                  onClick={() => setShowResolveDrift(false)}
+                  style={{ padding: "12px 20px", borderRadius: 7, border: "1px solid var(--border-strong, rgba(128,128,128,0.18))", background: "var(--surface)", color: "var(--text-muted)", fontSize: 14, fontFamily: "var(--font-mono)", cursor: "pointer" }}
+                >Cancel</button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    )}
+    </>
   );
 }
