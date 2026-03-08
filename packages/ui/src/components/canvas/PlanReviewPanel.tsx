@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   getDeployment,
   getDeploymentEnrichment,
@@ -78,6 +78,28 @@ export default function PlanReviewPanel({ deploymentId, title }: Props) {
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<ReviewMode>("review");
+
+  // Poll while deployment is pending (plan not yet generated)
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  useEffect(() => {
+    if (deployment?.status === "pending") {
+      pollRef.current = setInterval(async () => {
+        try {
+          const res = await getDeployment(deploymentId);
+          if (res.deployment.status !== "pending") {
+            setDeployment(res.deployment);
+            if (res.deployment.plan) {
+              setModifiedSteps(res.deployment.plan.steps.map((s) => ({ ...s })));
+            }
+            if (pollRef.current) clearInterval(pollRef.current);
+          }
+        } catch {
+          // ignore transient errors
+        }
+      }, 2000);
+    }
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, [deployment?.status, deploymentId]);
   const [rejectReason, setRejectReason] = useState("");
   const [modifiedSteps, setModifiedSteps] = useState<PlannedStep[]>([]);
   const [modifyReason, setModifyReason] = useState("");
@@ -106,6 +128,23 @@ export default function PlanReviewPanel({ deploymentId, title }: Props) {
     return (
       <CanvasPanelHost title={title}>
         <div className="error-msg">Deployment not found</div>
+      </CanvasPanelHost>
+    );
+  }
+
+  // Thinking state: plan is being generated
+  if (deployment.status === "pending") {
+    return (
+      <CanvasPanelHost title={title}>
+        <div style={{ textAlign: "center", padding: "48px 0" }}>
+          <SynthMark size={44} active />
+          <p style={{ color: "var(--text-secondary)", fontSize: 14, marginTop: 16, marginBottom: 4 }}>
+            Envoy is reasoning about this deployment…
+          </p>
+          <p style={{ color: "var(--text-muted)", fontSize: 12, margin: 0 }}>
+            Scanning local state · Loading previous plans · Building strategy
+          </p>
+        </div>
       </CanvasPanelHost>
     );
   }

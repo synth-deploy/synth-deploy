@@ -89,8 +89,8 @@ export default function DeploymentAuthoringPanel({ title, preselectedArtifactId,
       });
 
       pushPanel({
-        type: "deployment-detail",
-        title: `Deployment ${result.deployment.version || result.deployment.id.slice(0, 8)}`,
+        type: "plan-review",
+        title: `Review Plan`,
         params: { id: result.deployment.id },
       });
     } catch (e: unknown) {
