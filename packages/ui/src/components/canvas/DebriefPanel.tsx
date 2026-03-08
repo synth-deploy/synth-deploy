@@ -307,7 +307,7 @@ export default function DebriefPanel({ title, filterPartitionId, filterDecisionT
 
   return (
     <CanvasPanelHost title={title} noBreadcrumb>
-      <div className="canvas-detail">
+      <div>
         {!selectedDeploymentId && (
           <>
             <div style={{ marginBottom: 20 }}>
