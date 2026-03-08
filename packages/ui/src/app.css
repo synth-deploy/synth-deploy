@@ -4419,8 +4419,9 @@ table a:hover {
 
 .synth-header-tab {
   padding: 5px 12px;
-  border-radius: 5px;
+  border-radius: 0;
   border: none;
+  border-bottom: 2px solid transparent;
   cursor: pointer;
   background: transparent;
   color: var(--text-muted);
@@ -4435,7 +4436,7 @@ table a:hover {
 }
 
 .synth-header-tab-active {
-  background: var(--surface-alt);
+  border-bottom-color: var(--accent);
   color: var(--text);
   font-weight: 600;
 }
