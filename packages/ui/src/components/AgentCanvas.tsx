@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useCanvas } from "../context/CanvasContext.js";
 import type { CanvasQueryResult } from "../api.js";
 import SynthChannel from "./SynthChannel.js";
@@ -24,6 +24,10 @@ import DeploymentGraphPanel from "./canvas/DeploymentGraphPanel.js";
 import TopologyPanel from "./canvas/TopologyPanel.js";
 import ErrorBoundary from "./ErrorBoundary.js";
 
+const MIN_CHAT_WIDTH = 220;
+const MAX_CHAT_WIDTH = 640;
+const DEFAULT_CHAT_WIDTH = 340;
+
 export default function AgentCanvas() {
   const { currentPanel, pushPanel, minimizedDeployment, restoreDeployment } = useCanvas();
 
@@ -32,9 +36,39 @@ export default function AgentCanvas() {
 
   // For answer-type responses, right panel shows structured output instead of canvas panel
   const [answerContent, setAnswerContent] = useState<string | null>(null);
+  const [answerTitle, setAnswerTitle] = useState<string | undefined>(undefined);
+
+  // Resizable split
+  const [splitWidth, setSplitWidth] = useState(DEFAULT_CHAT_WIDTH);
+  const isDragging = useRef(false);
+  const dragStartX = useRef(0);
+  const dragStartWidth = useRef(0);
+
+  const handleDragStart = useCallback((e: React.MouseEvent) => {
+    isDragging.current = true;
+    dragStartX.current = e.clientX;
+    dragStartWidth.current = splitWidth;
+    e.preventDefault();
+  }, [splitWidth]);
+
+  useEffect(() => {
+    function onMouseMove(e: MouseEvent) {
+      if (!isDragging.current) return;
+      const delta = e.clientX - dragStartX.current;
+      setSplitWidth(Math.max(MIN_CHAT_WIDTH, Math.min(MAX_CHAT_WIDTH, dragStartWidth.current + delta)));
+    }
+    function onMouseUp() { isDragging.current = false; }
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
+    return () => {
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", onMouseUp);
+    };
+  }, []);
 
   function handleAgentResult(result: CanvasQueryResult) {
     setAnswerContent(null);
+    setAnswerTitle(undefined);
     switch (result.action) {
       case "navigate":
       case "data":
@@ -50,6 +84,7 @@ export default function AgentCanvas() {
   function handleDismissChat() {
     setChatOpen(false);
     setAnswerContent(null);
+    setAnswerTitle(undefined);
   }
 
   function renderPanel() {
@@ -208,14 +243,24 @@ export default function AgentCanvas() {
 
   // SynthChannel is always rendered as a sibling of the canvas-main-content div
   // so React preserves its internal state (messages) when chatOpen switches.
-  // CSS flex `order` controls visual placement: strip = below content, panel = left of content.
+  // In split mode: channel (order:1) | drag-handle (order:2) | content (order:3)
+  // In column mode: content (default) above, strip bar below
   return (
-    <div className={chatOpen ? "canvas-split-layout" : "canvas-column-layout"}>
+    <div className={chatOpen ? "canvas-split-layout" : `canvas-column-layout${hideChannel ? " canvas-layout-wide" : ""}`}>
       {/* Canvas content — always DOM-first so React identity is stable */}
       <div className="canvas-main-content">
         <ErrorBoundary>
           {answerContent && chatOpen
-            ? <StructuredOutputPanel content={answerContent} onDismiss={() => setAnswerContent(null)} />
+            ? <StructuredOutputPanel
+                content={answerContent}
+                title={answerTitle}
+                onDismiss={() => { setAnswerContent(null); setAnswerTitle(undefined); }}
+                onNavigate={(view, params) => {
+                  setAnswerContent(null);
+                  setAnswerTitle(undefined);
+                  pushPanel({ type: view, title: params.id ?? view, params });
+                }}
+              />
             : renderPanel()
           }
         </ErrorBoundary>
@@ -254,15 +299,21 @@ export default function AgentCanvas() {
         )}
       </div>
 
-      {/* SynthChannel — always DOM-second; CSS order puts it left in split, bottom in column */}
+      {/* Drag handle — only visible in split mode, between channel and content */}
+      {chatOpen && !hideChannel && (
+        <div className="canvas-split-handle" onMouseDown={handleDragStart} />
+      )}
+
+      {/* SynthChannel — always DOM-last; CSS order puts it left in split, bottom in column */}
       {!hideChannel && (
         <SynthChannel
           scope={scope}
           mode={chatOpen ? "panel" : "strip"}
           onQuerySubmit={() => setChatOpen(true)}
           onAgentResult={handleAgentResult}
-          onStructuredContent={(text) => setAnswerContent(text)}
+          onStructuredContent={(text, title) => { setAnswerContent(text); setAnswerTitle(title); }}
           onDismiss={handleDismissChat}
+          style={chatOpen ? { width: splitWidth, flexShrink: 0 } : undefined}
         />
       )}
     </div>

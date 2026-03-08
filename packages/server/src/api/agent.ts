@@ -308,6 +308,9 @@ export function registerAgentRoutes(
     const allArtifacts = artifacts.list();
     const allPartitions = partitions.list();
     const allEnvironments = environments.list();
+    const artifactMap = new Map(allArtifacts.map((a) => [a.id, a.name]));
+    const environmentMap = new Map(allEnvironments.map((e) => [e.id, e.name]));
+    const partitionMap = new Map(allPartitions.map((p) => [p.id, p.name]));
 
     // --- LLM classification (when available) ---
     const queryEntityExposure = settings.get().agent.llmEntityExposure ?? "names";
@@ -388,9 +391,12 @@ export function registerAgentRoutes(
       return { action: "navigate" as const, view: "deployment-detail", params: { id: deployIdMatch[1] }, title: "Deployment" };
     }
 
-    // Failed deployments / what failed
+    // Failed deployments / what failed → markdown table
     if (/\b(fail|failed|failures|what failed|broken)\b/.test(lower)) {
-      return { action: "navigate" as const, view: "deployment-list", params: { status: "failed" }, title: "Failed Deployments" };
+      const failed = deployments.list().filter((d) => d.status === "failed")
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      const content = buildDeploymentTable(failed, artifactMap, environmentMap, partitionMap);
+      return { action: "answer" as const, view: "", params: {}, title: "Failed Deployments", content };
     }
 
     // Settings / configuration
@@ -398,51 +404,34 @@ export function registerAgentRoutes(
       return { action: "navigate" as const, view: "settings", params: {}, title: "Settings" };
     }
 
-    // Artifacts list (legacy "operations" query also matches)
+    // Artifacts list → markdown table
     if (/\b(artifacts|artifact list|operations|operation list|manage artifacts)\b/.test(lower)) {
-      return { action: "navigate" as const, view: "artifact-list", params: {}, title: "Artifacts" };
+      const rows = allArtifacts.map((a) => `| ${a.name} | ${a.type} |`).join("\n");
+      const content = allArtifacts.length > 0
+        ? `| Artifact | Type |\n|----------|------|\n${rows}`
+        : "_No artifacts configured._";
+      return { action: "answer" as const, view: "", params: {}, title: "Artifacts", content };
     }
 
     // Debrief / decision diary
     if (/\b(debrief|decision diary|decisions|decision log|decision history)\b/.test(lower)) {
-      const debriefParams: Record<string, string> = {};
-      for (const p of allPartitions) {
-        if (lower.includes(p.name.toLowerCase())) {
-          debriefParams.partitionId = p.id;
-          break;
-        }
-      }
-      return { action: "navigate" as const, view: "debrief", params: debriefParams, title: "Debrief" };
+      return { action: "navigate" as const, view: "debrief", params: {}, title: "Debrief" };
     }
 
-    // Specific order by ID
-    const orderIdMatch = lower.match(/\border\s+([a-f0-9-]{8,36})\b/);
-    if (orderIdMatch) {
-      return { action: "navigate" as const, view: "order-detail", params: { id: orderIdMatch[1] }, title: "Order" };
-    }
-
-    // Artifact deployments list
-    if (/\b(orders|order list|all orders|manage orders)\b/.test(lower)) {
-      const orderParams: Record<string, string> = {};
+    // Deployment history / recent deployments → markdown table
+    if (/\b(deployment|history|recent|deployments)\b/.test(lower)) {
+      let deps = deployments.list()
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      // Scope to a specific artifact if mentioned
       for (const a of allArtifacts) {
         if (lower.includes(a.name.toLowerCase())) {
-          orderParams.artifactId = a.id;
+          deps = deps.filter((d) => d.artifactId === a.id);
           break;
         }
       }
-      return { action: "navigate" as const, view: "deployment-list", params: orderParams, title: "Deployments" };
-    }
-
-    // Deployment history / recent deployments
-    if (/\b(deployment|history|recent|deployments)\b/.test(lower)) {
-      const partitionParam: Record<string, string> = {};
-      for (const p of allPartitions) {
-        if (lower.includes(p.name.toLowerCase())) {
-          partitionParam.partitionId = p.id;
-          break;
-        }
-      }
-      return { action: "navigate" as const, view: "deployment-list", params: partitionParam, title: "Deployments" };
+      const content = buildDeploymentTable(deps, artifactMap, environmentMap, partitionMap);
+      const title = deps.length < deployments.list().length ? "Deployment History" : "Recent Deployments";
+      return { action: "answer" as const, view: "", params: {}, title, content };
     }
 
     // Signals / drift / health
@@ -785,44 +774,67 @@ export interface PreFlightContext {
 }
 
 // ---------------------------------------------------------------------------
+// Deterministic markdown table builders (used in regex fallback)
+// ---------------------------------------------------------------------------
+
+function buildDeploymentTable(
+  deps: Deployment[],
+  artifactMap: Map<string, string>,
+  environmentMap: Map<string, string>,
+  partitionMap: Map<string, string>,
+): string {
+  if (deps.length === 0) return "_No matching deployments found._";
+  const rows = deps
+    .slice(0, 50)
+    .map((d) => {
+      const art = artifactMap.get(d.artifactId) ?? d.artifactId;
+      const env = environmentMap.get(d.environmentId) ?? d.environmentId;
+      const part = d.partitionId ? (partitionMap.get(d.partitionId) ?? d.partitionId) : "—";
+      const date = new Date(d.createdAt).toLocaleString();
+      // Embed a synth:// deep-link so the UI can navigate to the deployment detail
+      const versionLink = `[v${d.version}](synth://deployment-detail?id=${d.id})`;
+      return `| ${d.status} | ${art} | ${versionLink} | ${env} | ${part} | ${date} |`;
+    })
+    .join("\n");
+  return [
+    "| Status | Artifact | Version | Environment | Partition | Date |",
+    "|--------|----------|---------|-------------|-----------|------|",
+    rows,
+  ].join("\n");
+}
+
+// ---------------------------------------------------------------------------
 // LLM-powered query classification
 // ---------------------------------------------------------------------------
 
 function buildQueryClassificationPrompt(): string {
   return `You are a query classifier for Synth's agent canvas. Given a natural language query from a deployment engineer, classify it into one of these actions:
 
-1. "navigate" — The user wants to see details about a specific entity (e.g., "show partition Alpha", "environment staging")
-2. "data" — The user wants to see a list or filtered view of data (e.g., "what failed", "recent deployments", "deployment history for Alpha")
-3. "create" — The user wants to create a new entity (e.g., "create partition Acme Corp", "create operation api-service")
-4. "answer" — The user wants an analytical or explanatory response that cannot be answered by navigating to a view (e.g., "how many deployments succeeded last week", "compare envoy health across environments", "show me plan durations for payments-api", "what is the success rate for artifact X", "summarize recent deployment activity"). Use this when the question requires aggregation, comparison, or narrative explanation of data.
+1. "navigate" — The user wants to drill into a specific named entity (e.g., "show partition Alpha", "open environment staging", "view deployment abc-123"). Only use this when there is a specific entity to navigate to.
+2. "create" — The user wants to create a new entity (e.g., "create partition Acme Corp", "create operation api-service")
+3. "answer" — Use this for EVERYTHING ELSE: data requests, lists, filters, analysis, comparisons, summaries. Examples: "show me failed deployments", "what failed", "recent deployments", "how many succeeded last week", "give me all deployments for api-service", "compare environments", "summarize activity". The response will be rendered as a formatted markdown table or narrative — NOT a navigation panel.
 
 Return a JSON object with this exact schema:
 {
-  "action": "navigate" | "data" | "create" | "answer",
-  "view": "<view-name or empty string for answer>",
+  "action": "navigate" | "create" | "answer",
+  "view": "<view-name or empty string for answer/create>",
   "params": { ... },
-  "title": "<human-readable title>"
+  "title": "<human-readable title, e.g. 'Failed Deployments' or 'Deployment History'>"
 }
 
-View names (for navigate/data/create):
+View names (for navigate only):
 - "partition-detail" — show specific partition (params: { "id": "<partition-name>" })
 - "environment-detail" — show specific environment (params: { "id": "<environment-name>" })
 - "deployment-detail" — show specific deployment (params: { "id": "<deployment-id>" })
-- "deployment-list" — show list of deployments (params: { "partitionId"?: "<partition-name>", "status"?: "failed"|"succeeded" })
-- "overview" — show the operational overview (params: { "focus"?: "signals"|"partitions" })
-- "operation-list" — show all operations (params: {})
-- "partition-list" — show all partitions with create option (params: {})
-- "order-list" — show deployment orders (params: { "operationId"?: "<operation-name>", "partitionId"?: "<partition-name>" })
-- "order-detail" — show a specific order (params: { "id": "<order-id>" })
-- "debrief" — show the decision diary / debrief timeline (params: { "partitionId"?: "<partition-name>", "decisionType"?: "..." })
-- "settings" — show application settings and configuration (params: {})
+- "overview" — show the operational overview (params: {})
+- "settings" — show application settings (params: {})
 
 Rules:
 - ONLY use entity names from the provided lists. Never invent names.
-- If the query mentions an entity, return its name in the params.
-- If the query is ambiguous, default to "overview".
-- For "create" actions, include the entity name in params: { "name": "..." } and use view "partition-list" for partitions or "operation-list" for operations.
-- For "answer" actions, set view to "" and params to {}.
+- If the query is a data/list/filter request, ALWAYS use "answer" — never "navigate".
+- If the query is ambiguous between navigation and data, prefer "answer".
+- For "create" actions, include the entity name in params: { "name": "..." }.
+- For "answer" and "create" actions, set view to "" and params to {}.
 - Return ONLY valid JSON, no markdown, no explanation.`;
 }
 
@@ -919,7 +931,11 @@ async function answerQueryWithData(
     const ageMs = now - new Date(d.createdAt).getTime();
     const ageHours = Math.round(ageMs / (1000 * 60 * 60));
     const age = ageHours < 24 ? `${ageHours}h ago` : `${Math.round(ageHours / 24)}d ago`;
-    return `- ${artifactMap.get(d.artifactId) ?? d.artifactId} v${d.version} → ${environmentMap.get(d.environmentId) ?? d.environmentId}${d.partitionId ? ` (${partitionMap.get(d.partitionId) ?? d.partitionId})` : ""}: ${d.status} (${age})`;
+    const art = artifactMap.get(d.artifactId) ?? d.artifactId;
+    const env = environmentMap.get(d.environmentId) ?? d.environmentId;
+    const part = d.partitionId ? ` (${partitionMap.get(d.partitionId) ?? d.partitionId})` : "";
+    // Include synth:// deep-link for UI navigation
+    return `- id:${d.id} | ${art} v${d.version} → ${env}${part}: ${d.status} (${age})`;
   }).join("\n");
 
   const artifactRows = allArtifacts.map((a) => `- ${a.name} (${a.type})`).join("\n");
@@ -944,7 +960,8 @@ async function answerQueryWithData(
   const systemPrompt = `You are Synth, an intelligent deployment system. A deployment engineer has asked you a question. Answer it using the real deployment data provided — do not fabricate records or invent names.
 
 Format your response as markdown:
-- Use tables for tabular/comparative data
+- Use tables for tabular/comparative data. When a deployment is listed in a table, make its version a markdown link using the format: [v1.2.3](synth://deployment-detail?id=<deployment-id>) — use the actual id from the data (the id: prefix in each row).
+- For partition or environment rows, you may link using: [Name](synth://partition-detail?id=<partition-name>) or [Name](synth://environment-detail?id=<env-name>)
 - Use numbered lists for sequences or steps
 - Use code blocks for configs, IDs, or technical strings
 - Be specific and factual — reference actual artifact names, environments, and statuses from the data

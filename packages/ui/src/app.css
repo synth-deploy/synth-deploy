@@ -5437,6 +5437,10 @@ table a:hover {
   padding: 28px 24px 0;
 }
 
+.canvas-column-layout.canvas-layout-wide {
+  max-width: 1400px;
+}
+
 .canvas-column-layout .canvas-main-content {
   flex: 1;
   min-height: 0;
@@ -5456,21 +5460,66 @@ table a:hover {
   overflow: hidden;
 }
 
+/* SynthChannel panel mode: left side — width set via inline style from AgentCanvas */
+.canvas-split-layout .synth-channel-panel-mode {
+  order: 1;
+  flex-shrink: 0;
+  border-right: none; /* handle provides the visual separator */
+  min-width: 0;
+}
+
+/* Drag handle between chat and content */
+.canvas-split-handle {
+  order: 2;
+  width: 5px;
+  flex-shrink: 0;
+  cursor: col-resize;
+  background: transparent;
+  border-left: 1px solid var(--border);
+  transition: border-color 0.15s, background 0.15s;
+  position: relative;
+  z-index: 10;
+}
+
+.canvas-split-handle:hover,
+.canvas-split-handle:active {
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  border-color: var(--accent-border);
+}
+
+/* Grip notch — three vertically stacked dots centered on the handle */
+.canvas-split-handle::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  box-shadow:
+    0 -7px 0 var(--text-muted),
+    0  7px 0 var(--text-muted);
+  opacity: 0.45;
+  transition: opacity 0.15s, background 0.15s, box-shadow 0.15s;
+}
+
+.canvas-split-handle:hover::after,
+.canvas-split-handle:active::after {
+  background: var(--accent);
+  box-shadow:
+    0 -7px 0 var(--accent),
+    0  7px 0 var(--accent);
+  opacity: 1;
+}
+
 /* Canvas main content: right side in split mode */
 .canvas-split-layout .canvas-main-content {
   flex: 1;
   min-width: 0;
-  overflow: auto;
-  order: 2;
-  padding: 24px;
-}
-
-/* SynthChannel panel mode: left side in split mode */
-.canvas-split-layout .synth-channel-panel-mode {
-  order: 1;
-  width: 340px;
-  flex-shrink: 0;
-  border-right: 1px solid var(--border);
+  overflow: hidden;
+  order: 3;
 }
 
 /* ---------------------------------------------------------------------------
@@ -5596,14 +5645,13 @@ table a:hover {
 }
 
 .canvas-split-output {
-  flex: 2;
-  min-width: 320px;
-  max-width: 560px;
-  border-left: 1px solid var(--border);
+  /* Fills .canvas-main-content completely — no card border or background */
+  width: 100%;
+  height: 100%;
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  background: var(--surface);
+  background: var(--bg);
 }
 
 .canvas-split-output-header {
@@ -5613,6 +5661,7 @@ table a:hover {
   padding: 10px 20px;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
+  background: var(--surface);
 }
 
 .canvas-split-output-label {
@@ -5622,6 +5671,56 @@ table a:hover {
   text-transform: uppercase;
   color: var(--text-muted);
   font-weight: 700;
+}
+
+.canvas-split-output-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.canvas-split-output-toggle {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  height: 24px;
+  padding: 0 8px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+
+.canvas-split-output-toggle:hover,
+.canvas-split-output-toggle.active {
+  color: var(--accent);
+  border-color: var(--accent-border);
+  background: var(--accent-dim);
+}
+
+.canvas-split-output-download {
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  height: 24px;
+  padding: 0 8px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.canvas-split-output-download:hover {
+  color: var(--accent);
+  border-color: var(--accent-border);
 }
 
 .canvas-split-output-dismiss {
@@ -5766,5 +5865,37 @@ table a:hover {
   border: none;
   border-top: 1px solid var(--border);
   margin: 14px 0;
+}
+
+/* Entity deep-link buttons inside tables */
+.canvas-split-output-entity-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: var(--font-mono);
+  font-size: inherit;
+  color: var(--accent);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  transition: color 0.15s, text-decoration-color 0.15s;
+}
+
+.canvas-split-output-entity-link:hover {
+  color: var(--text);
+  text-decoration-color: var(--accent);
+}
+
+/* Raw markdown view */
+.canvas-split-output-raw {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+  padding: 0;
 }
 

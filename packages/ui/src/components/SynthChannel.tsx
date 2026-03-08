@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, type CSSProperties } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { queryAgent } from "../api.js";
@@ -20,8 +20,9 @@ interface SynthChannelProps {
   mode?: "strip" | "panel";
   onQuerySubmit?: () => void;
   onAgentResult?: (result: CanvasQueryResult) => void;
-  onStructuredContent?: (text: string) => void;
+  onStructuredContent?: (text: string, title?: string) => void;
   onDismiss?: () => void;
+  style?: CSSProperties;
 }
 
 export default function SynthChannel({
@@ -31,6 +32,7 @@ export default function SynthChannel({
   onAgentResult,
   onStructuredContent,
   onDismiss,
+  style,
 }: SynthChannelProps) {
   const [inputValue, setInputValue] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
@@ -67,17 +69,20 @@ export default function SynthChannel({
 
       if (result.action === "answer") {
         const content = result.content ?? result.title ?? "Done.";
+        const isStructured = detectStructuredContent(content);
         setMessages((prev) => [
           ...prev,
           {
             id: `msg-${Date.now()}-r`,
-            speaker: "envoy",
+            // When structured content goes to the right panel, show a dim nav-style ack
+            // instead of repeating the full table in the chat history
+            speaker: isStructured ? "nav" : "envoy",
             time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false }),
-            text: content,
+            text: isStructured ? (result.title ?? "Structured data") : content,
           },
         ]);
-        if (detectStructuredContent(content)) {
-          onStructuredContent?.(content);
+        if (isStructured) {
+          onStructuredContent?.(content, result.title);
         }
       } else {
         // Navigation/data/create — show a dim nav ack, then navigate
@@ -113,7 +118,7 @@ export default function SynthChannel({
 
   if (mode === "panel") {
     return (
-      <div className="synth-channel-panel-mode">
+      <div className="synth-channel-panel-mode" style={style}>
         <div className="synth-channel-panel-mode-header">
           <span className="synth-channel-panel-mode-label">
             {scope ? `ASK \u203A ${scope}` : "ASK"}

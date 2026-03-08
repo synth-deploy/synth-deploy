@@ -182,7 +182,7 @@ export default function DeploymentAuthoringPanel({ title, preselectedArtifactId 
         </div>
 
         {/* Two-column layout */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 22 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: 22 }}>
           {/* WHAT column */}
           <div>
             <div
@@ -271,8 +271,15 @@ export default function DeploymentAuthoringPanel({ title, preselectedArtifactId 
           {/* WHERE column */}
           {environmentsEnabled && (
             <div>
-              <div className="section-label" style={{ marginBottom: 10 }}>
-                Where
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  marginBottom: 10,
+                }}
+              >
+                <div className="section-label">Where</div>
               </div>
 
               {/* Scope tabs */}
