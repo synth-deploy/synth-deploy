@@ -230,6 +230,7 @@ export interface PlannedStep {
   target: string;
   reversible: boolean;
   rollbackAction?: string;
+  execPreview?: string;
 }
 
 export interface ExecutionRecord {

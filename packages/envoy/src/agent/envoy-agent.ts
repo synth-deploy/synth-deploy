@@ -1222,7 +1222,9 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
       `You are the Envoy planning engine for Synth. Your job is to produce ` +
       `a concrete deployment plan: what to do, in what order, where, and how. ` +
       `Each step must have a clear action, target, description, and whether it is ` +
-      `reversible (with rollback action if so).\n\n` +
+      `reversible (with rollback action if so). For steps that execute a shell command, ` +
+      `include the exact literal command string in execPreview — this is what the user ` +
+      `will see to verify what deterministically runs.\n\n` +
       `IMPORTANT: You must respond with valid JSON only. No markdown, no commentary.\n\n` +
       `Response format:\n` +
       `{\n` +
@@ -1233,7 +1235,8 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
       `      "action": "The action type (e.g. copy-artifact, write-config, restart-service, verify-health)",\n` +
       `      "target": "What the action operates on (path, service name, URL)",\n` +
       `      "reversible": true,\n` +
-      `      "rollbackAction": "How to undo this step"\n` +
+      `      "rollbackAction": "How to undo this step",\n` +
+      `      "execPreview": "The exact literal command string that will execute, e.g. 'docker pull myapp:1.2.3', 'systemctl restart nginx', 'npm install --production'. Omit if this step doesn't invoke a shell command."\n` +
       `    }\n` +
       `  ],\n` +
       `  "delta": "If a previous successful plan exists, describe what changed and why. Omit if no previous plan."\n` +
@@ -1285,6 +1288,7 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
         target: string;
         reversible: boolean;
         rollbackAction?: string;
+        execPreview?: string;
       }>;
       delta?: string;
     };
@@ -1320,6 +1324,7 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
         target: s.target,
         reversible: s.reversible,
         rollbackAction: s.rollbackAction,
+        execPreview: s.execPreview,
       })),
       reasoning: parsed.reasoning,
       diffFromPreviousPlan: latestPlan

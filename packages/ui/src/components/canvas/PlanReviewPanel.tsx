@@ -120,6 +120,15 @@ export default function PlanReviewPanel({ deploymentId }: Props) {
     }
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [deployment?.status, deploymentId]);
+  const [expandedSteps, setExpandedSteps] = useState<Set<number>>(new Set());
+  function toggleStep(i: number) {
+    setExpandedSteps((prev) => {
+      const next = new Set(prev);
+      if (next.has(i)) next.delete(i);
+      else next.add(i);
+      return next;
+    });
+  }
   const [rejectReason, setRejectReason] = useState("");
   const [modifiedSteps, setModifiedSteps] = useState<PlannedStep[]>([]);
   const [modifyReason, setModifyReason] = useState("");
@@ -407,26 +416,50 @@ export default function PlanReviewPanel({ deploymentId }: Props) {
               <div key={i} className="plan-step-row">
                 <span className="plan-step-num">{i + 1}</span>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, color: "var(--text)" }}>
-                    {step.description || step.action}
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 13, color: "var(--text)" }}>
+                        {step.description || step.action}
+                      </div>
+                      <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>
+                        ↩ {step.rollbackAction || "—"}
+                      </div>
+                    </div>
+                    <span style={{
+                      fontSize: 10,
+                      fontFamily: "var(--font-mono)",
+                      fontWeight: 600,
+                      color: risk === "none"
+                        ? "var(--text-muted)"
+                        : risk === "high"
+                          ? "var(--status-failed)"
+                          : "var(--status-succeeded)",
+                    }}>
+                      {risk}
+                    </span>
+                    {step.execPreview && (
+                      <button
+                        onClick={() => toggleStep(i)}
+                        style={{
+                          background: "none",
+                          border: "none",
+                          cursor: "pointer",
+                          padding: "2px 4px",
+                          color: "var(--text-muted)",
+                          fontSize: 11,
+                          fontFamily: "var(--font-mono)",
+                          flexShrink: 0,
+                        }}
+                        title={expandedSteps.has(i) ? "Hide command" : "Show command"}
+                      >
+                        {expandedSteps.has(i) ? "▲" : "▼"}
+                      </button>
+                    )}
                   </div>
-                  <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>
-                    ↩ {step.rollbackAction || "—"}
-                  </div>
+                  {step.execPreview && expandedSteps.has(i) && (
+                    <div className="plan-step-exec-preview">{step.execPreview}</div>
+                  )}
                 </div>
-                <span style={{
-                  fontSize: 10,
-                  fontFamily: "var(--font-mono)",
-                  fontWeight: 600,
-                  alignSelf: "center",
-                  color: risk === "none"
-                    ? "var(--text-muted)"
-                    : risk === "high"
-                      ? "var(--status-failed)"
-                      : "var(--status-succeeded)",
-                }}>
-                  {risk}
-                </span>
               </div>
             );
           })}

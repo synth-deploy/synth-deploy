@@ -40,10 +40,16 @@ export type DeploymentTrigger = z.infer<typeof DeploymentTriggerSchema>;
 
 // --- Deployment Plan & Execution ---
 
+export interface ConfigChange {
+  key: string;
+  from: string;
+  to: string;
+}
+
 export interface DeploymentPlan {
   steps: PlannedStep[];
   reasoning: string;
-  diffFromCurrent?: string;
+  diffFromCurrent?: ConfigChange[];
   diffFromPreviousPlan?: string;
 }
 
@@ -53,6 +59,7 @@ export interface PlannedStep {
   target: string;
   reversible: boolean;
   rollbackAction?: string;
+  execPreview?: string;
 }
 
 export interface ExecutionRecord {

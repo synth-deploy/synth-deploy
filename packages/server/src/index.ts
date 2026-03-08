@@ -249,6 +249,19 @@ if (process.env.SYNTH_SEED_DEMO !== 'false' && partitions.list().length === 0) {
     id: crypto.randomUUID() as Deployment["id"], artifactId: webAppArtifact.id as Deployment["artifactId"], partitionId: acmePartition.id as Deployment["partitionId"],
     environmentId: prodEnv.id as Deployment["environmentId"], version: "2.3.0", status: "succeeded",
     variables: { ...acmePartition.variables, ...prodEnv.variables },
+    plan: {
+      steps: [
+        { description: "Stop service", action: "systemctl stop web-app", target: "prd-web-01", reversible: true, rollbackAction: "systemctl start web-app", execPreview: "systemctl stop web-app" },
+        { description: "Backup current binaries", action: "cp -r /opt/web-app/ /opt/web-app.bak/", target: "prd-web-01", reversible: false, execPreview: "cp -r /opt/web-app/ /opt/web-app.bak/" },
+        { description: "Deploy new artifact", action: "tar -xzf web-app-2.3.0.tar.gz -C /opt/web-app/", target: "prd-web-01", reversible: true, rollbackAction: "cp -r /opt/web-app.bak/ /opt/web-app/", execPreview: "tar -xzf /opt/releases/web-app-2.3.0.tar.gz -C /opt/web-app/" },
+        { description: "Apply environment config (1 variable changed: API_ENDPOINT)", action: "envsubst < config.template > /opt/web-app/.env", target: "prd-web-01", reversible: true, rollbackAction: "cp /opt/web-app.bak/.env /opt/web-app/.env", execPreview: "envsubst < /opt/web-app/config.template > /opt/web-app/.env" },
+        { description: "Start service and verify health endpoint → 200 OK", action: "systemctl start web-app && curl -f http://localhost:8080/health", target: "prd-web-01", reversible: true, rollbackAction: "systemctl stop web-app", execPreview: "systemctl start web-app" },
+      ],
+      reasoning: "Standard 5-step deploy: stop, backup, extract, config, start. One config change: API_ENDPOINT updated to v2 endpoint validated in staging for 4h.",
+      diffFromCurrent: [
+        { key: "API_ENDPOINT", from: "https://api.acme.corp/v1", to: "https://api.acme.corp/v2" },
+      ],
+    },
     debriefEntryIds: [],
     createdAt: hoursAgo(72), completedAt: hoursAgo(71.5), failureReason: undefined,
   };
@@ -307,8 +320,35 @@ if (process.env.SYNTH_SEED_DEMO !== 'false' && partitions.list().length === 0) {
     id: crypto.randomUUID() as Deployment["id"], artifactId: apiArtifact.id as Deployment["artifactId"], partitionId: globexPartition.id as Deployment["partitionId"],
     environmentId: stagingEnv.id as Deployment["environmentId"], version: "1.13.0-beta.2", status: "running",
     variables: { ...globexPartition.variables, ...stagingEnv.variables },
+    plan: {
+      steps: [
+        { description: "Pull latest image from registry", action: "docker pull", target: "registry.internal/api:1.13.0-beta.2", reversible: true, rollbackAction: "docker pull registry.internal/api:1.12.0", execPreview: "docker pull registry.internal/api:1.13.0-beta.2" },
+        { description: "Stop running container", action: "docker stop", target: "api-staging", reversible: true, rollbackAction: "docker start api-staging", execPreview: "docker stop api-staging" },
+        { description: "Start new container with updated image", action: "docker run", target: "registry.internal/api:1.13.0-beta.2", reversible: true, rollbackAction: "docker stop api-staging && docker run ... api:1.12.0", execPreview: "docker run -d --name api-staging --env-file /opt/api/.env -p 8080:8080 registry.internal/api:1.13.0-beta.2" },
+        { description: "Verify health endpoint returns 200", action: "verify health", target: "http://localhost:8080/health", reversible: false, execPreview: "curl -f --retry 3 --retry-delay 5 http://localhost:8080/health" },
+      ],
+      reasoning: "Container swap: pull new image, stop old container, start new one, verify health. Staging environment — rollback is fast via image tag swap.",
+    },
     debriefEntryIds: [],
     createdAt: hoursAgo(0.5),
+  };
+  const dep11: Deployment = {
+    id: crypto.randomUUID() as Deployment["id"], artifactId: workerArtifact.id as Deployment["artifactId"], partitionId: globexPartition.id as Deployment["partitionId"],
+    environmentId: prodEnv.id as Deployment["environmentId"], version: "3.1.0", status: "awaiting_approval",
+    variables: { ...globexPartition.variables, ...prodEnv.variables },
+    plan: {
+      steps: [
+        { description: "Drain queue — wait for in-flight jobs to complete", action: "run command", target: "worker-drain", reversible: false, execPreview: "npm run worker:drain --timeout=120" },
+        { description: "Stop worker processes on all nodes", action: "systemctl stop", target: "synth-worker", reversible: true, rollbackAction: "systemctl start synth-worker", execPreview: "systemctl stop synth-worker" },
+        { description: "Deploy new worker binary", action: "copy file", target: "/opt/worker/", reversible: true, rollbackAction: "restore /opt/worker/ from backup", execPreview: "cp -r /opt/releases/worker-3.1.0/* /opt/worker/" },
+        { description: "Update queue concurrency config (WORKER_CONCURRENCY: 4 → 8)", action: "write config", target: "/opt/worker/.env", reversible: true, rollbackAction: "restore previous .env", execPreview: "envsubst < /opt/worker/config.template > /opt/worker/.env" },
+        { description: "Start worker and verify queue depth drops", action: "systemctl start", target: "synth-worker", reversible: true, rollbackAction: "systemctl stop synth-worker", execPreview: "systemctl start synth-worker" },
+        { description: "Verify queue processing resumes within 30s", action: "verify health", target: "http://localhost:9090/metrics", reversible: false, execPreview: "curl -f --retry 6 --retry-delay 5 http://localhost:9090/metrics" },
+      ],
+      reasoning: "Worker upgrade with concurrency increase. Drain first to avoid job loss, then replace binary and config atomically. Queue depth check confirms processing resumed.",
+    },
+    debriefEntryIds: [],
+    createdAt: hoursAgo(0.1),
   };
   const dep10: Deployment = {
     id: crypto.randomUUID() as Deployment["id"], artifactId: webAppArtifact.id as Deployment["artifactId"], partitionId: initechPartition.id as Deployment["partitionId"],
@@ -319,7 +359,7 @@ if (process.env.SYNTH_SEED_DEMO !== 'false' && partitions.list().length === 0) {
     failureReason: "Rolled back after post-deploy smoke test detected 502 errors on /api/v2/users",
   };
 
-  for (const d of [dep1, dep2, dep3, dep4, dep5, dep6, dep7, dep8, dep9, dep10]) {
+  for (const d of [dep1, dep2, dep3, dep4, dep5, dep6, dep7, dep8, dep9, dep10, dep11]) {
     deployments.save(d);
   }
 

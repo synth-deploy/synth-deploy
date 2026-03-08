@@ -164,10 +164,11 @@ export default function AgentCanvas() {
       case "debrief":
         return (
           <DebriefPanel
-            key={`debrief:${params.partitionId ?? ""}:${params.decisionType ?? ""}`}
+            key={`debrief:${params.partitionId ?? ""}:${params.decisionType ?? ""}:${params.deploymentId ?? ""}`}
             title={panel.title}
             filterPartitionId={params.partitionId}
             filterDecisionType={params.decisionType}
+            initialDeploymentId={params.deploymentId}
           />
         );
 

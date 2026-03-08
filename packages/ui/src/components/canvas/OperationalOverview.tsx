@@ -668,14 +668,20 @@ function NormalState({ stats: _stats, signals }: { stats: SystemState["stats"]; 
                   {recentDeploys.map((d) => {
                     const artName = artifacts.find((a) => a.id === d.artifactId)?.name ?? d.artifactId.slice(0, 8);
                     const envName = environments.find((e) => e.id === d.environmentId)?.name ?? d.environmentId.slice(0, 8);
-                    return (
+                    const FINISHED = new Set(["succeeded", "failed", "rolled_back"]);
+                  const handleRowClick = () => {
+                    if (d.status === "awaiting_approval") {
+                      pushPanel({ type: "plan-review", title: "Review Plan", params: { id: d.id } });
+                    } else if (FINISHED.has(d.status)) {
+                      pushPanel({ type: "debrief", title: "Debriefs", params: { deploymentId: d.id } });
+                    } else {
+                      pushPanel({ type: "deployment-detail", title: `Deployment ${d.version}`, params: { id: d.id } });
+                    }
+                  };
+                  return (
                       <tr
                         key={d.id}
-                        onClick={() => pushPanel({
-                          type: "deployment-detail",
-                          title: `Deployment ${d.version}`,
-                          params: { id: d.id },
-                        })}
+                        onClick={handleRowClick}
                         style={{
                           borderBottom: "1px solid var(--border)",
                           cursor: "pointer",

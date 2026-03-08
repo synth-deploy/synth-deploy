@@ -309,6 +309,15 @@ export default function DeploymentDetailPanel({ deploymentId, title }: Props) {
 
   const [postmortem, setPostmortem] = useState<PostmortemReport | null>(null);
   const [expandedEntries, setExpandedEntries] = useState<Set<string>>(new Set());
+  const [expandedPlanSteps, setExpandedPlanSteps] = useState<Set<number>>(new Set());
+  function togglePlanStep(i: number) {
+    setExpandedPlanSteps((prev) => {
+      const next = new Set(prev);
+      if (next.has(i)) next.delete(i);
+      else next.add(i);
+      return next;
+    });
+  }
 
   // Fetch postmortem for failed deployments
   useEffect(() => {
@@ -412,21 +421,47 @@ export default function DeploymentDetailPanel({ deploymentId, title }: Props) {
                     <div
                       key={i}
                       className="exec-step-row"
-                      style={{ opacity: isCompleted || isActive ? 1 : 0.3 }}
+                      style={{ opacity: isCompleted || isActive ? 1 : 0.3, flexDirection: "column", alignItems: "flex-start" }}
                     >
-                      <span className={`exec-step-badge ${isCompleted ? "exec-step-badge-done" : isActive ? "exec-step-badge-active" : "exec-step-badge-pending"}`}>
-                        {isCompleted ? "✓" : i + 1}
-                      </span>
-                      <span style={{
-                        fontSize: 13,
-                        color: isCompleted
-                          ? "var(--status-succeeded)"
-                          : isActive
-                            ? "var(--text)"
-                            : "var(--text-muted)",
-                      }}>
-                        {step.description || step.action}
-                      </span>
+                      <div style={{ display: "flex", alignItems: "center", width: "100%", gap: 8 }}>
+                        <span className={`exec-step-badge ${isCompleted ? "exec-step-badge-done" : isActive ? "exec-step-badge-active" : "exec-step-badge-pending"}`}>
+                          {isCompleted ? "✓" : i + 1}
+                        </span>
+                        <span style={{
+                          fontSize: 13,
+                          flex: 1,
+                          color: isCompleted
+                            ? "var(--status-succeeded)"
+                            : isActive
+                              ? "var(--text)"
+                              : "var(--text-muted)",
+                        }}>
+                          {step.description || step.action}
+                        </span>
+                        {step.execPreview && (
+                          <button
+                            onClick={() => togglePlanStep(i)}
+                            style={{
+                              background: "none",
+                              border: "none",
+                              cursor: "pointer",
+                              padding: "2px 4px",
+                              color: "var(--text-muted)",
+                              fontSize: 11,
+                              fontFamily: "var(--font-mono)",
+                              flexShrink: 0,
+                            }}
+                            title={expandedPlanSteps.has(i) ? "Hide command" : "Show command"}
+                          >
+                            {expandedPlanSteps.has(i) ? "▲" : "▼"}
+                          </button>
+                        )}
+                      </div>
+                      {step.execPreview && expandedPlanSteps.has(i) && (
+                        <div className="plan-step-exec-preview" style={{ marginLeft: 30, marginTop: 4, width: "100%" }}>
+                          {step.execPreview}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -494,7 +529,12 @@ export default function DeploymentDetailPanel({ deploymentId, title }: Props) {
             </div>
             <div className="canvas-timeline">
               {deployment.plan.steps.map((step, i) => (
-                <div key={i} className="canvas-timeline-entry" style={{ cursor: "default" }}>
+                <div
+                  key={i}
+                  className="canvas-timeline-entry"
+                  style={{ cursor: step.execPreview ? "pointer" : "default" }}
+                  onClick={() => step.execPreview && togglePlanStep(i)}
+                >
                   <div className="canvas-timeline-dot" style={{ background: step.reversible ? "var(--status-succeeded)" : "var(--status-warning)" }} />
                   <div className="canvas-timeline-content">
                     <div className="canvas-timeline-header">
@@ -504,6 +544,12 @@ export default function DeploymentDetailPanel({ deploymentId, title }: Props) {
                     <div className="canvas-timeline-decision">{step.description}</div>
                     {!step.reversible && (
                       <div style={{ fontSize: 11, color: "var(--status-warning)", marginTop: 2 }}>Non-reversible</div>
+                    )}
+                    {step.execPreview && !expandedPlanSteps.has(i) && (
+                      <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 3, fontFamily: "var(--font-mono)" }}>▼ show command</div>
+                    )}
+                    {step.execPreview && expandedPlanSteps.has(i) && (
+                      <div className="plan-step-exec-preview">{step.execPreview}</div>
                     )}
                   </div>
                 </div>

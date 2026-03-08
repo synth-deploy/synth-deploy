@@ -5,6 +5,7 @@ import type { DebriefEntry, Partition, Deployment, Artifact, Environment, Decisi
 import CanvasPanelHost from "./CanvasPanelHost.js";
 import DebriefTimeline from "../DebriefTimeline.js";
 import { useQuery } from "../../hooks/useQuery.js";
+import { useCanvas } from "../../context/CanvasContext.js";
 
 const DECISION_TYPES: { value: DecisionType; label: string }[] = [
   { value: "pipeline-plan", label: "Plan" },
@@ -295,6 +296,13 @@ function DeploymentDebriefDetail({ deploymentId, onBack }: { deploymentId: strin
                   const isLast = i === executionEntries.length - 1;
                   const iconColor = "var(--status-succeeded)";
                   const iconBg = "var(--status-succeeded-bg)";
+                  const ms = typeof entry.context.executionDurationMs === "number" ? entry.context.executionDurationMs
+                    : typeof entry.context.durationMs === "number" ? entry.context.durationMs
+                    : typeof entry.context.duration === "number" ? entry.context.duration
+                    : null;
+                  const stepTime = ms != null
+                    ? (ms >= 60000 ? `${Math.floor(ms / 60000)}m ${Math.round((ms % 60000) / 1000)}s` : `${(ms / 1000).toFixed(1)}s`)
+                    : null;
                   return (
                     <div key={entry.id} style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "11px 16px", borderBottom: isLast ? "none" : "1px solid var(--border)" }}>
                       <span style={{ width: 22, height: 22, borderRadius: 5, display: "flex", alignItems: "center", justifyContent: "center", background: iconBg, color: iconColor, fontSize: 11, fontWeight: 700, flexShrink: 0, marginTop: 1 }}>✓</span>
@@ -302,6 +310,7 @@ function DeploymentDebriefDetail({ deploymentId, onBack }: { deploymentId: strin
                         <div style={{ fontSize: 13, color: "var(--text)" }}>{entry.decision}</div>
                         {entry.reasoning && <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>{entry.reasoning}</div>}
                       </div>
+                      {stepTime && <span style={{ fontSize: 11, fontFamily: "var(--font-mono)", color: "var(--text-muted)", flexShrink: 0, marginTop: 3 }}>{stepTime}</span>}
                     </div>
                   );
                 })
@@ -311,26 +320,19 @@ function DeploymentDebriefDetail({ deploymentId, onBack }: { deploymentId: strin
       )}
 
       {/* Config Diff */}
-      {(deployment.plan?.diffFromCurrent || configEntry) && (
+      {(deployment.plan?.diffFromCurrent?.length || configEntry) && (
         <div className="canvas-section">
           <h3 className="canvas-section-title">Configuration Changes</h3>
-          <div style={{ borderRadius: 10, border: "1px solid var(--border)", background: "var(--surface)", padding: "12px 16px" }}>
-            {deployment.plan?.diffFromCurrent
-              ? deployment.plan.diffFromCurrent.split("\n").filter(Boolean).map((line, i) => {
-                  const isAdded = line.startsWith("+");
-                  const isRemoved = line.startsWith("-");
-                  return (
-                    <div key={i} style={{
-                      fontFamily: "var(--font-mono)",
-                      fontSize: 12,
-                      lineHeight: 1.8,
-                      color: isAdded ? "var(--status-succeeded)" : isRemoved ? "var(--status-failed)" : "var(--text-muted)",
-                      textDecoration: isRemoved ? "line-through" : undefined,
-                    }}>
-                      {line}
-                    </div>
-                  );
-                })
+          <div style={{ borderRadius: 10, border: "1px solid var(--border)", background: "var(--surface)", padding: "12px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
+            {deployment.plan?.diffFromCurrent?.length
+              ? deployment.plan.diffFromCurrent.map((change, i) => (
+                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 600, color: "var(--text)" }}>{change.key}</span>
+                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--status-failed)", textDecoration: "line-through" }}>{change.from}</span>
+                    <span style={{ color: "var(--text-muted)", fontSize: 12 }}>→</span>
+                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--status-succeeded)" }}>{change.to}</span>
+                  </div>
+                ))
               : configEntry && (
                   <div style={{ fontSize: 13, color: "var(--text)", lineHeight: 1.6 }}>
                     <div>{configEntry.decision}</div>
@@ -437,13 +439,14 @@ interface Props {
   title: string;
   filterPartitionId?: string;
   filterDecisionType?: string;
+  initialDeploymentId?: string;
 }
 
-export default function DebriefPanel({ title, filterPartitionId, filterDecisionType }: Props) {
+export default function DebriefPanel({ title, filterPartitionId, filterDecisionType, initialDeploymentId }: Props) {
   const [tab, setTab] = useState<TabId>("deployments");
   const [filterPartition, setFilterPartition] = useState(filterPartitionId ?? "");
   const [filterType, setFilterType] = useState(filterDecisionType ?? "");
-  const [selectedDeploymentId, setSelectedDeploymentId] = useState<string | null>(null);
+  const [selectedDeploymentId, setSelectedDeploymentId] = useState<string | null>(initialDeploymentId ?? null);
 
   const debriefKey = `debrief:${filterPartition}:${filterType}`;
   const { data: entries, loading: l1, error } = useQuery<DebriefEntry[]>(debriefKey, () =>
@@ -454,6 +457,7 @@ export default function DebriefPanel({ title, filterPartitionId, filterDecisionT
   const { data: artifacts } = useQuery<Artifact[]>("list:artifacts", listArtifacts);
   const { data: environments } = useQuery<Environment[]>("list:environments", listEnvironments);
 
+  const { pushPanel } = useCanvas();
   const loading = l1 || l2;
   const safeEntries = entries ?? [];
   const safeDeployments = (deployments ?? []).slice().sort(
@@ -516,6 +520,7 @@ export default function DebriefPanel({ title, filterPartitionId, filterDecisionT
                   const envName = (environments ?? []).find((e) => e.id === dep.environmentId)?.name ?? dep.environmentId.slice(0, 8);
                   const duration = formatDuration(dep.createdAt, dep.completedAt);
                   const isFinished = FINISHED_STATUSES.has(dep.status);
+                  const isAwaiting = dep.status === "awaiting_approval";
                   return (
                     <div
                       key={dep.id}
@@ -555,6 +560,14 @@ export default function DebriefPanel({ title, filterPartitionId, filterDecisionT
                         {duration && <span>Duration: {duration}</span>}
                         {isFinished && (
                           <span style={{ color: "var(--accent)", fontWeight: 500 }}>View full debrief →</span>
+                        )}
+                        {isAwaiting && (
+                          <span
+                            style={{ color: "var(--status-warning)", fontWeight: 500, cursor: "pointer" }}
+                            onClick={(e) => { e.stopPropagation(); pushPanel({ type: "plan-review", title: "Review Plan", params: { id: dep.id } }); }}
+                          >
+                            Review Plan →
+                          </span>
                         )}
                       </div>
                     </div>
