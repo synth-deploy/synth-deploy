@@ -5,7 +5,6 @@ import type { DebriefEntry, Partition, Deployment, Artifact, Environment, Decisi
 import CanvasPanelHost from "./CanvasPanelHost.js";
 import DebriefTimeline from "../DebriefTimeline.js";
 import { useQuery } from "../../hooks/useQuery.js";
-import { useCanvas } from "../../context/CanvasContext.js";
 
 const DECISION_TYPES: { value: DecisionType; label: string }[] = [
   { value: "pipeline-plan", label: "Plan" },
@@ -60,13 +59,13 @@ function statusLabel(status: string): string {
 // Deployment detail sub-view for debrief drill-in
 // ---------------------------------------------------------------------------
 function DeploymentDebriefDetail({ deploymentId, onBack }: { deploymentId: string; onBack: () => void }) {
-  const { pushPanel } = useCanvas();
   const [deployment, setDeployment] = useState<Deployment | null>(null);
   const [debrief, setDebrief] = useState<DebriefEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [whatsNew, setWhatsNew] = useState<WhatsNewResult | null>(null);
   const { data: artifacts } = useQuery<Artifact[]>("list:artifacts", listArtifacts);
   const { data: environments } = useQuery<Environment[]>("list:environments", listEnvironments);
+  const { data: partitions } = useQuery<Partition[]>("list:partitions", listPartitions);
 
   useEffect(() => {
     setLoading(true);
@@ -85,54 +84,70 @@ function DeploymentDebriefDetail({ deploymentId, onBack }: { deploymentId: strin
 
   const artName = (artifacts ?? []).find((a) => a.id === deployment.artifactId)?.name ?? deployment.artifactId.slice(0, 8);
   const envName = (environments ?? []).find((e) => e.id === deployment.environmentId)?.name ?? deployment.environmentId.slice(0, 8);
+  const partName = deployment.partitionId
+    ? ((partitions ?? []).find((p) => p.id === deployment.partitionId)?.name ?? null)
+    : null;
   const duration = deployment.completedAt
     ? Math.round((new Date(deployment.completedAt).getTime() - new Date(deployment.createdAt).getTime()) / 1000)
     : null;
   const envoyEntries = debrief.filter((e) => e.agent === "envoy");
 
-  function handleRedeploy() {
-    if (!deployment) return;
-    const params: Record<string, string> = { artifactId: deployment.artifactId };
-    if (deployment.partitionId) {
-      params.partitionId = deployment.partitionId;
-    } else if (deployment.environmentId) {
-      params.environmentId = deployment.environmentId;
-    }
-    pushPanel({ type: "deployment-authoring", title: "New Deployment", params });
-  }
+  const statusColor = deployment.status === "succeeded"
+    ? "var(--status-succeeded)"
+    : deployment.status === "failed"
+    ? "var(--status-failed)"
+    : deployment.status === "rolled_back"
+    ? "var(--status-warning)"
+    : "var(--text-muted)";
+
+  const durationLabel = duration != null
+    ? (duration >= 60 ? `${Math.floor(duration / 60)}m ${duration % 60}s` : `${duration}s`)
+    : "—";
 
   return (
     <div>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-        <button
+      {/* Breadcrumb */}
+      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 24 }}>
+        <span
+          style={{ fontSize: 13, color: "var(--accent)", cursor: "pointer" }}
           onClick={onBack}
-          style={{ background: "none", border: "none", color: "var(--accent)", cursor: "pointer", fontSize: 12, padding: 0 }}
         >
-          ← Back to list
-        </button>
-        <button
-          onClick={handleRedeploy}
-          style={{
-            background: "var(--accent)",
-            border: "none",
-            color: "#fff",
-            cursor: "pointer",
-            fontSize: 12,
-            fontWeight: 600,
-            padding: "6px 14px",
-            borderRadius: 6,
-          }}
-        >
-          Redeploy
-        </button>
+          Debriefs
+        </span>
+        <span style={{ fontSize: 12, color: "var(--text-muted)" }}>›</span>
+        <span style={{ fontSize: 13, color: "var(--text-muted)", fontWeight: 500 }}>
+          {artName} {deployment.version} → {envName}
+        </span>
+      </div>
+
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 24 }}>
+        <div>
+          <h1 style={{ fontSize: 24, fontWeight: 500, color: "var(--text)", margin: "0 0 6px 0" }}>
+            {artName}{" "}
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 16, fontWeight: 400, color: "var(--text-muted)" }}>
+              {deployment.version}
+            </span>
+          </h1>
+          <div style={{ fontSize: 13, color: "var(--text-muted)" }}>
+            → {envName}{partName ? ` · ${partName}` : ""}
+          </div>
+        </div>
+        <span className={`badge badge-${deployment.status}`} style={{
+          padding: "4px 10px", borderRadius: 6, fontFamily: "var(--font-mono)",
+          letterSpacing: "0.06em", textTransform: "uppercase", fontSize: 11, fontWeight: 700,
+          border: "1px solid currentColor",
+        }}>
+          {statusLabel(deployment.status)}
+        </span>
       </div>
 
       {/* What's New */}
       {whatsNew && (
         <div style={{
-          marginBottom: 16,
+          marginBottom: 20,
           padding: "10px 14px",
-          borderRadius: 6,
+          borderRadius: 8,
           background: "var(--surface)",
           border: "1px solid var(--border)",
           fontSize: 12,
@@ -149,12 +164,12 @@ function DeploymentDebriefDetail({ deploymentId, onBack }: { deploymentId: strin
             </>
           ) : (
             <>
-              <span style={{ color: "var(--status-warning)", fontWeight: 600 }}>↑</span>
+              <span style={{ color: "var(--status-warning)", fontWeight: 700 }}>↑</span>
               <span style={{ color: "var(--text-muted)" }}>
                 Newer version available — deployed{" "}
-                <span style={{ fontFamily: "var(--font-mono)", color: "var(--text)" }}>{whatsNew.deployedVersion || "—"}</span>
+                <span style={{ fontFamily: "var(--font-mono)", fontWeight: 600, color: "var(--text)" }}>{whatsNew.deployedVersion || "—"}</span>
                 , latest is{" "}
-                <span style={{ fontFamily: "var(--font-mono)", color: "var(--text)" }}>{whatsNew.latestVersion}</span>
+                <span style={{ fontFamily: "var(--font-mono)", fontWeight: 600, color: "var(--text)" }}>{whatsNew.latestVersion}</span>
                 {whatsNew.latestCreatedAt && (
                   <span style={{ color: "var(--text-muted)" }}> (added {timeAgo(whatsNew.latestCreatedAt)})</span>
                 )}
@@ -165,28 +180,18 @@ function DeploymentDebriefDetail({ deploymentId, onBack }: { deploymentId: strin
       )}
 
       {/* Summary stat cards */}
-      <div className="canvas-summary-strip" style={{ marginBottom: 16 }}>
-        <div className="canvas-summary-item">
-          <span className="canvas-summary-value" style={{ fontSize: 13 }}>{artName}</span>
-          <span className="canvas-summary-label">Artifact</span>
-        </div>
-        <div className="canvas-summary-item">
-          <span className="canvas-summary-value" style={{ fontSize: 13 }}>{new Date(deployment.createdAt).toLocaleString()}</span>
-          <span className="canvas-summary-label">Started</span>
-        </div>
-        <div className="canvas-summary-item">
-          <span className="canvas-summary-value" style={{ fontSize: 13 }}>{duration != null ? `${duration}s` : "—"}</span>
-          <span className="canvas-summary-label">Duration</span>
-        </div>
-        <div className="canvas-summary-item">
-          <span className="canvas-summary-value" style={{
-            fontSize: 13,
-            color: deployment.status === "succeeded" ? "var(--status-succeeded)" : deployment.status === "failed" ? "var(--status-failed)" : "var(--text)",
-          }}>
-            {deployment.status}
-          </span>
-          <span className="canvas-summary-label">Status</span>
-        </div>
+      <div style={{ display: "flex", gap: 10, marginBottom: 24 }}>
+        {[
+          { label: "Artifact", value: artName },
+          { label: "Started", value: new Date(deployment.createdAt).toLocaleString() },
+          { label: "Duration", value: durationLabel },
+          { label: "Status", value: statusLabel(deployment.status), color: statusColor },
+        ].map((item) => (
+          <div key={item.label} style={{ flex: 1, padding: "14px 16px", borderRadius: 8, background: "var(--surface)", border: "1px solid var(--border)" }}>
+            <div style={{ fontSize: 10, fontFamily: "var(--font-mono)", textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-muted)", marginBottom: 5 }}>{item.label}</div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: item.color ?? "var(--text)" }}>{item.value}</div>
+          </div>
+        ))}
       </div>
 
       {/* Synth's Assessment at time of deployment */}
@@ -194,15 +199,18 @@ function DeploymentDebriefDetail({ deploymentId, onBack }: { deploymentId: strin
         <div className="canvas-section">
           <h3 className="canvas-section-title">Synth&rsquo;s Assessment</h3>
           <div style={{
-            padding: "10px 14px", borderRadius: 6, fontSize: 13, color: "var(--text)", lineHeight: 1.5,
-            background: "var(--surface)", border: "1px solid var(--border)",
+            padding: "14px 18px", borderRadius: 10, fontSize: 13, color: "var(--text)", lineHeight: 1.6,
+            background: "var(--accent-soft, rgba(45,91,240,0.06))", border: "1px solid var(--accent-border)",
           }}>
-            <div style={{ fontWeight: 600, marginBottom: 4, color: deployment.recommendation.verdict === "proceed" ? "var(--status-succeeded)" : deployment.recommendation.verdict === "caution" ? "var(--status-warning)" : "var(--status-failed)" }}>
-              {deployment.recommendation.verdict === "proceed" ? "Proceed" : deployment.recommendation.verdict === "caution" ? "Proceed with Caution" : "Hold"}
+            <div style={{
+              fontSize: 10, fontFamily: "var(--font-mono)", fontWeight: 700, textTransform: "uppercase",
+              letterSpacing: "0.08em", color: "var(--accent)", marginBottom: 8,
+            }}>
+              Recommendation: {deployment.recommendation.verdict === "proceed" ? "Proceed" : deployment.recommendation.verdict === "caution" ? "Proceed with Caution" : "Hold"}
             </div>
-            {deployment.recommendation.summary}
+            <div style={{ color: "var(--text)" }}>{deployment.recommendation.summary}</div>
             {deployment.recommendation.factors.length > 0 && (
-              <ul style={{ margin: "6px 0 0", paddingLeft: 18, fontSize: 12, color: "var(--text-muted)" }}>
+              <ul style={{ margin: "8px 0 0", paddingLeft: 18, fontSize: 12, color: "var(--text-muted)" }}>
                 {deployment.recommendation.factors.map((f, i) => <li key={i}>{f}</li>)}
               </ul>
             )}
@@ -210,28 +218,31 @@ function DeploymentDebriefDetail({ deploymentId, onBack }: { deploymentId: strin
         </div>
       )}
 
-      {/* Executed Plan steps with durations */}
+      {/* Executed Plan steps */}
       {deployment.executionRecord && (
         <div className="canvas-section">
           <h3 className="canvas-section-title">Executed Plan</h3>
-          <div className="canvas-timeline">
+          <div style={{ borderRadius: 10, overflow: "hidden", border: "1px solid var(--border)", background: "var(--surface)" }}>
             {deployment.executionRecord.steps.map((step, i) => {
               const stepDuration = step.completedAt
                 ? `${Math.round((new Date(step.completedAt).getTime() - new Date(step.startedAt).getTime()) / 1000)}s`
                 : "—";
-              const dotColor = step.status === "completed" ? "var(--status-succeeded)" : step.status === "failed" ? "var(--status-failed)" : "var(--status-warning)";
+              const isLast = i === deployment.executionRecord!.steps.length - 1;
+              const iconColor = step.status === "completed" ? "var(--status-succeeded)" : step.status === "failed" ? "var(--status-failed)" : "var(--status-warning)";
+              const iconBg = step.status === "completed" ? "var(--status-succeeded-bg)" : step.status === "failed" ? "var(--status-failed-bg)" : "var(--status-warning-bg)";
+              const iconLabel = step.status === "completed" ? "✓" : step.status === "failed" ? "✗" : "…";
               return (
-                <div key={i} className="canvas-timeline-entry" style={{ cursor: "default" }}>
-                  <div className="canvas-timeline-dot" style={{ background: dotColor }} />
-                  <div className="canvas-timeline-content">
-                    <div className="canvas-timeline-header">
-                      <span className="canvas-timeline-type">{step.status}</span>
-                      <span className="canvas-timeline-time">{stepDuration}</span>
-                    </div>
-                    <div className="canvas-timeline-decision">{step.description}</div>
+                <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "11px 16px", borderBottom: isLast ? "none" : "1px solid var(--border)" }}>
+                  <span style={{
+                    width: 22, height: 22, borderRadius: 5, display: "flex", alignItems: "center", justifyContent: "center",
+                    background: iconBg, color: iconColor, fontSize: 11, fontWeight: 700, flexShrink: 0, marginTop: 1,
+                  }}>{iconLabel}</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, color: "var(--text)" }}>{step.description}</div>
                     {step.output && <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>{step.output}</div>}
                     {step.error && <div style={{ fontSize: 11, color: "var(--status-failed)", marginTop: 2 }}>{step.error}</div>}
                   </div>
+                  <span style={{ fontSize: 11, fontFamily: "var(--font-mono)", color: "var(--text-muted)", flexShrink: 0, marginTop: 3 }}>{stepDuration}</span>
                 </div>
               );
             })}
@@ -239,19 +250,19 @@ function DeploymentDebriefDetail({ deploymentId, onBack }: { deploymentId: strin
         </div>
       )}
 
-      {/* Config Diff — old vs new, colored by line type */}
+      {/* Config Diff */}
       {deployment.plan?.diffFromCurrent && (
         <div className="canvas-section">
           <h3 className="canvas-section-title">Configuration Changes</h3>
-          <div style={{ borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)", padding: "12px 16px" }}>
+          <div style={{ borderRadius: 10, border: "1px solid var(--border)", background: "var(--surface)", padding: "12px 16px" }}>
             {deployment.plan.diffFromCurrent.split("\n").filter(Boolean).map((line, i) => {
               const isAdded = line.startsWith("+");
               const isRemoved = line.startsWith("-");
               return (
                 <div key={i} style={{
-                  fontFamily: "var(--font-mono, monospace)",
+                  fontFamily: "var(--font-mono)",
                   fontSize: 12,
-                  lineHeight: 1.7,
+                  lineHeight: 1.8,
                   color: isAdded ? "var(--status-succeeded)" : isRemoved ? "var(--status-failed)" : "var(--text-muted)",
                   textDecoration: isRemoved ? "line-through" : undefined,
                 }}>
@@ -282,39 +293,48 @@ function DeploymentDebriefDetail({ deploymentId, onBack }: { deploymentId: strin
       {envoyEntries.length > 0 && (
         <div className="canvas-section">
           <h3 className="canvas-section-title">Envoy Notes</h3>
-          <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: "var(--text)", lineHeight: 1.7 }}>
+          <div style={{ padding: "12px 16px", borderRadius: 10, background: "var(--surface-alt)", border: "1px solid var(--border)" }}>
             {envoyEntries.map((entry) => (
-              <li key={entry.id} style={{ marginBottom: 4 }}>
-                <span style={{ color: "var(--text)" }}>{entry.decision}</span>
-                {entry.reasoning && (
-                  <span style={{ color: "var(--text-muted)", fontSize: 12 }}> — {entry.reasoning}</span>
-                )}
-              </li>
+              <div key={entry.id} style={{ display: "flex", gap: 10, padding: "4px 0" }}>
+                <span style={{ color: "var(--text-muted)", fontSize: 11, marginTop: 2, flexShrink: 0 }}>•</span>
+                <span style={{ fontSize: 13, color: "var(--text)", lineHeight: 1.5 }}>
+                  {entry.decision}
+                  {entry.reasoning && (
+                    <span style={{ color: "var(--text-muted)", fontSize: 12 }}> — {entry.reasoning}</span>
+                  )}
+                </span>
+              </div>
             ))}
-          </ul>
+          </div>
         </div>
       )}
 
       {/* Rollback Plan */}
       {deployment.rollbackPlan && (
         <div className="canvas-section">
-          <h3 className="canvas-section-title">Rollback Plan</h3>
-          <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 8, lineHeight: 1.5 }}>
-            {deployment.rollbackPlan.reasoning}
-          </div>
-          <div className="canvas-timeline">
-            {deployment.rollbackPlan.steps.map((step, i) => (
-              <div key={i} className="canvas-timeline-entry" style={{ cursor: "default" }}>
-                <div className="canvas-timeline-dot" style={{ background: "var(--accent)" }} />
-                <div className="canvas-timeline-content">
-                  <div className="canvas-timeline-header">
-                    <span className="canvas-timeline-type">{step.action}</span>
-                    <span className="canvas-timeline-time">{step.target}</span>
+          <h3 className="canvas-section-title">Stored Rollback Plan</h3>
+          {deployment.rollbackPlan.reasoning && (
+            <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 10, lineHeight: 1.5 }}>
+              {deployment.rollbackPlan.reasoning}
+            </div>
+          )}
+          <div style={{ borderRadius: 10, overflow: "hidden", border: "1px solid var(--border)", background: "var(--surface)" }}>
+            {deployment.rollbackPlan.steps.map((step, i) => {
+              const isLast = i === deployment.rollbackPlan!.steps.length - 1;
+              return (
+                <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "11px 16px", borderBottom: isLast ? "none" : "1px solid var(--border)" }}>
+                  <span style={{
+                    width: 20, height: 20, borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center",
+                    background: "var(--accent-soft, rgba(45,91,240,0.06))", color: "var(--accent)", fontSize: 10, fontWeight: 700, flexShrink: 0, marginTop: 1,
+                  }}>{i + 1}</span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13, color: "var(--text)" }}>{step.action}</div>
+                    {step.description && <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>{step.description}</div>}
                   </div>
-                  <div className="canvas-timeline-decision">{step.description}</div>
+                  {step.target && <span style={{ fontSize: 11, fontFamily: "var(--font-mono)", color: "var(--text-muted)", flexShrink: 0, marginTop: 3 }}>{step.target}</span>}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}

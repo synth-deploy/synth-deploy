@@ -319,7 +319,7 @@ export default function Login({ onLogin, onRegister, needsSetup, error }: LoginP
           </div>
         )}
 
-        <div className="login-footer">synthdeploy.com</div>
+        <div className="login-footer"><a href="https://synthdeploy.com" target="_blank" rel="noreferrer">synthdeploy.com</a></div>
       </div>
     </div>
   );
