@@ -1,61 +1,123 @@
 import { useState, useEffect } from "react";
-import { getSettings, updateSettings, getCommandInfo, verifyTaskModel, listIdpProviders, createIdpProvider, updateIdpProvider, deleteIdpProvider, testIdpProvider, listRoleMappings, createRoleMapping, deleteRoleMapping, testLdapUser, listIntakeChannels, createIntakeChannel, updateIntakeChannel, deleteIntakeChannel, testIntakeChannel, manualUploadArtifact, listIntakeEvents } from "../../api.js";
-import type { AppSettings, CommandInfo, ConflictPolicy, McpServerConfig, TaskModelTask, CapabilityVerificationResult, IdpProvider, RoleMappingRule, IntakeChannel, IntakeEvent } from "../../types.js";
+import { getSettings, updateSettings, getCommandInfo, verifyTaskModel, listIdpProviders, createIdpProvider, updateIdpProvider, deleteIdpProvider, testIdpProvider, listRoleMappings, createRoleMapping, deleteRoleMapping, testLdapUser, listIntakeChannels, createIntakeChannel, updateIntakeChannel, deleteIntakeChannel, testIntakeChannel, manualUploadArtifact, listIntakeEvents, listEnvoys } from "../../api.js";
+import type { EnvoyRegistryEntry } from "../../api.js";
+import type { AppSettings, CommandInfo, ConflictPolicy, McpServerConfig, TaskModelTask, CapabilityVerificationResult, IdpProvider, RoleMappingRule, IntakeChannel, IntakeEvent, LlmProvider } from "../../types.js";
 import { TASK_MODEL_META } from "../../types.js";
 import { useSettings } from "../../context/SettingsContext.js";
 import { useAuth } from "../../context/AuthContext.js";
 import { useQuery } from "../../hooks/useQuery.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
 
-interface Props {
-  title: string;
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
+function SettingRow({ label, description, children, last }: { label: string; description?: string; children?: React.ReactNode; last?: boolean }) {
+  return (
+    <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 24, padding: "14px 0", borderBottom: last ? "none" : "1px solid var(--border)" }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 14, fontWeight: 500, color: "var(--text)" }}>{label}</div>
+        {description && <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 3, lineHeight: 1.45 }}>{description}</div>}
+      </div>
+      {children && <div style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 8 }}>{children}</div>}
+    </div>
+  );
 }
+
+function ToggleSwitch({ on, onChange }: { on: boolean; onChange: () => void }) {
+  return (
+    <div
+      onClick={onChange}
+      style={{ width: 38, height: 22, borderRadius: 11, border: "1px solid var(--border)", background: on ? "var(--accent-dim)" : "var(--surface-alt)", cursor: "pointer", position: "relative", transition: "all 0.2s", flexShrink: 0 }}
+    >
+      <div style={{ width: 16, height: 16, borderRadius: "50%", background: on ? "var(--accent)" : "var(--text-muted)", position: "absolute", top: 2, left: on ? 19 : 2, transition: "left 0.2s" }} />
+    </div>
+  );
+}
+
+function SubLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.5, color: "var(--text-muted)", fontFamily: "var(--font-mono)", marginBottom: 10, marginTop: 24 }}>
+      {children}
+    </div>
+  );
+}
+
+const INPUT_STYLE: React.CSSProperties = {
+  padding: "7px 12px", borderRadius: 6, border: "1px solid var(--border)",
+  background: "var(--input-bg, var(--surface))", color: "var(--text)",
+  fontSize: 13, fontFamily: "var(--font-mono)", boxSizing: "border-box",
+  outline: "none", transition: "border-color 0.15s",
+};
+
+function SI({ value, onChange, placeholder, type = "text", width = 220, mono = true }: { value: string; onChange: (v: string) => void; placeholder?: string; type?: string; width?: number; mono?: boolean }) {
+  return <input value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} type={type} style={{ ...INPUT_STYLE, width, fontFamily: mono ? "var(--font-mono)" : "var(--font)" }} />;
+}
+
+function SS({ value, onChange, options, width = 160 }: { value: string; onChange: (v: string) => void; options: { value: string; label: string }[]; width?: number }) {
+  return (
+    <select value={value} onChange={e => onChange(e.target.value)} style={{ ...INPUT_STYLE, width }}>
+      {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+    </select>
+  );
+}
+
+function Pill({ text, success, muted }: { text: string; success?: boolean; muted?: boolean }) {
+  const color = success ? "var(--accent)" : muted ? "var(--text-muted)" : "var(--text-muted)";
+  return (
+    <span style={{ padding: "2px 8px", borderRadius: 4, fontSize: 10, fontWeight: 600, fontFamily: "var(--font-mono)", textTransform: "uppercase", color, border: `1px solid ${color}30`, background: `${color}18` }}>
+      {text}
+    </span>
+  );
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
+
+type Tab = "general" | "llm" | "agent" | "deploy" | "envoy" | "identity" | "intake" | "branding";
+
+interface Props { title: string; }
 
 export default function SettingsPanel({ title }: Props) {
   const { refresh: refreshGlobalSettings } = useSettings();
   const { permissions } = useAuth();
   const canManageSettings = permissions.includes("settings.manage");
+
   const { data: fetchedSettings, loading: l1 } = useQuery("settings", getSettings);
   const { data: fetchedCommandInfo, loading: l2 } = useQuery("commandInfo", getCommandInfo);
+  const { data: envoysData } = useQuery("list:envoys", listEnvoys);
   const loading = l1 || l2;
+
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [commandInfo, setCommandInfo] = useState<CommandInfo | null>(null);
-  const [agentSaved, setAgentSaved] = useState(false);
-  const [envoySaved, setEnvoySaved] = useState(false);
-  const [coBrandingSaved, setCoBrandingSaved] = useState(false);
-  const [coBrandingOperatorName, setCoBrandingOperatorName] = useState("");
-  const [coBrandingLogoUrl, setCoBrandingLogoUrl] = useState("");
-  const [coBrandingAccentColor, setCoBrandingAccentColor] = useState("");
-  const [mcpServers, setMcpServers] = useState<McpServerConfig[]>([]);
-  const [mcpSaved, setMcpSaved] = useState(false);
+  const [envoys, setEnvoys] = useState<EnvoyRegistryEntry[]>([]);
+  const [settingsTab, setSettingsTab] = useState<Tab>("general");
+  const [saving, setSaving] = useState(false);
+  const [savedAt, setSavedAt] = useState<string | null>(null);
+
+  // MCP sub-state
   const [mcpNewName, setMcpNewName] = useState("");
   const [mcpNewUrl, setMcpNewUrl] = useState("");
   const [mcpNewDescription, setMcpNewDescription] = useState("");
+
+  // Task model sub-state
   const [useOneModel, setUseOneModel] = useState(true);
-  const [taskModelSaved, setTaskModelSaved] = useState(false);
   const [verificationResults, setVerificationResults] = useState<Record<string, CapabilityVerificationResult>>({});
   const [verifyingTask, setVerifyingTask] = useState<string | null>(null);
-  const [settingsTab, setSettingsTab] = useState<"general" | "integrations" | "identity" | "intake">("general");
 
-  // --- IdP state ---
+  // IdP state
   const { data: idpData } = useQuery("list:idpProviders", listIdpProviders);
   const [idpProviders, setIdpProviders] = useState<IdpProvider[]>([]);
   const [idpShowForm, setIdpShowForm] = useState(false);
   const [idpNewType, setIdpNewType] = useState<"oidc" | "saml" | "ldap">("oidc");
   const [idpNewName, setIdpNewName] = useState("");
-  // OIDC fields
   const [idpNewIssuerUrl, setIdpNewIssuerUrl] = useState("");
   const [idpNewClientId, setIdpNewClientId] = useState("");
   const [idpNewClientSecret, setIdpNewClientSecret] = useState("");
   const [idpNewScopes, setIdpNewScopes] = useState("openid profile email");
   const [idpNewGroupsClaim, setIdpNewGroupsClaim] = useState("groups");
-  // SAML fields
   const [idpNewEntryPoint, setIdpNewEntryPoint] = useState("");
   const [idpNewSamlIssuer, setIdpNewSamlIssuer] = useState("");
   const [idpNewSamlCert, setIdpNewSamlCert] = useState("");
   const [idpNewSignatureAlgorithm, setIdpNewSignatureAlgorithm] = useState<"sha256" | "sha512">("sha256");
   const [idpNewGroupsAttribute, setIdpNewGroupsAttribute] = useState("memberOf");
-  // LDAP fields
   const [idpNewLdapUrl, setIdpNewLdapUrl] = useState("");
   const [idpNewLdapBindDn, setIdpNewLdapBindDn] = useState("");
   const [idpNewLdapBindCredential, setIdpNewLdapBindCredential] = useState("");
@@ -65,7 +127,6 @@ export default function SettingsPanel({ title }: Props) {
   const [idpNewLdapGroupSearchFilter, setIdpNewLdapGroupSearchFilter] = useState("(member={{dn}})");
   const [idpNewLdapUseTls, setIdpNewLdapUseTls] = useState(true);
   const [idpNewLdapTlsCaPath, setIdpNewLdapTlsCaPath] = useState("");
-  // LDAP test user
   const [ldapTestUsername, setLdapTestUsername] = useState<Record<string, string>>({});
   const [ldapTestUserResults, setLdapTestUserResults] = useState<Record<string, { found: boolean; userDn?: string; email?: string; displayName?: string; error?: string }>>({});
   const [ldapTestingUser, setLdapTestingUser] = useState<string | null>(null);
@@ -76,16 +137,14 @@ export default function SettingsPanel({ title }: Props) {
   const [idpMappingNewRole, setIdpMappingNewRole] = useState("");
   const [idpMappingProviderId, setIdpMappingProviderId] = useState<string | null>(null);
 
-  // --- Intake state ---
+  // Intake state
   const { data: intakeChannelsData } = useQuery("list:intakeChannels", listIntakeChannels);
   const { data: intakeEventsData } = useQuery("list:intakeEvents", () => listIntakeEvents({ limit: 20 }), { refetchInterval: 10_000 });
   const [intakeChannels, setIntakeChannels] = useState<IntakeChannel[]>([]);
   const [intakeShowForm, setIntakeShowForm] = useState(false);
   const [intakeNewType, setIntakeNewType] = useState<"webhook" | "registry">("webhook");
   const [intakeNewName, setIntakeNewName] = useState("");
-  // Webhook fields
   const [intakeNewWebhookSource, setIntakeNewWebhookSource] = useState<string>("github-actions");
-  // Registry fields
   const [intakeNewRegistryType, setIntakeNewRegistryType] = useState<"docker" | "npm" | "nuget">("docker");
   const [intakeNewRegistryUrl, setIntakeNewRegistryUrl] = useState("");
   const [intakeNewRegistryUsername, setIntakeNewRegistryUsername] = useState("");
@@ -95,140 +154,50 @@ export default function SettingsPanel({ title }: Props) {
   const [intakeTesting, setIntakeTesting] = useState<string | null>(null);
   const [intakeTestResults, setIntakeTestResults] = useState<Record<string, { success: boolean; error?: string }>>({});
   const [intakeCreatedToken, setIntakeCreatedToken] = useState<string | null>(null);
+  const [intakeEvents, setIntakeEvents] = useState<IntakeEvent[]>([]);
 
-  // --- Manual upload state ---
+  // Manual upload state
   const [manualArtifactName, setManualArtifactName] = useState("");
   const [manualArtifactType, setManualArtifactType] = useState("docker");
   const [manualVersion, setManualVersion] = useState("");
   const [manualUploading, setManualUploading] = useState(false);
   const [manualUploadResult, setManualUploadResult] = useState<{ success: boolean; message: string } | null>(null);
 
-  // --- Intake activity feed state ---
-  const [intakeEvents, setIntakeEvents] = useState<IntakeEvent[]>([]);
+  // ── Sync effects ─────────────────────────────────────────────────────────────
 
-  // Sync fetched settings to local state for editing
   useEffect(() => {
     if (fetchedSettings && !settings) {
       setSettings(fetchedSettings);
-      setCoBrandingOperatorName(fetchedSettings.coBranding?.operatorName ?? "");
-      setCoBrandingLogoUrl(fetchedSettings.coBranding?.logoUrl ?? "");
-      setCoBrandingAccentColor(fetchedSettings.coBranding?.accentColor ?? "");
-      setMcpServers(fetchedSettings.mcpServers ?? []);
+      if (fetchedSettings.agent?.taskModels) {
+        const hasAny = Object.values(fetchedSettings.agent.taskModels).some(v => v && v.length > 0);
+        if (hasAny) setUseOneModel(false);
+      }
     }
   }, [fetchedSettings]);
 
-  // Sync command info
-  useEffect(() => {
-    if (fetchedCommandInfo) setCommandInfo(fetchedCommandInfo);
-  }, [fetchedCommandInfo]);
+  useEffect(() => { if (fetchedCommandInfo) setCommandInfo(fetchedCommandInfo); }, [fetchedCommandInfo]);
+  useEffect(() => { if (idpData) setIdpProviders(idpData); }, [idpData]);
+  useEffect(() => { if (intakeChannelsData) setIntakeChannels(intakeChannelsData); }, [intakeChannelsData]);
+  useEffect(() => { if (intakeEventsData) setIntakeEvents(intakeEventsData); }, [intakeEventsData]);
+  useEffect(() => { if (envoysData) setEnvoys(envoysData); }, [envoysData]);
 
-  // Sync IdP providers
-  useEffect(() => {
-    if (idpData) setIdpProviders(idpData);
-  }, [idpData]);
+  // ── Save ─────────────────────────────────────────────────────────────────────
 
-  // Sync intake channels
-  useEffect(() => {
-    if (intakeChannelsData) setIntakeChannels(intakeChannelsData);
-  }, [intakeChannelsData]);
-
-  // Sync intake events
-  useEffect(() => {
-    if (intakeEventsData) setIntakeEvents(intakeEventsData);
-  }, [intakeEventsData]);
-
-  async function handleSaveAgent() {
-    if (!settings) return;
-    const updated = await updateSettings({ agent: settings.agent });
-    setSettings(updated);
-    setAgentSaved(true);
-    setTimeout(() => setAgentSaved(false), 2000);
-  }
-
-  async function handleSaveDeploymentDefaults() {
-    if (!settings) return;
-    const updated = await updateSettings({
-      deploymentDefaults: settings.deploymentDefaults,
-    });
-    setSettings(updated);
-  }
-
-  async function handleToggleEnvironments() {
-    if (!settings) return;
-    const updated = await updateSettings({ environmentsEnabled: !settings.environmentsEnabled });
-    setSettings(updated);
-    await refreshGlobalSettings();
-  }
-
-  async function handleSaveEnvoy() {
-    if (!settings) return;
-    const updated = await updateSettings({ envoy: settings.envoy });
-    setSettings(updated);
-    setEnvoySaved(true);
-    setTimeout(() => setEnvoySaved(false), 2000);
-  }
-
-  async function handleSaveCoBranding() {
-    if (!settings) return;
-    const coBranding = coBrandingOperatorName && coBrandingLogoUrl
-      ? {
-          operatorName: coBrandingOperatorName,
-          logoUrl: coBrandingLogoUrl,
-          ...(coBrandingAccentColor ? { accentColor: coBrandingAccentColor } : {}),
-        }
-      : null;
-    const updated = await updateSettings({ coBranding } as Partial<AppSettings>);
-    setSettings(updated);
-    setCoBrandingSaved(true);
-    await refreshGlobalSettings();
-    setTimeout(() => setCoBrandingSaved(false), 2000);
-  }
-
-  async function handleClearCoBranding() {
-    if (!settings) return;
-    const updated = await updateSettings({ coBranding: undefined } as Partial<AppSettings>);
-    setSettings(updated);
-    setCoBrandingOperatorName("");
-    setCoBrandingLogoUrl("");
-    setCoBrandingAccentColor("");
-    await refreshGlobalSettings();
-  }
-
-  function handleAddMcpServer() {
-    if (!mcpNewName || !mcpNewUrl) return;
-    const server: McpServerConfig = {
-      name: mcpNewName,
-      url: mcpNewUrl,
-      ...(mcpNewDescription ? { description: mcpNewDescription } : {}),
-    };
-    setMcpServers([...mcpServers, server]);
-    setMcpNewName("");
-    setMcpNewUrl("");
-    setMcpNewDescription("");
-  }
-
-  function handleRemoveMcpServer(index: number) {
-    setMcpServers(mcpServers.filter((_, i) => i !== index));
-  }
-
-  async function handleSaveMcpServers() {
-    if (!settings) return;
-    const updated = await updateSettings({ mcpServers } as Partial<AppSettings>);
-    setSettings(updated);
-    setMcpServers(updated.mcpServers ?? []);
-    setMcpSaved(true);
-    setTimeout(() => setMcpSaved(false), 2000);
-  }
-
-  // --- Task Model handlers ---
-
-  useEffect(() => {
-    if (settings?.agent?.taskModels) {
-      const tm = settings.agent.taskModels;
-      const hasAny = Object.values(tm).some((v) => v && v.length > 0);
-      if (hasAny) setUseOneModel(false);
+  async function handleSave() {
+    if (!settings || saving) return;
+    setSaving(true);
+    try {
+      const updated = await updateSettings(settings);
+      setSettings(updated);
+      setSavedAt(new Date().toLocaleTimeString());
+      await refreshGlobalSettings();
+      setTimeout(() => setSavedAt(null), 3000);
+    } finally {
+      setSaving(false);
     }
-  }, [settings?.agent?.taskModels]);
+  }
+
+  // ── Task model helpers ────────────────────────────────────────────────────────
 
   function getTaskModel(task: TaskModelTask): string {
     return settings?.agent?.taskModels?.[task] ?? "";
@@ -237,31 +206,12 @@ export default function SettingsPanel({ title }: Props) {
   function updateTaskModel(task: TaskModelTask, model: string) {
     if (!settings) return;
     const current = settings.agent.taskModels ?? {};
-    setSettings({
-      ...settings,
-      agent: {
-        ...settings.agent,
-        taskModels: { ...current, [task]: model || undefined },
-      },
-    });
-  }
-
-  async function handleSaveTaskModels() {
-    if (!settings) return;
-    const updated = await updateSettings({
-      agent: { ...settings.agent, taskModels: settings.agent.taskModels },
-    });
-    setSettings(updated);
-    setTaskModelSaved(true);
-    setTimeout(() => setTaskModelSaved(false), 2000);
+    setSettings({ ...settings, agent: { ...settings.agent, taskModels: { ...current, [task]: model || undefined } } });
   }
 
   function handleClearTaskModels() {
     if (!settings) return;
-    setSettings({
-      ...settings,
-      agent: { ...settings.agent, taskModels: undefined },
-    });
+    setSettings({ ...settings, agent: { ...settings.agent, taskModels: undefined } });
     setUseOneModel(true);
     setVerificationResults({});
   }
@@ -272,92 +222,46 @@ export default function SettingsPanel({ title }: Props) {
     setVerifyingTask(task);
     try {
       const result = await verifyTaskModel(task, model);
-      setVerificationResults((prev) => ({ ...prev, [task]: result }));
+      setVerificationResults(prev => ({ ...prev, [task]: result }));
     } catch {
-      setVerificationResults((prev) => ({
-        ...prev,
-        [task]: {
-          task,
-          model,
-          status: "insufficient" as const,
-          explanation: "Verification request failed.",
-        },
-      }));
+      setVerificationResults(prev => ({ ...prev, [task]: { task, model, status: "insufficient" as const, explanation: "Verification request failed." } }));
     } finally {
       setVerifyingTask(null);
     }
   }
 
-  // --- IdP handlers ---
+  // ── MCP helpers ───────────────────────────────────────────────────────────────
+
+  function handleAddMcpServer() {
+    if (!mcpNewName || !mcpNewUrl || !settings) return;
+    const server: McpServerConfig = { name: mcpNewName, url: mcpNewUrl, ...(mcpNewDescription ? { description: mcpNewDescription } : {}) };
+    setSettings({ ...settings, mcpServers: [...(settings.mcpServers ?? []), server] });
+    setMcpNewName(""); setMcpNewUrl(""); setMcpNewDescription("");
+  }
+
+  function handleRemoveMcpServer(index: number) {
+    if (!settings) return;
+    setSettings({ ...settings, mcpServers: (settings.mcpServers ?? []).filter((_, i) => i !== index) });
+  }
+
+  // ── IdP handlers ─────────────────────────────────────────────────────────────
 
   async function handleAddIdpProvider() {
     if (!idpNewName) return;
-
     let config: Record<string, unknown>;
-
     if (idpNewType === "saml") {
       if (!idpNewEntryPoint || !idpNewSamlIssuer || !idpNewSamlCert) return;
-      config = {
-        entryPoint: idpNewEntryPoint,
-        issuer: idpNewSamlIssuer,
-        cert: idpNewSamlCert,
-        callbackUrl: "", // will be computed server-side from request
-        signatureAlgorithm: idpNewSignatureAlgorithm,
-        groupsAttribute: idpNewGroupsAttribute || "memberOf",
-      };
+      config = { entryPoint: idpNewEntryPoint, issuer: idpNewSamlIssuer, cert: idpNewSamlCert, callbackUrl: "", signatureAlgorithm: idpNewSignatureAlgorithm, groupsAttribute: idpNewGroupsAttribute || "memberOf" };
     } else if (idpNewType === "ldap") {
       if (!idpNewLdapUrl || !idpNewLdapBindDn || !idpNewLdapBindCredential || !idpNewLdapSearchBase || !idpNewLdapGroupSearchBase) return;
-      config = {
-        url: idpNewLdapUrl,
-        bindDn: idpNewLdapBindDn,
-        bindCredential: idpNewLdapBindCredential,
-        searchBase: idpNewLdapSearchBase,
-        searchFilter: idpNewLdapSearchFilter || "(sAMAccountName={{username}})",
-        groupSearchBase: idpNewLdapGroupSearchBase,
-        groupSearchFilter: idpNewLdapGroupSearchFilter || "(member={{dn}})",
-        useTls: idpNewLdapUseTls,
-        ...(idpNewLdapTlsCaPath ? { tlsCaPath: idpNewLdapTlsCaPath } : {}),
-      };
+      config = { url: idpNewLdapUrl, bindDn: idpNewLdapBindDn, bindCredential: idpNewLdapBindCredential, searchBase: idpNewLdapSearchBase, searchFilter: idpNewLdapSearchFilter || "(sAMAccountName={{username}})", groupSearchBase: idpNewLdapGroupSearchBase, groupSearchFilter: idpNewLdapGroupSearchFilter || "(member={{dn}})", useTls: idpNewLdapUseTls, ...(idpNewLdapTlsCaPath ? { tlsCaPath: idpNewLdapTlsCaPath } : {}) };
     } else {
       if (!idpNewIssuerUrl || !idpNewClientId || !idpNewClientSecret) return;
-      config = {
-        issuerUrl: idpNewIssuerUrl,
-        clientId: idpNewClientId,
-        clientSecret: idpNewClientSecret,
-        scopes: idpNewScopes.split(/\s+/).filter(Boolean),
-        groupsClaim: idpNewGroupsClaim || "groups",
-      };
+      config = { issuerUrl: idpNewIssuerUrl, clientId: idpNewClientId, clientSecret: idpNewClientSecret, scopes: idpNewScopes.split(/\s+/).filter(Boolean), groupsClaim: idpNewGroupsClaim || "groups" };
     }
-
-    const provider = await createIdpProvider({
-      type: idpNewType,
-      name: idpNewName,
-      enabled: true,
-      config,
-    });
+    const provider = await createIdpProvider({ type: idpNewType, name: idpNewName, enabled: true, config });
     setIdpProviders([...idpProviders, provider]);
-    // Reset all fields
-    setIdpNewName("");
-    setIdpNewType("oidc");
-    setIdpNewIssuerUrl("");
-    setIdpNewClientId("");
-    setIdpNewClientSecret("");
-    setIdpNewScopes("openid profile email");
-    setIdpNewGroupsClaim("groups");
-    setIdpNewEntryPoint("");
-    setIdpNewSamlIssuer("");
-    setIdpNewSamlCert("");
-    setIdpNewSignatureAlgorithm("sha256");
-    setIdpNewGroupsAttribute("memberOf");
-    setIdpNewLdapUrl("");
-    setIdpNewLdapBindDn("");
-    setIdpNewLdapBindCredential("");
-    setIdpNewLdapSearchBase("");
-    setIdpNewLdapSearchFilter("(sAMAccountName={{username}})");
-    setIdpNewLdapGroupSearchBase("");
-    setIdpNewLdapGroupSearchFilter("(member={{dn}})");
-    setIdpNewLdapUseTls(true);
-    setIdpNewLdapTlsCaPath("");
+    setIdpNewName(""); setIdpNewType("oidc"); setIdpNewIssuerUrl(""); setIdpNewClientId(""); setIdpNewClientSecret(""); setIdpNewScopes("openid profile email"); setIdpNewGroupsClaim("groups"); setIdpNewEntryPoint(""); setIdpNewSamlIssuer(""); setIdpNewSamlCert(""); setIdpNewSignatureAlgorithm("sha256"); setIdpNewGroupsAttribute("memberOf"); setIdpNewLdapUrl(""); setIdpNewLdapBindDn(""); setIdpNewLdapBindCredential(""); setIdpNewLdapSearchBase(""); setIdpNewLdapSearchFilter("(sAMAccountName={{username}})"); setIdpNewLdapGroupSearchBase(""); setIdpNewLdapGroupSearchFilter("(member={{dn}})"); setIdpNewLdapUseTls(true); setIdpNewLdapTlsCaPath("");
     setIdpShowForm(false);
   }
 
@@ -367,9 +271,9 @@ export default function SettingsPanel({ title }: Props) {
     setLdapTestingUser(providerId);
     try {
       const result = await testLdapUser(providerId, username);
-      setLdapTestUserResults((prev) => ({ ...prev, [providerId]: result }));
+      setLdapTestUserResults(prev => ({ ...prev, [providerId]: result }));
     } catch {
-      setLdapTestUserResults((prev) => ({ ...prev, [providerId]: { found: false, error: "Test request failed" } }));
+      setLdapTestUserResults(prev => ({ ...prev, [providerId]: { found: false, error: "Test request failed" } }));
     } finally {
       setLdapTestingUser(null);
     }
@@ -377,123 +281,84 @@ export default function SettingsPanel({ title }: Props) {
 
   async function handleToggleIdpProvider(id: string, enabled: boolean) {
     const updated = await updateIdpProvider(id, { enabled });
-    setIdpProviders(idpProviders.map((p) => (p.id === id ? updated : p)));
+    setIdpProviders(idpProviders.map(p => p.id === id ? updated : p));
   }
 
   async function handleDeleteIdpProvider(id: string) {
     await deleteIdpProvider(id);
-    setIdpProviders(idpProviders.filter((p) => p.id !== id));
+    setIdpProviders(idpProviders.filter(p => p.id !== id));
   }
 
   async function handleTestIdpProvider(id: string) {
     setIdpTesting(id);
     try {
       const result = await testIdpProvider(id);
-      setIdpTestResults((prev) => ({ ...prev, [id]: result }));
+      setIdpTestResults(prev => ({ ...prev, [id]: result }));
     } catch {
-      setIdpTestResults((prev) => ({ ...prev, [id]: { success: false, error: "Test request failed" } }));
+      setIdpTestResults(prev => ({ ...prev, [id]: { success: false, error: "Test request failed" } }));
     } finally {
       setIdpTesting(null);
     }
   }
 
   async function handleLoadMappings(providerId: string) {
-    if (idpMappingProviderId === providerId) {
-      setIdpMappingProviderId(null);
-      return;
-    }
+    if (idpMappingProviderId === providerId) { setIdpMappingProviderId(null); return; }
     const mappings = await listRoleMappings(providerId);
-    setIdpMappings((prev) => ({ ...prev, [providerId]: mappings }));
+    setIdpMappings(prev => ({ ...prev, [providerId]: mappings }));
     setIdpMappingProviderId(providerId);
-    setIdpMappingNewGroup("");
-    setIdpMappingNewRole("");
+    setIdpMappingNewGroup(""); setIdpMappingNewRole("");
   }
 
   async function handleAddRoleMapping(providerId: string) {
     if (!idpMappingNewGroup || !idpMappingNewRole) return;
-    const mapping = await createRoleMapping(providerId, {
-      idpGroup: idpMappingNewGroup,
-      synthRole: idpMappingNewRole,
-    });
-    setIdpMappings((prev) => ({
-      ...prev,
-      [providerId]: [...(prev[providerId] ?? []), mapping],
-    }));
-    setIdpMappingNewGroup("");
-    setIdpMappingNewRole("");
+    const mapping = await createRoleMapping(providerId, { idpGroup: idpMappingNewGroup, synthRole: idpMappingNewRole });
+    setIdpMappings(prev => ({ ...prev, [providerId]: [...(prev[providerId] ?? []), mapping] }));
+    setIdpMappingNewGroup(""); setIdpMappingNewRole("");
   }
 
   async function handleDeleteRoleMapping(providerId: string, mappingId: string) {
     await deleteRoleMapping(mappingId);
-    setIdpMappings((prev) => ({
-      ...prev,
-      [providerId]: (prev[providerId] ?? []).filter((m) => m.id !== mappingId),
-    }));
+    setIdpMappings(prev => ({ ...prev, [providerId]: (prev[providerId] ?? []).filter(m => m.id !== mappingId) }));
   }
 
-  // --- Intake handlers ---
+  // ── Intake handlers ───────────────────────────────────────────────────────────
 
   async function handleAddIntakeChannel() {
     const config: Record<string, unknown> = {};
-
     if (intakeNewType === "webhook") {
       config.source = intakeNewWebhookSource;
     } else {
       config.type = intakeNewRegistryType;
       config.url = intakeNewRegistryUrl;
-      if (intakeNewRegistryUsername) {
-        config.credentials = { username: intakeNewRegistryUsername, password: intakeNewRegistryPassword };
-      }
-      const items = intakeNewTrackedItems.split(",").map((s) => s.trim()).filter(Boolean);
-      if (intakeNewRegistryType === "docker") {
-        config.trackedImages = items;
-      } else {
-        config.trackedPackages = items;
-      }
+      if (intakeNewRegistryUsername) config.credentials = { username: intakeNewRegistryUsername, password: intakeNewRegistryPassword };
+      const items = intakeNewTrackedItems.split(",").map(s => s.trim()).filter(Boolean);
+      if (intakeNewRegistryType === "docker") config.trackedImages = items; else config.trackedPackages = items;
       config.pollIntervalMs = parseInt(intakeNewPollInterval, 10) || 300000;
     }
-
-    const channel = await createIntakeChannel({
-      type: intakeNewType,
-      name: intakeNewName,
-      enabled: true,
-      config,
-    });
-
-    // Show the auth token once on creation
-    if (channel.authToken) {
-      setIntakeCreatedToken(channel.authToken);
-    }
-
-    setIntakeChannels((prev) => [...prev, channel]);
+    const channel = await createIntakeChannel({ type: intakeNewType, name: intakeNewName, enabled: true, config });
+    if (channel.authToken) setIntakeCreatedToken(channel.authToken);
+    setIntakeChannels(prev => [...prev, channel]);
     setIntakeShowForm(false);
-    setIntakeNewName("");
-    setIntakeNewWebhookSource("github-actions");
-    setIntakeNewRegistryType("docker");
-    setIntakeNewRegistryUrl("");
-    setIntakeNewRegistryUsername("");
-    setIntakeNewRegistryPassword("");
-    setIntakeNewTrackedItems("");
-    setIntakeNewPollInterval("300000");
+    setIntakeNewName(""); setIntakeNewWebhookSource("github-actions"); setIntakeNewRegistryType("docker"); setIntakeNewRegistryUrl(""); setIntakeNewRegistryUsername(""); setIntakeNewRegistryPassword(""); setIntakeNewTrackedItems(""); setIntakeNewPollInterval("300000");
   }
 
   async function handleToggleIntakeChannel(id: string, enabled: boolean) {
     const updated = await updateIntakeChannel(id, { enabled });
-    setIntakeChannels((prev) => prev.map((ch) => (ch.id === id ? updated : ch)));
+    setIntakeChannels(prev => prev.map(ch => ch.id === id ? updated : ch));
   }
 
   async function handleDeleteIntakeChannel(id: string) {
     await deleteIntakeChannel(id);
-    setIntakeChannels((prev) => prev.filter((ch) => ch.id !== id));
+    setIntakeChannels(prev => prev.filter(ch => ch.id !== id));
   }
 
   async function handleTestIntakeChannel(id: string) {
     setIntakeTesting(id);
     try {
       const result = await testIntakeChannel(id);
-      setIntakeTestResults((prev) => ({ ...prev, [id]: result }));
+      setIntakeTestResults(prev => ({ ...prev, [id]: result }));
     } catch (err) {
-      setIntakeTestResults((prev) => ({ ...prev, [id]: { success: false, error: err instanceof Error ? err.message : "Test failed" } }));
+      setIntakeTestResults(prev => ({ ...prev, [id]: { success: false, error: err instanceof Error ? err.message : "Test failed" } }));
     } finally {
       setIntakeTesting(null);
     }
@@ -501,18 +366,11 @@ export default function SettingsPanel({ title }: Props) {
 
   async function handleManualUpload() {
     if (!manualArtifactName || !manualArtifactType || !manualVersion) return;
-    setManualUploading(true);
-    setManualUploadResult(null);
+    setManualUploading(true); setManualUploadResult(null);
     try {
-      const result = await manualUploadArtifact({
-        artifactName: manualArtifactName,
-        artifactType: manualArtifactType,
-        version: manualVersion,
-      });
+      const result = await manualUploadArtifact({ artifactName: manualArtifactName, artifactType: manualArtifactType, version: manualVersion });
       setManualUploadResult({ success: true, message: `Artifact uploaded successfully (ID: ${result.artifactId})` });
-      setManualArtifactName("");
-      setManualVersion("");
-      // Refresh intake events to show the new one
+      setManualArtifactName(""); setManualVersion("");
       listIntakeEvents({ limit: 20 }).then(setIntakeEvents).catch(() => {});
     } catch (err) {
       setManualUploadResult({ success: false, message: err instanceof Error ? err.message : "Upload failed" });
@@ -521,1092 +379,598 @@ export default function SettingsPanel({ title }: Props) {
     }
   }
 
+  // ── Render ────────────────────────────────────────────────────────────────────
+
   if (loading) return <CanvasPanelHost title={title} noBreadcrumb><div className="loading">Loading...</div></CanvasPanelHost>;
   if (!settings) return <CanvasPanelHost title={title} noBreadcrumb><div className="error-msg">Failed to load settings</div></CanvasPanelHost>;
 
-  const tabs = [
-    { id: "general" as const, label: "General" },
-    { id: "integrations" as const, label: "Integrations" },
+  const isIdpOrIntakeTab = settingsTab === "identity" || settingsTab === "intake";
+  const mcpServers = settings.mcpServers ?? [];
+
+  const tabs: { id: Tab; label: string }[] = [
+    { id: "general", label: "General" },
+    { id: "llm", label: "LLM" },
+    { id: "agent", label: "Agent" },
+    { id: "deploy", label: "Deploys" },
+    { id: "envoy", label: "Envoy" },
     ...(canManageSettings ? [
-      { id: "identity" as const, label: "Identity" },
-      { id: "intake" as const, label: "Intake" },
+      { id: "identity" as Tab, label: "Identity" },
+      { id: "intake" as Tab, label: "Intake" },
     ] : []),
+    { id: "branding", label: "Branding" },
   ];
 
   return (
     <CanvasPanelHost title={title} noBreadcrumb>
+      {/* Page header */}
       <div style={{ padding: "0 20px", marginBottom: 20 }}>
         <h1 className="v6-page-title">Settings</h1>
-        <p className="v6-page-subtitle">Configure agent behavior, integrations, and access control.</p>
+        <p className="v6-page-subtitle">Instance configuration and integrations.</p>
       </div>
 
-      <div style={{ padding: "0 20px", marginBottom: 20 }}>
+      {/* Tab bar */}
+      <div style={{ padding: "0 20px", marginBottom: 24 }}>
         <div className="segmented-control">
-          {tabs.map((tab) => (
+          {tabs.map(t => (
             <button
-              key={tab.id}
-              className={`segmented-control-btn ${settingsTab === tab.id ? "segmented-control-btn-active" : ""}`}
-              onClick={() => setSettingsTab(tab.id)}
+              key={t.id}
+              className={`segmented-control-btn ${settingsTab === t.id ? "segmented-control-btn-active" : ""}`}
+              onClick={() => setSettingsTab(t.id)}
             >
-              {tab.label}
+              {t.label}
             </button>
           ))}
         </div>
       </div>
 
-      <div style={{ padding: "0 20px 40px", display: "flex", flexDirection: "column", gap: 16, maxWidth: 720 }}>
+      {/* Content */}
+      <div style={{ padding: "0 20px 120px", display: "flex", flexDirection: "column", gap: 14, maxWidth: 760 }}>
 
-        {/* ── GENERAL ── */}
+        {/* ════ GENERAL ════ */}
         {settingsTab === "general" && (
           <>
-            {/* Feature Toggles */}
             <div className="card">
-              <div className="card-header">
-                <h3>Feature Toggles</h3>
-              </div>
-              <div className="form-group">
-                <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
-                  <input
-                    type="checkbox"
-                    checked={settings.environmentsEnabled}
-                    onChange={handleToggleEnvironments}
-                  />
-                  Enable Environments
-                </label>
-                <div className="settings-description">
-                  When disabled, environment selection is hidden from the UI and
-                  deployments proceed without environment-level variable merging.
-                </div>
-              </div>
+              <div className="card-header"><h3>Environments</h3></div>
+              <SettingRow label="Environments enabled" description="When disabled, deployments target envoys directly without environment scoping." last>
+                <ToggleSwitch on={settings.environmentsEnabled} onChange={() => setSettings({ ...settings, environmentsEnabled: !settings.environmentsEnabled })} />
+              </SettingRow>
             </div>
 
-            {/* Agent Configuration */}
             <div className="card">
-              <div className="card-header">
-                <h3>Agent Configuration</h3>
-              </div>
-              <div className="form-group">
-                <label>Default Health Check Retries</label>
-                <input
-                  type="number"
-                  min={0}
-                  max={10}
-                  value={settings.agent.defaultHealthCheckRetries}
-                  onChange={(e) =>
-                    setSettings({
-                      ...settings,
-                      agent: { ...settings.agent, defaultHealthCheckRetries: Number(e.target.value) },
-                    })
-                  }
-                  style={{ maxWidth: 300 }}
-                />
-              </div>
-              <div className="form-group">
-                <label>Default Timeout (ms)</label>
-                <input
-                  type="number"
-                  min={1000}
-                  step={1000}
-                  value={settings.agent.defaultTimeoutMs}
-                  onChange={(e) =>
-                    setSettings({
-                      ...settings,
-                      agent: { ...settings.agent, defaultTimeoutMs: Number(e.target.value) },
-                    })
-                  }
-                  style={{ maxWidth: 300 }}
-                />
-              </div>
-              <div className="form-group">
-                <label>Cross-Environment Conflict Policy</label>
-                <select
-                  value={settings.agent.conflictPolicy}
-                  onChange={(e) =>
-                    setSettings({
-                      ...settings,
-                      agent: { ...settings.agent, conflictPolicy: e.target.value as ConflictPolicy },
-                    })
-                  }
-                  style={{ maxWidth: 300 }}
-                >
-                  <option value="strict">Strict (block deployment)</option>
-                  <option value="permissive">Permissive (proceed with warning)</option>
-                </select>
-                <div className="settings-description">
-                  Strict mode blocks deployments when cross-environment variable conflicts are detected.
-                  Permissive mode proceeds but logs a warning in the Debrief.
-                </div>
-              </div>
-              <div className="form-group">
-                <label>Default Verification Strategy</label>
-                <select
-                  value={settings.agent.defaultVerificationStrategy}
-                  onChange={(e) =>
-                    setSettings({
-                      ...settings,
-                      agent: {
-                        ...settings.agent,
-                        defaultVerificationStrategy: e.target.value as "basic" | "full" | "none",
-                      },
-                    })
-                  }
-                  style={{ maxWidth: 300 }}
-                >
-                  <option value="basic">Basic</option>
-                  <option value="full">Full</option>
-                  <option value="none">None</option>
-                </select>
-              </div>
-              <button className="btn btn-primary" onClick={handleSaveAgent}>
-                {agentSaved ? "Saved" : "Save Agent Settings"}
-              </button>
+              <div className="card-header"><h3>Appearance</h3></div>
+              <SettingRow label="Default theme" description="Theme applied to new users. Individual users can override." last>
+                <SS value={settings.defaultTheme ?? "system"} onChange={v => setSettings({ ...settings, defaultTheme: v as "dark" | "light" | "system" })} options={[{ value: "dark", label: "Dark" }, { value: "light", label: "Light" }, { value: "system", label: "System" }]} width={120} />
+              </SettingRow>
             </div>
 
-            {/* Deployment Defaults */}
-            <div className="card">
-              <div className="card-header">
-                <h3>Default Deployment Configuration</h3>
-              </div>
-              <div className="form-group">
-                <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
-                  <input
-                    type="checkbox"
-                    checked={settings.deploymentDefaults.defaultHealthCheckEnabled}
-                    onChange={(e) =>
-                      setSettings({
-                        ...settings,
-                        deploymentDefaults: { ...settings.deploymentDefaults, defaultHealthCheckEnabled: e.target.checked },
-                      })
-                    }
-                  />
-                  Enable Health Checks
-                </label>
-              </div>
-              <div className="form-group">
-                <label>Default Health Check Retries</label>
-                <input
-                  type="number"
-                  min={0}
-                  max={10}
-                  value={settings.deploymentDefaults.defaultHealthCheckRetries}
-                  onChange={(e) =>
-                    setSettings({
-                      ...settings,
-                      deploymentDefaults: { ...settings.deploymentDefaults, defaultHealthCheckRetries: Number(e.target.value) },
-                    })
-                  }
-                  style={{ maxWidth: 300 }}
-                />
-              </div>
-              <div className="form-group">
-                <label>Default Timeout (ms)</label>
-                <input
-                  type="number"
-                  min={1000}
-                  step={1000}
-                  value={settings.deploymentDefaults.defaultTimeoutMs}
-                  onChange={(e) =>
-                    setSettings({
-                      ...settings,
-                      deploymentDefaults: { ...settings.deploymentDefaults, defaultTimeoutMs: Number(e.target.value) },
-                    })
-                  }
-                  style={{ maxWidth: 300 }}
-                />
-              </div>
-              <div className="form-group">
-                <label>Default Verification Strategy</label>
-                <select
-                  value={settings.deploymentDefaults.defaultVerificationStrategy}
-                  onChange={(e) =>
-                    setSettings({
-                      ...settings,
-                      deploymentDefaults: {
-                        ...settings.deploymentDefaults,
-                        defaultVerificationStrategy: e.target.value as "basic" | "full" | "none",
-                      },
-                    })
-                  }
-                  style={{ maxWidth: 300 }}
-                >
-                  <option value="basic">Basic</option>
-                  <option value="full">Full</option>
-                  <option value="none">None</option>
-                </select>
-              </div>
-              <button className="btn btn-primary" onClick={handleSaveDeploymentDefaults}>
-                Save Deployment Defaults
-              </button>
-            </div>
-
-            {/* Synth Connection Info */}
             {commandInfo && (
               <div className="card">
-                <div className="card-header">
-                  <h3>Synth Connection</h3>
-                </div>
-                <div className="server-info-grid">
-                  <div className="server-info-item">
-                    <div className="server-info-label">Version</div>
-                    <div className="server-info-value">{commandInfo.version}</div>
-                  </div>
-                  <div className="server-info-item">
-                    <div className="server-info-label">Host</div>
-                    <div className="server-info-value">{commandInfo.host}</div>
-                  </div>
-                  <div className="server-info-item">
-                    <div className="server-info-label">Port</div>
-                    <div className="server-info-value">{commandInfo.port}</div>
-                  </div>
-                  <div className="server-info-item">
-                    <div className="server-info-label">Started</div>
-                    <div className="server-info-value">{new Date(commandInfo.startedAt).toLocaleString()}</div>
-                  </div>
-                </div>
+                <div className="card-header"><h3>Instance</h3></div>
+                <SettingRow label="Version"><span style={{ fontFamily: "var(--font-mono)", fontSize: 13, color: "var(--text-muted)" }}>{commandInfo.version}</span></SettingRow>
+                <SettingRow label="Host"><span style={{ fontFamily: "var(--font-mono)", fontSize: 13, color: "var(--text-muted)" }}>{commandInfo.host}:{commandInfo.port}</span></SettingRow>
+                <SettingRow label="Started" last><span style={{ fontFamily: "var(--font-mono)", fontSize: 13, color: "var(--text-muted)" }}>{new Date(commandInfo.startedAt).toUTCString()}</span></SettingRow>
               </div>
             )}
           </>
         )}
 
-        {/* ── INTEGRATIONS ── */}
-        {settingsTab === "integrations" && (
+        {/* ════ LLM ════ */}
+        {settingsTab === "llm" && (
           <>
-            {/* Envoy Configuration */}
             <div className="card">
               <div className="card-header">
-                <h3>Envoy Configuration</h3>
+                <h3>Primary Provider</h3>
+                {settings.llm?.apiKeyConfigured && <Pill text="Connected" success />}
               </div>
-              <div className="form-group">
-                <label>Envoy URL</label>
-                <input
-                  value={settings.envoy.url}
-                  onChange={(e) =>
-                    setSettings({
-                      ...settings,
-                      envoy: { ...settings.envoy, url: e.target.value },
-                    })
-                  }
-                  placeholder="http://localhost:3001"
-                  style={{ maxWidth: 400 }}
+              <SettingRow label="Provider">
+                <SS
+                  value={settings.llm?.provider ?? "claude"}
+                  onChange={v => setSettings({ ...settings, llm: { ...(settings.llm ?? { provider: "claude", reasoningModel: "", classificationModel: "", timeoutMs: 30000, rateLimitPerMin: 60, apiKeyConfigured: false }), provider: v as LlmProvider } })}
+                  options={[
+                    { value: "claude", label: "Anthropic Claude" },
+                    { value: "openai", label: "OpenAI" },
+                    { value: "gemini", label: "Google Gemini" },
+                    { value: "grok", label: "xAI Grok" },
+                    { value: "deepseek", label: "DeepSeek" },
+                    { value: "ollama", label: "Ollama (local)" },
+                    { value: "custom", label: "Custom endpoint" },
+                  ]}
+                  width={200}
                 />
-              </div>
-              <div className="form-group">
-                <label>Connection Timeout (ms)</label>
-                <input
-                  type="number"
-                  min={1000}
-                  step={1000}
-                  value={settings.envoy.timeoutMs}
-                  onChange={(e) =>
-                    setSettings({
-                      ...settings,
-                      envoy: { ...settings.envoy, timeoutMs: Number(e.target.value) },
-                    })
-                  }
-                  style={{ maxWidth: 300 }}
-                />
-              </div>
-              <button className="btn btn-primary" onClick={handleSaveEnvoy}>
-                {envoySaved ? "Saved" : "Save Envoy Settings"}
-              </button>
+              </SettingRow>
+              <SettingRow label="API Key" description="Stored in SYNTH_LLM_API_KEY environment variable. Never persisted to disk.">
+                {settings.llm?.apiKeyConfigured
+                  ? <><span style={{ fontFamily: "var(--font-mono)", fontSize: 13, color: "var(--text-muted)" }}>sk-••••••••••••••••</span><Pill text="Set" success /></>
+                  : <Pill text="Not set" muted />
+                }
+              </SettingRow>
+              <SettingRow label="Reasoning model" description="Plan generation, diagnostics, and complex decisions.">
+                <SI value={settings.llm?.reasoningModel ?? ""} onChange={v => setSettings({ ...settings, llm: { ...(settings.llm ?? { provider: "claude", reasoningModel: "", classificationModel: "", timeoutMs: 30000, rateLimitPerMin: 60, apiKeyConfigured: false }), reasoningModel: v } })} placeholder="e.g. claude-sonnet-4-5" width={260} />
+              </SettingRow>
+              <SettingRow label="Classification model" description="Log classification and lightweight pattern matching.">
+                <SI value={settings.llm?.classificationModel ?? ""} onChange={v => setSettings({ ...settings, llm: { ...(settings.llm ?? { provider: "claude", reasoningModel: "", classificationModel: "", timeoutMs: 30000, rateLimitPerMin: 60, apiKeyConfigured: false }), classificationModel: v } })} placeholder="e.g. claude-haiku-4-5" width={260} />
+              </SettingRow>
+              <SettingRow label="Timeout">
+                <SI value={String(settings.llm?.timeoutMs ?? 30000)} onChange={v => setSettings({ ...settings, llm: { ...(settings.llm ?? { provider: "claude", reasoningModel: "", classificationModel: "", timeoutMs: 30000, rateLimitPerMin: 60, apiKeyConfigured: false }), timeoutMs: Number(v) } })} type="number" width={90} />
+                <span style={{ fontSize: 11, color: "var(--text-muted)" }}>ms</span>
+              </SettingRow>
+              <SettingRow label="Rate limit" last>
+                <SI value={String(settings.llm?.rateLimitPerMin ?? 60)} onChange={v => setSettings({ ...settings, llm: { ...(settings.llm ?? { provider: "claude", reasoningModel: "", classificationModel: "", timeoutMs: 30000, rateLimitPerMin: 60, apiKeyConfigured: false }), rateLimitPerMin: Number(v) } })} type="number" width={70} />
+                <span style={{ fontSize: 11, color: "var(--text-muted)" }}>req/min</span>
+              </SettingRow>
             </div>
 
-            {/* Per-Task Model Configuration */}
             <div className="card">
               <div className="card-header">
-                <h3>Per-Task Model Configuration</h3>
+                <h3>Task Model Overrides</h3>
+                <Pill text="Optional" muted />
               </div>
-              <div className="settings-description" style={{ marginBottom: 12 }}>
-                Route different tasks to different models for cost and performance optimization.
-              </div>
-              <div className="form-group">
-                <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
-                  <input
-                    type="checkbox"
-                    checked={useOneModel}
-                    onChange={() => {
-                      if (!useOneModel) {
-                        handleClearTaskModels();
-                      } else {
-                        setUseOneModel(false);
-                      }
-                    }}
-                  />
-                  Use one model for all tasks
-                </label>
-              </div>
-              {!useOneModel && (
-                <>
-                  {(["logClassification", "diagnosticSynthesis", "postmortemGeneration", "queryAnswering"] as TaskModelTask[]).map((task) => {
-                    const meta = TASK_MODEL_META[task];
-                    const result = verificationResults[task];
-                    return (
-                      <div key={task} className="form-group" style={{ marginBottom: 8 }}>
-                        <label style={{ fontSize: "0.9em" }}>
-                          {meta.label}
-                          <span style={{ fontSize: "0.8em", color: "var(--text-muted)", marginLeft: 8 }}>
-                            ({meta.tier} | {meta.tokenBudget})
-                          </span>
-                        </label>
-                        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                          <input
-                            value={getTaskModel(task)}
-                            onChange={(e) => updateTaskModel(task, e.target.value)}
-                            placeholder="Model ID (leave empty for default)"
-                            style={{ flex: 1, maxWidth: 300 }}
-                          />
-                          <button
-                            className="btn"
-                            onClick={() => handleVerifyTaskModel(task)}
-                            disabled={!getTaskModel(task) || verifyingTask === task}
-                            style={{ fontSize: "0.8em", padding: "4px 8px" }}
-                          >
-                            {verifyingTask === task ? "..." : "Test"}
-                          </button>
-                          {result && (
-                            <span
-                              title={result.explanation}
-                              className={`status-badge status-${result.status === "verified" ? "succeeded" : result.status === "marginal" ? "pending" : "failed"}`}
-                              style={{ fontSize: "0.8em" }}
-                            >
-                              {result.status}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                  <button className="btn btn-primary" onClick={handleSaveTaskModels}>
-                    {taskModelSaved ? "Saved" : "Save Task Models"}
-                  </button>
-                </>
-              )}
+              <p style={{ fontSize: 12, color: "var(--text-muted)", margin: "0 0 8px 0", lineHeight: 1.5 }}>
+                Override which model handles specific tasks. Leave blank to use the primary provider models above.
+              </p>
+              <SettingRow label="Use one model for all tasks" last={useOneModel}>
+                <ToggleSwitch on={useOneModel} onChange={() => { if (!useOneModel) { handleClearTaskModels(); } else { setUseOneModel(false); } }} />
+              </SettingRow>
+              {!useOneModel && (["logClassification", "diagnosticSynthesis", "postmortemGeneration", "queryAnswering"] as TaskModelTask[]).map((task, i, arr) => {
+                const meta = TASK_MODEL_META[task];
+                const result = verificationResults[task];
+                return (
+                  <SettingRow key={task} label={meta.label} description={`${meta.tier} · ${meta.tokenBudget}`} last={i === arr.length - 1}>
+                    <SI value={getTaskModel(task)} onChange={v => updateTaskModel(task, v)} placeholder="Use default" width={220} />
+                    <button className="btn" onClick={() => handleVerifyTaskModel(task)} disabled={!getTaskModel(task) || verifyingTask === task} style={{ padding: "4px 10px", fontSize: 11 }}>
+                      {verifyingTask === task ? "…" : "Test"}
+                    </button>
+                    {result && (
+                      <span className={`status-badge status-${result.status === "verified" ? "succeeded" : result.status === "marginal" ? "pending" : "failed"}`} title={result.explanation}>
+                        {result.status}
+                      </span>
+                    )}
+                  </SettingRow>
+                );
+              })}
+            </div>
+          </>
+        )}
+
+        {/* ════ AGENT ════ */}
+        {settingsTab === "agent" && (
+          <>
+            <div className="card">
+              <div className="card-header"><h3>Conflict Resolution</h3></div>
+              <SettingRow label="Variable conflict policy" description="Strict: halt on any cross-environment variable conflict. Permissive: proceed and log a warning in the Debrief." last>
+                <SS value={settings.agent.conflictPolicy} onChange={v => setSettings({ ...settings, agent: { ...settings.agent, conflictPolicy: v as ConflictPolicy } })} options={[{ value: "strict", label: "Strict" }, { value: "permissive", label: "Permissive" }]} width={140} />
+              </SettingRow>
             </div>
 
-            {/* External MCP Servers */}
             <div className="card">
-              <div className="card-header">
-                <h3>External MCP Servers</h3>
-              </div>
-              <div className="settings-description" style={{ marginBottom: 12 }}>
-                Connect to external MCP servers (monitoring, incident management, etc.)
-                for pre-deployment intelligence. Unreachable servers are skipped gracefully.
-              </div>
+              <div className="card-header"><h3>Verification</h3></div>
+              <SettingRow label="Default verification strategy" description="How Synth verifies deployments after execution." last>
+                <SS value={settings.agent.defaultVerificationStrategy} onChange={v => setSettings({ ...settings, agent: { ...settings.agent, defaultVerificationStrategy: v as "basic" | "full" | "none" } })} options={[{ value: "full", label: "Full" }, { value: "basic", label: "Basic" }, { value: "none", label: "None" }]} width={110} />
+              </SettingRow>
+            </div>
+
+            <div className="card">
+              <div className="card-header"><h3>Privacy</h3></div>
+              <SettingRow label="LLM entity exposure" description="'names' sends real envoy and partition names to the LLM. 'none' uses anonymized references." last>
+                <SS value={settings.agent.llmEntityExposure ?? "names"} onChange={v => setSettings({ ...settings, agent: { ...settings.agent, llmEntityExposure: v as "names" | "none" } })} options={[{ value: "names", label: "Names" }, { value: "none", label: "None" }]} width={110} />
+              </SettingRow>
+            </div>
+
+            <div className="card">
+              <div className="card-header"><h3>External MCP Servers</h3></div>
+              <p style={{ fontSize: 12, color: "var(--text-muted)", margin: "0 0 8px 0", lineHeight: 1.5 }}>
+                Connect to external MCP servers for pre-deployment intelligence. Unreachable servers are skipped gracefully.
+              </p>
               {mcpServers.length > 0 && (
-                <div style={{ marginBottom: 16 }}>
-                  {mcpServers.map((server, index) => (
-                    <div
-                      key={index}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 8,
-                        padding: "10px 0",
-                        borderBottom: "1px solid var(--border)",
-                      }}
-                    >
+                <div style={{ marginBottom: 12 }}>
+                  {mcpServers.map((server, i) => (
+                    <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 0", borderBottom: "1px solid var(--border)" }}>
                       <div style={{ flex: 1 }}>
-                        <div style={{ fontWeight: 500, fontSize: 13 }}>{server.name}</div>
-                        <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2, fontFamily: "var(--font-mono)" }}>{server.url}</div>
-                        {server.description && (
-                          <div style={{ fontSize: 12, color: "var(--text-muted)" }}>{server.description}</div>
-                        )}
+                        <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>{server.name}</div>
+                        <div style={{ fontSize: 12, color: "var(--text-muted)", fontFamily: "var(--font-mono)", marginTop: 2 }}>{server.url}</div>
+                        {server.description && <div style={{ fontSize: 12, color: "var(--text-muted)" }}>{server.description}</div>}
                       </div>
-                      <button
-                        className="btn"
-                        onClick={() => handleRemoveMcpServer(index)}
-                        style={{ padding: "4px 8px", fontSize: "0.85em" }}
-                      >
-                        Remove
-                      </button>
+                      <button className="btn" onClick={() => handleRemoveMcpServer(i)} style={{ padding: "4px 10px", fontSize: 11 }}>Remove</button>
                     </div>
                   ))}
                 </div>
               )}
-              <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
-                <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label>Server Name</label>
-                  <input
-                    value={mcpNewName}
-                    onChange={(e) => setMcpNewName(e.target.value)}
-                    placeholder="e.g. datadog-monitor"
-                    style={{ maxWidth: 300 }}
-                  />
-                </div>
-                <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label>Server URL</label>
-                  <input
-                    value={mcpNewUrl}
-                    onChange={(e) => setMcpNewUrl(e.target.value)}
-                    placeholder="http://localhost:4000/mcp"
-                    style={{ maxWidth: 400 }}
-                  />
-                </div>
-                <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label>Description (optional)</label>
-                  <input
-                    value={mcpNewDescription}
-                    onChange={(e) => setMcpNewDescription(e.target.value)}
-                    placeholder="Datadog monitoring integration"
-                    style={{ maxWidth: 400 }}
-                  />
-                </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <SI value={mcpNewName} onChange={setMcpNewName} placeholder="Server name (e.g. datadog-monitor)" width={320} />
+                <SI value={mcpNewUrl} onChange={setMcpNewUrl} placeholder="http://localhost:4000/mcp" width={320} />
+                <SI value={mcpNewDescription} onChange={setMcpNewDescription} placeholder="Description (optional)" mono={false} width={320} />
                 <div>
-                  <button className="btn" onClick={handleAddMcpServer} disabled={!mcpNewName || !mcpNewUrl}>
-                    Add Server
-                  </button>
+                  <button className="btn" onClick={handleAddMcpServer} disabled={!mcpNewName || !mcpNewUrl}>+ Add Server</button>
                 </div>
-              </div>
-              <button className="btn btn-primary" onClick={handleSaveMcpServers}>
-                {mcpSaved ? "Saved" : "Save MCP Servers"}
-              </button>
-            </div>
-
-            {/* Co-Branding */}
-            <div className="card">
-              <div className="card-header">
-                <h3>Co-Branding</h3>
-              </div>
-              <div className="settings-description" style={{ marginBottom: 12 }}>
-                Optionally brand this instance with your organization's identity.
-                When configured, the UI shows your name and logo with "by Synth" beneath.
-              </div>
-              <div className="form-group">
-                <label>Operator Name</label>
-                <input
-                  value={coBrandingOperatorName}
-                  onChange={(e) => setCoBrandingOperatorName(e.target.value)}
-                  placeholder="Your Company Name"
-                  style={{ maxWidth: 400 }}
-                />
-              </div>
-              <div className="form-group">
-                <label>Logo URL</label>
-                <input
-                  value={coBrandingLogoUrl}
-                  onChange={(e) => setCoBrandingLogoUrl(e.target.value)}
-                  placeholder="https://example.com/logo.png"
-                  style={{ maxWidth: 400 }}
-                />
-              </div>
-              <div className="form-group">
-                <label>Accent Color (optional)</label>
-                <input
-                  value={coBrandingAccentColor}
-                  onChange={(e) => setCoBrandingAccentColor(e.target.value)}
-                  placeholder="#63e1be"
-                  style={{ maxWidth: 300 }}
-                />
-                <div className="settings-description">
-                  A CSS color value applied to header accents when co-branding is active.
-                </div>
-              </div>
-              <div style={{ display: "flex", gap: 8 }}>
-                <button className="btn btn-primary" onClick={handleSaveCoBranding}>
-                  {coBrandingSaved ? "Saved" : "Save Co-Branding"}
-                </button>
-                {settings.coBranding && (
-                  <button className="btn" onClick={handleClearCoBranding}>
-                    Clear
-                  </button>
-                )}
               </div>
             </div>
           </>
         )}
 
-        {/* ── IDENTITY ── */}
-        {settingsTab === "identity" && canManageSettings && (
-          <div className="card">
-            <div className="card-header">
-              <h3>Identity Providers</h3>
+        {/* ════ DEPLOYS ════ */}
+        {settingsTab === "deploy" && (
+          <>
+            <div className="card">
+              <div className="card-header"><h3>Health Checks</h3></div>
+              <SettingRow label="Enabled" description="Run health verification after each deployment step.">
+                <ToggleSwitch on={settings.deploymentDefaults.defaultHealthCheckEnabled} onChange={() => setSettings({ ...settings, deploymentDefaults: { ...settings.deploymentDefaults, defaultHealthCheckEnabled: !settings.deploymentDefaults.defaultHealthCheckEnabled } })} />
+              </SettingRow>
+              <SettingRow label="Retries" description="Retry attempts before marking a health check as failed." last>
+                <SI value={String(settings.deploymentDefaults.defaultHealthCheckRetries)} onChange={v => setSettings({ ...settings, deploymentDefaults: { ...settings.deploymentDefaults, defaultHealthCheckRetries: Number(v) } })} type="number" width={70} />
+              </SettingRow>
             </div>
-            <div className="settings-description" style={{ marginBottom: 12 }}>
-              Configure SSO providers for your team. Users can sign in via configured identity providers
-              instead of local credentials.
+
+            <div className="card">
+              <div className="card-header"><h3>Timeouts</h3></div>
+              <SettingRow label="Step timeout" description="Maximum execution time for a single deployment step." last>
+                <SI value={String(settings.deploymentDefaults.defaultTimeoutMs)} onChange={v => setSettings({ ...settings, deploymentDefaults: { ...settings.deploymentDefaults, defaultTimeoutMs: Number(v) } })} type="number" width={90} />
+                <span style={{ fontSize: 11, color: "var(--text-muted)" }}>ms</span>
+              </SettingRow>
             </div>
 
-            {idpProviders.length > 0 && (
-              <div style={{ marginBottom: 16 }}>
-                {idpProviders.map((provider) => {
-                  const testResult = idpTestResults[provider.id];
-                  return (
-                    <div key={provider.id} style={{ padding: "12px 0", borderBottom: "1px solid var(--border)" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontWeight: 500, fontSize: 13 }}>{provider.name}</div>
-                          <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>
-                            {provider.type.toUpperCase()} — {
-                              provider.type === "saml"
-                                ? (provider.config.entryPoint as string) || "No entry point"
-                                : provider.type === "ldap"
-                                ? (provider.config.url as string) || "No LDAP URL"
-                                : (provider.config.issuerUrl as string) || "No issuer URL"
-                            }
-                          </div>
-                        </div>
-                        <span className={`status-badge status-${provider.enabled ? "succeeded" : "failed"}`}>
-                          {provider.enabled ? "Enabled" : "Disabled"}
-                        </span>
-                        <label style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer" }}>
-                          <input
-                            type="checkbox"
-                            checked={provider.enabled}
-                            onChange={(e) => handleToggleIdpProvider(provider.id, e.target.checked)}
-                          />
-                        </label>
-                        <button
-                          className="btn"
-                          onClick={() => handleTestIdpProvider(provider.id)}
-                          disabled={idpTesting === provider.id}
-                          style={{ padding: "4px 8px", fontSize: "0.85em" }}
-                        >
-                          {idpTesting === provider.id ? "..." : "Test"}
-                        </button>
-                        {provider.type === "saml" && (
-                          <a
-                            href={`/api/auth/saml/${provider.id}/metadata`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="btn"
-                            style={{ padding: "4px 8px", fontSize: "0.85em", textDecoration: "none" }}
-                          >
-                            SP Metadata
-                          </a>
-                        )}
-                        <button
-                          className="btn"
-                          onClick={() => handleLoadMappings(provider.id)}
-                          style={{ padding: "4px 8px", fontSize: "0.85em" }}
-                        >
-                          {idpMappingProviderId === provider.id ? "Hide Mappings" : "Mappings"}
-                        </button>
-                        <button
-                          className="btn"
-                          onClick={() => handleDeleteIdpProvider(provider.id)}
-                          style={{ padding: "4px 8px", fontSize: "0.85em" }}
-                        >
-                          Remove
-                        </button>
-                      </div>
-                      {testResult && (
-                        <div style={{ marginTop: 6 }}>
-                          <span className={`status-badge status-${testResult.success ? "succeeded" : "failed"}`}>
-                            {testResult.success ? "Connection successful" : `Failed: ${testResult.error}`}
-                          </span>
-                        </div>
-                      )}
-
-                      {/* LDAP Test User */}
-                      {provider.type === "ldap" && (
-                        <div style={{ marginTop: 8, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                          <input
-                            value={ldapTestUsername[provider.id] ?? ""}
-                            onChange={(e) => setLdapTestUsername((prev) => ({ ...prev, [provider.id]: e.target.value }))}
-                            placeholder="Test username (e.g. jdoe)"
-                            style={{ maxWidth: 200, fontSize: "0.85em" }}
-                          />
-                          <button
-                            className="btn"
-                            onClick={() => handleTestLdapUser(provider.id)}
-                            disabled={!ldapTestUsername[provider.id] || ldapTestingUser === provider.id}
-                            style={{ padding: "4px 8px", fontSize: "0.85em" }}
-                          >
-                            {ldapTestingUser === provider.id ? "..." : "Test User"}
-                          </button>
-                          {ldapTestUserResults[provider.id] && (
-                            <div style={{ width: "100%", marginTop: 4 }}>
-                              <span className={`status-badge status-${ldapTestUserResults[provider.id].found ? "succeeded" : "failed"}`}>
-                                {ldapTestUserResults[provider.id].found
-                                  ? `Found: ${ldapTestUserResults[provider.id].displayName ?? "unknown"} (${ldapTestUserResults[provider.id].email ?? "no email"}) — DN: ${ldapTestUserResults[provider.id].userDn}`
-                                  : `Not found: ${ldapTestUserResults[provider.id].error}`}
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Role Mappings */}
-                      {idpMappingProviderId === provider.id && (
-                        <div style={{ marginTop: 12, paddingLeft: 16, borderLeft: "2px solid var(--border)" }}>
-                          <div style={{ fontWeight: 600, fontSize: 12, textTransform: "uppercase", letterSpacing: "0.4px", color: "var(--text-muted)", marginBottom: 8 }}>Role Mappings</div>
-                          {(idpMappings[provider.id] ?? []).length > 0 && (
-                            <div style={{ marginBottom: 8 }}>
-                              {(idpMappings[provider.id] ?? []).map((mapping) => (
-                                <div
-                                  key={mapping.id}
-                                  style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0", fontSize: "0.85em" }}
-                                >
-                                  <span style={{ flex: 1, fontFamily: "var(--font-mono)" }}>
-                                    {mapping.idpGroup} → {mapping.synthRole}
-                                  </span>
-                                  <button
-                                    className="btn"
-                                    onClick={() => handleDeleteRoleMapping(provider.id, mapping.id)}
-                                    style={{ padding: "2px 6px", fontSize: "0.8em" }}
-                                  >
-                                    Remove
-                                  </button>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                            <input
-                              value={idpMappingNewGroup}
-                              onChange={(e) => setIdpMappingNewGroup(e.target.value)}
-                              placeholder="IdP Group"
-                              style={{ maxWidth: 180, fontSize: "0.85em" }}
-                            />
-                            <input
-                              value={idpMappingNewRole}
-                              onChange={(e) => setIdpMappingNewRole(e.target.value)}
-                              placeholder="Synth Role"
-                              style={{ maxWidth: 180, fontSize: "0.85em" }}
-                            />
-                            <button
-                              className="btn"
-                              onClick={() => handleAddRoleMapping(provider.id)}
-                              disabled={!idpMappingNewGroup || !idpMappingNewRole}
-                              style={{ padding: "4px 8px", fontSize: "0.85em" }}
-                            >
-                              Add
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            {idpShowForm ? (
-              <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
-                <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label>Provider Type</label>
-                  <select
-                    value={idpNewType}
-                    onChange={(e) => setIdpNewType(e.target.value as "oidc" | "saml" | "ldap")}
-                    style={{ maxWidth: 300 }}
-                  >
-                    <option value="oidc">OIDC (OpenID Connect)</option>
-                    <option value="saml">SAML 2.0</option>
-                    <option value="ldap">LDAP / Active Directory</option>
-                  </select>
-                </div>
-                <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label>Provider Name</label>
-                  <input
-                    value={idpNewName}
-                    onChange={(e) => setIdpNewName(e.target.value)}
-                    placeholder="e.g. Okta, Auth0, Azure AD"
-                    style={{ maxWidth: 300 }}
-                  />
-                </div>
-
-                {idpNewType === "oidc" && (
-                  <>
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label>Issuer URL</label>
-                      <input value={idpNewIssuerUrl} onChange={(e) => setIdpNewIssuerUrl(e.target.value)} placeholder="https://login.example.com" style={{ maxWidth: 400 }} />
-                    </div>
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label>Client ID</label>
-                      <input value={idpNewClientId} onChange={(e) => setIdpNewClientId(e.target.value)} placeholder="client-id" style={{ maxWidth: 400 }} />
-                    </div>
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label>Client Secret</label>
-                      <input type="password" value={idpNewClientSecret} onChange={(e) => setIdpNewClientSecret(e.target.value)} placeholder="client-secret" style={{ maxWidth: 400 }} />
-                    </div>
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label>Scopes</label>
-                      <input value={idpNewScopes} onChange={(e) => setIdpNewScopes(e.target.value)} placeholder="openid profile email" style={{ maxWidth: 400 }} />
-                    </div>
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label>Groups Claim</label>
-                      <input value={idpNewGroupsClaim} onChange={(e) => setIdpNewGroupsClaim(e.target.value)} placeholder="groups" style={{ maxWidth: 300 }} />
-                      <div className="settings-description">The JWT claim that contains the user's group memberships for role mapping.</div>
-                    </div>
-                  </>
-                )}
-
-                {idpNewType === "saml" && (
-                  <>
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label>Entry Point URL</label>
-                      <input value={idpNewEntryPoint} onChange={(e) => setIdpNewEntryPoint(e.target.value)} placeholder="https://idp.example.com/sso/saml" style={{ maxWidth: 400 }} />
-                      <div className="settings-description">The IdP's SSO URL where AuthnRequests are sent.</div>
-                    </div>
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label>Issuer / Entity ID</label>
-                      <input value={idpNewSamlIssuer} onChange={(e) => setIdpNewSamlIssuer(e.target.value)} placeholder="https://synth.example.com/sp" style={{ maxWidth: 400 }} />
-                      <div className="settings-description">The Service Provider entity ID that identifies this Synth instance to the IdP.</div>
-                    </div>
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label>IdP Certificate (PEM)</label>
-                      <textarea
-                        value={idpNewSamlCert}
-                        onChange={(e) => setIdpNewSamlCert(e.target.value)}
-                        placeholder={"-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----"}
-                        rows={6}
-                        style={{ maxWidth: 500, fontFamily: "var(--font-mono)", fontSize: "0.85em" }}
-                      />
-                      <div className="settings-description">The IdP's X.509 signing certificate in PEM format. Used to verify SAML Response signatures.</div>
-                    </div>
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label>Signature Algorithm</label>
-                      <select value={idpNewSignatureAlgorithm} onChange={(e) => setIdpNewSignatureAlgorithm(e.target.value as "sha256" | "sha512")} style={{ maxWidth: 300 }}>
-                        <option value="sha256">SHA-256</option>
-                        <option value="sha512">SHA-512</option>
-                      </select>
-                    </div>
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label>Groups Attribute</label>
-                      <input value={idpNewGroupsAttribute} onChange={(e) => setIdpNewGroupsAttribute(e.target.value)} placeholder="memberOf" style={{ maxWidth: 300 }} />
-                      <div className="settings-description">The SAML attribute that contains the user's group memberships for role mapping.</div>
-                    </div>
-                  </>
-                )}
-
-                {idpNewType === "ldap" && (
-                  <>
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label>URL</label>
-                      <input value={idpNewLdapUrl} onChange={(e) => setIdpNewLdapUrl(e.target.value)} placeholder="ldaps://dc.corp.example.com:636" style={{ maxWidth: 400 }} />
-                      <div className="settings-description">The LDAP server URL. Use ldaps:// for TLS or ldap:// for plain (not recommended).</div>
-                    </div>
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label>Bind DN</label>
-                      <input value={idpNewLdapBindDn} onChange={(e) => setIdpNewLdapBindDn(e.target.value)} placeholder="cn=svc-synth,ou=ServiceAccounts,dc=corp,dc=example,dc=com" style={{ maxWidth: 500 }} />
-                      <div className="settings-description">The distinguished name of the service account used to search the directory.</div>
-                    </div>
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label>Bind Credential</label>
-                      <input type="password" value={idpNewLdapBindCredential} onChange={(e) => setIdpNewLdapBindCredential(e.target.value)} placeholder="Service account password" style={{ maxWidth: 400 }} />
-                      <div className="settings-description">Password for the service account. Encrypted at rest.</div>
-                    </div>
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label>Search Base</label>
-                      <input value={idpNewLdapSearchBase} onChange={(e) => setIdpNewLdapSearchBase(e.target.value)} placeholder="ou=Users,dc=corp,dc=example,dc=com" style={{ maxWidth: 500 }} />
-                      <div className="settings-description">The base DN to search for user entries.</div>
-                    </div>
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label>Search Filter</label>
-                      <input value={idpNewLdapSearchFilter} onChange={(e) => setIdpNewLdapSearchFilter(e.target.value)} placeholder="(sAMAccountName={{username}})" style={{ maxWidth: 500 }} />
-                      <div className="settings-description">{"LDAP filter to find users. Use {{username}} as the placeholder for the login username."}</div>
-                    </div>
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label>Group Search Base</label>
-                      <input value={idpNewLdapGroupSearchBase} onChange={(e) => setIdpNewLdapGroupSearchBase(e.target.value)} placeholder="ou=Groups,dc=corp,dc=example,dc=com" style={{ maxWidth: 500 }} />
-                      <div className="settings-description">The base DN to search for group entries.</div>
-                    </div>
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label>Group Search Filter</label>
-                      <input value={idpNewLdapGroupSearchFilter} onChange={(e) => setIdpNewLdapGroupSearchFilter(e.target.value)} placeholder="(member={{dn}})" style={{ maxWidth: 500 }} />
-                      <div className="settings-description">{"LDAP filter to find groups. Use {{dn}} as the placeholder for the user's DN. For AD nested groups, use (member={{dn}}) which is automatically enhanced with the transitive membership matching rule."}</div>
-                    </div>
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
-                        <input type="checkbox" checked={idpNewLdapUseTls} onChange={(e) => setIdpNewLdapUseTls(e.target.checked)} />
-                        Use TLS
-                      </label>
-                    </div>
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label>TLS CA Path (optional)</label>
-                      <input value={idpNewLdapTlsCaPath} onChange={(e) => setIdpNewLdapTlsCaPath(e.target.value)} placeholder="/etc/ssl/certs/ldap-ca.pem" style={{ maxWidth: 400 }} />
-                      <div className="settings-description">Path to a custom CA certificate file for verifying the LDAP server's TLS certificate.</div>
-                    </div>
-                  </>
-                )}
-
-                <div style={{ display: "flex", gap: 8 }}>
-                  <button
-                    className="btn btn-primary"
-                    onClick={handleAddIdpProvider}
-                    disabled={
-                      !idpNewName || (
-                        idpNewType === "oidc"
-                          ? (!idpNewIssuerUrl || !idpNewClientId || !idpNewClientSecret)
-                          : idpNewType === "saml"
-                          ? (!idpNewEntryPoint || !idpNewSamlIssuer || !idpNewSamlCert)
-                          : (!idpNewLdapUrl || !idpNewLdapBindDn || !idpNewLdapBindCredential || !idpNewLdapSearchBase || !idpNewLdapGroupSearchBase)
-                      )
-                    }
-                  >
-                    Add Provider
-                  </button>
-                  <button className="btn" onClick={() => setIdpShowForm(false)}>Cancel</button>
-                </div>
-              </div>
-            ) : (
-              <button className="btn" onClick={() => setIdpShowForm(true)}>
-                Add Identity Provider
-              </button>
-            )}
-          </div>
+            <div className="card">
+              <div className="card-header"><h3>Verification</h3></div>
+              <SettingRow label="Post-deploy verification" description="Full runs all checks. Basic checks health only. None skips." last>
+                <SS value={settings.deploymentDefaults.defaultVerificationStrategy} onChange={v => setSettings({ ...settings, deploymentDefaults: { ...settings.deploymentDefaults, defaultVerificationStrategy: v as "basic" | "full" | "none" } })} options={[{ value: "full", label: "Full" }, { value: "basic", label: "Basic" }, { value: "none", label: "None" }]} width={110} />
+              </SettingRow>
+            </div>
+          </>
         )}
 
-        {/* ── INTAKE ── */}
+        {/* ════ ENVOY ════ */}
+        {settingsTab === "envoy" && (
+          <>
+            <div className="card">
+              <div className="card-header"><h3>Server Endpoint</h3></div>
+              <SettingRow label="URL" description="The URL envoys use to reach this Synth instance.">
+                <SI value={settings.envoy.url} onChange={v => setSettings({ ...settings, envoy: { ...settings.envoy, url: v } })} placeholder="https://synth.internal:3000" width={280} />
+              </SettingRow>
+              <SettingRow label="Connection timeout" description="How long to wait for an envoy health probe response." last>
+                <SI value={String(settings.envoy.timeoutMs)} onChange={v => setSettings({ ...settings, envoy: { ...settings.envoy, timeoutMs: Number(v) } })} type="number" width={90} />
+                <span style={{ fontSize: 11, color: "var(--text-muted)" }}>ms</span>
+              </SettingRow>
+            </div>
+
+            <SubLabel>Registered Envoys</SubLabel>
+            <div className="card">
+              {envoys.length === 0 ? (
+                <div style={{ fontSize: 13, color: "var(--text-muted)", padding: "8px 0" }}>No envoys registered.</div>
+              ) : (
+                envoys.map((e, i) => (
+                  <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 0", borderBottom: i < envoys.length - 1 ? "1px solid var(--border)" : "none" }}>
+                    <div style={{ width: 7, height: 7, borderRadius: "50%", flexShrink: 0, background: e.health === "OK" ? "var(--accent)" : e.health === "Degraded" ? "var(--signal-warning, orange)" : "var(--text-muted)" }} />
+                    <span style={{ fontSize: 13, fontWeight: 600, fontFamily: "var(--font-mono)", flex: 1, color: "var(--text)" }}>{e.hostname ?? e.id}</span>
+                    <span className={`status-badge status-${e.health === "OK" ? "succeeded" : e.health === "Degraded" ? "pending" : "failed"}`} style={{ fontSize: 11 }}>{e.health}</span>
+                    {e.lastSeen && <span style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)", minWidth: 60, textAlign: "right" }}>{e.lastSeen}</span>}
+                  </div>
+                ))
+              )}
+            </div>
+          </>
+        )}
+
+        {/* ════ IDENTITY ════ */}
+        {settingsTab === "identity" && canManageSettings && (
+          <>
+            <div className="card">
+              <div className="card-header">
+                <h3>Identity Providers</h3>
+                {idpProviders.length > 0 && <Pill text={`${idpProviders.filter(p => p.enabled).length} active`} success />}
+              </div>
+              {idpProviders.map(provider => {
+                const testResult = idpTestResults[provider.id];
+                return (
+                  <div key={provider.id} style={{ padding: "14px 16px", borderRadius: 8, background: "var(--surface-alt)", border: "1px solid var(--border)", marginBottom: 8 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <div style={{ width: 7, height: 7, borderRadius: "50%", flexShrink: 0, background: provider.enabled ? "var(--accent)" : "var(--text-muted)" }} />
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>{provider.name}</div>
+                        <div style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)", marginTop: 2 }}>
+                          {provider.type.toUpperCase()} — {provider.type === "saml" ? (provider.config.entryPoint as string) || "No entry point" : provider.type === "ldap" ? (provider.config.url as string) || "No LDAP URL" : (provider.config.issuerUrl as string) || "No issuer URL"}
+                        </div>
+                      </div>
+                      <ToggleSwitch on={provider.enabled} onChange={() => handleToggleIdpProvider(provider.id, !provider.enabled)} />
+                      <button className="btn" onClick={() => handleTestIdpProvider(provider.id)} disabled={idpTesting === provider.id} style={{ padding: "4px 10px", fontSize: 11 }}>{idpTesting === provider.id ? "…" : "Test"}</button>
+                      {provider.type === "saml" && <a href={`/api/auth/saml/${provider.id}/metadata`} target="_blank" rel="noopener noreferrer" className="btn" style={{ padding: "4px 10px", fontSize: 11, textDecoration: "none" }}>SP Metadata</a>}
+                      <button className="btn" onClick={() => handleLoadMappings(provider.id)} style={{ padding: "4px 10px", fontSize: 11 }}>{idpMappingProviderId === provider.id ? "Hide Mappings" : "Mappings"}</button>
+                      <button className="btn" onClick={() => handleDeleteIdpProvider(provider.id)} style={{ padding: "4px 10px", fontSize: 11 }}>Remove</button>
+                    </div>
+                    {testResult && (
+                      <div style={{ marginTop: 8 }}>
+                        <span className={`status-badge status-${testResult.success ? "succeeded" : "failed"}`}>{testResult.success ? "Connection successful" : `Failed: ${testResult.error}`}</span>
+                      </div>
+                    )}
+                    {provider.type === "ldap" && (
+                      <div style={{ marginTop: 8, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                        <SI value={ldapTestUsername[provider.id] ?? ""} onChange={v => setLdapTestUsername(prev => ({ ...prev, [provider.id]: v }))} placeholder="Test username (e.g. jdoe)" width={200} />
+                        <button className="btn" onClick={() => handleTestLdapUser(provider.id)} disabled={!ldapTestUsername[provider.id] || ldapTestingUser === provider.id} style={{ padding: "4px 10px", fontSize: 11 }}>{ldapTestingUser === provider.id ? "…" : "Test User"}</button>
+                        {ldapTestUserResults[provider.id] && (
+                          <span className={`status-badge status-${ldapTestUserResults[provider.id].found ? "succeeded" : "failed"}`}>
+                            {ldapTestUserResults[provider.id].found ? `Found: ${ldapTestUserResults[provider.id].displayName ?? "unknown"} (${ldapTestUserResults[provider.id].email ?? "no email"})` : `Not found: ${ldapTestUserResults[provider.id].error}`}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    {idpMappingProviderId === provider.id && (
+                      <div style={{ marginTop: 12, paddingLeft: 16, borderLeft: "2px solid var(--border)" }}>
+                        <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.5, color: "var(--text-muted)", fontFamily: "var(--font-mono)", marginBottom: 8 }}>Role Mappings</div>
+                        {(idpMappings[provider.id] ?? []).length > 0 && (
+                          <div style={{ borderRadius: 6, overflow: "hidden", border: "1px solid var(--border)", marginBottom: 8 }}>
+                            <div style={{ display: "flex", padding: "7px 12px", background: "var(--surface-alt)", borderBottom: "1px solid var(--border)" }}>
+                              <span style={{ flex: 1, fontSize: 10, fontWeight: 700, color: "var(--text-muted)", fontFamily: "var(--font-mono)", textTransform: "uppercase", letterSpacing: 1 }}>IdP Group</span>
+                              <span style={{ flex: 1, fontSize: 10, fontWeight: 700, color: "var(--text-muted)", fontFamily: "var(--font-mono)", textTransform: "uppercase", letterSpacing: 1 }}>Synth Role</span>
+                              <span style={{ width: 60 }} />
+                            </div>
+                            {(idpMappings[provider.id] ?? []).map(mapping => (
+                              <div key={mapping.id} style={{ display: "flex", alignItems: "center", padding: "9px 12px", borderBottom: "1px solid var(--border)" }}>
+                                <span style={{ flex: 1, fontSize: 12, fontFamily: "var(--font-mono)", color: "var(--text)" }}>{mapping.idpGroup}</span>
+                                <span style={{ flex: 1, fontSize: 12, fontFamily: "var(--font-mono)", color: "var(--accent)", fontWeight: 500 }}>{mapping.synthRole}</span>
+                                <button className="btn" onClick={() => handleDeleteRoleMapping(provider.id, mapping.id)} style={{ padding: "2px 8px", fontSize: 11 }}>✕</button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                          <SI value={idpMappingNewGroup} onChange={setIdpMappingNewGroup} placeholder="IdP Group" width={180} />
+                          <SI value={idpMappingNewRole} onChange={setIdpMappingNewRole} placeholder="Synth Role" width={140} />
+                          <button className="btn btn-primary" onClick={() => handleAddRoleMapping(provider.id)} disabled={!idpMappingNewGroup || !idpMappingNewRole} style={{ padding: "6px 12px", fontSize: 11 }}>+ Add</button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              {idpShowForm ? (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "14px 16px", background: "var(--surface-alt)", borderRadius: 8, border: "1px solid var(--border)" }}>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <SS value={idpNewType} onChange={v => setIdpNewType(v as "oidc" | "saml" | "ldap")} options={[{ value: "oidc", label: "OIDC (OpenID Connect)" }, { value: "saml", label: "SAML 2.0" }, { value: "ldap", label: "LDAP / Active Directory" }]} width={220} />
+                    <SI value={idpNewName} onChange={setIdpNewName} placeholder="Provider name (e.g. Okta, Azure AD)" width={240} />
+                  </div>
+                  {idpNewType === "oidc" && (
+                    <>
+                      <SI value={idpNewIssuerUrl} onChange={setIdpNewIssuerUrl} placeholder="Issuer URL (https://login.example.com)" width={400} />
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <SI value={idpNewClientId} onChange={setIdpNewClientId} placeholder="Client ID" width={200} />
+                        <SI value={idpNewClientSecret} onChange={setIdpNewClientSecret} placeholder="Client Secret" type="password" width={200} />
+                      </div>
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <SI value={idpNewScopes} onChange={setIdpNewScopes} placeholder="Scopes (openid profile email)" width={240} />
+                        <SI value={idpNewGroupsClaim} onChange={setIdpNewGroupsClaim} placeholder="Groups claim (groups)" width={160} />
+                      </div>
+                    </>
+                  )}
+                  {idpNewType === "saml" && (
+                    <>
+                      <SI value={idpNewEntryPoint} onChange={setIdpNewEntryPoint} placeholder="Entry Point URL (https://idp.example.com/sso/saml)" width={400} />
+                      <SI value={idpNewSamlIssuer} onChange={setIdpNewSamlIssuer} placeholder="Issuer / Entity ID" width={400} />
+                      <textarea value={idpNewSamlCert} onChange={e => setIdpNewSamlCert(e.target.value)} placeholder={"-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----"} rows={5} style={{ ...INPUT_STYLE, width: "100%", resize: "vertical", fontFamily: "var(--font-mono)", fontSize: 12 }} />
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <SS value={idpNewSignatureAlgorithm} onChange={v => setIdpNewSignatureAlgorithm(v as "sha256" | "sha512")} options={[{ value: "sha256", label: "SHA-256" }, { value: "sha512", label: "SHA-512" }]} width={130} />
+                        <SI value={idpNewGroupsAttribute} onChange={setIdpNewGroupsAttribute} placeholder="Groups attribute (memberOf)" width={200} />
+                      </div>
+                    </>
+                  )}
+                  {idpNewType === "ldap" && (
+                    <>
+                      <SI value={idpNewLdapUrl} onChange={setIdpNewLdapUrl} placeholder="ldaps://dc.corp.example.com:636" width={400} />
+                      <SI value={idpNewLdapBindDn} onChange={setIdpNewLdapBindDn} placeholder="Bind DN (cn=svc-synth,ou=ServiceAccounts,dc=corp,dc=example,dc=com)" width={400} />
+                      <SI value={idpNewLdapBindCredential} onChange={setIdpNewLdapBindCredential} placeholder="Bind Credential" type="password" width={300} />
+                      <SI value={idpNewLdapSearchBase} onChange={setIdpNewLdapSearchBase} placeholder="Search Base (ou=Users,dc=corp,dc=example,dc=com)" width={400} />
+                      <SI value={idpNewLdapSearchFilter} onChange={setIdpNewLdapSearchFilter} placeholder="Search Filter" width={400} />
+                      <SI value={idpNewLdapGroupSearchBase} onChange={setIdpNewLdapGroupSearchBase} placeholder="Group Search Base (ou=Groups,...)" width={400} />
+                      <SI value={idpNewLdapGroupSearchFilter} onChange={setIdpNewLdapGroupSearchFilter} placeholder="Group Search Filter" width={400} />
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <ToggleSwitch on={idpNewLdapUseTls} onChange={() => setIdpNewLdapUseTls(v => !v)} />
+                        <span style={{ fontSize: 13 }}>Use TLS</span>
+                        <SI value={idpNewLdapTlsCaPath} onChange={setIdpNewLdapTlsCaPath} placeholder="TLS CA path (optional)" width={260} />
+                      </div>
+                    </>
+                  )}
+                  <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+                    <button className="btn btn-primary" onClick={handleAddIdpProvider} disabled={!idpNewName || (idpNewType === "oidc" ? (!idpNewIssuerUrl || !idpNewClientId || !idpNewClientSecret) : idpNewType === "saml" ? (!idpNewEntryPoint || !idpNewSamlIssuer || !idpNewSamlCert) : (!idpNewLdapUrl || !idpNewLdapBindDn || !idpNewLdapBindCredential || !idpNewLdapSearchBase || !idpNewLdapGroupSearchBase))}>Add Provider</button>
+                    <button className="btn" onClick={() => setIdpShowForm(false)}>Cancel</button>
+                  </div>
+                </div>
+              ) : (
+                <button className="btn" onClick={() => setIdpShowForm(true)} style={{ marginTop: 4 }}>+ Add Provider</button>
+              )}
+            </div>
+          </>
+        )}
+
+        {/* ════ INTAKE ════ */}
         {settingsTab === "intake" && canManageSettings && (
           <>
             <div className="card">
               <div className="card-header">
-                <h3>Artifact Intake Channels</h3>
-              </div>
-              <div className="settings-description" style={{ marginBottom: 12 }}>
-                Configure CI/CD webhook receivers and registry pollers to automatically ingest new artifact versions.
+                <h3>Intake Channels</h3>
+                {intakeChannels.filter(c => c.enabled).length > 0 && <Pill text={`${intakeChannels.filter(c => c.enabled).length} active`} success />}
               </div>
 
               {intakeCreatedToken && (
-                <div style={{ padding: 12, marginBottom: 16, background: "var(--accent-dim)", border: "1px solid var(--accent-border)", borderRadius: 6, fontSize: "0.9em" }}>
-                  <strong>Channel Auth Token (shown once):</strong>
-                  <code style={{ display: "block", marginTop: 4, padding: 6, background: "var(--bg)", borderRadius: 4, fontFamily: "var(--font-mono)", fontSize: "0.85em", wordBreak: "break-all" }}>
-                    {intakeCreatedToken}
-                  </code>
-                  <div style={{ marginTop: 4, fontSize: "0.85em", color: "var(--text-muted)" }}>
-                    Use this token as a query parameter <code>?token=...</code> or header <code>X-Intake-Token</code> when sending webhooks.
-                  </div>
-                  <button className="btn" onClick={() => setIntakeCreatedToken(null)} style={{ marginTop: 8, padding: "4px 8px", fontSize: "0.85em" }}>
-                    Dismiss
-                  </button>
+                <div style={{ padding: 12, marginBottom: 12, background: "var(--accent-dim)", border: "1px solid var(--accent-border)", borderRadius: 6 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Channel Auth Token (shown once)</div>
+                  <code style={{ display: "block", padding: "6px 10px", background: "var(--bg)", borderRadius: 4, fontFamily: "var(--font-mono)", fontSize: 12, wordBreak: "break-all" }}>{intakeCreatedToken}</code>
+                  <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 6 }}>Use as query parameter <code>?token=…</code> or header <code>X-Intake-Token</code>.</div>
+                  <button className="btn" onClick={() => setIntakeCreatedToken(null)} style={{ marginTop: 8, padding: "4px 10px", fontSize: 11 }}>Dismiss</button>
                 </div>
               )}
 
-              {intakeChannels.length > 0 && (
-                <div style={{ marginBottom: 16 }}>
-                  {intakeChannels.map((channel) => {
-                    const testResult = intakeTestResults[channel.id];
-                    const webhookUrl = channel.type === "webhook"
-                      ? `${window.location.origin}/api/intake/webhook/${channel.id}`
-                      : null;
-                    return (
-                      <div key={channel.id} style={{ padding: "12px 0", borderBottom: "1px solid var(--border)" }}>
+              {intakeChannels.map(channel => {
+                const testResult = intakeTestResults[channel.id];
+                const webhookUrl = channel.type === "webhook" ? `${window.location.origin}/api/intake/webhook/${channel.id}` : null;
+                return (
+                  <div key={channel.id} style={{ padding: "14px 16px", borderRadius: 8, background: "var(--surface-alt)", border: "1px solid var(--border)", marginBottom: 8 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <div style={{ width: 7, height: 7, borderRadius: "50%", flexShrink: 0, background: channel.enabled ? "var(--accent)" : "var(--text-muted)" }} />
+                      <div style={{ flex: 1 }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                          <div style={{ flex: 1 }}>
-                            <div style={{ fontWeight: 500, fontSize: 13 }}>{channel.name}</div>
-                            <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>
-                              <span style={{
-                                display: "inline-block",
-                                padding: "1px 5px",
-                                borderRadius: 3,
-                                fontSize: 10,
-                                fontWeight: 600,
-                                fontFamily: "var(--font-mono)",
-                                border: "1px solid var(--border)",
-                                marginRight: 6,
-                              }}>
-                                {channel.type.toUpperCase()}
-                              </span>
-                              {channel.type === "webhook" && (channel.config.source as string || "generic")}
-                              {channel.type === "registry" && `${(channel.config.type as string || "").toUpperCase()} — ${channel.config.url as string || ""}`}
-                            </div>
-                            {webhookUrl && (
-                              <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2, fontFamily: "var(--font-mono)", wordBreak: "break-all" }}>
-                                POST {webhookUrl}
-                              </div>
-                            )}
-                          </div>
-                          <span className={`status-badge status-${channel.enabled ? "succeeded" : "failed"}`}>
-                            {channel.enabled ? "Enabled" : "Disabled"}
-                          </span>
-                          <label style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer" }}>
-                            <input type="checkbox" checked={channel.enabled} onChange={(e) => handleToggleIntakeChannel(channel.id, e.target.checked)} />
-                          </label>
-                          {channel.type === "registry" && (
-                            <button
-                              className="btn"
-                              onClick={() => handleTestIntakeChannel(channel.id)}
-                              disabled={intakeTesting === channel.id}
-                              style={{ padding: "4px 8px", fontSize: "0.85em" }}
-                            >
-                              {intakeTesting === channel.id ? "..." : "Test"}
-                            </button>
-                          )}
-                          <button className="btn" onClick={() => handleDeleteIntakeChannel(channel.id)} style={{ padding: "4px 8px", fontSize: "0.85em" }}>
-                            Remove
-                          </button>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>{channel.name}</span>
+                          <Pill text={channel.type} muted />
                         </div>
-                        {testResult && (
-                          <div style={{ marginTop: 6 }}>
-                            <span className={`status-badge status-${testResult.success ? "succeeded" : "failed"}`}>
-                              {testResult.success ? "Connection successful" : `Failed: ${testResult.error}`}
-                            </span>
-                          </div>
-                        )}
+                        {webhookUrl && <div style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)", marginTop: 2, wordBreak: "break-all" }}>{webhookUrl}</div>}
+                        {channel.type === "registry" && <div style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)", marginTop: 2 }}>{(channel.config.type as string || "").toUpperCase()} — {channel.config.url as string || ""}</div>}
                       </div>
-                    );
-                  })}
-                </div>
-              )}
+                      <ToggleSwitch on={channel.enabled} onChange={() => handleToggleIntakeChannel(channel.id, !channel.enabled)} />
+                      {channel.type === "registry" && <button className="btn" onClick={() => handleTestIntakeChannel(channel.id)} disabled={intakeTesting === channel.id} style={{ padding: "4px 10px", fontSize: 11 }}>{intakeTesting === channel.id ? "…" : "Test"}</button>}
+                      <button className="btn" onClick={() => handleDeleteIntakeChannel(channel.id)} style={{ padding: "4px 10px", fontSize: 11 }}>Remove</button>
+                    </div>
+                    {testResult && (
+                      <div style={{ marginTop: 8 }}>
+                        <span className={`status-badge status-${testResult.success ? "succeeded" : "failed"}`}>{testResult.success ? "Connection successful" : `Failed: ${testResult.error}`}</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
 
               {intakeShowForm ? (
-                <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
-                  <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label>Channel Type</label>
-                    <select value={intakeNewType} onChange={(e) => setIntakeNewType(e.target.value as "webhook" | "registry")} style={{ maxWidth: 300 }}>
-                      <option value="webhook">Webhook (CI/CD)</option>
-                      <option value="registry">Registry Poll</option>
-                    </select>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "14px 16px", background: "var(--surface-alt)", borderRadius: 8, border: "1px solid var(--border)" }}>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <SS value={intakeNewType} onChange={v => setIntakeNewType(v as "webhook" | "registry")} options={[{ value: "webhook", label: "Webhook (CI/CD)" }, { value: "registry", label: "Registry Poll" }]} width={180} />
+                    <SI value={intakeNewName} onChange={setIntakeNewName} placeholder="Channel name" width={200} mono={false} />
                   </div>
-                  <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label>Channel Name</label>
-                    <input value={intakeNewName} onChange={(e) => setIntakeNewName(e.target.value)} placeholder="e.g. Production CI, Docker Hub" style={{ maxWidth: 300 }} />
-                  </div>
-
                   {intakeNewType === "webhook" && (
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label>CI/CD Source</label>
-                      <select value={intakeNewWebhookSource} onChange={(e) => setIntakeNewWebhookSource(e.target.value)} style={{ maxWidth: 300 }}>
-                        <option value="github-actions">GitHub Actions</option>
-                        <option value="azure-devops">Azure DevOps</option>
-                        <option value="jenkins">Jenkins</option>
-                        <option value="gitlab-ci">GitLab CI</option>
-                        <option value="circleci">CircleCI</option>
-                        <option value="generic">Generic</option>
-                      </select>
-                      <div className="settings-description">Select the CI/CD platform. A unique webhook URL and auth token will be generated.</div>
-                    </div>
+                    <SS value={intakeNewWebhookSource} onChange={setIntakeNewWebhookSource} options={[{ value: "github-actions", label: "GitHub Actions" }, { value: "azure-devops", label: "Azure DevOps" }, { value: "jenkins", label: "Jenkins" }, { value: "gitlab-ci", label: "GitLab CI" }, { value: "circleci", label: "CircleCI" }, { value: "generic", label: "Generic" }]} width={200} />
                   )}
-
                   {intakeNewType === "registry" && (
                     <>
-                      <div className="form-group" style={{ marginBottom: 0 }}>
-                        <label>Registry Type</label>
-                        <select value={intakeNewRegistryType} onChange={(e) => setIntakeNewRegistryType(e.target.value as "docker" | "npm" | "nuget")} style={{ maxWidth: 300 }}>
-                          <option value="docker">Docker Registry</option>
-                          <option value="npm">npm Registry</option>
-                          <option value="nuget">NuGet Feed</option>
-                        </select>
+                      <SS value={intakeNewRegistryType} onChange={v => setIntakeNewRegistryType(v as "docker" | "npm" | "nuget")} options={[{ value: "docker", label: "Docker Registry" }, { value: "npm", label: "npm Registry" }, { value: "nuget", label: "NuGet Feed" }]} width={200} />
+                      <SI value={intakeNewRegistryUrl} onChange={setIntakeNewRegistryUrl} placeholder="Registry URL" width={360} />
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <SI value={intakeNewRegistryUsername} onChange={setIntakeNewRegistryUsername} placeholder="Username (optional)" width={180} mono={false} />
+                        <SI value={intakeNewRegistryPassword} onChange={setIntakeNewRegistryPassword} placeholder="Password (optional)" type="password" width={180} />
                       </div>
-                      <div className="form-group" style={{ marginBottom: 0 }}>
-                        <label>Registry URL</label>
-                        <input
-                          value={intakeNewRegistryUrl}
-                          onChange={(e) => setIntakeNewRegistryUrl(e.target.value)}
-                          placeholder={intakeNewRegistryType === "docker" ? "https://registry.example.com" : intakeNewRegistryType === "npm" ? "https://registry.npmjs.org" : "https://api.nuget.org/v3"}
-                          style={{ maxWidth: 400 }}
-                        />
-                      </div>
-                      <div className="form-group" style={{ marginBottom: 0 }}>
-                        <label>Username (optional)</label>
-                        <input value={intakeNewRegistryUsername} onChange={(e) => setIntakeNewRegistryUsername(e.target.value)} placeholder="Registry username" style={{ maxWidth: 300 }} />
-                      </div>
-                      <div className="form-group" style={{ marginBottom: 0 }}>
-                        <label>Password (optional)</label>
-                        <input type="password" value={intakeNewRegistryPassword} onChange={(e) => setIntakeNewRegistryPassword(e.target.value)} placeholder="Registry password" style={{ maxWidth: 300 }} />
-                      </div>
-                      <div className="form-group" style={{ marginBottom: 0 }}>
-                        <label>{intakeNewRegistryType === "docker" ? "Tracked Images" : "Tracked Packages"}</label>
-                        <input
-                          value={intakeNewTrackedItems}
-                          onChange={(e) => setIntakeNewTrackedItems(e.target.value)}
-                          placeholder={intakeNewRegistryType === "docker" ? "myapp, myorg/api-service" : "@myorg/package, another-pkg"}
-                          style={{ maxWidth: 400 }}
-                        />
-                        <div className="settings-description">Comma-separated list of {intakeNewRegistryType === "docker" ? "image names" : "package names"} to watch for new versions.</div>
-                      </div>
-                      <div className="form-group" style={{ marginBottom: 0 }}>
-                        <label>Poll Interval (ms)</label>
-                        <input type="number" value={intakeNewPollInterval} onChange={(e) => setIntakeNewPollInterval(e.target.value)} placeholder="300000" style={{ maxWidth: 200 }} />
-                        <div className="settings-description">How often to check for new versions. Default: 300000 (5 minutes).</div>
+                      <SI value={intakeNewTrackedItems} onChange={setIntakeNewTrackedItems} placeholder={intakeNewRegistryType === "docker" ? "myapp, myorg/api-service" : "@myorg/package, another-pkg"} width={400} mono={false} />
+                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                        <SI value={intakeNewPollInterval} onChange={setIntakeNewPollInterval} placeholder="300000" type="number" width={110} />
+                        <span style={{ fontSize: 11, color: "var(--text-muted)" }}>ms poll interval</span>
                       </div>
                     </>
                   )}
-
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <button
-                      className="btn btn-primary"
-                      onClick={handleAddIntakeChannel}
-                      disabled={!intakeNewName || (intakeNewType === "registry" && !intakeNewRegistryUrl)}
-                    >
-                      Add Channel
-                    </button>
+                  <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+                    <button className="btn btn-primary" onClick={handleAddIntakeChannel} disabled={!intakeNewName || (intakeNewType === "registry" && !intakeNewRegistryUrl)}>Add Channel</button>
                     <button className="btn" onClick={() => setIntakeShowForm(false)}>Cancel</button>
                   </div>
                 </div>
               ) : (
-                <button className="btn" onClick={() => setIntakeShowForm(true)}>
-                  Add Intake Channel
-                </button>
+                <button className="btn" onClick={() => setIntakeShowForm(true)} style={{ marginTop: 4 }}>+ Add Channel</button>
               )}
             </div>
 
             {/* Manual Upload */}
             <div className="card">
-              <div className="card-header">
-                <h3>Manual Upload</h3>
-              </div>
-              <div className="settings-description" style={{ marginBottom: 12 }}>
-                Submit an artifact directly without a CI/CD pipeline or registry.
-              </div>
-              <div className="form-group">
-                <label>Artifact Name</label>
-                <input value={manualArtifactName} onChange={(e) => setManualArtifactName(e.target.value)} placeholder="e.g. my-api-service" style={{ maxWidth: 300 }} />
-              </div>
-              <div className="form-group">
-                <label>Artifact Type</label>
-                <select value={manualArtifactType} onChange={(e) => setManualArtifactType(e.target.value)} style={{ maxWidth: 300 }}>
-                  <option value="docker">Docker</option>
-                  <option value="npm">npm</option>
-                  <option value="nuget">NuGet</option>
-                  <option value="helm">Helm</option>
-                  <option value="generic">Generic</option>
-                </select>
-              </div>
-              <div className="form-group">
-                <label>Version</label>
-                <input value={manualVersion} onChange={(e) => setManualVersion(e.target.value)} placeholder="e.g. 1.2.3" style={{ maxWidth: 300 }} />
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                <div>
-                  <button
-                    className="btn btn-primary"
-                    onClick={handleManualUpload}
-                    disabled={!manualArtifactName || !manualVersion || manualUploading}
-                  >
-                    {manualUploading ? "Uploading..." : "Upload Artifact"}
-                  </button>
-                </div>
-                {manualUploadResult && (
-                  <span className={`status-badge status-${manualUploadResult.success ? "succeeded" : "failed"}`}>
-                    {manualUploadResult.message}
-                  </span>
-                )}
+              <div className="card-header"><h3>Manual Upload</h3></div>
+              <SettingRow label="Artifact name">
+                <SI value={manualArtifactName} onChange={setManualArtifactName} placeholder="e.g. my-api-service" width={220} mono={false} />
+              </SettingRow>
+              <SettingRow label="Type">
+                <SS value={manualArtifactType} onChange={setManualArtifactType} options={[{ value: "docker", label: "Docker" }, { value: "npm", label: "npm" }, { value: "nuget", label: "NuGet" }, { value: "helm", label: "Helm" }, { value: "generic", label: "Generic" }]} width={130} />
+              </SettingRow>
+              <SettingRow label="Version" last>
+                <SI value={manualVersion} onChange={setManualVersion} placeholder="e.g. 1.2.3" width={140} />
+              </SettingRow>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 12 }}>
+                <button className="btn btn-primary" onClick={handleManualUpload} disabled={!manualArtifactName || !manualVersion || manualUploading}>{manualUploading ? "Uploading…" : "Upload Artifact"}</button>
+                {manualUploadResult && <span className={`status-badge status-${manualUploadResult.success ? "succeeded" : "failed"}`}>{manualUploadResult.message}</span>}
               </div>
             </div>
 
-            {/* Recent Intake Activity */}
+            {/* Recent Events */}
+            <SubLabel>Recent Events</SubLabel>
             <div className="card">
-              <div className="card-header">
-                <h3>Recent Intake Activity</h3>
-              </div>
               {intakeEvents.length === 0 ? (
-                <div style={{ padding: "8px 0", color: "var(--text-muted)", fontSize: 13 }}>
-                  No intake events yet.
-                </div>
+                <div style={{ fontSize: 13, color: "var(--text-muted)", padding: "8px 0" }}>No intake events yet.</div>
               ) : (
-                <div style={{ borderRadius: 6, overflow: "hidden", border: "1px solid var(--border)" }}>
-                  {intakeEvents.map((event) => {
-                    const statusClass = event.status === "completed" ? "succeeded" : event.status === "processing" ? "running" : event.status === "failed" ? "failed" : "pending";
-                    const artifactName = (event.payload?.artifactName as string) ?? "Unknown artifact";
-                    const timestamp = event.createdAt ? new Date(event.createdAt).toLocaleString() : "";
-                    return (
-                      <div key={event.id} className="canvas-activity-row" style={{ borderBottom: "1px solid var(--border)" }}>
-                        <span className={`status-badge status-${statusClass}`} style={{ minWidth: 70, textAlign: "center" }}>
-                          {event.status}
-                        </span>
-                        <span style={{ flex: 1, fontSize: 13 }}>{artifactName}</span>
-                        <span style={{ fontSize: 12, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>{event.channelId}</span>
-                        <span className="canvas-activity-time">{timestamp}</span>
+                intakeEvents.map((event, i) => {
+                  const statusClass = event.status === "completed" ? "succeeded" : event.status === "processing" ? "running" : event.status === "failed" ? "failed" : "pending";
+                  const artifactName = (event.payload?.artifactName as string) ?? "Unknown artifact";
+                  return (
+                    <div key={event.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: i < intakeEvents.length - 1 ? "1px solid var(--border)" : "none" }}>
+                      <div style={{ flex: 1 }}>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>{artifactName}</span>
+                        <span style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)", marginLeft: 8 }}>{(event.payload?.version as string) ?? ""}</span>
                       </div>
-                    );
-                  })}
-                </div>
+                      <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{event.channelId}</span>
+                      <span className={`status-badge status-${statusClass}`}>{event.status}</span>
+                      {event.createdAt && <span style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)", minWidth: 60, textAlign: "right" }}>{new Date(event.createdAt).toLocaleTimeString()}</span>}
+                    </div>
+                  );
+                })
               )}
             </div>
           </>
         )}
+
+        {/* ════ BRANDING ════ */}
+        {settingsTab === "branding" && (
+          <>
+            <div className="card">
+              <div className="card-header">
+                <h3>Co-Branding</h3>
+                <Pill text="Optional" muted />
+              </div>
+              <SettingRow label="Operator name" description="Your organization name. Shown on the login page and footer.">
+                <SI value={settings.coBranding?.operatorName ?? ""} onChange={v => setSettings({ ...settings, coBranding: { ...(settings.coBranding ?? { operatorName: "", logoUrl: "" }), operatorName: v } })} placeholder="Acme Corp" width={220} mono={false} />
+              </SettingRow>
+              <SettingRow label="Logo URL" description="Displayed alongside the Synth mark in the header.">
+                <SI value={settings.coBranding?.logoUrl ?? ""} onChange={v => setSettings({ ...settings, coBranding: { ...(settings.coBranding ?? { operatorName: "", logoUrl: "" }), logoUrl: v } })} placeholder="https://cdn.example.com/logo.svg" width={260} />
+              </SettingRow>
+              <SettingRow label="Accent color" description="Override the default accent. CSS hex color." last>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  {settings.coBranding?.accentColor && <div style={{ width: 26, height: 26, borderRadius: 5, background: settings.coBranding.accentColor, border: "1px solid var(--border)", flexShrink: 0 }} />}
+                  <SI value={settings.coBranding?.accentColor ?? ""} onChange={v => setSettings({ ...settings, coBranding: { ...(settings.coBranding ?? { operatorName: "", logoUrl: "" }), accentColor: v || undefined } })} placeholder="#2d5bf0" width={110} />
+                </div>
+              </SettingRow>
+            </div>
+
+            {settings.coBranding?.operatorName && (
+              <>
+                <SubLabel>Preview</SubLabel>
+                <div className="card">
+                  <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "8px 0" }}>
+                    <span style={{ fontSize: 18, fontWeight: 600, color: "var(--text)" }}>Synth</span>
+                    <span style={{ fontSize: 11, color: "var(--text-muted)" }}>×</span>
+                    <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{settings.coBranding.operatorName}</span>
+                  </div>
+                  <p style={{ fontSize: 12, color: "var(--text-muted)", margin: 0 }}>This is how the co-branded header will appear on the login page and navigation.</p>
+                </div>
+              </>
+            )}
+          </>
+        )}
+
+      </div>
+
+      {/* ── Save bar ─────────────────────────────────────────────────────────────── */}
+      <div style={{
+        position: "sticky", bottom: 0, zIndex: 10,
+        margin: "0 20px 20px",
+        padding: "14px 20px",
+        borderRadius: 10,
+        background: "var(--surface)",
+        border: "1px solid var(--border)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        backdropFilter: "blur(12px)",
+        WebkitBackdropFilter: "blur(12px)",
+      }}>
+        <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
+          {isIdpOrIntakeTab ? "Identity and intake changes apply immediately." : "Changes are not saved until you click Save."}
+        </span>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          {savedAt && <span style={{ fontSize: 12, color: "var(--accent)", fontFamily: "var(--font-mono)" }}>Saved at {savedAt}</span>}
+          <button
+            className="btn btn-primary"
+            onClick={handleSave}
+            disabled={saving || isIdpOrIntakeTab}
+            style={{ opacity: isIdpOrIntakeTab ? 0.4 : 1 }}
+          >
+            {saving ? "Saving…" : "Save Changes"}
+          </button>
+        </div>
       </div>
     </CanvasPanelHost>
   );

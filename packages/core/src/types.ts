@@ -396,6 +396,7 @@ export interface McpServerConfig {
 
 export interface AppSettings {
   environmentsEnabled: boolean;
+  defaultTheme?: "dark" | "light" | "system";
   agent: AgentSettings;
   deploymentDefaults: DeploymentDefaults;
   envoy: EnvoyEndpointConfig;
@@ -708,4 +709,21 @@ export interface InputBinding {
   sourceNodeId: string;
   sourceOutputName: string;
   resolvedValue?: string;
+}
+
+// --- API Keys ---
+
+export type ApiKeyId = string & { readonly __brand: "ApiKeyId" };
+
+export interface ApiKey {
+  id: ApiKeyId;
+  userId: UserId;
+  name: string;
+  keyPrefix: string;  // first 8 chars after "synth_" prefix, for display
+  keySuffix: string;  // last 4 chars, for display
+  keyHash: string;    // bcrypt hash
+  permissions: string[];
+  createdAt: Date;
+  lastUsedAt: Date | null;
+  revokedAt: Date | null;
 }

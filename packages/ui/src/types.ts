@@ -122,6 +122,7 @@ export interface LlmHealthStatus {
 
 export interface AppSettings {
   environmentsEnabled: boolean;
+  defaultTheme?: "dark" | "light" | "system";
   agent: AgentSettings;
   deploymentDefaults: DeploymentDefaults;
   envoy: EnvoyEndpointConfig;

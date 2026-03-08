@@ -182,11 +182,13 @@ export const VerifyTaskModelSchema = z.object({
 
 export const UpdateSettingsSchema = z.object({
   environmentsEnabled: z.boolean().optional(),
+  defaultTheme: z.enum(["dark", "light", "system"]).optional(),
   agent: z.object({
     defaultHealthCheckRetries: z.number().int().nonnegative().optional(),
     defaultTimeoutMs: z.number().int().positive().optional(),
     conflictPolicy: z.enum(["permissive", "strict"]).optional(),
     defaultVerificationStrategy: z.enum(["basic", "full", "none"]).optional(),
+    llmEntityExposure: z.enum(["names", "none"]).optional(),
     llmOverride: LlmProviderConfigSchema.partial().optional(),
     taskModels: TaskModelConfigSchema.optional(),
   }).optional(),
