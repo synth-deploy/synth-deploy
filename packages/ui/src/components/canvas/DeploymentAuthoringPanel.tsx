@@ -182,7 +182,7 @@ export default function DeploymentAuthoringPanel({ title, preselectedArtifactId 
         </div>
 
         {/* Two-column layout */}
-        <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: 22 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 3fr) minmax(0, 2fr)", gap: 22 }}>
           {/* WHAT column */}
           <div>
             <div
