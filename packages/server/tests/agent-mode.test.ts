@@ -463,9 +463,9 @@ describe("Agent mode — LLM query classification", () => {
 
     expect(res.statusCode).toBe(200);
     const result = JSON.parse(res.payload);
-    // Regex fallback detects "deployments" keyword
-    expect(result.action).toBe("navigate");
-    expect(result.view).toBe("deployment-list");
+    // Regex fallback detects "deployments" keyword → returns inline markdown table
+    expect(result.action).toBe("answer");
+    expect(result.content).toBeDefined();
   });
 
   it("records debrief entry for LLM-classified queries", async () => {
@@ -529,7 +529,8 @@ describe("Agent mode — LLM query classification", () => {
     expect(res.statusCode).toBe(200);
     const result = JSON.parse(res.payload);
     // Missing action field → classifyQueryWithLlm returns null → regex fallback
-    // "deployments" matches the deployment list pattern
-    expect(result.view).toBe("deployment-list");
+    // "deployments" matches the deployment list pattern → returns inline markdown table
+    expect(result.action).toBe("answer");
+    expect(result.content).toBeDefined();
   });
 });
