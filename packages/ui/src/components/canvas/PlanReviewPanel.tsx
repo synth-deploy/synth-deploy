@@ -17,7 +17,6 @@ import type {
 } from "../../types.js";
 import { useCanvas } from "../../context/CanvasContext.js";
 import { useQuery } from "../../hooks/useQuery.js";
-import CanvasPanelHost from "./CanvasPanelHost.js";
 import SynthMark from "../SynthMark.js";
 import ConfidenceIndicator from "../ConfidenceIndicator.js";
 
@@ -58,8 +57,29 @@ function buildContextText(enrichment: DeploymentEnrichment | null, envName: stri
   return parts.join(" · ");
 }
 
-export default function PlanReviewPanel({ deploymentId, title }: Props) {
-  const { replacePanel } = useCanvas();
+// ── Modal shell ──────────────────────────────────────────────────────────────
+function PlanModal({ children }: { onClose: () => void; children: React.ReactNode }) {
+  return (
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 100,
+      display: "flex", alignItems: "center", justifyContent: "center",
+      background: "var(--overlay-bg)", backdropFilter: "blur(20px)",
+      WebkitBackdropFilter: "blur(20px)",
+    }}>
+      <div style={{
+        width: "100%", maxWidth: 620, maxHeight: "85vh", overflow: "auto",
+        background: "var(--surface)", borderRadius: 14,
+        border: "1px solid var(--border-strong, rgba(128,128,128,0.18))",
+        padding: "30px 34px", boxShadow: "var(--modal-shadow)",
+      }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+export default function PlanReviewPanel({ deploymentId }: Props) {
+  const { replacePanel, popPanel, minimizeDeployment } = useCanvas();
 
   const { data: result, loading: l1 } = useQuery(`deployment:${deploymentId}`, () => getDeployment(deploymentId));
   const { data: enrichCtx, loading: l2 } = useQuery(
@@ -118,44 +138,67 @@ export default function PlanReviewPanel({ deploymentId, title }: Props) {
 
   if (loading) {
     return (
-      <CanvasPanelHost title={title}>
-        <div className="loading">Loading plan review...</div>
-      </CanvasPanelHost>
+      <PlanModal onClose={popPanel}>
+        <div style={{ textAlign: "center", padding: "40px 0" }}>
+          <SynthMark size={44} active />
+          <p style={{ color: "var(--text-secondary)", fontSize: 14, marginTop: 14, marginBottom: 4 }}>
+            Loading plan…
+          </p>
+        </div>
+      </PlanModal>
     );
   }
 
   if (!deployment) {
     return (
-      <CanvasPanelHost title={title}>
+      <PlanModal onClose={popPanel}>
         <div className="error-msg">Deployment not found</div>
-      </CanvasPanelHost>
+      </PlanModal>
     );
   }
 
   // Thinking state: plan is being generated
   if (deployment.status === "pending") {
+    const pendingArtName =
+      (artifacts ?? []).find((a) => a.id === deployment.artifactId)?.name ?? deployment.artifactId.slice(0, 8);
     return (
-      <CanvasPanelHost title={title}>
-        <div style={{ textAlign: "center", padding: "48px 0" }}>
+      <PlanModal onClose={popPanel}>
+        <div style={{ textAlign: "center", padding: "40px 0" }}>
           <SynthMark size={44} active />
-          <p style={{ color: "var(--text-secondary)", fontSize: 14, marginTop: 16, marginBottom: 4 }}>
+          <p style={{ color: "var(--text-secondary)", fontSize: 14, marginTop: 14, marginBottom: 4 }}>
             Envoy is reasoning about this deployment…
           </p>
           <p style={{ color: "var(--text-muted)", fontSize: 12, margin: 0 }}>
             Scanning local state · Loading previous plans · Building strategy
           </p>
+          <button
+            onClick={() => minimizeDeployment({ deploymentId, artifactName: pendingArtName, panelType: "plan-review" })}
+            style={{
+              marginTop: 24,
+              padding: "7px 16px",
+              borderRadius: 6,
+              border: "1px solid var(--border)",
+              background: "transparent",
+              color: "var(--text-muted)",
+              fontSize: 12,
+              fontFamily: "var(--font-mono)",
+              cursor: "pointer",
+            }}
+          >
+            Minimize ↓
+          </button>
         </div>
-      </CanvasPanelHost>
+      </PlanModal>
     );
   }
 
   if (deployment.status !== "awaiting_approval") {
     return (
-      <CanvasPanelHost title={title}>
+      <PlanModal onClose={popPanel}>
         <div className="error-msg">
           This deployment is in &ldquo;{deployment.status}&rdquo; status and is not awaiting approval.
         </div>
-      </CanvasPanelHost>
+      </PlanModal>
     );
   }
 
@@ -273,11 +316,11 @@ export default function PlanReviewPanel({ deploymentId, title }: Props) {
   }
 
   return (
-    <CanvasPanelHost title={title}>
-      <div style={{ display: "flex", flexDirection: "column" }}>
+    <PlanModal onClose={popPanel}>
 
-        {/* ── Plan header ── */}
-        <div style={{ marginBottom: 24 }}>
+      {/* ── Plan header ── */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24 }}>
+        <div>
           <div style={{
             fontSize: 10,
             color: "var(--text-muted)",
@@ -311,389 +354,401 @@ export default function PlanReviewPanel({ deploymentId, title }: Props) {
             → {envName}{partName ? ` · ${partName}` : ""}
           </div>
         </div>
+        <button
+          onClick={popPanel}
+          style={{
+            width: 30, height: 30, borderRadius: 6,
+            border: "1px solid var(--border)", background: "var(--surface)",
+            color: "var(--text-muted)", fontSize: 16, cursor: "pointer",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            flexShrink: 0,
+          }}
+        >
+          ×
+        </button>
+      </div>
 
-        {/* ── Synth Assessment ── */}
-        {recommendation && (
-          <div className="synth-assessment">
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-              <SynthMark size={16} />
-              <span className="synth-assessment-label">Synth Assessment</span>
-              <ConfidenceIndicator value={verdictToConfidence(recommendation.verdict)} qualifier="confidence" />
-            </div>
-            <p style={{ fontSize: 13, color: "var(--text)", lineHeight: 1.6, margin: 0 }}>
-              {recommendation.summary}
-            </p>
-            {recommendation.factors.length > 0 && (
-              <ul style={{ margin: "8px 0 0 0", paddingLeft: 18, fontSize: 12, color: "var(--text-secondary)" }}>
-                {recommendation.factors.map((f, i) => <li key={i}>{f}</li>)}
-              </ul>
-            )}
+      {/* ── Synth Assessment ── */}
+      {recommendation && (
+        <div className="synth-assessment">
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+            <SynthMark size={16} />
+            <span className="synth-assessment-label">Synth Assessment</span>
+            <ConfidenceIndicator value={verdictToConfidence(recommendation.verdict)} qualifier="confidence" />
           </div>
-        )}
+          <p style={{ fontSize: 13, color: "var(--text)", lineHeight: 1.6, margin: 0 }}>
+            {recommendation.summary}
+          </p>
+          {recommendation.factors.length > 0 && (
+            <ul style={{ margin: "8px 0 0 0", paddingLeft: 18, fontSize: 12, color: "var(--text-secondary)" }}>
+              {recommendation.factors.map((f, i) => <li key={i}>{f}</li>)}
+            </ul>
+          )}
+        </div>
+      )}
 
-        {/* ── Envoy's Plan (review mode) ── */}
-        {mode !== "modify" && plan && (
-          <div style={{ marginBottom: 22 }}>
-            <div style={{
-              fontSize: 10,
-              color: "var(--text-muted)",
-              fontWeight: 700,
-              textTransform: "uppercase",
-              letterSpacing: "1.5px",
-              fontFamily: "var(--font-mono)",
-              marginBottom: 10,
-            }}>
-              Envoy&apos;s Plan{revised && " (Revised)"}
-            </div>
-            {plan.steps.map((step, i) => {
-              const risk = !step.reversible ? "high" : step.rollbackAction ? "low" : "none";
-              return (
-                <div key={i} className="plan-step-row">
-                  <span className="plan-step-num">{i + 1}</span>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 13, color: "var(--text)" }}>
-                      {step.description || step.action}
-                    </div>
-                    <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>
-                      ↩ {step.rollbackAction || "—"}
-                    </div>
-                  </div>
-                  <span style={{
-                    fontSize: 10,
-                    fontFamily: "var(--font-mono)",
-                    fontWeight: 600,
-                    alignSelf: "center",
-                    color: risk === "none"
-                      ? "var(--text-muted)"
-                      : risk === "high"
-                        ? "var(--status-failed)"
-                        : "var(--status-succeeded)",
-                  }}>
-                    {risk}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        {/* ── Cross-System Context ── */}
-        <div style={{
-          padding: "12px 16px",
-          borderRadius: 8,
-          marginBottom: 20,
-          background: "var(--surface-alt)",
-          border: "1px solid var(--border)",
-        }}>
+      {/* ── Envoy's Plan (review mode) ── */}
+      {mode !== "modify" && plan && (
+        <div style={{ marginBottom: 22 }}>
           <div style={{
             fontSize: 10,
             color: "var(--text-muted)",
-            fontWeight: 600,
-            marginBottom: 6,
-            fontFamily: "var(--font-mono)",
+            fontWeight: 700,
             textTransform: "uppercase",
-            letterSpacing: "1px",
+            letterSpacing: "1.5px",
+            fontFamily: "var(--font-mono)",
+            marginBottom: 10,
           }}>
-            Cross-System Context
+            Envoy&apos;s Plan{revised && " (Revised)"}
           </div>
-          <div style={{ fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.65 }}>
-            {buildContextText(enrichment, envName)}
-          </div>
-        </div>
-
-        {/* ── Modify mode ── */}
-        {mode === "modify" && (
-          <div className="canvas-section">
-            <h3 className="canvas-section-title">Edit Plan Steps</h3>
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              {modifiedSteps.map((step, i) => (
-                <div key={i} style={{
-                  background: "var(--surface-alt)",
-                  padding: 12,
-                  borderRadius: 8,
-                  border: "1px solid var(--border)",
-                }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>Step {i + 1}</span>
-                    <button
-                      onClick={() => removeStep(i)}
-                      style={{ background: "transparent", border: "none", color: "var(--status-failed)", cursor: "pointer", fontSize: 12 }}
-                    >
-                      Remove
-                    </button>
+          {plan.steps.map((step, i) => {
+            const risk = !step.reversible ? "high" : step.rollbackAction ? "low" : "none";
+            return (
+              <div key={i} className="plan-step-row">
+                <span className="plan-step-num">{i + 1}</span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, color: "var(--text)" }}>
+                    {step.description || step.action}
                   </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                    <input
-                      value={step.action}
-                      onChange={(e) => updateStep(i, "action", e.target.value)}
-                      placeholder="Action"
-                      className="v2-input"
-                      style={{ fontSize: 12 }}
-                    />
-                    <input
-                      value={step.target}
-                      onChange={(e) => updateStep(i, "target", e.target.value)}
-                      placeholder="Target"
-                      className="v2-input"
-                      style={{ fontSize: 12 }}
-                    />
-                  </div>
-                  <input
-                    value={step.description}
-                    onChange={(e) => updateStep(i, "description", e.target.value)}
-                    placeholder="Description"
-                    className="v2-input"
-                    style={{ fontSize: 12, marginTop: 8 }}
-                  />
-                  <div style={{ display: "flex", gap: 8, marginTop: 8, alignItems: "center" }}>
-                    <label style={{ fontSize: 12, color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 4 }}>
-                      <input
-                        type="checkbox"
-                        checked={step.reversible}
-                        onChange={(e) => updateStep(i, "reversible", e.target.checked)}
-                      />
-                      Reversible
-                    </label>
-                    {step.reversible && (
-                      <input
-                        value={step.rollbackAction ?? ""}
-                        onChange={(e) => updateStep(i, "rollbackAction", e.target.value)}
-                        placeholder="Rollback action"
-                        className="v2-input"
-                        style={{ fontSize: 12, flex: 1 }}
-                      />
-                    )}
+                  <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>
+                    ↩ {step.rollbackAction || "—"}
                   </div>
                 </div>
-              ))}
-              <button onClick={addStep} className="v2-btn" style={{ alignSelf: "flex-start" }}>
-                + Add Step
-              </button>
-              <div>
-                <label style={{ fontSize: 12, color: "var(--text-muted)", display: "block", marginBottom: 4 }}>
-                  Reason for modification
-                </label>
-                <textarea
-                  value={modifyReason}
-                  onChange={(e) => setModifyReason(e.target.value)}
-                  placeholder="Why are you modifying this plan?"
-                  className="v2-input"
-                  rows={2}
-                  style={{ resize: "vertical" }}
-                />
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ── Refine mode — inline above action buttons ── */}
-        {mode === "refine" && (
-          <div style={{
-            padding: "16px 18px",
-            borderRadius: 10,
-            marginBottom: 16,
-            background: "var(--accent-dim)",
-            border: "1px solid var(--accent-border)",
-          }}>
-            <div style={{
-              fontSize: 12,
-              fontWeight: 600,
-              color: "var(--accent)",
-              marginBottom: 8,
-              fontFamily: "var(--font-mono)",
-            }}>
-              What should Synth reconsider?
-            </div>
-            <p style={{ fontSize: 12, color: "var(--text-secondary)", margin: "0 0 10px 0", lineHeight: 1.5 }}>
-              Describe what&apos;s wrong or what&apos;s missing. Synth will regenerate the plan incorporating your
-              feedback. This also improves future plans for this artifact.
-            </p>
-            <textarea
-              value={refineFeedback}
-              onChange={(e) => setRefineFeedback(e.target.value)}
-              placeholder="e.g. CACHE_TTL also changed in this version — make sure that's applied. Also verify the /v2 endpoint responds after deploy, not just /health."
-              className="v2-input"
-              rows={3}
-              style={{ resize: "vertical" }}
-              autoFocus
-            />
-            {refining && (
-              <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 8, fontSize: 12, color: "var(--accent)" }}>
-                <SynthMark size={14} active />
-                Re-reasoning...
-              </div>
-            )}
-            <div style={{ display: "flex", gap: 8, marginTop: 10, justifyContent: "flex-end" }}>
-              <button
-                onClick={() => { setMode("review"); setError(null); setRefineFeedback(""); }}
-                disabled={refining}
-                style={{
-                  padding: "8px 14px",
-                  borderRadius: 6,
-                  border: "1px solid var(--border)",
-                  background: "transparent",
-                  color: "var(--text-muted)",
-                  fontSize: 12,
+                <span style={{
+                  fontSize: 10,
                   fontFamily: "var(--font-mono)",
-                  cursor: "pointer",
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleRefine}
-                disabled={refining}
-                style={{
-                  padding: "8px 18px",
-                  borderRadius: 6,
-                  border: "none",
-                  background: "var(--accent)",
-                  color: "#fff",
-                  fontSize: 12,
                   fontWeight: 600,
-                  fontFamily: "var(--font-mono)",
-                  cursor: "pointer",
-                  opacity: refining ? 0.6 : 1,
-                }}
-              >
-                {refining ? "Revising..." : "Revise Plan"}
-              </button>
+                  alignSelf: "center",
+                  color: risk === "none"
+                    ? "var(--text-muted)"
+                    : risk === "high"
+                      ? "var(--status-failed)"
+                      : "var(--status-succeeded)",
+                }}>
+                  {risk}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ── Cross-System Context ── */}
+      <div style={{
+        padding: "12px 16px",
+        borderRadius: 8,
+        marginBottom: 20,
+        background: "var(--surface-alt)",
+        border: "1px solid var(--border)",
+      }}>
+        <div style={{
+          fontSize: 10,
+          color: "var(--text-muted)",
+          fontWeight: 600,
+          marginBottom: 6,
+          fontFamily: "var(--font-mono)",
+          textTransform: "uppercase",
+          letterSpacing: "1px",
+        }}>
+          Cross-System Context
+        </div>
+        <div style={{ fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.65 }}>
+          {buildContextText(enrichment, envName)}
+        </div>
+      </div>
+
+      {/* ── Modify mode ── */}
+      {mode === "modify" && (
+        <div className="canvas-section">
+          <h3 className="canvas-section-title">Edit Plan Steps</h3>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            {modifiedSteps.map((step, i) => (
+              <div key={i} style={{
+                background: "var(--surface-alt)",
+                padding: 12,
+                borderRadius: 8,
+                border: "1px solid var(--border)",
+              }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>Step {i + 1}</span>
+                  <button
+                    onClick={() => removeStep(i)}
+                    style={{ background: "transparent", border: "none", color: "var(--status-failed)", cursor: "pointer", fontSize: 12 }}
+                  >
+                    Remove
+                  </button>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                  <input
+                    value={step.action}
+                    onChange={(e) => updateStep(i, "action", e.target.value)}
+                    placeholder="Action"
+                    className="v2-input"
+                    style={{ fontSize: 12 }}
+                  />
+                  <input
+                    value={step.target}
+                    onChange={(e) => updateStep(i, "target", e.target.value)}
+                    placeholder="Target"
+                    className="v2-input"
+                    style={{ fontSize: 12 }}
+                  />
+                </div>
+                <input
+                  value={step.description}
+                  onChange={(e) => updateStep(i, "description", e.target.value)}
+                  placeholder="Description"
+                  className="v2-input"
+                  style={{ fontSize: 12, marginTop: 8 }}
+                />
+                <div style={{ display: "flex", gap: 8, marginTop: 8, alignItems: "center" }}>
+                  <label style={{ fontSize: 12, color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 4 }}>
+                    <input
+                      type="checkbox"
+                      checked={step.reversible}
+                      onChange={(e) => updateStep(i, "reversible", e.target.checked)}
+                    />
+                    Reversible
+                  </label>
+                  {step.reversible && (
+                    <input
+                      value={step.rollbackAction ?? ""}
+                      onChange={(e) => updateStep(i, "rollbackAction", e.target.value)}
+                      placeholder="Rollback action"
+                      className="v2-input"
+                      style={{ fontSize: 12, flex: 1 }}
+                    />
+                  )}
+                </div>
+              </div>
+            ))}
+            <button onClick={addStep} className="v2-btn" style={{ alignSelf: "flex-start" }}>
+              + Add Step
+            </button>
+            <div>
+              <label style={{ fontSize: 12, color: "var(--text-muted)", display: "block", marginBottom: 4 }}>
+                Reason for modification
+              </label>
+              <textarea
+                value={modifyReason}
+                onChange={(e) => setModifyReason(e.target.value)}
+                placeholder="Why are you modifying this plan?"
+                className="v2-input"
+                rows={2}
+                style={{ resize: "vertical" }}
+              />
             </div>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* ── Reject prompt ── */}
-        {mode === "reject-prompt" && (
-          <div style={{ marginBottom: 16 }}>
-            <label style={{ fontSize: 12, color: "var(--text-muted)", display: "block", marginBottom: 4 }}>
-              Reason for rejection
-            </label>
-            <textarea
-              value={rejectReason}
-              onChange={(e) => setRejectReason(e.target.value)}
-              placeholder="Why is this plan being rejected?"
-              className="v2-input"
-              rows={3}
-              style={{ resize: "vertical" }}
-              autoFocus
-            />
-          </div>
-        )}
-
-        {/* ── Error ── */}
-        {error && (
+      {/* ── Refine mode ── */}
+      {mode === "refine" && (
+        <div style={{
+          padding: "16px 18px",
+          borderRadius: 10,
+          marginBottom: 16,
+          background: "var(--accent-dim)",
+          border: "1px solid var(--accent-border)",
+        }}>
           <div style={{
-            padding: "8px 12px",
-            background: "color-mix(in srgb, var(--status-failed) 12%, transparent)",
-            border: "1px solid color-mix(in srgb, var(--status-failed) 30%, transparent)",
-            borderRadius: 6,
-            fontSize: 13,
-            color: "var(--status-failed)",
-            marginBottom: 12,
+            fontSize: 12,
+            fontWeight: 600,
+            color: "var(--accent)",
+            marginBottom: 8,
+            fontFamily: "var(--font-mono)",
           }}>
-            {error}
+            What should Synth reconsider?
           </div>
-        )}
-
-        {/* ── Primary action buttons ── */}
-        {(mode === "review" || mode === "refine") && (
-          <div style={{ display: "flex", gap: 8 }}>
+          <p style={{ fontSize: 12, color: "var(--text-secondary)", margin: "0 0 10px 0", lineHeight: 1.5 }}>
+            Describe what&apos;s wrong or what&apos;s missing. Synth will regenerate the plan incorporating your
+            feedback. This also improves future plans for this artifact.
+          </p>
+          <textarea
+            value={refineFeedback}
+            onChange={(e) => setRefineFeedback(e.target.value)}
+            placeholder="e.g. CACHE_TTL also changed in this version — make sure that's applied. Also verify the /v2 endpoint responds after deploy, not just /health."
+            className="v2-input"
+            rows={3}
+            style={{ resize: "vertical" }}
+            autoFocus
+          />
+          {refining && (
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 8, fontSize: 12, color: "var(--accent)" }}>
+              <SynthMark size={14} active />
+              Re-reasoning...
+            </div>
+          )}
+          <div style={{ display: "flex", gap: 8, marginTop: 10, justifyContent: "flex-end" }}>
             <button
-              className="plan-btn plan-btn-greenlight"
-              onClick={handleGreenlight}
-              disabled={actionLoading}
-            >
-              ✓ Greenlight
-            </button>
-            {mode === "review" && (
-              <button
-                className="plan-btn plan-btn-refine"
-                onClick={() => { setMode("refine"); setError(null); setRefineFeedback(""); }}
-                disabled={actionLoading}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M12 20h9" />
-                  <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
-                </svg>
-                Refine
-              </button>
-            )}
-            <button
-              className="plan-btn plan-btn-reject"
-              onClick={() => { setMode("reject-prompt"); setError(null); }}
-              disabled={actionLoading}
-            >
-              Reject
-            </button>
-          </div>
-        )}
-
-        {mode === "reject-prompt" && (
-          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-            <button
-              className="plan-btn plan-btn-reject"
-              onClick={() => { setMode("review"); setError(null); setRejectReason(""); }}
-              disabled={actionLoading}
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleReject}
-              disabled={actionLoading}
+              onClick={() => { setMode("review"); setError(null); setRefineFeedback(""); }}
+              disabled={refining}
               style={{
-                padding: "13px 20px",
-                borderRadius: 8,
-                border: "none",
-                background: "var(--status-failed)",
-                color: "#fff",
-                fontSize: 14,
+                padding: "8px 14px",
+                borderRadius: 6,
+                border: "1px solid var(--border)",
+                background: "transparent",
+                color: "var(--text-muted)",
+                fontSize: 12,
                 fontFamily: "var(--font-mono)",
-                fontWeight: 600,
                 cursor: "pointer",
-                opacity: actionLoading ? 0.5 : 1,
               }}
-            >
-              {actionLoading ? "Rejecting..." : "Confirm Rejection"}
-            </button>
-          </div>
-        )}
-
-        {mode === "modify" && (
-          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 8 }}>
-            <button
-              className="plan-btn plan-btn-reject"
-              onClick={() => {
-                setMode("review");
-                setError(null);
-                if (deployment.plan) setModifiedSteps(deployment.plan.steps.map((s) => ({ ...s })));
-                setModifyReason("");
-              }}
-              disabled={actionLoading}
             >
               Cancel
             </button>
             <button
-              onClick={handleSaveModifications}
-              disabled={actionLoading}
+              onClick={handleRefine}
+              disabled={refining}
               style={{
-                padding: "13px 20px",
-                borderRadius: 8,
+                padding: "8px 18px",
+                borderRadius: 6,
                 border: "none",
                 background: "var(--accent)",
                 color: "#fff",
-                fontSize: 14,
-                fontFamily: "var(--font-mono)",
+                fontSize: 12,
                 fontWeight: 600,
+                fontFamily: "var(--font-mono)",
                 cursor: "pointer",
-                opacity: actionLoading ? 0.5 : 1,
+                opacity: refining ? 0.6 : 1,
               }}
             >
-              {actionLoading ? "Saving..." : "Save Modifications"}
+              {refining ? "Revising..." : "Revise Plan"}
             </button>
           </div>
-        )}
+        </div>
+      )}
 
-      </div>
-    </CanvasPanelHost>
+      {/* ── Reject prompt ── */}
+      {mode === "reject-prompt" && (
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ fontSize: 12, color: "var(--text-muted)", display: "block", marginBottom: 4 }}>
+            Reason for rejection
+          </label>
+          <textarea
+            value={rejectReason}
+            onChange={(e) => setRejectReason(e.target.value)}
+            placeholder="Why is this plan being rejected?"
+            className="v2-input"
+            rows={3}
+            style={{ resize: "vertical" }}
+            autoFocus
+          />
+        </div>
+      )}
+
+      {/* ── Error ── */}
+      {error && (
+        <div style={{
+          padding: "8px 12px",
+          background: "color-mix(in srgb, var(--status-failed) 12%, transparent)",
+          border: "1px solid color-mix(in srgb, var(--status-failed) 30%, transparent)",
+          borderRadius: 6,
+          fontSize: 13,
+          color: "var(--status-failed)",
+          marginBottom: 12,
+        }}>
+          {error}
+        </div>
+      )}
+
+      {/* ── Primary action buttons ── */}
+      {(mode === "review" || mode === "refine") && (
+        <div style={{ display: "flex", gap: 8 }}>
+          <button
+            className="plan-btn plan-btn-greenlight"
+            onClick={handleGreenlight}
+            disabled={actionLoading}
+          >
+            ✓ Greenlight
+          </button>
+          {mode === "review" && (
+            <button
+              className="plan-btn plan-btn-refine"
+              onClick={() => { setMode("refine"); setError(null); setRefineFeedback(""); }}
+              disabled={actionLoading}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 20h9" />
+                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
+              </svg>
+              Refine
+            </button>
+          )}
+          <button
+            className="plan-btn plan-btn-reject"
+            onClick={() => { setMode("reject-prompt"); setError(null); }}
+            disabled={actionLoading}
+          >
+            Reject
+          </button>
+        </div>
+      )}
+
+      {mode === "reject-prompt" && (
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+          <button
+            className="plan-btn plan-btn-reject"
+            onClick={() => { setMode("review"); setError(null); setRejectReason(""); }}
+            disabled={actionLoading}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleReject}
+            disabled={actionLoading}
+            style={{
+              padding: "13px 20px",
+              borderRadius: 8,
+              border: "none",
+              background: "var(--status-failed)",
+              color: "#fff",
+              fontSize: 14,
+              fontFamily: "var(--font-mono)",
+              fontWeight: 600,
+              cursor: "pointer",
+              opacity: actionLoading ? 0.5 : 1,
+            }}
+          >
+            {actionLoading ? "Rejecting..." : "Confirm Rejection"}
+          </button>
+        </div>
+      )}
+
+      {mode === "modify" && (
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 8 }}>
+          <button
+            className="plan-btn plan-btn-reject"
+            onClick={() => {
+              setMode("review");
+              setError(null);
+              if (deployment.plan) setModifiedSteps(deployment.plan.steps.map((s) => ({ ...s })));
+              setModifyReason("");
+            }}
+            disabled={actionLoading}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSaveModifications}
+            disabled={actionLoading}
+            style={{
+              padding: "13px 20px",
+              borderRadius: 8,
+              border: "none",
+              background: "var(--accent)",
+              color: "#fff",
+              fontSize: 14,
+              fontFamily: "var(--font-mono)",
+              fontWeight: 600,
+              cursor: "pointer",
+              opacity: actionLoading ? 0.5 : 1,
+            }}
+          >
+            {actionLoading ? "Saving..." : "Save Modifications"}
+          </button>
+        </div>
+      )}
+
+    </PlanModal>
   );
 }

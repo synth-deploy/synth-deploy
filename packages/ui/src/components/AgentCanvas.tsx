@@ -311,9 +311,15 @@ export default function AgentCanvas() {
             <SynthMark size={16} active={true} />
             <div>
               <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>
-                Deploying {minimizedDeployment.artifactName}
+                {minimizedDeployment.panelType === "plan-review"
+                  ? `Planning ${minimizedDeployment.artifactName}`
+                  : `Deploying ${minimizedDeployment.artifactName}`}
               </div>
-              <div style={{ fontSize: 11, color: "var(--text-muted)" }}>In progress — click to view</div>
+              <div style={{ fontSize: 11, color: "var(--text-muted)" }}>
+                {minimizedDeployment.panelType === "plan-review"
+                  ? "Reasoning in progress — click to review"
+                  : "In progress — click to view"}
+              </div>
             </div>
             <div style={{ width: 48, height: 3, borderRadius: 2, background: "var(--surface-alt)", overflow: "hidden", marginLeft: 8 }}>
               <div style={{ height: "100%", borderRadius: 2, background: "var(--accent)", animation: "progressPulse 2s ease infinite" }} />

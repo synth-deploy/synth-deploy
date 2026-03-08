@@ -10,6 +10,7 @@ export interface CanvasPanel {
 export interface MinimizedDeployment {
   deploymentId: string;
   artifactName: string;
+  panelType?: "deployment-detail" | "plan-review";
 }
 
 interface CanvasState {
@@ -91,11 +92,12 @@ export function CanvasProvider({ children }: { children: ReactNode }) {
     },
     restoreDeployment: () => {
       if (minimizedDeployment) {
+        const panelType = minimizedDeployment.panelType ?? "deployment-detail";
         dispatch({
           type: "PUSH",
           panel: {
-            type: "deployment-detail",
-            title: `Deployment`,
+            type: panelType,
+            title: panelType === "plan-review" ? "Review Plan" : `Deployment`,
             params: { id: minimizedDeployment.deploymentId },
           },
         });

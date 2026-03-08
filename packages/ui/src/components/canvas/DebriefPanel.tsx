@@ -91,6 +91,18 @@ function DeploymentDebriefDetail({ deploymentId, onBack }: { deploymentId: strin
     ? Math.round((new Date(deployment.completedAt).getTime() - new Date(deployment.createdAt).getTime()) / 1000)
     : null;
   const envoyEntries = debrief.filter((e) => e.agent === "envoy");
+  // Fallback assessment from debrief when recommendation isn't persisted
+  const assessmentEntry = !deployment.recommendation
+    ? debrief.find((e) => e.decisionType === "plan-generation" || e.decisionType === "pipeline-plan")
+    : null;
+  // Fallback plan steps from debrief when plan isn't stored
+  const executionEntries = !deployment.plan
+    ? debrief.filter((e) => e.decisionType === "deployment-execution" || e.decisionType === "deployment-verification")
+    : [];
+  // Config changes fallback from debrief when plan.diffFromCurrent isn't available
+  const configEntry = !deployment.plan?.diffFromCurrent
+    ? debrief.find((e) => e.decisionType === "configuration-resolved")
+    : null;
 
   const statusColor = deployment.status === "succeeded"
     ? "var(--status-succeeded)"
@@ -123,7 +135,7 @@ function DeploymentDebriefDetail({ deploymentId, onBack }: { deploymentId: strin
       {/* Header */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 24 }}>
         <div>
-          <h1 style={{ fontSize: 24, fontWeight: 500, color: "var(--text)", margin: "0 0 6px 0" }}>
+          <h1 style={{ fontSize: 24, fontWeight: 500, color: "var(--text)", margin: "0 0 6px 0", fontFamily: "var(--font-display)" }}>
             {artName}{" "}
             <span style={{ fontFamily: "var(--font-mono)", fontSize: 16, fontWeight: 400, color: "var(--text-muted)" }}>
               {deployment.version}
@@ -194,82 +206,140 @@ function DeploymentDebriefDetail({ deploymentId, onBack }: { deploymentId: strin
         ))}
       </div>
 
-      {/* Synth's Assessment at time of deployment */}
-      {deployment.recommendation && (
+      {/* Synth's Assessment — from recommendation or debrief fallback */}
+      {(deployment.recommendation || assessmentEntry) && (
         <div className="canvas-section">
           <h3 className="canvas-section-title">Synth&rsquo;s Assessment</h3>
           <div style={{
             padding: "14px 18px", borderRadius: 10, fontSize: 13, color: "var(--text)", lineHeight: 1.6,
             background: "var(--accent-soft, rgba(45,91,240,0.06))", border: "1px solid var(--accent-border)",
           }}>
-            <div style={{
-              fontSize: 10, fontFamily: "var(--font-mono)", fontWeight: 700, textTransform: "uppercase",
-              letterSpacing: "0.08em", color: "var(--accent)", marginBottom: 8,
-            }}>
-              Recommendation: {deployment.recommendation.verdict === "proceed" ? "Proceed" : deployment.recommendation.verdict === "caution" ? "Proceed with Caution" : "Hold"}
-            </div>
-            <div style={{ color: "var(--text)" }}>{deployment.recommendation.summary}</div>
-            {deployment.recommendation.factors.length > 0 && (
-              <ul style={{ margin: "8px 0 0", paddingLeft: 18, fontSize: 12, color: "var(--text-muted)" }}>
-                {deployment.recommendation.factors.map((f, i) => <li key={i}>{f}</li>)}
-              </ul>
+            {deployment.recommendation ? (
+              <>
+                <div style={{
+                  fontSize: 10, fontFamily: "var(--font-mono)", fontWeight: 700, textTransform: "uppercase",
+                  letterSpacing: "0.08em", color: "var(--accent)", marginBottom: 8,
+                }}>
+                  Recommendation: {deployment.recommendation.verdict === "proceed" ? "Proceed" : deployment.recommendation.verdict === "caution" ? "Proceed with Caution" : "Hold"}
+                </div>
+                <div style={{ color: "var(--text)" }}>{deployment.recommendation.summary}</div>
+                {deployment.recommendation.factors.length > 0 && (
+                  <ul style={{ margin: "8px 0 0", paddingLeft: 18, fontSize: 12, color: "var(--text-muted)" }}>
+                    {deployment.recommendation.factors.map((f, i) => <li key={i}>{f}</li>)}
+                  </ul>
+                )}
+              </>
+            ) : assessmentEntry && (
+              <>
+                <div style={{
+                  fontSize: 10, fontFamily: "var(--font-mono)", fontWeight: 700, textTransform: "uppercase",
+                  letterSpacing: "0.08em", color: "var(--accent)", marginBottom: 8,
+                }}>
+                  {assessmentEntry.decision}
+                </div>
+                {assessmentEntry.reasoning && (
+                  <div style={{ color: "var(--text)" }}>{assessmentEntry.reasoning}</div>
+                )}
+              </>
             )}
           </div>
         </div>
       )}
 
-      {/* Executed Plan steps */}
-      {deployment.executionRecord && (
+      {/* Executed Plan steps — prefer executionRecord, fall back to plan.steps, then debrief entries */}
+      {(deployment.executionRecord || deployment.plan || executionEntries.length > 0) && (
         <div className="canvas-section">
           <h3 className="canvas-section-title">Executed Plan</h3>
           <div style={{ borderRadius: 10, overflow: "hidden", border: "1px solid var(--border)", background: "var(--surface)" }}>
-            {deployment.executionRecord.steps.map((step, i) => {
-              const stepDuration = step.completedAt
-                ? `${Math.round((new Date(step.completedAt).getTime() - new Date(step.startedAt).getTime()) / 1000)}s`
-                : "—";
-              const isLast = i === deployment.executionRecord!.steps.length - 1;
-              const iconColor = step.status === "completed" ? "var(--status-succeeded)" : step.status === "failed" ? "var(--status-failed)" : "var(--status-warning)";
-              const iconBg = step.status === "completed" ? "var(--status-succeeded-bg)" : step.status === "failed" ? "var(--status-failed-bg)" : "var(--status-warning-bg)";
-              const iconLabel = step.status === "completed" ? "✓" : step.status === "failed" ? "✗" : "…";
-              return (
-                <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "11px 16px", borderBottom: isLast ? "none" : "1px solid var(--border)" }}>
-                  <span style={{
-                    width: 22, height: 22, borderRadius: 5, display: "flex", alignItems: "center", justifyContent: "center",
-                    background: iconBg, color: iconColor, fontSize: 11, fontWeight: 700, flexShrink: 0, marginTop: 1,
-                  }}>{iconLabel}</span>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, color: "var(--text)" }}>{step.description}</div>
-                    {step.output && <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>{step.output}</div>}
-                    {step.error && <div style={{ fontSize: 11, color: "var(--status-failed)", marginTop: 2 }}>{step.error}</div>}
-                  </div>
-                  <span style={{ fontSize: 11, fontFamily: "var(--font-mono)", color: "var(--text-muted)", flexShrink: 0, marginTop: 3 }}>{stepDuration}</span>
-                </div>
-              );
-            })}
+            {deployment.executionRecord
+              ? deployment.executionRecord.steps.map((step, i) => {
+                  const stepDuration = step.completedAt
+                    ? `${Math.round((new Date(step.completedAt).getTime() - new Date(step.startedAt).getTime()) / 1000)}s`
+                    : "—";
+                  const isLast = i === deployment.executionRecord!.steps.length - 1;
+                  const iconColor = step.status === "completed" ? "var(--status-succeeded)" : step.status === "failed" ? "var(--status-failed)" : "var(--status-warning)";
+                  const iconBg = step.status === "completed" ? "var(--status-succeeded-bg)" : step.status === "failed" ? "var(--status-failed-bg)" : "var(--status-warning-bg)";
+                  const iconLabel = step.status === "completed" ? "✓" : step.status === "failed" ? "✗" : "…";
+                  return (
+                    <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "11px 16px", borderBottom: isLast ? "none" : "1px solid var(--border)" }}>
+                      <span style={{ width: 22, height: 22, borderRadius: 5, display: "flex", alignItems: "center", justifyContent: "center", background: iconBg, color: iconColor, fontSize: 11, fontWeight: 700, flexShrink: 0, marginTop: 1 }}>{iconLabel}</span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, color: "var(--text)" }}>{step.description}</div>
+                        {step.output && <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>{step.output}</div>}
+                        {step.error && <div style={{ fontSize: 11, color: "var(--status-failed)", marginTop: 2 }}>{step.error}</div>}
+                      </div>
+                      <span style={{ fontSize: 11, fontFamily: "var(--font-mono)", color: "var(--text-muted)", flexShrink: 0, marginTop: 3 }}>{stepDuration}</span>
+                    </div>
+                  );
+                })
+              : deployment.plan
+              ? deployment.plan.steps.map((step, i) => {
+                  const isLast = i === deployment.plan!.steps.length - 1;
+                  const succeeded = deployment.status === "succeeded";
+                  const failed = deployment.status === "failed" || deployment.status === "rolled_back";
+                  const iconColor = succeeded ? "var(--status-succeeded)" : failed ? "var(--status-failed)" : "var(--text-muted)";
+                  const iconBg = succeeded ? "var(--status-succeeded-bg)" : failed ? "var(--status-failed-bg)" : "var(--surface-alt)";
+                  const iconLabel = succeeded ? "✓" : failed ? "✗" : "·";
+                  return (
+                    <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "11px 16px", borderBottom: isLast ? "none" : "1px solid var(--border)" }}>
+                      <span style={{ width: 22, height: 22, borderRadius: 5, display: "flex", alignItems: "center", justifyContent: "center", background: iconBg, color: iconColor, fontSize: 11, fontWeight: 700, flexShrink: 0, marginTop: 1 }}>{iconLabel}</span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, color: "var(--text)" }}>{step.description}</div>
+                        {step.action && <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2, fontFamily: "var(--font-mono)" }}>{step.action}</div>}
+                      </div>
+                      {step.target && <span style={{ fontSize: 11, fontFamily: "var(--font-mono)", color: "var(--text-muted)", flexShrink: 0, marginTop: 3 }}>{step.target}</span>}
+                    </div>
+                  );
+                })
+              : executionEntries.map((entry, i) => {
+                  const isLast = i === executionEntries.length - 1;
+                  const iconColor = "var(--status-succeeded)";
+                  const iconBg = "var(--status-succeeded-bg)";
+                  return (
+                    <div key={entry.id} style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "11px 16px", borderBottom: isLast ? "none" : "1px solid var(--border)" }}>
+                      <span style={{ width: 22, height: 22, borderRadius: 5, display: "flex", alignItems: "center", justifyContent: "center", background: iconBg, color: iconColor, fontSize: 11, fontWeight: 700, flexShrink: 0, marginTop: 1 }}>✓</span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, color: "var(--text)" }}>{entry.decision}</div>
+                        {entry.reasoning && <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>{entry.reasoning}</div>}
+                      </div>
+                    </div>
+                  );
+                })
+            }
           </div>
         </div>
       )}
 
       {/* Config Diff */}
-      {deployment.plan?.diffFromCurrent && (
+      {(deployment.plan?.diffFromCurrent || configEntry) && (
         <div className="canvas-section">
           <h3 className="canvas-section-title">Configuration Changes</h3>
           <div style={{ borderRadius: 10, border: "1px solid var(--border)", background: "var(--surface)", padding: "12px 16px" }}>
-            {deployment.plan.diffFromCurrent.split("\n").filter(Boolean).map((line, i) => {
-              const isAdded = line.startsWith("+");
-              const isRemoved = line.startsWith("-");
-              return (
-                <div key={i} style={{
-                  fontFamily: "var(--font-mono)",
-                  fontSize: 12,
-                  lineHeight: 1.8,
-                  color: isAdded ? "var(--status-succeeded)" : isRemoved ? "var(--status-failed)" : "var(--text-muted)",
-                  textDecoration: isRemoved ? "line-through" : undefined,
-                }}>
-                  {line}
-                </div>
-              );
-            })}
+            {deployment.plan?.diffFromCurrent
+              ? deployment.plan.diffFromCurrent.split("\n").filter(Boolean).map((line, i) => {
+                  const isAdded = line.startsWith("+");
+                  const isRemoved = line.startsWith("-");
+                  return (
+                    <div key={i} style={{
+                      fontFamily: "var(--font-mono)",
+                      fontSize: 12,
+                      lineHeight: 1.8,
+                      color: isAdded ? "var(--status-succeeded)" : isRemoved ? "var(--status-failed)" : "var(--text-muted)",
+                      textDecoration: isRemoved ? "line-through" : undefined,
+                    }}>
+                      {line}
+                    </div>
+                  );
+                })
+              : configEntry && (
+                  <div style={{ fontSize: 13, color: "var(--text)", lineHeight: 1.6 }}>
+                    <div>{configEntry.decision}</div>
+                    {configEntry.reasoning && (
+                      <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 6 }}>{configEntry.reasoning}</div>
+                    )}
+                  </div>
+                )
+            }
           </div>
         </div>
       )}
@@ -306,6 +376,14 @@ function DeploymentDebriefDetail({ deploymentId, onBack }: { deploymentId: strin
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Decision Log — all non-envoy debrief entries for this deployment */}
+      {debrief.filter((e) => e.agent !== "envoy").length > 0 && (
+        <div className="canvas-section">
+          <h3 className="canvas-section-title">Decision Log</h3>
+          <DebriefTimeline entries={debrief.filter((e) => e.agent !== "envoy")} />
         </div>
       )}
 

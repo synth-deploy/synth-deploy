@@ -1939,12 +1939,13 @@ table a:hover {
 }
 
 .canvas-section-title {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 10px;
+  font-weight: 700;
+  font-family: var(--font-mono);
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 1.5px;
   color: var(--text-muted);
-  margin: 0 0 12px 0;
+  margin: 0 0 10px 0;
 }
 
 /* ---- Signal grid ---- */
