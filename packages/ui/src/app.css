@@ -5041,6 +5041,24 @@ table a:hover {
 
 /* ---- Toast ---- */
 
+@keyframes panelSlideFromRight {
+  from { opacity: 0.5; transform: translateX(28px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes panelSlideFromLeft {
+  from { opacity: 0.5; transform: translateX(-28px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.panel-enter-from-right {
+  animation: panelSlideFromRight 0.2s ease-out;
+}
+
+.panel-enter-from-left {
+  animation: panelSlideFromLeft 0.2s ease-out;
+}
+
 @keyframes fadeUp {
   from { opacity: 0; transform: translateX(-50%) translateY(8px); }
   to { opacity: 1; transform: translateX(-50%) translateY(0); }
@@ -5440,7 +5458,8 @@ table a:hover {
 .canvas-column-layout .canvas-main-content {
   flex: 1;
   min-height: 0;
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .canvas-column-layout .synth-channel {

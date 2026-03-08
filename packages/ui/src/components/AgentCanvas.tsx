@@ -267,19 +267,25 @@ export default function AgentCanvas() {
       {/* Canvas content — always DOM-first so React identity is stable */}
       <div className="canvas-main-content">
         <ErrorBoundary>
-          {answerContent && chatOpen
-            ? <StructuredOutputPanel
-                content={answerContent}
-                title={answerTitle}
-                onDismiss={() => { setAnswerContent(null); setAnswerTitle(undefined); }}
-                onNavigate={(view, params) => {
-                  setAnswerContent(null);
-                  setAnswerTitle(undefined);
-                  pushPanel({ type: view, title: params.id ?? view, params });
-                }}
-              />
-            : renderPanel()
-          }
+          <div
+            key={currentPanel.id}
+            className={slideDir ? `panel-enter-from-${slideDir}` : undefined}
+            style={{ height: "100%", width: "100%" }}
+          >
+            {answerContent && chatOpen
+              ? <StructuredOutputPanel
+                  content={answerContent}
+                  title={answerTitle}
+                  onDismiss={() => { setAnswerContent(null); setAnswerTitle(undefined); }}
+                  onNavigate={(view, params) => {
+                    setAnswerContent(null);
+                    setAnswerTitle(undefined);
+                    pushPanel({ type: view, title: params.id ?? view, params });
+                  }}
+                />
+              : renderPanel()
+            }
+          </div>
         </ErrorBoundary>
         {minimizedDeployment && (
           <div
