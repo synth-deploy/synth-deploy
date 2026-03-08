@@ -78,7 +78,7 @@ const ExecuteRequestSchema = z.object({
       rollbackAction: z.string().optional(),
     })),
     reasoning: z.string(),
-    diffFromCurrent: z.string().optional(),
+    diffFromCurrent: z.array(z.object({ key: z.string(), from: z.string(), to: z.string() })).optional(),
     diffFromPreviousPlan: z.string().optional(),
   }),
   rollbackPlan: z.object({
@@ -90,7 +90,7 @@ const ExecuteRequestSchema = z.object({
       rollbackAction: z.string().optional(),
     })),
     reasoning: z.string(),
-    diffFromCurrent: z.string().optional(),
+    diffFromCurrent: z.array(z.object({ key: z.string(), from: z.string(), to: z.string() })).optional(),
     diffFromPreviousPlan: z.string().optional(),
   }),
 });

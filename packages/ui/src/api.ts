@@ -389,6 +389,10 @@ export interface SystemState {
     deployments: { total: number; active: number; failed24h: number };
     environments: number;
   };
+  assessment: {
+    headline: string;
+    detail: string;
+  };
 }
 
 export async function getSystemState(): Promise<SystemState> {

@@ -30,6 +30,10 @@ export interface SystemStateResponse {
     deployments: { total: number; active: number; failed24h: number };
     environments: number;
   };
+  assessment: {
+    headline: string;
+    detail: string;
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -105,6 +109,7 @@ export function registerSystemRoutes(
         state: "empty",
         signals: [],
         stats,
+        assessment: { headline: "Welcome to Synth.", detail: "Get started by connecting an envoy and registering your first artifact." },
       } satisfies SystemStateResponse;
     }
 
@@ -187,10 +192,38 @@ export function registerSystemRoutes(
 
     const state = signals.length > 0 ? "alert" : "normal";
 
+    // Derive editorial assessment from signals and context
+    let headline: string;
+    let detail: string;
+
+    const critical = signals.filter((s) => s.severity === "critical");
+    const warnings = signals.filter((s) => s.severity === "warning");
+
+    if (critical.length > 0) {
+      headline = critical.length === 1 ? "One thing before you deploy." : `${critical.length} issues need your attention.`;
+      detail = critical[0].detail;
+    } else if (warnings.length > 0) {
+      headline = warnings.length === 1 ? "One thing to keep in mind." : `${warnings.length} signals worth reviewing.`;
+      detail = warnings[0].detail;
+    } else if (activeDeployments.length > 0) {
+      const d = activeDeployments[0];
+      const artName = allArtifacts.find((a) => a.id === d.artifactId)?.name ?? "A deployment";
+      const envName = allEnvironments.find((e) => e.id === d.environmentId)?.name ?? "target";
+      headline = "Deployment in progress.";
+      detail = `${artName} is being deployed to ${envName}. All other environments are stable.`;
+    } else {
+      const totalDeps = allDeployments.length;
+      headline = "Looking good. Systems are clear.";
+      detail = totalDeps > 0
+        ? `No active alerts. ${stats.deployments.failed24h === 0 ? "All recent deployments succeeded." : `${stats.deployments.failed24h} failure${stats.deployments.failed24h > 1 ? "s" : ""} in the last 24h.`}`
+        : "No active alerts. Ready for your first deployment.";
+    }
+
     return {
       state,
       signals,
       stats,
+      assessment: { headline, detail },
     } satisfies SystemStateResponse;
   });
 }

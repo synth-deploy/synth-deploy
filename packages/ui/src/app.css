@@ -1780,9 +1780,15 @@ table a:hover {
 .canvas-panel-stack {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   padding-bottom: 80px; /* space for intent bar */
   position: relative;
   z-index: 1;
+  scrollbar-width: none;
+}
+
+.canvas-panel-stack::-webkit-scrollbar {
+  display: none;
 }
 
 /* ---- Canvas panel chrome ---- */
@@ -5461,6 +5467,11 @@ table a:hover {
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
+  scrollbar-width: none;
+}
+
+.canvas-column-layout .canvas-main-content::-webkit-scrollbar {
+  display: none;
 }
 
 .canvas-column-layout .synth-channel {

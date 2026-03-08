@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import {
   listDeployments,
-  listPartitions,
   listEnvironments,
   listArtifacts,
   listEnvoys,
@@ -9,13 +8,10 @@ import {
   createDeployment,
   getArtifact,
   getDeployment,
-  getRecentDebrief,
-  getDeploymentContext,
-  getHealth,
   getSystemState,
 } from "../../api.js";
-import type { Deployment, Partition, Environment, Artifact, DebriefEntry } from "../../types.js";
-import type { DeploymentContext, SystemState, AlertSignal, EnvoyRegistryEntry } from "../../api.js";
+import type { Deployment, Environment, Artifact, DebriefEntry } from "../../types.js";
+import type { SystemState, AlertSignal, EnvoyRegistryEntry } from "../../api.js";
 import { useCanvas } from "../../context/CanvasContext.js";
 import { useSettings } from "../../context/SettingsContext.js";
 import { useQuery } from "../../hooks/useQuery.js";
@@ -624,10 +620,15 @@ function NormalState({ stats: _stats, signals, assessment }: { stats: SystemStat
                   style={{ fontSize: 12, padding: "5px 12px", flexShrink: 0 }}
                   onClick={() => {
                     if (signal.relatedEntity) {
-                      const type = signal.relatedEntity.type;
-                      if (type === "environment") pushPanel({ type: "environment-detail", title: signal.relatedEntity.name, params: { id: signal.relatedEntity.id } });
-                      else if (type === "deployment") pushPanel({ type: "deployment-detail", title: "Deployment", params: { id: signal.relatedEntity.id } });
-                      else if (type === "envoy") pushPanel({ type: "envoy-registry", title: "Envoys", params: {} });
+                      const entityType = signal.relatedEntity.type;
+                      if (entityType === "environment") pushPanel({ type: "environment-detail", title: signal.relatedEntity.name, params: { id: signal.relatedEntity.id } });
+                      else if (entityType === "deployment") {
+                        if (signal.type === "deployment-failure") {
+                          pushPanel({ type: "debrief", title: "Debriefs", params: { deploymentId: signal.relatedEntity.id } });
+                        } else {
+                          pushPanel({ type: "deployment-detail", title: "Deployment", params: { id: signal.relatedEntity.id } });
+                        }
+                      } else if (entityType === "envoy") pushPanel({ type: "envoy-registry", title: "Envoys", params: {} });
                     }
                   }}
                 >
@@ -649,11 +650,14 @@ function NormalState({ stats: _stats, signals, assessment }: { stats: SystemStat
           }}>
             <span>Recent Deployments</span>
             <button
-              className="btn btn-secondary"
-              style={{ fontSize: 11, padding: "3px 10px", textTransform: "none", letterSpacing: "normal", fontWeight: 500 }}
               onClick={() => pushPanel({ type: "debrief", title: "Debriefs", params: {} })}
+              style={{
+                background: "none", border: "none", cursor: "pointer", padding: 0,
+                fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--text-muted)",
+                letterSpacing: "0.05em",
+              }}
             >
-              View All
+              view all →
             </button>
           </div>
           <div style={{ borderRadius: 10, overflow: "hidden", border: "1px solid var(--border)", background: "var(--surface)" }}>

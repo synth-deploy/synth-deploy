@@ -259,7 +259,7 @@ export const SubmitPlanSchema = z.object({
       rollbackAction: z.string().optional(),
     })).min(1),
     reasoning: z.string().min(1),
-    diffFromCurrent: z.string().optional(),
+    diffFromCurrent: z.array(z.object({ key: z.string(), from: z.string(), to: z.string() })).optional(),
     diffFromPreviousPlan: z.string().optional(),
   }),
   rollbackPlan: z.object({
