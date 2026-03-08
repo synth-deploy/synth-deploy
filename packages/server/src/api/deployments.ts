@@ -96,6 +96,30 @@ export function registerDeploymentRoutes(
     };
   });
 
+  // What's New — compare deployed artifact version against catalog latest
+  app.get<{ Params: { id: string } }>("/api/deployments/:id/whats-new", { preHandler: [requirePermission("deployment.view")] }, async (request, reply) => {
+    const deployment = deployments.get(request.params.id);
+    if (!deployment) {
+      return reply.status(404).send({ error: "Deployment not found" });
+    }
+
+    const versions = artifactStore.getVersions(deployment.artifactId);
+    const sorted = versions.slice().sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    );
+    const latest = sorted[0] ?? null;
+    const deployedVersion = deployment.version;
+    const latestVersion = latest?.version ?? null;
+    const isLatest = latestVersion === null || latestVersion === deployedVersion;
+
+    return {
+      deployedVersion,
+      latestVersion,
+      isLatest,
+      latestCreatedAt: latest?.createdAt ? new Date(latest.createdAt).toISOString() : null,
+    };
+  });
+
   // List deployments (optionally filtered by partition or artifact)
   app.get("/api/deployments", { preHandler: [requirePermission("deployment.view")] }, async (request) => {
     const qParsed = DeploymentListQuerySchema.safeParse(request.query);

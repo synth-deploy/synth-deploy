@@ -251,6 +251,17 @@ export async function getDeployment(id: string): Promise<{ deployment: Deploymen
   return fetchJson(`/api/deployments/${id}`);
 }
 
+export interface WhatsNewResult {
+  deployedVersion: string;
+  latestVersion: string | null;
+  isLatest: boolean;
+  latestCreatedAt: string | null;
+}
+
+export async function getWhatsNew(deploymentId: string): Promise<WhatsNewResult> {
+  return fetchJson(`/api/deployments/${deploymentId}/whats-new`);
+}
+
 export async function createDeployment(trigger: {
   artifactId: string;
   environmentId?: string;

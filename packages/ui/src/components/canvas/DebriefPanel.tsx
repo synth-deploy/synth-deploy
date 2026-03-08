@@ -1,9 +1,11 @@
 import { useState, useEffect } from "react";
-import { getRecentDebrief, getDeployment, listDeployments, listPartitions, listArtifacts, listEnvironments } from "../../api.js";
+import { getRecentDebrief, getDeployment, listDeployments, listPartitions, listArtifacts, listEnvironments, getWhatsNew } from "../../api.js";
+import type { WhatsNewResult } from "../../api.js";
 import type { DebriefEntry, Partition, Deployment, Artifact, Environment, DecisionType } from "../../types.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
 import DebriefTimeline from "../DebriefTimeline.js";
 import { useQuery } from "../../hooks/useQuery.js";
+import { useCanvas } from "../../context/CanvasContext.js";
 
 const DECISION_TYPES: { value: DecisionType; label: string }[] = [
   { value: "pipeline-plan", label: "Plan" },
@@ -58,9 +60,11 @@ function statusLabel(status: string): string {
 // Deployment detail sub-view for debrief drill-in
 // ---------------------------------------------------------------------------
 function DeploymentDebriefDetail({ deploymentId, onBack }: { deploymentId: string; onBack: () => void }) {
+  const { pushPanel } = useCanvas();
   const [deployment, setDeployment] = useState<Deployment | null>(null);
   const [debrief, setDebrief] = useState<DebriefEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [whatsNew, setWhatsNew] = useState<WhatsNewResult | null>(null);
   const { data: artifacts } = useQuery<Artifact[]>("list:artifacts", listArtifacts);
   const { data: environments } = useQuery<Environment[]>("list:environments", listEnvironments);
 
@@ -70,6 +74,10 @@ function DeploymentDebriefDetail({ deploymentId, onBack }: { deploymentId: strin
       .then(({ deployment: d, debrief: db }) => { setDeployment(d); setDebrief(db); })
       .catch(() => {})
       .finally(() => setLoading(false));
+  }, [deploymentId]);
+
+  useEffect(() => {
+    getWhatsNew(deploymentId).then(setWhatsNew).catch(() => {});
   }, [deploymentId]);
 
   if (loading) return <div className="loading">Loading deployment detail...</div>;
@@ -82,14 +90,79 @@ function DeploymentDebriefDetail({ deploymentId, onBack }: { deploymentId: strin
     : null;
   const envoyEntries = debrief.filter((e) => e.agent === "envoy");
 
+  function handleRedeploy() {
+    if (!deployment) return;
+    const params: Record<string, string> = { artifactId: deployment.artifactId };
+    if (deployment.partitionId) {
+      params.partitionId = deployment.partitionId;
+    } else if (deployment.environmentId) {
+      params.environmentId = deployment.environmentId;
+    }
+    pushPanel({ type: "deployment-authoring", title: "New Deployment", params });
+  }
+
   return (
     <div>
-      <button
-        onClick={onBack}
-        style={{ background: "none", border: "none", color: "var(--accent)", cursor: "pointer", fontSize: 12, marginBottom: 12, padding: 0 }}
-      >
-        ← Back to list
-      </button>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+        <button
+          onClick={onBack}
+          style={{ background: "none", border: "none", color: "var(--accent)", cursor: "pointer", fontSize: 12, padding: 0 }}
+        >
+          ← Back to list
+        </button>
+        <button
+          onClick={handleRedeploy}
+          style={{
+            background: "var(--accent)",
+            border: "none",
+            color: "#fff",
+            cursor: "pointer",
+            fontSize: 12,
+            fontWeight: 600,
+            padding: "6px 14px",
+            borderRadius: 6,
+          }}
+        >
+          Redeploy
+        </button>
+      </div>
+
+      {/* What's New */}
+      {whatsNew && (
+        <div style={{
+          marginBottom: 16,
+          padding: "10px 14px",
+          borderRadius: 6,
+          background: "var(--surface)",
+          border: "1px solid var(--border)",
+          fontSize: 12,
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+        }}>
+          {whatsNew.isLatest ? (
+            <>
+              <span style={{ color: "var(--status-succeeded)", fontWeight: 600 }}>✓</span>
+              <span style={{ color: "var(--text-muted)" }}>
+                Up to date — <span style={{ fontFamily: "var(--font-mono)", color: "var(--text)" }}>{whatsNew.deployedVersion || "—"}</span> is the latest catalog version
+              </span>
+            </>
+          ) : (
+            <>
+              <span style={{ color: "var(--status-warning)", fontWeight: 600 }}>↑</span>
+              <span style={{ color: "var(--text-muted)" }}>
+                Newer version available — deployed{" "}
+                <span style={{ fontFamily: "var(--font-mono)", color: "var(--text)" }}>{whatsNew.deployedVersion || "—"}</span>
+                , latest is{" "}
+                <span style={{ fontFamily: "var(--font-mono)", color: "var(--text)" }}>{whatsNew.latestVersion}</span>
+                {whatsNew.latestCreatedAt && (
+                  <span style={{ color: "var(--text-muted)" }}> (added {timeAgo(whatsNew.latestCreatedAt)})</span>
+                )}
+              </span>
+            </>
+          )}
+        </div>
+      )}
 
       {/* Summary stat cards */}
       <div className="canvas-summary-strip" style={{ marginBottom: 16 }}>

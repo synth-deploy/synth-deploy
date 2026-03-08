@@ -21,11 +21,13 @@ import { useQuery } from "../../hooks/useQuery.js";
 interface Props {
   title: string;
   preselectedArtifactId?: string;
+  preselectedEnvironmentId?: string;
+  preselectedPartitionId?: string;
 }
 
 type DeployScope = "environment" | "envoy" | "partition";
 
-export default function DeploymentAuthoringPanel({ title, preselectedArtifactId }: Props) {
+export default function DeploymentAuthoringPanel({ title, preselectedArtifactId, preselectedEnvironmentId, preselectedPartitionId }: Props) {
   const { pushPanel } = useCanvas();
   const { settings: appSettings } = useSettings();
   const environmentsEnabled = appSettings?.environmentsEnabled ?? true;
@@ -42,9 +44,11 @@ export default function DeploymentAuthoringPanel({ title, preselectedArtifactId 
   const [selectedArtifactIds, setSelectedArtifactIds] = useState<string[]>(
     preselectedArtifactId ? [preselectedArtifactId] : [],
   );
-  const [deployScope, setDeployScope] = useState<DeployScope>("environment");
-  const [selectedEnvironmentId, setSelectedEnvironmentId] = useState<string>("");
-  const [selectedPartitionId, setSelectedPartitionId] = useState<string>("");
+  const [deployScope, setDeployScope] = useState<DeployScope>(
+    preselectedPartitionId ? "partition" : "environment",
+  );
+  const [selectedEnvironmentId, setSelectedEnvironmentId] = useState<string>(preselectedEnvironmentId ?? "");
+  const [selectedPartitionId, setSelectedPartitionId] = useState<string>(preselectedPartitionId ?? "");
   const [selectedEnvoyId, setSelectedEnvoyId] = useState<string>("");
   const [preFlightRec, setPreFlightRec] = useState<PreFlightContext["recommendation"] | null>(null);
 

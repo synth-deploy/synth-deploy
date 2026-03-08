@@ -28,8 +28,23 @@ const MIN_CHAT_WIDTH = 220;
 const MAX_CHAT_WIDTH = 640;
 const DEFAULT_CHAT_WIDTH = 340;
 
+const TAB_ORDER = ["deployment-authoring", "artifact-catalog", "topology", "debrief"] as const;
+type TabType = typeof TAB_ORDER[number];
+
 export default function AgentCanvas() {
   const { currentPanel, pushPanel, minimizedDeployment, restoreDeployment } = useCanvas();
+
+  // Compute directional slide for tab transitions during render (no effect delay)
+  const prevPanelTypeRef = useRef<string>(currentPanel.type);
+  let slideDir: "left" | "right" | null = null;
+  if (prevPanelTypeRef.current !== currentPanel.type) {
+    const prevIdx = TAB_ORDER.indexOf(prevPanelTypeRef.current as TabType);
+    const nextIdx = TAB_ORDER.indexOf(currentPanel.type as TabType);
+    if (prevIdx !== -1 && nextIdx !== -1) {
+      slideDir = nextIdx > prevIdx ? "right" : "left";
+    }
+    prevPanelTypeRef.current = currentPanel.type;
+  }
 
   // chatOpen drives the layout: false = strip bar at bottom, true = side panel
   const [chatOpen, setChatOpen] = useState(false);
@@ -135,9 +150,11 @@ export default function AgentCanvas() {
       case "deployment-authoring":
         return (
           <DeploymentAuthoringPanel
-            key={`deployment-authoring:${params.artifactId ?? ""}`}
+            key={`deployment-authoring:${params.artifactId ?? ""}:${params.environmentId ?? ""}:${params.partitionId ?? ""}`}
             title={panel.title}
             preselectedArtifactId={params.artifactId}
+            preselectedEnvironmentId={params.environmentId}
+            preselectedPartitionId={params.partitionId}
           />
         );
 
