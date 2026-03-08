@@ -5432,13 +5432,9 @@ table a:hover {
   display: flex;
   flex-direction: column;
   height: 100%;
-  max-width: 920px;
+  max-width: 1400px;
   margin: 0 auto;
   padding: 28px 24px 0;
-}
-
-.canvas-column-layout.canvas-layout-wide {
-  max-width: 1400px;
 }
 
 .canvas-column-layout .canvas-main-content {

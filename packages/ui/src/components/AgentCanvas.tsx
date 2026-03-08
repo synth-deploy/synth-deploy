@@ -246,7 +246,7 @@ export default function AgentCanvas() {
   // In split mode: channel (order:1) | drag-handle (order:2) | content (order:3)
   // In column mode: content (default) above, strip bar below
   return (
-    <div className={chatOpen ? "canvas-split-layout" : `canvas-column-layout${hideChannel ? " canvas-layout-wide" : ""}`}>
+    <div className={chatOpen ? "canvas-split-layout" : "canvas-column-layout"}>
       {/* Canvas content — always DOM-first so React identity is stable */}
       <div className="canvas-main-content">
         <ErrorBoundary>
