@@ -9,7 +9,7 @@ import type { EntityType } from "./EntityTag.js";
 
 interface Message {
   id: string;
-  speaker: "you" | "command";
+  speaker: "you" | "envoy" | "nav";
   time: string;
   text: string;
   entities?: Array<{ type: EntityType; label: string }>;
@@ -17,12 +17,21 @@ interface Message {
 
 interface SynthChannelProps {
   scope?: string;
+  mode?: "strip" | "panel";
+  onQuerySubmit?: () => void;
   onAgentResult?: (result: CanvasQueryResult) => void;
   onStructuredContent?: (text: string) => void;
+  onDismiss?: () => void;
 }
 
-export default function SynthChannel({ scope, onAgentResult, onStructuredContent }: SynthChannelProps) {
-  const [expanded, setExpanded] = useState(false);
+export default function SynthChannel({
+  scope,
+  mode = "strip",
+  onQuerySubmit,
+  onAgentResult,
+  onStructuredContent,
+  onDismiss,
+}: SynthChannelProps) {
   const [inputValue, setInputValue] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [typing, setTyping] = useState(false);
@@ -33,7 +42,7 @@ export default function SynthChannel({ scope, onAgentResult, onStructuredContent
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages, expanded]);
+  }, [messages, typing]);
 
   const handleSubmit = async () => {
     if (!inputValue.trim()) return;
@@ -49,37 +58,39 @@ export default function SynthChannel({ scope, onAgentResult, onStructuredContent
       },
     ]);
     setInputValue("");
-    if (!expanded) setExpanded(true);
+    onQuerySubmit?.();
     setTyping(true);
 
     try {
       const result = await queryAgent(text, conversationIdRef.current);
-
       setTyping(false);
 
-      // For "answer" action, use the full content as the message body
-      const responseText = result.action === "answer" && result.content
-        ? result.content
-        : (result.title ?? "Understood. Navigating.");
-
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `msg-${Date.now()}-r`,
-          speaker: "command",
-          time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false }),
-          text: responseText,
-          entities: [],
-        },
-      ]);
-
-      // Emit structured content for split canvas if detected
-      if (onStructuredContent && detectStructuredContent(responseText)) {
-        onStructuredContent(responseText);
-      }
-
-      if (onAgentResult && result.action !== "answer") {
-        onAgentResult(result);
+      if (result.action === "answer") {
+        const content = result.content ?? result.title ?? "Done.";
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `msg-${Date.now()}-r`,
+            speaker: "envoy",
+            time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false }),
+            text: content,
+          },
+        ]);
+        if (detectStructuredContent(content)) {
+          onStructuredContent?.(content);
+        }
+      } else {
+        // Navigation/data/create — show a dim nav ack, then navigate
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `msg-${Date.now()}-nav`,
+            speaker: "nav",
+            time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false }),
+            text: result.title ?? result.view ?? "Navigating.",
+          },
+        ]);
+        onAgentResult?.(result);
       }
     } catch {
       setTyping(false);
@@ -87,10 +98,10 @@ export default function SynthChannel({ scope, onAgentResult, onStructuredContent
         ...prev,
         {
           id: `msg-${Date.now()}-err`,
-          speaker: "command",
+          speaker: "envoy",
           time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false }),
           text: scope
-            ? `Looking into that for ${scope}. I can see the full deployment history and current status for this Partition.`
+            ? `Looking into that for ${scope}.`
             : "Let me look into that for you.",
           entities: scope ? [{ type: "Partition" as EntityType, label: scope }] : [],
         },
@@ -100,66 +111,65 @@ export default function SynthChannel({ scope, onAgentResult, onStructuredContent
 
   const prefix = scope ? `ASK \u203A ${scope} \u203A` : "ASK \u203A";
 
-  return (
-    <div className="synth-channel">
-      {/* Expanded conversation panel */}
-      <div
-        className="synth-channel-panel"
-        style={{
-          maxHeight: expanded ? "40vh" : 0,
-          opacity: expanded ? 1 : 0,
-        }}
-      >
-        {expanded && (
-          <div className="synth-channel-panel-header">
-            <span className="synth-channel-scope-label">
-              {scope ? "Investigating" : "Querying"}
-            </span>
-            {scope ? (
-              <EntityTag type="Partition" label={scope} />
-            ) : (
-              <EntityTag type="Synth" label="Synth" />
-            )}
-            <button
-              className="synth-channel-collapse-btn"
-              onClick={() => setExpanded(false)}
-            >
-              Collapse
+  if (mode === "panel") {
+    return (
+      <div className="synth-channel-panel-mode">
+        <div className="synth-channel-panel-mode-header">
+          <span className="synth-channel-panel-mode-label">
+            {scope ? `ASK \u203A ${scope}` : "ASK"}
+          </span>
+          {scope && <EntityTag type="Partition" label={scope} />}
+          {onDismiss && (
+            <button className="synth-channel-panel-dismiss" onClick={onDismiss} title="Close">
+              &times;
             </button>
-          </div>
-        )}
-        <div ref={scrollRef} className="synth-channel-messages">
+          )}
+        </div>
+
+        <div ref={scrollRef} className="synth-channel-panel-mode-messages">
+          {messages.length === 0 && !typing && (
+            <div className="synth-channel-panel-mode-empty">
+              {scope
+                ? `Ask about ${scope}`
+                : "Ask anything about your systems, deployments, or fleet."}
+            </div>
+          )}
           {messages.map((msg, i) => {
+            if (msg.speaker === "nav") {
+              return (
+                <div
+                  key={msg.id}
+                  className="synth-channel-nav-ack"
+                  style={{ animation: i === messages.length - 1 ? "fadeSlideIn 0.25s ease" : "none" }}
+                >
+                  <span className="synth-channel-nav-arrow">&#8594;</span>
+                  <span className="synth-channel-nav-text">{msg.text}</span>
+                </div>
+              );
+            }
+
             const isYou = msg.speaker === "you";
             return (
               <div
                 key={msg.id}
                 className={`synth-channel-msg ${isYou ? "synth-channel-msg-you" : "synth-channel-msg-command"}`}
-                style={{
-                  animation: i === messages.length - 1 ? "fadeSlideIn 0.3s ease" : "none",
-                }}
+                style={{ animation: i === messages.length - 1 ? "fadeSlideIn 0.3s ease" : "none" }}
               >
                 <div className="synth-channel-msg-header">
                   <span className={`synth-channel-speaker ${isYou ? "speaker-you" : "speaker-command"}`}>
                     {isYou ? "YOU" : "ENVOY"}
                   </span>
                   <span className="synth-channel-time">{msg.time}</span>
-                  {msg.entities && (
-                    <div className="synth-channel-entities">
-                      {msg.entities.map((e, j) => (
-                        <EntityTag key={j} type={e.type} label={e.label} />
-                      ))}
-                    </div>
-                  )}
+                  {msg.entities && msg.entities.map((e, j) => (
+                    <EntityTag key={j} type={e.type} label={e.label} />
+                  ))}
                 </div>
                 <div className="synth-channel-msg-text">
                   {isYou ? (
                     msg.text
                   ) : (
                     <div className="synth-channel-md">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                        {msg.text}
-                      </ReactMarkdown>
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.text}</ReactMarkdown>
                     </div>
                   )}
                 </div>
@@ -179,9 +189,38 @@ export default function SynthChannel({ scope, onAgentResult, onStructuredContent
             </div>
           )}
         </div>
-      </div>
 
-      {/* Input bar */}
+        <div className="synth-channel-panel-mode-input">
+          <input
+            className="synth-channel-input synth-channel-panel-mode-input-field"
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") { e.preventDefault(); handleSubmit(); }
+            }}
+            placeholder={scope ? `Ask about ${scope}...` : "What do you want to know?"}
+            autoFocus
+          />
+          <button
+            className="synth-channel-submit-btn"
+            onClick={handleSubmit}
+            disabled={!inputValue.trim()}
+            style={{
+              background: inputValue.trim() ? "var(--accent-dim)" : "transparent",
+              borderColor: inputValue.trim() ? "var(--accent-border)" : "var(--border)",
+              color: inputValue.trim() ? "var(--accent)" : "var(--text-muted)",
+            }}
+          >
+            &#8629;
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Strip mode (default): minimal bottom bar
+  return (
+    <div className="synth-channel">
       <div className="synth-channel-bar">
         <div className="synth-channel-input-wrapper">
           <span className="synth-channel-prefix">{prefix}</span>
@@ -190,51 +229,24 @@ export default function SynthChannel({ scope, onAgentResult, onStructuredContent
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                handleSubmit();
-              }
-            }}
-            onFocus={() => {
-              if (messages.length > 0 && !expanded) setExpanded(true);
+              if (e.key === "Enter") { e.preventDefault(); handleSubmit(); }
             }}
             placeholder={scope ? `Ask about ${scope}...` : "What do you want to know?"}
           />
-          {messages.length > 0 && (
-            <button
-              className="synth-channel-toggle-btn"
-              onClick={() => setExpanded(!expanded)}
-            >
-              <span
-                style={{
-                  transform: expanded ? "rotate(180deg)" : "rotate(0deg)",
-                  transition: "transform 0.3s ease",
-                  display: "inline-block",
-                }}
-              >
-                &uarr;
-              </span>
-              {!expanded && <span>{messages.length}</span>}
-            </button>
-          )}
           <button
             className="synth-channel-submit-btn"
             onClick={handleSubmit}
             disabled={!inputValue.trim()}
             style={{
-              background: inputValue.trim()
-                ? "var(--accent-dim)"
-                : "transparent",
-              borderColor: inputValue.trim()
-                ? "var(--accent-border)"
-                : "var(--border)",
+              background: inputValue.trim() ? "var(--accent-dim)" : "transparent",
+              borderColor: inputValue.trim() ? "var(--accent-border)" : "var(--border)",
               color: inputValue.trim() ? "var(--accent)" : "var(--text-muted)",
             }}
           >
             &#8629;
           </button>
         </div>
-        {!expanded && messages.length === 0 && (
+        {messages.length === 0 && (
           <div className="synth-channel-hint">
             {scope
               ? `Scoped to ${scope} \u2014 ask questions to investigate`

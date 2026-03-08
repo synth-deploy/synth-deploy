@@ -25,10 +25,16 @@ import TopologyPanel from "./canvas/TopologyPanel.js";
 import ErrorBoundary from "./ErrorBoundary.js";
 
 export default function AgentCanvas() {
-  const { currentPanel, pushPanel } = useCanvas();
-  const [splitContent, setSplitContent] = useState<string | null>(null);
+  const { currentPanel, pushPanel, minimizedDeployment, restoreDeployment } = useCanvas();
+
+  // chatOpen drives the layout: false = strip bar at bottom, true = side panel
+  const [chatOpen, setChatOpen] = useState(false);
+
+  // For answer-type responses, right panel shows structured output instead of canvas panel
+  const [answerContent, setAnswerContent] = useState<string | null>(null);
 
   function handleAgentResult(result: CanvasQueryResult) {
+    setAnswerContent(null);
     switch (result.action) {
       case "navigate":
       case "data":
@@ -39,6 +45,11 @@ export default function AgentCanvas() {
         });
         break;
     }
+  }
+
+  function handleDismissChat() {
+    setChatOpen(false);
+    setAnswerContent(null);
   }
 
   function renderPanel() {
@@ -192,74 +203,68 @@ export default function AgentCanvas() {
     }
   }
 
-  // Determine scope for SynthChannel based on current panel
-  const scope = currentPanel.type === "partition-detail"
-    ? currentPanel.title
-    : undefined;
+  const scope = currentPanel.type === "partition-detail" ? currentPanel.title : undefined;
+  const hideChannel = currentPanel.type === "deployment-authoring";
 
-  const { minimizedDeployment, restoreDeployment } = useCanvas();
-
-  const mainContent = (
-    <div style={{ display: "flex", flexDirection: "column", minHeight: "100%" }}>
-      <ErrorBoundary>
-        {renderPanel()}
-      </ErrorBoundary>
-      {minimizedDeployment && (
-        <div
-          onClick={restoreDeployment}
-          style={{
-            position: "fixed",
-            bottom: 20,
-            left: "50%",
-            transform: "translateX(-50%)",
-            zIndex: 200,
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
-            padding: "10px 20px",
-            borderRadius: 10,
-            background: "var(--surface)",
-            border: "1px solid var(--accent-border)",
-            boxShadow: "0 24px 80px color-mix(in srgb, var(--text) 15%, transparent)",
-            cursor: "pointer",
-            animation: "fadeUp 0.25s ease",
-          }}
-        >
-          <SynthMark size={16} active={true} />
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>
-              Deploying {minimizedDeployment.artifactName}
+  // SynthChannel is always rendered as a sibling of the canvas-main-content div
+  // so React preserves its internal state (messages) when chatOpen switches.
+  // CSS flex `order` controls visual placement: strip = below content, panel = left of content.
+  return (
+    <div className={chatOpen ? "canvas-split-layout" : "canvas-column-layout"}>
+      {/* Canvas content — always DOM-first so React identity is stable */}
+      <div className="canvas-main-content">
+        <ErrorBoundary>
+          {answerContent && chatOpen
+            ? <StructuredOutputPanel content={answerContent} onDismiss={() => setAnswerContent(null)} />
+            : renderPanel()
+          }
+        </ErrorBoundary>
+        {minimizedDeployment && (
+          <div
+            onClick={restoreDeployment}
+            style={{
+              position: "fixed",
+              bottom: 20,
+              left: "50%",
+              transform: "translateX(-50%)",
+              zIndex: 200,
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+              padding: "10px 20px",
+              borderRadius: 10,
+              background: "var(--surface)",
+              border: "1px solid var(--accent-border)",
+              boxShadow: "0 24px 80px color-mix(in srgb, var(--text) 15%, transparent)",
+              cursor: "pointer",
+              animation: "fadeUp 0.25s ease",
+            }}
+          >
+            <SynthMark size={16} active={true} />
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>
+                Deploying {minimizedDeployment.artifactName}
+              </div>
+              <div style={{ fontSize: 11, color: "var(--text-muted)" }}>In progress — click to view</div>
             </div>
-            <div style={{ fontSize: 11, color: "var(--text-muted)" }}>In progress — click to view</div>
+            <div style={{ width: 48, height: 3, borderRadius: 2, background: "var(--surface-alt)", overflow: "hidden", marginLeft: 8 }}>
+              <div style={{ height: "100%", borderRadius: 2, background: "var(--accent)", animation: "progressPulse 2s ease infinite" }} />
+            </div>
           </div>
-          <div style={{ width: 48, height: 3, borderRadius: 2, background: "var(--surface-alt)", overflow: "hidden", marginLeft: 8 }}>
-            <div style={{ height: "100%", borderRadius: 2, background: "var(--accent)", animation: "progressPulse 2s ease infinite" }} />
-          </div>
-        </div>
-      )}
-      {currentPanel.type !== "deployment-authoring" && (
+        )}
+      </div>
+
+      {/* SynthChannel — always DOM-second; CSS order puts it left in split, bottom in column */}
+      {!hideChannel && (
         <SynthChannel
           scope={scope}
+          mode={chatOpen ? "panel" : "strip"}
+          onQuerySubmit={() => setChatOpen(true)}
           onAgentResult={handleAgentResult}
-          onStructuredContent={(text) => setSplitContent(text)}
+          onStructuredContent={(text) => setAnswerContent(text)}
+          onDismiss={handleDismissChat}
         />
       )}
     </div>
   );
-
-  if (splitContent !== null) {
-    return (
-      <div className="canvas-split-layout">
-        <div className="canvas-split-main">
-          {mainContent}
-        </div>
-        <StructuredOutputPanel
-          content={splitContent}
-          onDismiss={() => setSplitContent(null)}
-        />
-      </div>
-    );
-  }
-
-  return mainContent;
 }
