@@ -97,8 +97,8 @@ export default function DebriefEntryCard({ entry }: { entry: DebriefEntry }) {
         <span className={`dt-badge`} style={{ color: `var(--${dtClass})`, background: `color-mix(in srgb, var(--${dtClass}) 12%, transparent)` }}>
           {dtLabel}
         </span>
-        <span className={`agent-badge agent-badge-${entry.agent}`}>
-          {entry.agent}
+        <span className={`agent-badge agent-badge-${entry.agent === "command" ? "server" : entry.agent}`}>
+          {entry.agent === "command" ? "server" : entry.agent}
         </span>
         {entry.actor && (
           <span className="debrief-entry-actor text-muted" style={{ fontSize: 11 }}>
