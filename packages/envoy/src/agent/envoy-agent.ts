@@ -1383,10 +1383,10 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
       steps: [
         {
           description: `Create workspace directory for ${instruction.artifact.name} v${instruction.version}`,
-          action: "create-directory",
+          action: "mkdir",
           target: workspacePath,
           reversible: true,
-          rollbackAction: "remove-directory",
+          rollbackAction: "delete-directory",
         },
         {
           description: `Copy ${instruction.artifact.type} artifact to workspace`,

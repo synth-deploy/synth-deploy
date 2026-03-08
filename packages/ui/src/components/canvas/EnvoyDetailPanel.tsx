@@ -172,7 +172,7 @@ export default function EnvoyDetailPanel({ envoyId, title }: Props) {
                       className="canvas-activity-row"
                       style={{ fontSize: 12, padding: "4px 8px" }}
                       onClick={() => {
-                        // TODO: wire to POST /api/envoys/:id/connections
+                        // #192: wire to POST /api/envoys/:id/connections (assign environment)
                         pushPanel({ type: "environment-detail", title: env.name, params: { id: env.id } });
                         setShowEnvPicker(false);
                       }}
@@ -195,7 +195,7 @@ export default function EnvoyDetailPanel({ envoyId, title }: Props) {
                       <button
                         style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: 12, padding: "0 4px" }}
                         title="Unlink environment"
-                        onClick={() => {/* TODO: wire to DELETE /api/envoys/:id/connections/environment/:targetId */}}
+                        onClick={() => {/* #192: wire to DELETE /api/envoys/:id/connections/environment/:targetId */}}
                       >
                         ✕
                       </button>
@@ -227,7 +227,7 @@ export default function EnvoyDetailPanel({ envoyId, title }: Props) {
                       className="canvas-activity-row"
                       style={{ fontSize: 12, padding: "4px 8px" }}
                       onClick={() => {
-                        // TODO: wire to POST /api/envoys/:id/connections
+                        // #192: wire to POST /api/envoys/:id/connections (assign partition)
                         pushPanel({ type: "partition-detail", title: part.name, params: { id: part.id } });
                         setShowPartPicker(false);
                       }}
@@ -250,7 +250,7 @@ export default function EnvoyDetailPanel({ envoyId, title }: Props) {
                       <button
                         style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: 12, padding: "0 4px" }}
                         title="Unlink partition"
-                        onClick={() => {/* TODO: wire to DELETE /api/envoys/:id/connections/partition/:targetId */}}
+                        onClick={() => {/* #192: wire to DELETE /api/envoys/:id/connections/partition/:targetId */}}
                       >
                         ✕
                       </button>

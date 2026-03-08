@@ -170,8 +170,8 @@ export default function PlanReviewPanel({ deploymentId, title }: Props) {
     setRefining(true);
     setError(null);
     try {
-      // TODO: wire to POST /api/deployments/:id/plan/refine when endpoint exists
-      // For now, use modifyDeploymentPlan with the feedback as the reason
+      // #191: wire to POST /api/deployments/:id/plan/refine (Envoy reasoning loop)
+      // Temporarily using modifyDeploymentPlan until the refine endpoint ships
       const result = await modifyDeploymentPlan(deploymentId, {
         steps: deployment!.plan!.steps,
         reason: `Refine request: ${refineFeedback.trim()}`,
