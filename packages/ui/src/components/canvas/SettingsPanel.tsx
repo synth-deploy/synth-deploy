@@ -7,6 +7,7 @@ import { useSettings } from "../../context/SettingsContext.js";
 import { useAuth } from "../../context/AuthContext.js";
 import { useQuery } from "../../hooks/useQuery.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
+import SelectField from "../SelectField.js";
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
@@ -41,22 +42,24 @@ function SubLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
-const INPUT_STYLE: React.CSSProperties = {
-  padding: "7px 12px", borderRadius: 6, border: "1px solid var(--border)",
-  background: "var(--input-bg, var(--surface))", color: "var(--text)",
-  fontSize: 13, fontFamily: "var(--font-mono)", boxSizing: "border-box",
-  outline: "none", transition: "border-color 0.15s",
-};
-
 function SI({ value, onChange, placeholder, type = "text", width = 220, mono = true }: { value: string; onChange: (v: string) => void; placeholder?: string; type?: string; width?: number; mono?: boolean }) {
-  return <input value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} type={type} style={{ ...INPUT_STYLE, width, fontFamily: mono ? "var(--font-mono)" : "var(--font)" }} />;
+  return (
+    <input
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      placeholder={placeholder}
+      type={type}
+      className="modal-form-input"
+      style={{ width, fontFamily: mono ? "var(--font-mono)" : "var(--font)" }}
+    />
+  );
 }
 
 function SS({ value, onChange, options, width = 160 }: { value: string; onChange: (v: string) => void; options: { value: string; label: string }[]; width?: number }) {
   return (
-    <select value={value} onChange={e => onChange(e.target.value)} style={{ ...INPUT_STYLE, width }}>
-      {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-    </select>
+    <div style={{ width }}>
+      <SelectField value={value} onChange={onChange} options={options} />
+    </div>
   );
 }
 
@@ -744,7 +747,7 @@ export default function SettingsPanel({ title }: Props) {
                     <>
                       <SI value={idpNewEntryPoint} onChange={setIdpNewEntryPoint} placeholder="Entry Point URL (https://idp.example.com/sso/saml)" width={400} />
                       <SI value={idpNewSamlIssuer} onChange={setIdpNewSamlIssuer} placeholder="Issuer / Entity ID" width={400} />
-                      <textarea value={idpNewSamlCert} onChange={e => setIdpNewSamlCert(e.target.value)} placeholder={"-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----"} rows={5} style={{ ...INPUT_STYLE, width: "100%", resize: "vertical", fontFamily: "var(--font-mono)", fontSize: 12 }} />
+                      <textarea value={idpNewSamlCert} onChange={e => setIdpNewSamlCert(e.target.value)} placeholder={"-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----"} rows={5} className="modal-form-input" style={{ width: "100%", resize: "vertical", fontFamily: "var(--font-mono)", fontSize: 12 }} />
                       <div style={{ display: "flex", gap: 8 }}>
                         <SS value={idpNewSignatureAlgorithm} onChange={v => setIdpNewSignatureAlgorithm(v as "sha256" | "sha512")} options={[{ value: "sha256", label: "SHA-256" }, { value: "sha512", label: "SHA-512" }]} width={130} />
                         <SI value={idpNewGroupsAttribute} onChange={setIdpNewGroupsAttribute} placeholder="Groups attribute (memberOf)" width={200} />
