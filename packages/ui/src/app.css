@@ -5914,3 +5914,531 @@ table a:hover {
   padding: 0;
 }
 
+/* =====================================================================
+   Login / Registration
+   ===================================================================== */
+
+.login-particles {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.login-theme-toggle {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 10;
+}
+
+.login-page {
+  min-height: 100vh;
+  background: var(--bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  transition: background 0.4s;
+}
+
+.login-content {
+  width: 100%;
+  max-width: 420px;
+  position: relative;
+  z-index: 1;
+  opacity: 0;
+  transform: translateY(16px);
+  transition: opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1), transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.login-content-mounted {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.login-logo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 44px;
+}
+
+.login-wordmark {
+  font-family: var(--font-display);
+  font-size: 32px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: -0.5px;
+  transition: color 0.3s;
+}
+
+.login-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 36px 32px;
+  box-shadow: var(--modal-shadow);
+  transition: background 0.3s, border-color 0.3s;
+}
+
+.login-header {
+  margin-bottom: 28px;
+}
+
+.login-title {
+  font-family: var(--font);
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0 0 6px 0;
+  transition: color 0.3s;
+}
+
+.login-subtitle {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 0;
+  line-height: 1.5;
+  transition: color 0.3s;
+}
+
+.login-alert {
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  margin-bottom: 16px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.login-alert-error {
+  background: var(--status-failed-bg);
+  border: 1px solid rgba(196, 48, 48, 0.2);
+  color: var(--status-failed);
+}
+
+.login-alert-success {
+  background: var(--status-succeeded-bg);
+  border: 1px solid var(--status-succeeded-border);
+  color: var(--status-succeeded);
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.login-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.login-field label {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  transition: color 0.3s;
+}
+
+.login-field input {
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-strong);
+  background: var(--input-bg);
+  color: var(--text);
+  font-size: 14px;
+  font-family: var(--font);
+  transition: border-color 0.2s, background 0.3s;
+  box-sizing: border-box;
+}
+
+.login-field input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.login-field-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.login-forgot-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--accent);
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.login-forgot-link:hover { opacity: 0.7; }
+
+.login-pw-wrap {
+  position: relative;
+}
+
+.login-pw-wrap input {
+  padding-right: 52px;
+}
+
+.login-pw-toggle {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px 6px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-family: var(--font-mono);
+  transition: color 0.2s;
+}
+
+.login-pw-toggle:hover { color: var(--text-secondary); }
+
+.login-button {
+  width: 100%;
+  margin-top: 4px;
+  padding: 12px 0;
+  border-radius: var(--radius);
+  border: 1px solid var(--status-succeeded-border);
+  background: var(--status-succeeded-bg);
+  color: var(--status-succeeded);
+  font-size: 14px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  cursor: pointer;
+  transition: background 0.2s, opacity 0.2s;
+}
+
+.login-button:hover:not(:disabled) {
+  background: rgba(26, 140, 84, 0.14);
+}
+
+.login-button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+[data-theme="dark"] .login-button {
+  border-color: var(--status-succeeded-border);
+  background: var(--status-succeeded-bg);
+  color: var(--status-succeeded);
+}
+
+.login-sso {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.login-sso-button {
+  width: 100%;
+  padding: 10px 0;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  font-family: var(--font);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: background 0.2s, color 0.2s;
+}
+
+.login-sso-button:hover {
+  background: var(--surface-alt);
+  color: var(--text);
+}
+
+.login-divider {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: 20px 0 4px;
+}
+
+.login-divider-line {
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+  transition: background 0.3s;
+}
+
+.login-divider span {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.login-toggle {
+  text-align: center;
+  margin-top: 20px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.login-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--accent);
+  cursor: pointer;
+  font-family: inherit;
+  transition: opacity 0.2s;
+}
+
+.login-link:hover { opacity: 0.7; }
+
+.login-footer {
+  text-align: center;
+  margin-top: 32px;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  transition: color 0.3s;
+}
+
+/* ---- Plan review action buttons ---- */
+
+.plan-btn {
+  padding: 13px 20px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  border: 1px solid transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: opacity 0.15s;
+  line-height: 1;
+}
+
+.plan-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.plan-btn-greenlight {
+  flex: 1;
+  background: var(--status-succeeded);
+  color: #fff;
+  border-color: var(--status-succeeded);
+}
+
+.plan-btn-greenlight:hover:not(:disabled) {
+  opacity: 0.88;
+}
+
+.plan-btn-refine {
+  background: transparent;
+  color: var(--accent);
+  border: 1.5px solid var(--accent);
+}
+
+.plan-btn-refine:hover:not(:disabled) {
+  background: var(--accent-dim);
+}
+
+.plan-btn-reject {
+  background: var(--surface);
+  color: var(--text-muted);
+  border: 1px solid var(--border-strong);
+}
+
+.plan-btn-reject:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--text-muted);
+}
+
+/* ---- Plan step row ---- */
+
+.plan-step-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.plan-step-num {
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-alt);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* ---- Form inputs (shared by plan review / modify) ---- */
+
+.v2-input {
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 12px;
+  color: var(--text);
+  font-size: 13px;
+  font-family: var(--font);
+  outline: none;
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.v2-input:focus {
+  border-color: var(--accent-border);
+}
+
+.v2-btn {
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  line-height: 1;
+}
+
+.v2-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.v2-btn:hover:not(:disabled) { color: var(--text); }
+
+.v2-btn-primary {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+.v2-btn-primary:hover:not(:disabled) { opacity: 0.9; }
+
+.v2-btn-secondary {
+  background: transparent;
+  color: var(--text-muted);
+  border-color: var(--border-strong);
+}
+
+.v2-btn-danger {
+  color: var(--status-failed);
+  border-color: color-mix(in srgb, var(--status-failed) 30%, transparent);
+}
+
+/* ---- Execution progress panel (running deployments) ---- */
+
+.exec-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.exec-title-block {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.exec-title {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--text);
+  font-family: var(--font-display);
+}
+
+.exec-subtitle {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.exec-progress-bar {
+  width: 100%;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--surface-alt);
+  margin-bottom: 20px;
+  overflow: hidden;
+}
+
+.exec-progress-fill {
+  height: 100%;
+  border-radius: 1px;
+  background: var(--accent);
+  transition: width 0.4s ease;
+}
+
+.exec-step-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 0;
+  transition: opacity 0.25s;
+}
+
+.exec-step-badge {
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  flex-shrink: 0;
+}
+
+.exec-step-badge-done {
+  background: var(--status-succeeded-bg);
+  color: var(--status-succeeded);
+  border: 1px solid var(--status-succeeded-border);
+}
+
+.exec-step-badge-active {
+  background: var(--accent-dim);
+  color: var(--accent);
+  border: 1px solid var(--accent-border);
+}
+
+.exec-step-badge-pending {
+  background: var(--surface-alt);
+  color: var(--text-muted);
+  border: 1px solid transparent;
+}
+
