@@ -10,12 +10,11 @@ import {
   getDeployment,
   getSystemState,
 } from "../../api.js";
-import type { Deployment, Environment, Artifact, DebriefEntry } from "../../types.js";
+import type { Environment, Artifact, DebriefEntry } from "../../types.js";
 import type { SystemState, AlertSignal, EnvoyRegistryEntry } from "../../api.js";
 import { useCanvas } from "../../context/CanvasContext.js";
 import { useSettings } from "../../context/SettingsContext.js";
 import { useQuery } from "../../hooks/useQuery.js";
-import SectionHeader from "../SectionHeader.js";
 import SynthMark from "../SynthMark.js";
 import ConfidenceIndicator from "../ConfidenceIndicator.js";
 import StatusBadge from "../StatusBadge.js";
@@ -577,6 +576,7 @@ function NormalState({ stats: _stats, signals, assessment }: { stats: SystemStat
         <h1 style={{
           fontSize: 28, fontWeight: 500, color: "var(--text)",
           margin: "0 0 8px 0", lineHeight: 1.25, maxWidth: 500,
+          fontFamily: "var(--font-display)",
         }}>
           {assessment.headline}
         </h1>
@@ -594,43 +594,45 @@ function NormalState({ stats: _stats, signals, assessment }: { stats: SystemStat
       {signals && signals.length > 0 && (
         <div>
           <div className="v6-section-label" style={{ marginBottom: 8 }}>Signals</div>
-          <div style={{ borderRadius: 10, overflow: "hidden", border: "1px solid var(--border)", background: "var(--surface)" }}>
-            {signals.map((signal, i) => (
+          {signals.map((signal, i) => {
+            const isWarn = signal.severity === "warning" || signal.severity === "critical";
+            return (
               <div
                 key={i}
                 style={{
-                  display: "flex", alignItems: "center", gap: 14,
-                  padding: "14px 16px",
-                  borderBottom: i < signals.length - 1 ? "1px solid var(--border)" : "none",
-                  background: signal.severity === "critical"
-                    ? "color-mix(in srgb, var(--status-failed) 6%, var(--surface))"
-                    : "var(--surface)",
+                  display: "flex", gap: 12, padding: "12px 16px", borderRadius: 8,
+                  background: isWarn
+                    ? "color-mix(in srgb, var(--status-warning) 8%, transparent)"
+                    : "transparent",
+                  border: `1px solid ${isWarn ? "color-mix(in srgb, var(--status-warning) 25%, transparent)" : "var(--border)"}`,
+                  marginBottom: i < signals.length - 1 ? 8 : 0,
                 }}
               >
-                <span className="status-pip" style={{
-                  flexShrink: 0,
-                  background: signal.severity === "critical" ? "var(--status-failed)" : "var(--status-warning)",
+                <span style={{
+                  width: 6, height: 6, borderRadius: "50%", marginTop: 6, flexShrink: 0,
+                  background: isWarn ? "var(--status-warning)" : "var(--accent)",
+                  display: "inline-block",
                 }} />
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, color: "var(--text)", lineHeight: 1.4 }}>{signal.title}</div>
-                  <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>{signal.detail}</div>
+                  <p style={{ fontSize: 13, color: "var(--text)", lineHeight: 1.55, margin: 0 }}>{signal.title}</p>
+                  {signal.detail && <span style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4, display: "block" }}>{signal.detail}</span>}
                 </div>
                 <button
                   className="btn btn-secondary"
-                  style={{ fontSize: 12, padding: "5px 12px", flexShrink: 0 }}
+                  style={{ fontSize: 11, padding: "5px 12px", flexShrink: 0, alignSelf: "center", fontFamily: "var(--font-mono)" }}
                   onClick={() => {
                     if (signal.type === "deployment-failure" && signal.relatedEntity?.type === "deployment") {
                       pushPanel({ type: "debrief", title: "Debriefs", params: { deploymentId: signal.relatedEntity.id } });
                     } else {
-                      pushPanel({ type: "signal-detail", title: signal.title, params: { signal: JSON.stringify(signal) } });
+                      pushPanel({ type: "signal-detail", title: signal.investigation.title, params: { signal: JSON.stringify(signal) } });
                     }
                   }}
                 >
                   Investigate →
                 </button>
               </div>
-            ))}
-          </div>
+            );
+          })}
         </div>
       )}
 

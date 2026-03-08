@@ -378,6 +378,18 @@ export interface AlertSignal {
   title: string;
   detail: string;
   relatedEntity?: { type: string; id: string; name: string };
+  investigation: {
+    title: string;
+    entity: string;
+    entityType: string;
+    status: string;
+    detectedAt: string;
+    synthAssessment: { confidence: number; summary: string };
+    evidence: Array<{ label: string; value: string; status: "healthy" | "warning" | "info" }>;
+    recommendations: Array<{ action: string; detail: string; priority: "high" | "medium" | "low" }>;
+    timeline: Array<{ time: string; event: string }>;
+    relatedDeployments: Array<{ artifact: string; version: string; target: string; status: string; time: string }>;
+  };
 }
 
 export interface SystemState {

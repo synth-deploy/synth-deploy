@@ -2504,43 +2504,42 @@ table a:hover {
 .v2-breadcrumb {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 24px;
+  gap: 6px;
+  margin-bottom: 20px;
 }
 
 .v2-breadcrumb-logo {
   font-family: var(--font-mono);
-  font-size: 20px;
-  font-weight: 700;
-  background: linear-gradient(135deg, #63e1be, #818cf8);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--accent);
+  background: none;
+  -webkit-text-fill-color: unset;
   cursor: pointer;
 }
 
 .v2-breadcrumb-segment {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .v2-breadcrumb-separator {
-  color: #374151;
+  color: var(--text-muted);
   font-family: var(--font-mono);
-  font-size: 14px;
+  font-size: 11px;
 }
 
 .v2-breadcrumb-item {
-  font-family: var(--font);
-  font-size: 14px;
-  color: #6b7280;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-muted);
   font-weight: 400;
 }
 
 .v2-breadcrumb-current {
-  color: #e2e8f0;
-  font-weight: 600;
+  color: var(--text-muted);
+  font-weight: 400;
 }
 
 /* ---- v2 Co-Branding ---- */

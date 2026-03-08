@@ -51,7 +51,7 @@ export default function CanvasPanelHost({ title, dismissible = true, noBreadcrum
 
   return (
     <div className="canvas-panel">
-      <div className="canvas-panel-header">
+      <div className="canvas-panel-body">
         <div
           className="v2-breadcrumb"
           style={coBranding?.accentColor ? { borderColor: coBranding.accentColor } : undefined}
@@ -73,7 +73,7 @@ export default function CanvasPanelHost({ title, dismissible = true, noBreadcrum
             </span>
           ) : (
             <span className="v2-breadcrumb-logo" onClick={resetToOverview}>
-              Synth
+              Home
             </span>
           )}
           {breadcrumbPath.map((item, i) => (
@@ -88,14 +88,12 @@ export default function CanvasPanelHost({ title, dismissible = true, noBreadcrum
               </span>
             </div>
           ))}
+          {depth > 1 && dismissible && (
+            <button className="canvas-panel-dismiss" onClick={popPanel} title="Close panel" style={{ marginLeft: "auto" }}>
+              &times;
+            </button>
+          )}
         </div>
-        {depth > 1 && dismissible && (
-          <button className="canvas-panel-dismiss" onClick={popPanel} title="Close panel">
-            &times;
-          </button>
-        )}
-      </div>
-      <div className="canvas-panel-body">
         {children}
       </div>
     </div>
