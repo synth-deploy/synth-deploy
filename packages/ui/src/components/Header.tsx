@@ -9,7 +9,7 @@ const TABS = [
   { id: "deployment-authoring", label: "Deploy" },
   { id: "artifact-catalog", label: "Artifacts" },
   { id: "topology", label: "Topology" },
-  { id: "deployment-list", label: "Debriefs" },
+  { id: "debrief", label: "Debriefs" },
 ] as const;
 
 export default function Header() {

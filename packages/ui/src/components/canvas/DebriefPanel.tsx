@@ -306,7 +306,7 @@ export default function DebriefPanel({ title, filterPartitionId, filterDecisionT
   const FINISHED_STATUSES = new Set(["succeeded", "failed", "rolled_back"]);
 
   return (
-    <CanvasPanelHost title={title}>
+    <CanvasPanelHost title={title} noBreadcrumb>
       <div className="canvas-detail">
         {!selectedDeploymentId && (
           <>
