@@ -215,13 +215,13 @@ export function registerSystemRoutes(
                 : `Cannot reach ${envoy.name} at ${envoy.url}. The envoy process may have stopped, the host may be down, or network connectivity may be blocked. Cannot distinguish between these causes without direct host access.`,
             },
             evidence: [
-              { label: "Health status", value: isDegraded ? "Degraded (returning non-OK)" : "Unreachable", status: "warning" },
-              { label: "Last health check", value: lastCheck, status: isDegraded ? "warning" : "info" },
+              { label: "Health status", value: isDegraded ? "Degraded — returning non-OK on health probe" : "Unreachable — no response to ping", status: "warning" },
+              { label: "Last health check", value: `${lastCheck} (normal: <2m)`, status: isDegraded ? "warning" : "warning" },
               { label: "Envoy URL", value: envoy.url, status: isDegraded ? "info" : "warning" },
-              { label: "Hostname", value: envoy.name, status: "info" },
+              { label: "Registered name", value: envoy.name, status: "info" },
               ...(isDegraded
-                ? [{ label: "Deployment risk", value: "May succeed — envoy process likely running", status: "info" as const }]
-                : [{ label: "Deployment risk", value: "Will fail — envoy cannot be reached", status: "warning" as const }]),
+                ? [{ label: "Deployment risk", value: "Elevated — envoy running but degraded", status: "info" as const }]
+                : [{ label: "Deployment risk", value: "Critical — envoy cannot be reached", status: "warning" as const }]),
             ],
             recommendations: [
               {
@@ -306,14 +306,14 @@ export function registerSystemRoutes(
                 : `Deployment of ${artifactName} v${failedDep.version} to ${envName} failed without a specific reason recorded. This may indicate an infrastructure issue, a timeout, or an envoy-side failure. Review the debrief logs for the full execution trace.`,
             },
             evidence: [
-              { label: "Deployment status", value: "Failed", status: "warning" },
-              { label: "Target environment", value: envName, status: "info" },
-              { label: "Version", value: `v${failedDep.version}`, status: "info" },
+              { label: "Deployment status", value: `Failed · ${timeAgo(failedDep.createdAt)}`, status: "warning" },
+              { label: "Target environment", value: `${envName} — no successful retry`, status: "info" },
+              { label: "Version deployed", value: `v${failedDep.version}`, status: "info" },
               ...(failedDep.failureReason
                 ? [{ label: "Failure reason", value: failedDep.failureReason, status: "warning" as const }]
-                : []),
+                : [{ label: "Failure reason", value: "Unknown — check debrief for trace", status: "warning" as const }]),
               ...(prevSuccessful.length > 0
-                ? [{ label: "Last successful deploy", value: `${timeAgo(prevSuccessful[0].createdAt)} (v${prevSuccessful[0].version})`, status: "info" as const }]
+                ? [{ label: "Last successful deploy", value: `${timeAgo(prevSuccessful[0].createdAt)} (${artifactName} v${prevSuccessful[0].version})`, status: "info" as const }]
                 : [{ label: "Prior deployments", value: "None to this environment", status: "info" as const }]),
             ],
             recommendations: [
@@ -389,11 +389,11 @@ export function registerSystemRoutes(
                 summary: `${n} variable${n > 1 ? "s" : ""} in partition "${partition.name}" contain${n === 1 ? "s" : ""} values that don't match the expected pattern for the "${env.name}" environment. This was detected through environment-pattern analysis — the values reference identifiers (like hostnames or URLs) that suggest a different tier. This could cause runtime failures if deployed as-is.`,
               },
               evidence: [
-                { label: "Partition", value: partition.name, status: "info" },
-                { label: "Environment", value: env.name, status: "info" },
+                { label: "Partition", value: `${partition.name} · ${Object.keys(partition.variables).length} variables defined`, status: "info" },
+                { label: "Environment", value: `${env.name} · ${conflicts.length} conflict${conflicts.length > 1 ? "s" : ""} detected`, status: "info" },
                 ...conflicts.map((key) => ({
                   label: `Variable: ${key}`,
-                  value: String(partition.variables[key] ?? "(empty)"),
+                  value: `"${String(partition.variables[key] ?? "(empty)")}" — conflicts with ${env.name} tier`,
                   status: "warning" as const,
                 })),
               ],

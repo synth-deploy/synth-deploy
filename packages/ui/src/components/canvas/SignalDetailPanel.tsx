@@ -131,7 +131,7 @@ export default function SignalDetailPanel({ signal, title }: Props) {
                     width: 6, height: 6, borderRadius: "50%", flexShrink: 0,
                     background: evidenceColor(e.status), display: "inline-block",
                   }} />
-                  <span style={{ flex: 1, fontSize: 13, color: "var(--text-muted)", marginLeft: 10 }}>{e.label}</span>
+                  <span style={{ flex: 1, fontSize: 13, color: "var(--text)", marginLeft: 10 }}>{e.label}</span>
                   <span style={{
                     fontSize: 13, fontFamily: "var(--font-mono)", fontWeight: 500,
                     color: evidenceColor(e.status),
