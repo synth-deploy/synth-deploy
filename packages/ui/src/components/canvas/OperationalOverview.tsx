@@ -619,16 +619,10 @@ function NormalState({ stats: _stats, signals, assessment }: { stats: SystemStat
                   className="btn btn-secondary"
                   style={{ fontSize: 12, padding: "5px 12px", flexShrink: 0 }}
                   onClick={() => {
-                    if (signal.relatedEntity) {
-                      const entityType = signal.relatedEntity.type;
-                      if (entityType === "environment") pushPanel({ type: "environment-detail", title: signal.relatedEntity.name, params: { id: signal.relatedEntity.id } });
-                      else if (entityType === "deployment") {
-                        if (signal.type === "deployment-failure") {
-                          pushPanel({ type: "debrief", title: "Debriefs", params: { deploymentId: signal.relatedEntity.id } });
-                        } else {
-                          pushPanel({ type: "deployment-detail", title: "Deployment", params: { id: signal.relatedEntity.id } });
-                        }
-                      } else if (entityType === "envoy") pushPanel({ type: "envoy-registry", title: "Envoys", params: {} });
+                    if (signal.type === "deployment-failure" && signal.relatedEntity?.type === "deployment") {
+                      pushPanel({ type: "debrief", title: "Debriefs", params: { deploymentId: signal.relatedEntity.id } });
+                    } else {
+                      pushPanel({ type: "signal-detail", title: signal.title, params: { signal: JSON.stringify(signal) } });
                     }
                   }}
                 >
