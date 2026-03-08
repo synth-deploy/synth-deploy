@@ -217,6 +217,69 @@ export function registerAuthRoutes(
     }
   });
 
+  // --- GET /api/auth/sessions ---
+  // List current user's active sessions (without token/refreshToken fields).
+  app.get("/api/auth/sessions", async (request, reply) => {
+    const user = request.user;
+    if (!user) {
+      return reply.status(401).send({ error: "Authentication required" });
+    }
+    const authHeader = request.headers.authorization;
+    const currentToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
+
+    const sessions = sessionStore.listByUserId(user.id);
+    return {
+      sessions: sessions.map(s => ({
+        id: s.id,
+        createdAt: s.createdAt.toISOString(),
+        expiresAt: s.expiresAt.toISOString(),
+        current: currentToken ? s.token === currentToken : false,
+      })),
+    };
+  });
+
+  // --- DELETE /api/auth/sessions/:id ---
+  // Revoke a specific session (cannot revoke current session).
+  app.delete("/api/auth/sessions/:id", async (request, reply) => {
+    const user = request.user;
+    if (!user) {
+      return reply.status(401).send({ error: "Authentication required" });
+    }
+    const { id } = request.params as { id: string };
+    const authHeader = request.headers.authorization;
+    const currentToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
+
+    const sessions = sessionStore.listByUserId(user.id);
+    const target = sessions.find(s => s.id === id);
+    if (!target) {
+      return reply.status(404).send({ error: "Session not found" });
+    }
+    if (currentToken && target.token === currentToken) {
+      return reply.status(400).send({ error: "Cannot revoke current session" });
+    }
+    sessionStore.deleteById(id);
+    return reply.status(204).send();
+  });
+
+  // --- DELETE /api/auth/sessions ---
+  // Revoke all other sessions (keep current).
+  app.delete("/api/auth/sessions", async (request, reply) => {
+    const user = request.user;
+    if (!user) {
+      return reply.status(401).send({ error: "Authentication required" });
+    }
+    const authHeader = request.headers.authorization;
+    const currentToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
+
+    const sessions = sessionStore.listByUserId(user.id);
+    for (const s of sessions) {
+      if (!currentToken || s.token !== currentToken) {
+        sessionStore.deleteById(s.id);
+      }
+    }
+    return reply.status(204).send();
+  });
+
   // --- POST /api/auth/me/password ---
   // Change the authenticated user's password (local accounts only).
   app.post("/api/auth/me/password", async (request, reply) => {

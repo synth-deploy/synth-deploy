@@ -28,6 +28,8 @@ import type {
   Session,
   IdpProvider,
   RoleMappingRule,
+  ApiKey,
+  ApiKeyId,
 } from "./types.js";
 
 export interface IPartitionStore {
@@ -134,6 +136,18 @@ export interface ISessionStore {
   deleteByToken(token: string): void;
   deleteByUserId(userId: UserId): void;
   deleteExpired(): void;
+  listByUserId(userId: UserId): Session[];
+  deleteById(id: string): void;
+}
+
+export interface IApiKeyStore {
+  create(key: ApiKey): ApiKey;
+  getById(id: ApiKeyId): ApiKey | undefined;
+  listByUserId(userId: UserId): ApiKey[];
+  updateLastUsed(id: ApiKeyId, at: Date): void;
+  revoke(id: ApiKeyId): void;
+  updateHash(id: ApiKeyId, keyHash: string, keyPrefix: string, keySuffix: string): void;
+  delete(id: ApiKeyId): void;
 }
 
 // --- IdP store interfaces ---

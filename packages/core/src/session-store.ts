@@ -60,6 +60,20 @@ export class SessionStore implements ISessionStore {
     }
   }
 
+  listByUserId(userId: UserId): Session[] {
+    const result: Session[] = [];
+    for (const session of this.sessions.values()) {
+      if (session.userId === userId) {
+        result.push(structuredClone(session));
+      }
+    }
+    return result;
+  }
+
+  deleteById(id: string): void {
+    this.deleteBySessionId(id);
+  }
+
   private deleteBySessionId(id: string): void {
     const session = this.sessions.get(id);
     if (session) {

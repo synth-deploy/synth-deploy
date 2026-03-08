@@ -1404,6 +1404,8 @@ export class PersistentSessionStore {
     deleteByToken: Database.Statement;
     deleteByUserId: Database.Statement;
     deleteExpired: Database.Statement;
+    listByUserId: Database.Statement;
+    deleteById: Database.Statement;
   };
 
   constructor(private db: Database.Database) {
@@ -1417,6 +1419,8 @@ export class PersistentSessionStore {
       deleteByToken: db.prepare(`DELETE FROM sessions WHERE token = ?`),
       deleteByUserId: db.prepare(`DELETE FROM sessions WHERE user_id = ?`),
       deleteExpired: db.prepare(`DELETE FROM sessions WHERE expires_at < ?`),
+      listByUserId: db.prepare(`SELECT * FROM sessions WHERE user_id = ?`),
+      deleteById: db.prepare(`DELETE FROM sessions WHERE id = ?`),
     };
   }
 
@@ -1458,6 +1462,15 @@ export class PersistentSessionStore {
 
   deleteExpired(): void {
     this.stmts.deleteExpired.run(new Date().toISOString());
+  }
+
+  listByUserId(userId: UserId): Session[] {
+    const rows = this.stmts.listByUserId.all(userId) as SessionRow[];
+    return rows.map(rowToSession);
+  }
+
+  deleteById(id: string): void {
+    this.stmts.deleteById.run(id);
   }
 }
 

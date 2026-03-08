@@ -80,6 +80,8 @@ export type {
   DeploymentGraphEdge,
   OutputBinding,
   InputBinding,
+  ApiKey,
+  ApiKeyId,
 } from "./types.js";
 
 export {
@@ -111,6 +113,7 @@ export type {
   ISessionStore,
   IIdpProviderStore,
   IRoleMappingStore,
+  IApiKeyStore,
 } from "./store-interfaces.js";
 export {
   openEntityDatabase,
@@ -135,6 +138,7 @@ export { UserStore } from "./user-store.js";
 export { RoleStore } from "./role-store.js";
 export { UserRoleStore } from "./user-role-store.js";
 export { SessionStore } from "./session-store.js";
+export { ApiKeyStore } from "./api-key-store.js";
 export { IdpProviderStore } from "./idp-provider-store.js";
 export { RoleMappingStore } from "./role-mapping-store.js";
 export { PartitionContainer } from "./partition-container.js";

@@ -841,3 +841,50 @@ export async function listIntakeEvents(params?: { channelId?: string; limit?: nu
   const data = await fetchJson<{ events: IntakeEvent[] }>(`/api/intake/events${query ? `?${query}` : ""}`);
   return data.events;
 }
+
+// --- Sessions ---
+
+export async function listSessions(): Promise<Array<{ id: string; createdAt: string; expiresAt: string; current: boolean }>> {
+  const data = await fetchJson<{ sessions: Array<{ id: string; createdAt: string; expiresAt: string; current: boolean }> }>("/api/auth/sessions");
+  return data.sessions;
+}
+
+export async function revokeSession(id: string): Promise<void> {
+  await fetchJson(`/api/auth/sessions/${id}`, { method: "DELETE" });
+}
+
+export async function revokeOtherSessions(): Promise<void> {
+  await fetchJson("/api/auth/sessions", { method: "DELETE" });
+}
+
+// --- API Keys ---
+
+export interface ApiKeyPublic {
+  id: string;
+  name: string;
+  keyPrefix: string;
+  keySuffix: string;
+  permissions: string[];
+  createdAt: string;
+  lastUsedAt: string | null;
+}
+
+export async function listApiKeys(): Promise<ApiKeyPublic[]> {
+  const data = await fetchJson<{ apiKeys: ApiKeyPublic[] }>("/api/auth/api-keys");
+  return data.apiKeys;
+}
+
+export async function createApiKey(data: { name: string; permissions: string[] }): Promise<{ key: ApiKeyPublic; fullKey: string }> {
+  return fetchJson("/api/auth/api-keys", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function revokeApiKey(id: string): Promise<void> {
+  await fetchJson(`/api/auth/api-keys/${id}`, { method: "DELETE" });
+}
+
+export async function regenerateApiKey(id: string): Promise<{ key: ApiKeyPublic; fullKey: string }> {
+  return fetchJson(`/api/auth/api-keys/${id}/regenerate`, { method: "POST" });
+}
