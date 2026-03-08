@@ -73,7 +73,7 @@ function ToggleSwitch({ on, onChange }: ToggleSwitchProps) {
     >
       <div style={{
         width: 16, height: 16, borderRadius: "50%",
-        background: on ? "var(--accent)" : "var(--text-faint)",
+        background: on ? "var(--accent)" : "var(--text-muted)",
         position: "absolute", top: 2, left: on ? 19 : 2, transition: "left 0.2s",
       }} />
     </div>
