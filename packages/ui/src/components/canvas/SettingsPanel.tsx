@@ -5,6 +5,7 @@ import type { AppSettings, CommandInfo, ConflictPolicy, McpServerConfig, TaskMod
 import { TASK_MODEL_META } from "../../types.js";
 import { useSettings } from "../../context/SettingsContext.js";
 import { useAuth } from "../../context/AuthContext.js";
+import { useTheme } from "../../context/ThemeContext.js";
 import { useQuery } from "../../hooks/useQuery.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
 import SelectField from "../SelectField.js";
@@ -81,6 +82,7 @@ interface Props { title: string; }
 export default function SettingsPanel({ title }: Props) {
   const { refresh: refreshGlobalSettings } = useSettings();
   const { permissions } = useAuth();
+  const { setTheme: applyTheme } = useTheme();
   const canManageSettings = permissions.includes("settings.manage");
 
   const { data: fetchedSettings, loading: l1 } = useQuery("settings", getSettings);
@@ -442,7 +444,7 @@ export default function SettingsPanel({ title }: Props) {
             <div className="card">
               <div className="card-header"><h3>Appearance</h3></div>
               <SettingRow label="Default theme" description="Theme applied to new users. Individual users can override." last>
-                <SS value={settings.defaultTheme ?? "system"} onChange={v => setSettings({ ...settings, defaultTheme: v as "dark" | "light" | "system" })} options={[{ value: "dark", label: "Dark" }, { value: "light", label: "Light" }, { value: "system", label: "System" }]} width={120} />
+                <SS value={settings.defaultTheme ?? "system"} onChange={v => { const t = v as "dark" | "light" | "system"; applyTheme(t); setSettings({ ...settings, defaultTheme: t }); }} options={[{ value: "dark", label: "Dark" }, { value: "light", label: "Light" }, { value: "system", label: "System" }]} width={120} />
               </SettingRow>
             </div>
 
