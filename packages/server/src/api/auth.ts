@@ -75,6 +75,8 @@ export function registerAuthRoutes(
       refreshToken: tokens.refreshToken,
       expiresAt: tokens.expiresAt,
       createdAt: now,
+      userAgent: request.headers["user-agent"] ?? undefined,
+      ipAddress: request.ip ?? undefined,
     });
 
     const permissions = userRoleStore.getUserPermissions(userId);
@@ -113,6 +115,8 @@ export function registerAuthRoutes(
       refreshToken: tokens.refreshToken,
       expiresAt: tokens.expiresAt,
       createdAt: new Date(),
+      userAgent: request.headers["user-agent"] ?? undefined,
+      ipAddress: request.ip ?? undefined,
     });
 
     const permissions = userRoleStore.getUserPermissions(user.id);
@@ -149,7 +153,7 @@ export function registerAuthRoutes(
     // Delete old session
     sessionStore.deleteByToken(session.token);
 
-    // Generate new tokens
+    // Generate new tokens — preserve UA/IP from the original session
     const tokens = await generateTokens(session.userId, jwtSecret);
     sessionStore.create({
       id: crypto.randomUUID(),
@@ -158,6 +162,8 @@ export function registerAuthRoutes(
       refreshToken: tokens.refreshToken,
       expiresAt: tokens.expiresAt,
       createdAt: new Date(),
+      userAgent: session.userAgent,
+      ipAddress: session.ipAddress,
     });
 
     return {
@@ -234,6 +240,8 @@ export function registerAuthRoutes(
         createdAt: s.createdAt.toISOString(),
         expiresAt: s.expiresAt.toISOString(),
         current: currentToken ? s.token === currentToken : false,
+        userAgent: s.userAgent ?? null,
+        ipAddress: s.ipAddress ?? null,
       })),
     };
   });

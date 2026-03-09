@@ -530,6 +530,8 @@ export interface Session {
   refreshToken: string;
   expiresAt: Date;
   createdAt: Date;
+  userAgent?: string;
+  ipAddress?: string;
 }
 
 export type UserPublic = Omit<User, "passwordHash" | "externalId">;

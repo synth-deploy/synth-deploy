@@ -844,8 +844,17 @@ export async function listIntakeEvents(params?: { channelId?: string; limit?: nu
 
 // --- Sessions ---
 
-export async function listSessions(): Promise<Array<{ id: string; createdAt: string; expiresAt: string; current: boolean }>> {
-  const data = await fetchJson<{ sessions: Array<{ id: string; createdAt: string; expiresAt: string; current: boolean }> }>("/api/auth/sessions");
+export interface SessionPublic {
+  id: string;
+  createdAt: string;
+  expiresAt: string;
+  current: boolean;
+  userAgent: string | null;
+  ipAddress: string | null;
+}
+
+export async function listSessions(): Promise<SessionPublic[]> {
+  const data = await fetchJson<{ sessions: SessionPublic[] }>("/api/auth/sessions");
   return data.sessions;
 }
 

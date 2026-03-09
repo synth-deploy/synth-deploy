@@ -368,6 +368,8 @@ export function registerIdpRoutes(
         refreshToken: tokens.refreshToken,
         expiresAt: tokens.expiresAt,
         createdAt: new Date(),
+        userAgent: request.headers["user-agent"] ?? undefined,
+        ipAddress: request.ip ?? undefined,
       });
 
       // Redirect to UI with token (the UI picks this up and stores it)
@@ -530,6 +532,8 @@ export function registerIdpRoutes(
         refreshToken: tokens.refreshToken,
         expiresAt: tokens.expiresAt,
         createdAt: new Date(),
+        userAgent: request.headers["user-agent"] ?? undefined,
+        ipAddress: request.ip ?? undefined,
       });
 
       // Redirect to UI with token
@@ -668,6 +672,8 @@ export function registerIdpRoutes(
         refreshToken: tokens.refreshToken,
         expiresAt: tokens.expiresAt,
         createdAt: now,
+        userAgent: request.headers["user-agent"] ?? undefined,
+        ipAddress: request.ip ?? undefined,
       });
 
       const permissions = userRoleStore.getUserPermissions(user.id);

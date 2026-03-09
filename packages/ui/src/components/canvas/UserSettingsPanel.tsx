@@ -12,7 +12,28 @@ import {
   revokeApiKey,
   regenerateApiKey,
 } from "../../api.js";
-import type { ApiKeyPublic } from "../../api.js";
+import type { ApiKeyPublic, SessionPublic } from "../../api.js";
+
+function parseUA(ua: string | null | undefined): string {
+  if (!ua) return "Browser session";
+  let browser = "Browser";
+  if (/Edg\//.test(ua)) browser = "Edge";
+  else if (/OPR\/|Opera\//.test(ua)) browser = "Opera";
+  else if (/Chrome\//.test(ua)) browser = "Chrome";
+  else if (/Firefox\//.test(ua)) browser = "Firefox";
+  else if (/Safari\//.test(ua)) browser = "Safari";
+  else if (/synth-cli/i.test(ua)) browser = "Synth CLI";
+  else if (/curl\//.test(ua)) browser = "curl";
+
+  let os = "";
+  if (/Windows/.test(ua)) os = "Windows";
+  else if (/iPhone|iPad/.test(ua)) os = "iOS";
+  else if (/Mac OS X/.test(ua)) os = "macOS";
+  else if (/Android/.test(ua)) os = "Android";
+  else if (/Linux/.test(ua)) os = "Linux";
+
+  return os ? `${browser} · ${os}` : browser;
+}
 
 interface Props {
   title: string;
@@ -288,8 +309,7 @@ export default function UserSettingsPanel({ title }: Props) {
   const isLocal = !user?.authSource || user.authSource === "local";
 
   // Sessions state
-  type SessionEntry = { id: string; createdAt: string; expiresAt: string; current: boolean };
-  const [sessions, setSessions] = useState<SessionEntry[]>([]);
+  const [sessions, setSessions] = useState<SessionPublic[]>([]);
   const [sessionsLoading, setSessionsLoading] = useState(false);
 
   // API Keys state
@@ -830,11 +850,12 @@ export default function UserSettingsPanel({ title }: Props) {
                     <div style={{ minWidth: 0 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                         <span style={{ fontSize: 13, fontWeight: 500, color: "var(--text)" }}>
-                          {s.current ? "This session" : `Session ${i + 1}`}
+                          {parseUA(s.userAgent)}
                         </span>
                         {s.current && <Pill text="Current" color={SUCCESS} />}
                       </div>
                       <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 3, fontFamily: "var(--font-mono)" }}>
+                        {s.ipAddress && <span>{s.ipAddress} · </span>}
                         Signed in {relativeTime(s.createdAt)} · expires {new Date(s.expiresAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                       </div>
                     </div>

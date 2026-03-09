@@ -36,7 +36,7 @@ import { DEFAULT_APP_SETTINGS } from "./types.js";
 // Schema version — bump when table definitions change
 // ---------------------------------------------------------------------------
 
-const SCHEMA_VERSION = 5;
+const SCHEMA_VERSION = 6;
 
 // ---------------------------------------------------------------------------
 // Safe JSON parse — returns fallback on corruption instead of crashing
@@ -259,6 +259,18 @@ export function openEntityDatabase(dbPath: string): Database.Database {
     `);
     db.prepare(`UPDATE schema_version SET version = ?`).run(5);
     console.log("[Synth] Migrated database schema from v4 to v5 (IdP support)");
+  }
+
+  // Migrate from v5 to v6: add user_agent and ip_address to sessions
+  if (versionRow && versionRow.version < 6) {
+    try {
+      db.exec(`ALTER TABLE sessions ADD COLUMN user_agent TEXT`);
+    } catch { /* column may already exist */ }
+    try {
+      db.exec(`ALTER TABLE sessions ADD COLUMN ip_address TEXT`);
+    } catch { /* column may already exist */ }
+    db.prepare(`UPDATE schema_version SET version = ?`).run(6);
+    console.log("[Synth] Migrated database schema from v5 to v6 (session UA/IP)");
   }
 
   if (!versionRow) {
@@ -1411,8 +1423,8 @@ export class PersistentSessionStore {
   constructor(private db: Database.Database) {
     this.stmts = {
       insert: db.prepare(
-        `INSERT INTO sessions (id, user_id, token, refresh_token, expires_at, created_at)
-         VALUES (@id, @user_id, @token, @refresh_token, @expires_at, @created_at)`,
+        `INSERT INTO sessions (id, user_id, token, refresh_token, expires_at, created_at, user_agent, ip_address)
+         VALUES (@id, @user_id, @token, @refresh_token, @expires_at, @created_at, @user_agent, @ip_address)`,
       ),
       getByToken: db.prepare(`SELECT * FROM sessions WHERE token = ?`),
       getByRefreshToken: db.prepare(`SELECT * FROM sessions WHERE refresh_token = ?`),
@@ -1432,6 +1444,8 @@ export class PersistentSessionStore {
       refresh_token: session.refreshToken,
       expires_at: session.expiresAt.toISOString(),
       created_at: session.createdAt.toISOString(),
+      user_agent: session.userAgent ?? null,
+      ip_address: session.ipAddress ?? null,
     });
     return structuredClone(session);
   }
@@ -1481,6 +1495,8 @@ interface SessionRow {
   refresh_token: string;
   expires_at: string;
   created_at: string;
+  user_agent: string | null;
+  ip_address: string | null;
 }
 
 function rowToSession(row: SessionRow): Session {
@@ -1491,6 +1507,8 @@ function rowToSession(row: SessionRow): Session {
     refreshToken: row.refresh_token,
     expiresAt: new Date(row.expires_at),
     createdAt: new Date(row.created_at),
+    userAgent: row.user_agent ?? undefined,
+    ipAddress: row.ip_address ?? undefined,
   };
 }
 
