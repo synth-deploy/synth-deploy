@@ -24,7 +24,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
     <div style={{
       fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.5,
-      color: "var(--text-faint)", fontFamily: "var(--font-mono)", marginBottom: 10, marginTop: 28,
+      color: "var(--text-muted)", fontFamily: "var(--font-mono)", marginBottom: 10, marginTop: 28,
     }}>
       {children}
     </div>
@@ -45,9 +45,9 @@ function SettingRow({ label, description, children, last }: SettingRowProps) {
       padding: "14px 0", borderBottom: last ? "none" : "1px solid var(--border)",
     }}>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 14, fontWeight: 500, color: "var(--text)" }}>{label}</div>
+        <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text)" }}>{label}</div>
         {description && (
-          <div style={{ fontSize: 12, color: "var(--text-faint)", marginTop: 3, lineHeight: 1.45 }}>{description}</div>
+          <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 3, lineHeight: 1.45 }}>{description}</div>
         )}
       </div>
       <div style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 8 }}>{children}</div>
@@ -91,7 +91,9 @@ function Pill({ text, color }: PillProps) {
     <span style={{
       padding: "2px 8px", borderRadius: 4, fontSize: 10, fontWeight: 600,
       fontFamily: "var(--font-mono)", textTransform: "uppercase",
-      color: c, background: `${c}18`, border: `1px solid ${c}30`,
+      color: c,
+      background: `color-mix(in srgb, ${c} 10%, transparent)`,
+      border: `1px solid color-mix(in srgb, ${c} 28%, transparent)`,
     }}>
       {text}
     </span>
@@ -232,6 +234,29 @@ function relativeTime(iso: string): string {
   if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
   return `${Math.floor(diff / 86_400_000)}d ago`;
 }
+
+const PERM_DESCRIPTIONS: Record<string, string> = {
+  "deployment.create": "Create and execute deployments",
+  "deployment.approve": "Approve deployment plans",
+  "deployment.reject": "Reject deployment plans",
+  "deployment.view": "View deployments and plans",
+  "artifact.read": "View artifact catalog",
+  "artifact.write": "Create and annotate artifacts",
+  "topology.read": "View topology",
+  "topology.write": "Manage envoys, environments, partitions",
+  "debrief.read": "View debriefs and postmortems",
+  "settings.manage": "Modify instance settings",
+  "users.manage": "Manage users and roles",
+  "deploy:write": "Create and execute deployments",
+  "deploy:read": "View deployments and plans",
+  "artifact:write": "Create and annotate artifacts",
+  "artifact:read": "View artifact catalog",
+  "topology:write": "Manage envoys, environments, partitions",
+  "topology:read": "View topology",
+  "debrief:read": "View debriefs and postmortems",
+  "settings:write": "Modify instance settings",
+  "users:write": "Manage users and roles",
+};
 
 function deriveInitials(name: string): string {
   const parts = name.trim().split(/\s+/);
@@ -420,14 +445,13 @@ export default function UserSettingsPanel({ title }: Props) {
     { id: "apikeys", label: "API Keys" },
   ];
 
-  // danger colors (CSS vars don't have a dangerSoft/dangerBorder equivalent, use inline)
   const DANGER = "var(--status-failed)";
-  const DANGER_SOFT = "rgba(196,48,48,0.06)";
-  const DANGER_BORDER = "rgba(196,48,48,0.15)";
-  const SUCCESS = "var(--status-ok)";
+  const DANGER_SOFT = "var(--status-failed-bg)";
+  const DANGER_BORDER = "color-mix(in srgb, var(--status-failed) 28%, transparent)";
+  const SUCCESS = "var(--status-succeeded)";
 
   return (
-    <CanvasPanelHost title={title}>
+    <CanvasPanelHost title={title} noBreadcrumb>
       <div style={{ maxWidth: 780, margin: "0 auto", padding: "28px 24px 80px" }}>
 
         {/* Avatar + name header */}
@@ -474,7 +498,7 @@ export default function UserSettingsPanel({ title }: Props) {
               {user?.name ?? "—"}
             </h1>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span style={{ fontSize: 13, color: "var(--text-faint)" }}>{user?.email ?? "—"}</span>
+              <span style={{ fontSize: 13, color: "var(--text-muted)" }}>{user?.email ?? "—"}</span>
               <Pill text={roleLabel} color="var(--accent)" />
             </div>
           </div>
@@ -504,7 +528,7 @@ export default function UserSettingsPanel({ title }: Props) {
               style={{
                 padding: "6px 14px", borderRadius: 5, border: "none", cursor: "pointer",
                 background: tab === t.id ? "var(--surface)" : "transparent",
-                color: tab === t.id ? "var(--text)" : "var(--text-faint)",
+                color: tab === t.id ? "var(--text)" : "var(--text-muted)",
                 fontSize: 12, fontWeight: tab === t.id ? 600 : 400,
                 fontFamily: "var(--font-mono)", transition: "all 0.15s",
                 boxShadow: tab === t.id ? "0 1px 3px var(--border)" : "none",
@@ -767,7 +791,7 @@ export default function UserSettingsPanel({ title }: Props) {
               <SettingRow label="Email address" last>
                 <span style={{
                   width: 220, padding: "7px 12px", borderRadius: 6, border: "1px solid var(--border)",
-                  background: "var(--surface-alt)", color: "var(--text-faint)", fontSize: 13,
+                  background: "var(--surface-alt)", color: "var(--text-muted)", fontSize: 13,
                   fontFamily: "var(--font-mono)", opacity: 0.6, display: "inline-block",
                 }}>
                   {user?.email ?? "—"}
@@ -785,9 +809,9 @@ export default function UserSettingsPanel({ title }: Props) {
               badge={<Pill text={`${sessions.length} active`} color={SUCCESS} />}
             >
               {sessionsLoading ? (
-                <div style={{ fontSize: 13, color: "var(--text-faint)", padding: "12px 0" }}>Loading…</div>
+                <div style={{ fontSize: 13, color: "var(--text-muted)", padding: "12px 0" }}>Loading…</div>
               ) : sessions.length === 0 ? (
-                <div style={{ fontSize: 13, color: "var(--text-faint)", padding: "12px 0" }}>No active sessions found.</div>
+                <div style={{ fontSize: 13, color: "var(--text-muted)", padding: "12px 0" }}>No active sessions found.</div>
               ) : sessions.map((s, i, arr) => (
                 <div
                   key={s.id}
@@ -800,7 +824,7 @@ export default function UserSettingsPanel({ title }: Props) {
                   <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                     <div style={{
                       width: 8, height: 8, borderRadius: "50%",
-                      background: s.current ? SUCCESS : "var(--text-faint)",
+                      background: s.current ? SUCCESS : "var(--text-muted)",
                       flexShrink: 0,
                     }} />
                     <div>
@@ -810,13 +834,13 @@ export default function UserSettingsPanel({ title }: Props) {
                         </span>
                         {s.current && <Pill text="Current" color={SUCCESS} />}
                       </div>
-                      <div style={{ fontSize: 11, color: "var(--text-faint)", marginTop: 2, fontFamily: "var(--font-mono)" }}>
+                      <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2, fontFamily: "var(--font-mono)" }}>
                         Created {new Date(s.createdAt).toLocaleString()} · expires {new Date(s.expiresAt).toLocaleString()}
                       </div>
                     </div>
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                    <span style={{ fontSize: 11, color: "var(--text-faint)" }}>
+                    <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
                       {s.current ? "Now" : relativeTime(s.createdAt)}
                     </span>
                     {!s.current && (
@@ -839,7 +863,7 @@ export default function UserSettingsPanel({ title }: Props) {
 
             <SectionLabel>Session History</SectionLabel>
             <Card>
-              <div style={{ fontSize: 13, color: "var(--text-faint)", padding: "8px 0" }}>
+              <div style={{ fontSize: 13, color: "var(--text-muted)", padding: "8px 0" }}>
                 Historical session log is not retained in this version.
               </div>
             </Card>
@@ -867,7 +891,7 @@ export default function UserSettingsPanel({ title }: Props) {
               title="Personal API Keys"
               badge={<Pill text={`${apiKeys.length} active`} color={SUCCESS} />}
             >
-              <p style={{ fontSize: 12, color: "var(--text-faint)", margin: "0 0 14px 0", lineHeight: 1.5 }}>
+              <p style={{ fontSize: 12, color: "var(--text-muted)", margin: "0 0 14px 0", lineHeight: 1.5 }}>
                 API keys authenticate CLI tools and scripts against this Synth instance. Keys inherit your role permissions.
               </p>
 
@@ -885,7 +909,7 @@ export default function UserSettingsPanel({ title }: Props) {
                   </code>
                   <button
                     onClick={() => setCreatedFullKey(null)}
-                    style={{ marginLeft: 12, fontSize: 11, color: "var(--text-faint)", background: "none", border: "none", cursor: "pointer" }}
+                    style={{ marginLeft: 12, fontSize: 11, color: "var(--text-muted)", background: "none", border: "none", cursor: "pointer" }}
                   >
                     Dismiss
                   </button>
@@ -904,7 +928,7 @@ export default function UserSettingsPanel({ title }: Props) {
                   </code>
                   <button
                     onClick={() => setRegeneratedKey(null)}
-                    style={{ marginLeft: 12, fontSize: 11, color: "var(--text-faint)", background: "none", border: "none", cursor: "pointer" }}
+                    style={{ marginLeft: 12, fontSize: 11, color: "var(--text-muted)", background: "none", border: "none", cursor: "pointer" }}
                   >
                     Dismiss
                   </button>
@@ -912,7 +936,7 @@ export default function UserSettingsPanel({ title }: Props) {
               )}
 
               {apiKeysLoading ? (
-                <div style={{ fontSize: 13, color: "var(--text-faint)", padding: "12px 0" }}>Loading…</div>
+                <div style={{ fontSize: 13, color: "var(--text-muted)", padding: "12px 0" }}>Loading…</div>
               ) : apiKeys.map(k => (
                 <div
                   key={k.id}
@@ -950,15 +974,15 @@ export default function UserSettingsPanel({ title }: Props) {
                       </button>
                     </div>
                   </div>
-                  <div style={{ display: "flex", gap: 16, fontSize: 11, color: "var(--text-faint)" }}>
-                    <span>Created: {new Date(k.createdAt).toLocaleDateString()}</span>
+                  <div style={{ display: "flex", gap: 16, fontSize: 11, color: "var(--text-muted)" }}>
+                    <span>Created: {new Date(k.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>
                     <span>Last used: {k.lastUsedAt ? relativeTime(k.lastUsedAt) : "Never"}</span>
                     <span style={{ fontFamily: "var(--font-mono)" }}>
                       synth_{k.keyPrefix}•••••••{k.keySuffix}
                     </span>
                   </div>
                   {k.permissions.length > 0 && (
-                    <div style={{ fontSize: 11, color: "var(--text-faint)", marginTop: 4 }}>
+                    <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>
                       Permissions:{" "}
                       {k.permissions.map((p, i) => (
                         <span key={p}>
@@ -981,7 +1005,7 @@ export default function UserSettingsPanel({ title }: Props) {
                     Create API Key
                   </div>
                   <div style={{ marginBottom: 10 }}>
-                    <label style={{ fontSize: 11, color: "var(--text-faint)", fontFamily: "var(--font-mono)", display: "block", marginBottom: 4 }}>
+                    <label style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)", display: "block", marginBottom: 4 }}>
                       KEY NAME
                     </label>
                     <input
@@ -997,7 +1021,7 @@ export default function UserSettingsPanel({ title }: Props) {
                     />
                   </div>
                   <div style={{ marginBottom: 12 }}>
-                    <label style={{ fontSize: 11, color: "var(--text-faint)", fontFamily: "var(--font-mono)", display: "block", marginBottom: 6 }}>
+                    <label style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)", display: "block", marginBottom: 6 }}>
                       PERMISSIONS
                     </label>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
@@ -1033,7 +1057,7 @@ export default function UserSettingsPanel({ title }: Props) {
                       onClick={() => { setShowCreateKey(false); setNewKeyName(""); setNewKeyPerms([]); }}
                       style={{
                         padding: "6px 14px", borderRadius: 5, border: "1px solid var(--border)",
-                        background: "transparent", color: "var(--text-faint)", fontSize: 12,
+                        background: "transparent", color: "var(--text-muted)", fontSize: 12,
                         fontFamily: "var(--font-mono)", cursor: "pointer",
                       }}
                     >
@@ -1057,13 +1081,13 @@ export default function UserSettingsPanel({ title }: Props) {
             </Card>
 
             <Card title="Key Permissions">
-              <p style={{ fontSize: 12, color: "var(--text-faint)", margin: "0 0 12px 0", lineHeight: 1.5 }}>
+              <p style={{ fontSize: 12, color: "var(--text-muted)", margin: "0 0 12px 0", lineHeight: 1.5 }}>
                 API keys can be scoped to specific permission sets. Available permissions depend on your role.
               </p>
               <div style={{ borderRadius: 8, overflow: "hidden", border: "1px solid var(--border)" }}>
                 <div style={{ display: "flex", padding: "8px 14px", background: "var(--surface-alt)", borderBottom: "1px solid var(--border)" }}>
-                  <span style={{ flex: 1, fontSize: 10, fontWeight: 700, color: "var(--text-faint)", fontFamily: "var(--font-mono)", textTransform: "uppercase", letterSpacing: 1 }}>Permission</span>
-                  <span style={{ width: 80, fontSize: 10, fontWeight: 700, color: "var(--text-faint)", fontFamily: "var(--font-mono)", textTransform: "uppercase", letterSpacing: 1, textAlign: "center" }}>Your Role</span>
+                  <span style={{ flex: 1, fontSize: 10, fontWeight: 700, color: "var(--text-muted)", fontFamily: "var(--font-mono)", textTransform: "uppercase", letterSpacing: 1 }}>Permission</span>
+                  <span style={{ width: 80, fontSize: 10, fontWeight: 700, color: "var(--text-muted)", fontFamily: "var(--font-mono)", textTransform: "uppercase", letterSpacing: 1, textAlign: "center" }}>Your Role</span>
                 </div>
                 {permissions.map((p, i) => (
                   <div
@@ -1075,14 +1099,19 @@ export default function UserSettingsPanel({ title }: Props) {
                   >
                     <div style={{ flex: 1 }}>
                       <span style={{ fontSize: 12, fontFamily: "var(--font-mono)", color: "var(--accent)", fontWeight: 500 }}>{p}</span>
+                      {PERM_DESCRIPTIONS[p] && (
+                        <span style={{ fontSize: 11, color: "var(--text-muted)", marginLeft: 10 }}>{PERM_DESCRIPTIONS[p]}</span>
+                      )}
                     </div>
-                    <div style={{ width: 80, textAlign: "center" }}>
-                      <span style={{ fontSize: 11, color: SUCCESS }}>✓</span>
+                    <div style={{ width: 80, display: "flex", justifyContent: "center" }}>
+                      <svg width="13" height="13" viewBox="0 0 13 13" fill="none" strokeLinecap="round" strokeLinejoin="round" style={{ stroke: SUCCESS, strokeWidth: 2, display: "block", flexShrink: 0 }}>
+                        <polyline points="2,7 5,10 11,3"/>
+                      </svg>
                     </div>
                   </div>
                 ))}
                 {permissions.length === 0 && (
-                  <div style={{ padding: "12px 14px", fontSize: 12, color: "var(--text-faint)" }}>
+                  <div style={{ padding: "12px 14px", fontSize: 12, color: "var(--text-muted)" }}>
                     No permissions assigned.
                   </div>
                 )}
