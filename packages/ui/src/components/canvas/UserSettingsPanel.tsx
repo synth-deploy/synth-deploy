@@ -849,14 +849,13 @@ export default function UserSettingsPanel({ title }: Props) {
                     }} />
                     <div style={{ minWidth: 0 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <span style={{ fontSize: 13, fontWeight: 500, color: "var(--text)" }}>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>
                           {parseUA(s.userAgent)}
                         </span>
                         {s.current && <Pill text="Current" color={SUCCESS} />}
                       </div>
-                      <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 3, fontFamily: "var(--font-mono)" }}>
-                        {s.ipAddress && <span>{s.ipAddress} · </span>}
-                        Signed in {relativeTime(s.createdAt)} · expires {new Date(s.expiresAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                      <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2, fontFamily: "var(--font-mono)" }}>
+                        {s.ipAddress ?? "unknown IP"}
                       </div>
                     </div>
                   </div>
@@ -884,15 +883,8 @@ export default function UserSettingsPanel({ title }: Props) {
 
             <SectionLabel>Session History</SectionLabel>
             <Card>
-              <div style={{ borderRadius: 6, overflow: "hidden", border: "1px solid var(--border)" }}>
-                <div style={{ display: "flex", padding: "7px 14px", background: "var(--surface-alt)", borderBottom: "1px solid var(--border)", gap: 12 }}>
-                  <span style={{ flex: 1, fontSize: 10, fontWeight: 700, color: "var(--text-muted)", fontFamily: "var(--font-mono)", textTransform: "uppercase", letterSpacing: 1 }}>Session</span>
-                  <span style={{ width: 140, fontSize: 10, fontWeight: 700, color: "var(--text-muted)", fontFamily: "var(--font-mono)", textTransform: "uppercase", letterSpacing: 1 }}>Started</span>
-                  <span style={{ width: 70, fontSize: 10, fontWeight: 700, color: "var(--text-muted)", fontFamily: "var(--font-mono)", textTransform: "uppercase", letterSpacing: 1, textAlign: "right" }}>Duration</span>
-                </div>
-                <div style={{ padding: "14px", fontSize: 12, color: "var(--text-muted)" }}>
-                  Session history is not retained.
-                </div>
+              <div style={{ fontSize: 12, color: "var(--text-muted)", padding: "10px 0" }}>
+                Session history is not retained by this instance.
               </div>
             </Card>
 
