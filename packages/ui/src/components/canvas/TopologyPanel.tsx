@@ -181,20 +181,42 @@ export default function TopologyPanel({ title }: { title?: string }) {
       )}
 
       {section === "partitions" && (
-        <div style={{ borderRadius: 10, border: "1px solid var(--border)", background: "var(--surface)", overflow: "hidden" }}>
-          {partitions?.map((p) => (
-            <button
-              key={p.id}
-              className="canvas-activity-row"
-              style={{ borderBottom: "1px solid var(--border)" }}
-              onClick={() => pushPanel({ type: "partition-detail", title: p.name, params: { id: p.id } })}
-            >
-              <span style={{ fontWeight: 600, fontSize: 14 }}>{p.name}</span>
-              <span style={{ color: "var(--text-muted)", fontSize: 12, marginLeft: "auto" }}>
-                {Object.keys(p.variables).length} variable{Object.keys(p.variables).length !== 1 ? "s" : ""}
-              </span>
-            </button>
-          ))}
+        <div>
+          {partitions?.map((p) => {
+            const varCount = Object.keys(p.variables).length;
+            return (
+              <button
+                key={p.id}
+                onClick={() => pushPanel({ type: "partition-detail", title: p.name, params: { id: p.id } })}
+                style={{
+                  display: "flex", alignItems: "center", gap: 16, padding: "16px 20px",
+                  borderRadius: 10, marginBottom: 8, width: "100%", textAlign: "left",
+                  background: "var(--surface)", border: "1px solid var(--border)",
+                  cursor: "pointer", transition: "background 0.15s",
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-hover)")}
+                onMouseLeave={(e) => (e.currentTarget.style.background = "var(--surface)")}
+              >
+                <span className="status-pip" style={{ background: "var(--status-succeeded)", width: 8, height: 8, flexShrink: 0 }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{p.name}</div>
+                  <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>
+                    {varCount} scoped variable{varCount !== 1 ? "s" : ""}
+                  </div>
+                </div>
+                <span style={{
+                  padding: "2px 9px", borderRadius: 4, fontSize: 10, fontWeight: 600, flexShrink: 0,
+                  fontFamily: "var(--font-mono)", textTransform: "uppercase",
+                  background: "color-mix(in srgb, var(--status-succeeded) 12%, transparent)",
+                  color: "var(--status-succeeded)",
+                  border: "1px solid color-mix(in srgb, var(--status-succeeded) 25%, transparent)",
+                }}>Active</span>
+                <svg width="16" height="16" viewBox="0 0 16 16" style={{ opacity: 0.3, flexShrink: 0 }}>
+                  <path d="M6 4l4 4-4 4" stroke="currentColor" fill="none" strokeWidth="1.5" strokeLinecap="round" />
+                </svg>
+              </button>
+            );
+          })}
           {(!partitions || partitions.length === 0) && (
             <div className="empty-state"><p>No partitions created yet.</p></div>
           )}
