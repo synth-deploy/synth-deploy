@@ -245,10 +245,11 @@ export async function deleteEnvironment(id: string): Promise<void> {
 
 // --- Deployments ---
 
-export async function listDeployments(filters?: { partitionId?: string; artifactId?: string }): Promise<Deployment[]> {
+export async function listDeployments(filters?: { partitionId?: string; artifactId?: string; envoyId?: string }): Promise<Deployment[]> {
   const params = new URLSearchParams();
   if (filters?.partitionId) params.set("partitionId", filters.partitionId);
   if (filters?.artifactId) params.set("artifactId", filters.artifactId);
+  if (filters?.envoyId) params.set("envoyId", filters.envoyId);
   const qs = params.toString();
   const url = qs ? `/api/deployments?${qs}` : "/api/deployments";
   const data = await fetchJson<{ deployments: Deployment[] }>(url);
@@ -579,6 +580,29 @@ export async function listEnvoys(): Promise<EnvoyRegistryEntry[]> {
 export async function getEnvoyHealth(id: string): Promise<EnvoyRegistryEntry> {
   const data = await fetchJson<{ envoy: EnvoyRegistryEntry }>(`/api/envoys/${id}/health`);
   return data.envoy;
+}
+
+export interface EnvoySecurityBoundary {
+  id: string;
+  envoyId: string;
+  boundaryType: "filesystem" | "service" | "network" | "credential" | "execution";
+  config: Record<string, unknown>;
+}
+
+export async function getEnvoySecurityBoundaries(envoyId: string): Promise<EnvoySecurityBoundary[]> {
+  const data = await fetchJson<{ boundaries: EnvoySecurityBoundary[] }>(`/api/envoys/${envoyId}/security-boundaries`);
+  return data.boundaries;
+}
+
+export interface EnvoyKnowledgeItem {
+  id: string;
+  timestamp: string;
+  text: string;
+}
+
+export async function getEnvoyKnowledge(envoyId: string): Promise<EnvoyKnowledgeItem[]> {
+  const data = await fetchJson<{ knowledge: EnvoyKnowledgeItem[] }>(`/api/envoys/${envoyId}/knowledge`);
+  return data.knowledge;
 }
 
 // --- Identity Providers ---

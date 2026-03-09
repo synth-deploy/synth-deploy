@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import type { ISettingsStore, ITelemetryStore } from "@synth-deploy/core";
+import type { ISettingsStore, ITelemetryStore, IDeploymentStore, DebriefReader } from "@synth-deploy/core";
 import type { EnvoyRegistry } from "../agent/envoy-registry.js";
 import { requirePermission } from "../middleware/permissions.js";
 
@@ -8,6 +8,8 @@ export function registerEnvoyRoutes(
   settings: ISettingsStore,
   registry: EnvoyRegistry,
   telemetry: ITelemetryStore,
+  deployments: IDeploymentStore,
+  debrief: DebriefReader,
 ): void {
   // List all registered Envoys (cached data — no live probe)
   app.get("/api/envoys", { preHandler: [requirePermission("envoy.view")] }, async () => {
@@ -149,6 +151,32 @@ export function registerEnvoyRoutes(
     }
 
     return { token: newToken };
+  });
+
+  // Get accumulated knowledge for an Envoy — system observations from environment scans
+  app.get("/api/envoys/:id/knowledge", { preHandler: [requirePermission("envoy.view")] }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const entry = registry.get(id);
+    if (!entry) {
+      return reply.status(404).send({ error: "Envoy not found" });
+    }
+
+    const envoyDeployments = deployments.list().filter((d) => d.envoyId === id);
+    const observations: { id: string; timestamp: string; text: string }[] = [];
+
+    for (const d of envoyDeployments) {
+      const entries = debrief.getByDeployment(d.id);
+      for (const e of entries) {
+        if (e.decisionType === "environment-scan") {
+          observations.push({ id: e.id, timestamp: e.timestamp.toISOString(), text: e.reasoning || e.decision });
+        }
+      }
+    }
+
+    // Sort newest first, cap at 20
+    observations.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+    return { knowledge: observations.slice(0, 20) };
   });
 
   // Validate an Envoy token (used by Envoy report endpoint)

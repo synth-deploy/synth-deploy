@@ -5,10 +5,12 @@ interface CanvasPanelHostProps {
   title: string;
   dismissible?: boolean;
   noBreadcrumb?: boolean;
+  /** Hide the root Home/logo item — breadcrumb starts from the first panel in the stack */
+  hideRootCrumb?: boolean;
   children: React.ReactNode;
 }
 
-export default function CanvasPanelHost({ title, dismissible = true, noBreadcrumb = false, children }: CanvasPanelHostProps) {
+export default function CanvasPanelHost({ title, dismissible = true, noBreadcrumb = false, hideRootCrumb = false, children }: CanvasPanelHostProps) {
   const { popPanel, resetToOverview, depth, panels } = useCanvas();
   const { settings } = useSettings();
   const coBranding = settings?.coBranding;
@@ -56,7 +58,7 @@ export default function CanvasPanelHost({ title, dismissible = true, noBreadcrum
           className="v2-breadcrumb"
           style={coBranding?.accentColor ? { borderColor: coBranding.accentColor } : undefined}
         >
-          {coBranding ? (
+          {!hideRootCrumb && (coBranding ? (
             <span className="v2-breadcrumb-logo v2-cobranding-logo" onClick={resetToOverview}>
               <img
                 src={coBranding.logoUrl}
@@ -75,10 +77,10 @@ export default function CanvasPanelHost({ title, dismissible = true, noBreadcrum
             <span className="v2-breadcrumb-logo" onClick={resetToOverview}>
               Home
             </span>
-          )}
+          ))}
           {breadcrumbPath.map((item, i) => (
             <div key={i} className="v2-breadcrumb-segment">
-              <span className="v2-breadcrumb-separator">&rsaquo;</span>
+              {(i > 0 || !hideRootCrumb) && <span className="v2-breadcrumb-separator">&rsaquo;</span>}
               <span
                 onClick={item.onClick}
                 className={`v2-breadcrumb-item ${i === breadcrumbPath.length - 1 ? "v2-breadcrumb-current" : ""}`}

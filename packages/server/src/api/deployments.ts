@@ -120,10 +120,10 @@ export function registerDeploymentRoutes(
     };
   });
 
-  // List deployments (optionally filtered by partition or artifact)
+  // List deployments (optionally filtered by partition, artifact, or envoy)
   app.get("/api/deployments", { preHandler: [requirePermission("deployment.view")] }, async (request) => {
     const qParsed = DeploymentListQuerySchema.safeParse(request.query);
-    const { partitionId, artifactId } = qParsed.success ? qParsed.data : {};
+    const { partitionId, artifactId, envoyId } = qParsed.success ? qParsed.data : {};
 
     let list;
     if (partitionId) {
@@ -132,6 +132,10 @@ export function registerDeploymentRoutes(
       list = deployments.getByArtifact(artifactId);
     } else {
       list = deployments.list();
+    }
+
+    if (envoyId) {
+      list = list.filter((d) => d.envoyId === envoyId);
     }
 
     return { deployments: list };

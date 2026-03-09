@@ -656,7 +656,7 @@ registerEnvironmentRoutes(app, environments, deployments, telemetryStore);
 registerAgentRoutes(app, agent, partitions, environments, artifactStore, deployments, debrief, settings, llm, envoyRegistry, telemetryStore);
 registerSettingsRoutes(app, settings, telemetryStore);
 registerTelemetryRoutes(app, telemetryStore);
-registerEnvoyRoutes(app, settings, envoyRegistry, telemetryStore);
+registerEnvoyRoutes(app, settings, envoyRegistry, telemetryStore, deployments, debrief);
 registerSystemRoutes(app, deployments, artifactStore, environments, partitions, envoyRegistry);
 registerAuthRoutes(app, userStore, roleStore, userRoleStore, sessionStore, jwtSecret);
 registerApiKeyRoutes(app, apiKeyStore, jwtSecret);

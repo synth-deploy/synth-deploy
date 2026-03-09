@@ -279,6 +279,7 @@ export const SubmitPlanSchema = z.object({
 export const DeploymentListQuerySchema = z.object({
   partitionId: z.string().optional(),
   artifactId: z.string().optional(),
+  envoyId: z.string().optional(),
 });
 
 export const DebriefQuerySchema = z.object({
