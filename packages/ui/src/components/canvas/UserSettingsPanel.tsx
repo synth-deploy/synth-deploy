@@ -816,30 +816,30 @@ export default function UserSettingsPanel({ title }: Props) {
                 <div
                   key={s.id}
                   style={{
-                    display: "flex", alignItems: "center", justifyContent: "space-between",
-                    padding: "14px 0",
+                    display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
+                    padding: "13px 0",
                     borderBottom: i < arr.length - 1 ? "1px solid var(--border)" : "none",
                   }}
                 >
-                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
                     <div style={{
                       width: 8, height: 8, borderRadius: "50%",
                       background: s.current ? SUCCESS : "var(--text-muted)",
                       flexShrink: 0,
                     }} />
-                    <div>
+                    <div style={{ minWidth: 0 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>
-                          Session {s.id.slice(0, 8)}
+                        <span style={{ fontSize: 13, fontWeight: 500, color: "var(--text)" }}>
+                          {s.current ? "This session" : `Session ${i + 1}`}
                         </span>
                         {s.current && <Pill text="Current" color={SUCCESS} />}
                       </div>
-                      <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2, fontFamily: "var(--font-mono)" }}>
-                        Created {new Date(s.createdAt).toLocaleString()} · expires {new Date(s.expiresAt).toLocaleString()}
+                      <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 3, fontFamily: "var(--font-mono)" }}>
+                        Signed in {relativeTime(s.createdAt)} · expires {new Date(s.expiresAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                       </div>
                     </div>
                   </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
                     <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
                       {s.current ? "Now" : relativeTime(s.createdAt)}
                     </span>
@@ -863,8 +863,15 @@ export default function UserSettingsPanel({ title }: Props) {
 
             <SectionLabel>Session History</SectionLabel>
             <Card>
-              <div style={{ fontSize: 13, color: "var(--text-muted)", padding: "8px 0" }}>
-                Historical session log is not retained in this version.
+              <div style={{ borderRadius: 6, overflow: "hidden", border: "1px solid var(--border)" }}>
+                <div style={{ display: "flex", padding: "7px 14px", background: "var(--surface-alt)", borderBottom: "1px solid var(--border)", gap: 12 }}>
+                  <span style={{ flex: 1, fontSize: 10, fontWeight: 700, color: "var(--text-muted)", fontFamily: "var(--font-mono)", textTransform: "uppercase", letterSpacing: 1 }}>Session</span>
+                  <span style={{ width: 140, fontSize: 10, fontWeight: 700, color: "var(--text-muted)", fontFamily: "var(--font-mono)", textTransform: "uppercase", letterSpacing: 1 }}>Started</span>
+                  <span style={{ width: 70, fontSize: 10, fontWeight: 700, color: "var(--text-muted)", fontFamily: "var(--font-mono)", textTransform: "uppercase", letterSpacing: 1, textAlign: "right" }}>Duration</span>
+                </div>
+                <div style={{ padding: "14px", fontSize: 12, color: "var(--text-muted)" }}>
+                  Session history is not retained.
+                </div>
               </div>
             </Card>
 
