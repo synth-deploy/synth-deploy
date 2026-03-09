@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { listEnvoys, listPartitions, listEnvironments } from "../../api.js";
+import type { EnvoyRegistryEntry } from "../../api.js";
 import type { Partition, Environment } from "../../types.js";
 import { useCanvas } from "../../context/CanvasContext.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
@@ -128,17 +129,51 @@ export default function TopologyPanel({ title }: { title?: string }) {
       )}
 
       {section === "environments" && (
-        <div style={{ borderRadius: 10, border: "1px solid var(--border)", background: "var(--surface)", overflow: "hidden" }}>
-          {environments?.map((env) => (
-            <button
-              key={env.id}
-              className="canvas-activity-row"
-              style={{ borderBottom: "1px solid var(--border)" }}
-              onClick={() => pushPanel({ type: "environment-detail", title: env.name, params: { id: env.id } })}
-            >
-              <span style={{ fontWeight: 600, fontSize: 14 }}>{env.name}</span>
-            </button>
-          ))}
+        <div>
+          {environments?.map((env) => {
+            const assigned = envoys?.filter((e) => e.assignedEnvironments.includes(env.name)) ?? [];
+            const envoyCount = assigned.length;
+            const healthColor =
+              envoyCount === 0
+                ? "var(--text-faint, var(--text-muted))"
+                : assigned.some((e) => e.health === "Unreachable")
+                  ? "var(--status-failed)"
+                  : assigned.some((e) => e.health === "Degraded")
+                    ? "var(--status-warning)"
+                    : "var(--status-succeeded)";
+            return (
+              <button
+                key={env.id}
+                onClick={() => pushPanel({ type: "environment-detail", title: env.name, params: { id: env.id } })}
+                style={{
+                  display: "block", width: "100%", textAlign: "left",
+                  padding: "18px 22px", borderRadius: 10, marginBottom: 10,
+                  background: "var(--surface)", border: "1px solid var(--border)",
+                  cursor: "pointer", transition: "background 0.15s",
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-hover)")}
+                onMouseLeave={(e) => (e.currentTarget.style.background = "var(--surface)")}
+              >
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <span className="status-pip" style={{ background: healthColor, width: 8, height: 8, flexShrink: 0 }} />
+                    <span style={{ fontSize: 16, fontWeight: 600, color: "var(--text)" }}>{env.name}</span>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                    <span style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
+                      {envoyCount} envoy{envoyCount !== 1 ? "s" : ""}
+                    </span>
+                    <svg width="16" height="16" viewBox="0 0 16 16" style={{ opacity: 0.3, flexShrink: 0 }}>
+                      <path d="M6 4l4 4-4 4" stroke="currentColor" fill="none" strokeWidth="1.5" strokeLinecap="round" />
+                    </svg>
+                  </div>
+                </div>
+                <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0, lineHeight: 1.5, paddingLeft: 18 }}>
+                  {Object.keys(env.variables).length} variable{Object.keys(env.variables).length !== 1 ? "s" : ""} configured
+                </p>
+              </button>
+            );
+          })}
           {(!environments || environments.length === 0) && (
             <div className="empty-state"><p>No environments created yet.</p></div>
           )}
