@@ -562,6 +562,42 @@ if (process.env.SYNTH_SEED_DEMO !== 'false' && partitions.list().length === 0) {
   console.log('Demo seed data skipped (database already populated)');
 }
 
+// Seed demo envoys on every startup when demo mode is on — the registry is
+// in-memory so it's always empty at boot, regardless of DB state.
+if (process.env.SYNTH_SEED_DEMO !== 'false') {
+  const secsAgo = (s: number) => new Date(Date.now() - s * 1000).toISOString();
+
+  const e1 = envoyRegistry.register({ name: "stg-web-01", url: "http://stg-web-01.internal:8080", assignedEnvironments: ["staging"] });
+  e1.lastHealthStatus = "healthy"; e1.lastHealthCheck = secsAgo(12);
+  e1.cachedHostname = "stg-web-01.acme.internal"; e1.cachedOs = "Ubuntu 22.04";
+  e1.cachedSummary = { totalDeployments: 47, succeeded: 45, failed: 2, executing: 0, environments: 1 };
+  e1.cachedReadiness = { ready: true, reason: "Workspace is ready for deployments." };
+
+  const e2 = envoyRegistry.register({ name: "stg-web-02", url: "http://stg-web-02.internal:8080", assignedEnvironments: ["staging"] });
+  e2.lastHealthStatus = "healthy"; e2.lastHealthCheck = secsAgo(8);
+  e2.cachedHostname = "stg-web-02.acme.internal"; e2.cachedOs = "Ubuntu 22.04";
+  e2.cachedSummary = { totalDeployments: 44, succeeded: 43, failed: 1, executing: 0, environments: 1 };
+  e2.cachedReadiness = { ready: true, reason: "Workspace is ready for deployments." };
+
+  const e3 = envoyRegistry.register({ name: "prd-web-01", url: "http://prd-web-01.internal:8080", assignedEnvironments: ["production"] });
+  e3.lastHealthStatus = "healthy"; e3.lastHealthCheck = secsAgo(3);
+  e3.cachedHostname = "prd-web-01.acme.internal"; e3.cachedOs = "Ubuntu 22.04";
+  e3.cachedSummary = { totalDeployments: 112, succeeded: 110, failed: 2, executing: 0, environments: 1 };
+  e3.cachedReadiness = { ready: true, reason: "Workspace is ready for deployments." };
+
+  const e4 = envoyRegistry.register({ name: "prd-web-02", url: "http://prd-web-02.internal:8080", assignedEnvironments: ["production"] });
+  e4.lastHealthStatus = "degraded"; e4.lastHealthCheck = secsAgo(45);
+  e4.cachedHostname = "prd-web-02.acme.internal"; e4.cachedOs = "Ubuntu 20.04";
+  e4.cachedSummary = { totalDeployments: 108, succeeded: 104, failed: 4, executing: 0, environments: 1 };
+  e4.cachedReadiness = { ready: false, reason: "Heartbeat degraded — 45s since last check-in." };
+
+  const e5 = envoyRegistry.register({ name: "prd-batch-01", url: "http://prd-batch-01.internal:8080", assignedEnvironments: ["production"] });
+  e5.lastHealthStatus = "healthy"; e5.lastHealthCheck = secsAgo(6);
+  e5.cachedHostname = "prd-batch-01.acme.internal"; e5.cachedOs = "Windows Server 2022";
+  e5.cachedSummary = { totalDeployments: 23, succeeded: 23, failed: 0, executing: 0, environments: 1 };
+  e5.cachedReadiness = { ready: true, reason: "Workspace is ready for deployments." };
+}
+
 // --- Create MCP server ---
 
 const mcp = createMcpServer({ agent, debrief, partitions, environments, deployments, artifactStore });

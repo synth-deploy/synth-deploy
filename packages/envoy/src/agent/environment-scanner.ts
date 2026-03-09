@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import type { EnvoyKnowledgeStore } from "../state/knowledge-store.js";
 
@@ -9,6 +10,8 @@ import type { EnvoyKnowledgeStore } from "../state/knowledge-store.js";
 export interface EnvironmentScanResult {
   /** Machine hostname or identifier */
   hostname: string;
+  /** Human-readable OS description, e.g. "Ubuntu 22.04", "Windows Server 2022", "macOS 14.4" */
+  os: string;
   /** Base directory where deployments are stored */
   deploymentsDir: string;
   /** Whether the deployments directory exists and is writable */
@@ -66,6 +69,7 @@ export class EnvironmentScanner {
 
     return {
       hostname: this.getHostname(),
+      os: this.getOsInfo(),
       deploymentsDir,
       deploymentsWritable,
       disk: {
@@ -120,9 +124,29 @@ export class EnvironmentScanner {
 
   private getHostname(): string {
     try {
-      return require("node:os").hostname();
+      return os.hostname();
     } catch {
       return "unknown";
+    }
+  }
+
+  private getOsInfo(): string {
+    try {
+      if (process.platform === "linux") {
+        const release = fs.readFileSync("/etc/os-release", "utf8");
+        const match = release.match(/^PRETTY_NAME="(.+)"$/m);
+        if (match) return match[1];
+        return "Linux";
+      }
+      if (process.platform === "win32") {
+        return os.version() || "Windows";
+      }
+      if (process.platform === "darwin") {
+        return `macOS ${os.release()}`;
+      }
+      return process.platform;
+    } catch {
+      return process.platform;
     }
   }
 }

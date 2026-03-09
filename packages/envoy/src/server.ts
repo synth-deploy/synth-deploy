@@ -132,6 +132,7 @@ export function createEnvoyServer(
       status: status.healthy ? "healthy" : "degraded",
       service: "synth-envoy",
       hostname: status.hostname,
+      os: status.os,
       timestamp: new Date().toISOString(),
       readiness: status.readiness,
       summary: status.summary,

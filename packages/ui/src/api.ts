@@ -551,10 +551,13 @@ export async function getCommandInfo(): Promise<CommandInfo> {
 
 export interface EnvoyRegistryEntry {
   id: string;
+  name: string;
   url: string;
   health: "OK" | "Degraded" | "Unreachable";
   hostname: string | null;
+  os: string | null;
   lastSeen: string | null;
+  assignedEnvironments: string[];
   summary: {
     totalDeployments: number;
     succeeded: number;

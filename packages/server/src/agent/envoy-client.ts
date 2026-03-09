@@ -37,6 +37,7 @@ export interface EnvoyHealthResponse {
   status: "healthy" | "degraded";
   service: string;
   hostname: string;
+  os: string;
   timestamp: string;
   readiness: { ready: boolean; reason: string };
   summary: {

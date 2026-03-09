@@ -1771,6 +1771,7 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
   getStatus(): {
     healthy: boolean;
     hostname: string;
+    os: string;
     summary: ReturnType<EnvoyKnowledgeStore["getSummary"]>;
     readiness: { ready: boolean; reason: string };
     lifecycle: LifecycleState;
@@ -1782,6 +1783,7 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
     return {
       healthy: readiness.ready && summary.executing === 0,
       hostname: scan.hostname,
+      os: scan.os,
       summary,
       readiness,
       lifecycle: this._lifecycleState,

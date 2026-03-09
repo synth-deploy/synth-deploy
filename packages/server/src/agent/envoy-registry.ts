@@ -17,11 +17,17 @@ export interface EnvoyRegistration {
   registeredAt: string;
   lastHealthCheck: string | null;
   lastHealthStatus: "healthy" | "degraded" | "unreachable" | null;
+  /** Cached from last successful health probe */
+  cachedHostname: string | null;
+  cachedOs: string | null;
+  cachedSummary: EnvoyHealthResponse["summary"] | null;
+  cachedReadiness: EnvoyHealthResponse["readiness"] | null;
 }
 
 export interface EnvoyRegistryEntry extends EnvoyRegistration {
   health: "OK" | "Degraded" | "Unreachable";
   hostname: string | null;
+  os: string | null;
   lastSeen: string | null;
   summary: EnvoyHealthResponse["summary"] | null;
   readiness: EnvoyHealthResponse["readiness"] | null;
@@ -54,6 +60,10 @@ export class EnvoyRegistry {
       registeredAt: new Date().toISOString(),
       lastHealthCheck: null,
       lastHealthStatus: null,
+      cachedHostname: null,
+      cachedOs: null,
+      cachedSummary: null,
+      cachedReadiness: null,
     };
 
     this.envoys.set(id, registration);
@@ -178,10 +188,11 @@ export class EnvoyRegistry {
     return {
       ...reg,
       health: healthMap[reg.lastHealthStatus ?? "unreachable"] ?? "Unreachable",
-      hostname: null,
+      hostname: reg.cachedHostname,
+      os: reg.cachedOs,
       lastSeen: reg.lastHealthCheck,
-      summary: null,
-      readiness: null,
+      summary: reg.cachedSummary,
+      readiness: reg.cachedReadiness,
     };
   }
 
@@ -205,10 +216,17 @@ export class EnvoyRegistry {
       const status = health.status === "healthy" ? "healthy" : "degraded";
       this.updateHealth(id, status);
 
+      // Persist probe results so get() returns fresh data without re-probing
+      registration.cachedHostname = health.hostname;
+      registration.cachedOs = health.os ?? null;
+      registration.cachedSummary = health.summary;
+      registration.cachedReadiness = health.readiness;
+
       return {
         ...registration,
         health: status === "healthy" ? "OK" : "Degraded",
         hostname: health.hostname,
+        os: health.os ?? null,
         lastSeen: health.timestamp,
         summary: health.summary,
         readiness: health.readiness,
@@ -219,6 +237,7 @@ export class EnvoyRegistry {
         ...registration,
         health: "Unreachable",
         hostname: null,
+        os: null,
         lastSeen: null,
         summary: null,
         readiness: null,
