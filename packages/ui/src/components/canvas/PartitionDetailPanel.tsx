@@ -53,8 +53,8 @@ export default function PartitionDetailPanel({ partitionId, title }: Props) {
     setVarSaving(false);
   }
 
-  if (loading) return <CanvasPanelHost title={title}><div className="loading">Loading...</div></CanvasPanelHost>;
-  if (!partition) return <CanvasPanelHost title={title}><div className="error-msg">Partition not found</div></CanvasPanelHost>;
+  if (loading) return <CanvasPanelHost title={title} hideRootCrumb><div className="loading">Loading...</div></CanvasPanelHost>;
+  if (!partition) return <CanvasPanelHost title={title} hideRootCrumb><div className="error-msg">Partition not found</div></CanvasPanelHost>;
 
   const vars = Object.entries(partition?.variables ?? {});
   // Build set of variable keys that exist in parent environments (inherited/scoped)
@@ -74,7 +74,7 @@ export default function PartitionDetailPanel({ partitionId, title }: Props) {
     : "\u2014";
 
   return (
-    <CanvasPanelHost title={title}>
+    <CanvasPanelHost title={title} hideRootCrumb>
       <div className="v2-detail-view">
         {/* Partition header with barrier styling */}
         <div className="v2-partition-detail-header">

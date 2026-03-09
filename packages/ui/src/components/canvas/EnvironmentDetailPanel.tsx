@@ -19,8 +19,8 @@ export default function EnvironmentDetailPanel({ environmentId, title }: Props) 
   const loading = l1 || l2 || l3;
   const deployments = (allDeployments ?? []).filter((dep) => dep.environmentId === environmentId);
 
-  if (loading) return <CanvasPanelHost title={title}><div className="loading">Loading...</div></CanvasPanelHost>;
-  if (!environment) return <CanvasPanelHost title={title}><div className="error-msg">Environment not found</div></CanvasPanelHost>;
+  if (loading) return <CanvasPanelHost title={title} hideRootCrumb><div className="loading">Loading...</div></CanvasPanelHost>;
+  if (!environment) return <CanvasPanelHost title={title} hideRootCrumb><div className="error-msg">Environment not found</div></CanvasPanelHost>;
 
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
@@ -66,7 +66,7 @@ export default function EnvironmentDetailPanel({ environmentId, title }: Props) 
   );
 
   return (
-    <CanvasPanelHost title={title}>
+    <CanvasPanelHost title={title} hideRootCrumb>
       <div className="canvas-detail">
         <div className="canvas-summary-strip">
           <div className="canvas-summary-item">
