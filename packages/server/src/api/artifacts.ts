@@ -108,7 +108,7 @@ export function registerArtifactRoutes(
       const updated = artifactStore.addAnnotation(request.params.id, {
         field: parsed.data.field,
         correction: parsed.data.correction,
-        annotatedBy: "operator",
+        annotatedBy: request.user?.email ?? request.user?.name ?? "unknown",
         annotatedAt: new Date(),
       });
 

@@ -67,6 +67,7 @@ function DeploymentDebriefDetail({ deploymentId, onBack }: { deploymentId: strin
   const { data: artifacts } = useQuery<Artifact[]>("list:artifacts", listArtifacts);
   const { data: environments } = useQuery<Environment[]>("list:environments", listEnvironments);
   const { data: partitions } = useQuery<Partition[]>("list:partitions", listPartitions);
+  const { pushPanel } = useCanvas();
 
   useEffect(() => {
     setLoading(true);
@@ -120,7 +121,7 @@ function DeploymentDebriefDetail({ deploymentId, onBack }: { deploymentId: strin
   return (
     <div>
       {/* Breadcrumb */}
-      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 24 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 24, flexWrap: "wrap" }}>
         <span
           style={{ fontSize: 13, color: "var(--accent)", cursor: "pointer" }}
           onClick={onBack}
@@ -128,9 +129,30 @@ function DeploymentDebriefDetail({ deploymentId, onBack }: { deploymentId: strin
           Debriefs
         </span>
         <span style={{ fontSize: 12, color: "var(--text-muted)" }}>›</span>
-        <span style={{ fontSize: 13, color: "var(--text-muted)", fontWeight: 500 }}>
-          {artName} {deployment.version} → {envName}
+        <span
+          style={{ fontSize: 13, color: "var(--accent)", cursor: "pointer", fontWeight: 500 }}
+          onClick={() => pushPanel({ type: "artifact-detail", title: artName, params: { artifactId: deployment.artifactId } })}
+        >
+          {artName}
         </span>
+        <span style={{ fontSize: 12, color: "var(--text-muted)" }}>›</span>
+        <span
+          style={{ fontSize: 13, color: "var(--accent)", cursor: "pointer", fontWeight: 500 }}
+          onClick={() => pushPanel({ type: "environment-detail", title: envName, params: { id: deployment.environmentId } })}
+        >
+          {envName}
+        </span>
+        {partName && (
+          <>
+            <span style={{ fontSize: 12, color: "var(--text-muted)" }}>›</span>
+            <span
+              style={{ fontSize: 13, color: "var(--accent)", cursor: "pointer", fontWeight: 500 }}
+              onClick={() => pushPanel({ type: "partition-detail", title: partName, params: { id: deployment.partitionId! } })}
+            >
+              {partName}
+            </span>
+          </>
+        )}
       </div>
 
       {/* Header */}

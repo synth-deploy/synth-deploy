@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { createArtifact, manualUploadArtifact, createIntakeChannel } from "../api.js";
-import { invalidate } from "../hooks/useQuery.js";
+import { manualUploadArtifact, createIntakeChannel, addArtifactVersion } from "../api.js";
+import { invalidate, invalidateExact } from "../hooks/useQuery.js";
 import ModalOverlay from "./ModalOverlay.js";
 import SelectField from "./SelectField.js";
 
@@ -14,19 +14,26 @@ const ARTIFACT_TYPE_OPTIONS = [
 
 interface Props {
   onClose: () => void;
+  /** When set, modal operates in "new version" mode for the given artifact */
+  newVersionFor?: {
+    artifactId: string;
+    artifactName: string;
+    artifactType: string;
+  };
 }
 
 type IntakePath = "upload" | "registry" | "pipeline";
 
-export default function AddArtifactModal({ onClose }: Props) {
+export default function AddArtifactModal({ onClose, newVersionFor }: Props) {
+  const isNewVersion = !!newVersionFor;
   const [path, setPath] = useState<IntakePath>("upload");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
   // Upload state
-  const [name, setName] = useState("");
-  const [type, setType] = useState("docker");
+  const [name, setName] = useState(newVersionFor?.artifactName ?? "");
+  const [type, setType] = useState(newVersionFor?.artifactType ?? "docker");
   const [version, setVersion] = useState("");
   const [source, setSource] = useState("");
 
@@ -35,16 +42,25 @@ export default function AddArtifactModal({ onClose }: Props) {
   const [channelUrl, setChannelUrl] = useState("");
 
   async function handleUpload() {
-    if (!name.trim()) { setError("Artifact name is required"); return; }
+    if (!isNewVersion && !name.trim()) { setError("Artifact name is required"); return; }
+    if (!version.trim()) { setError("Version is required"); return; }
     setSubmitting(true);
     setError(null);
     try {
-      await manualUploadArtifact({
-        artifactName: name.trim(),
-        artifactType: type,
-        version: version.trim() || "1.0.0",
-      });
-      invalidate("list:artifacts");
+      if (isNewVersion) {
+        await addArtifactVersion(newVersionFor.artifactId, {
+          version: version.trim(),
+          source: source.trim() || "manual-upload",
+        });
+        invalidateExact(`artifact:${newVersionFor.artifactId}`);
+      } else {
+        await manualUploadArtifact({
+          artifactName: name.trim(),
+          artifactType: type,
+          version: version.trim() || "1.0.0",
+        });
+        invalidate("list:artifacts");
+      }
       setSuccess(true);
       setTimeout(onClose, 1500);
     } catch (err: unknown) {
@@ -76,32 +92,36 @@ export default function AddArtifactModal({ onClose }: Props) {
     <ModalOverlay onClose={onClose}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 }}>
         <div>
-          <div className="modal-label">Artifact Intake</div>
-          <h2 className="modal-title">Add Artifact</h2>
+          <div className="modal-label">{isNewVersion ? newVersionFor.artifactName : "Artifact Intake"}</div>
+          <h2 className="modal-title">{isNewVersion ? "Upload New Version" : "Add Artifact"}</h2>
         </div>
         <button className="modal-close" onClick={onClose}>&times;</button>
       </div>
 
       <p style={{ fontSize: 13, color: "var(--text-muted)", lineHeight: 1.55, margin: "0 0 18px 0" }}>
-        Choose how to bring an artifact into Synth. Once ingested, Synth will analyze it automatically.
+        {isNewVersion
+          ? "Manually upload a new version of this artifact. Synth will re-analyze it and update its understanding."
+          : "Choose how to bring an artifact into Synth. Once ingested, Synth will analyze it automatically."}
       </p>
 
-      {/* Path selector */}
-      <div className="segmented-control" style={{ width: "fit-content", marginBottom: 18 }}>
-        {([
-          { key: "upload" as const, label: "Upload" },
-          { key: "registry" as const, label: "Container Registry" },
-          { key: "pipeline" as const, label: "CI/CD Pipeline" },
-        ]).map(({ key, label }) => (
-          <button
-            key={key}
-            className={`segmented-control-btn ${path === key ? "segmented-control-btn-active" : ""}`}
-            onClick={() => { setPath(key); setError(null); }}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      {/* Path selector — hidden in new-version mode (upload only) */}
+      {!isNewVersion && (
+        <div className="segmented-control" style={{ width: "fit-content", marginBottom: 18 }}>
+          {([
+            { key: "upload" as const, label: "Upload" },
+            { key: "registry" as const, label: "Container Registry" },
+            { key: "pipeline" as const, label: "CI/CD Pipeline" },
+          ]).map(({ key, label }) => (
+            <button
+              key={key}
+              className={`segmented-control-btn ${path === key ? "segmented-control-btn-active" : ""}`}
+              onClick={() => { setPath(key); setError(null); }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {success && (
         <div style={{
@@ -110,31 +130,35 @@ export default function AddArtifactModal({ onClose }: Props) {
           border: "1px solid color-mix(in srgb, var(--status-succeeded) 25%, transparent)",
           color: "var(--status-succeeded)", fontSize: 13, fontWeight: 500,
         }}>
-          Success! Artifact added.
+          {isNewVersion ? "New version uploaded." : "Success! Artifact added."}
         </div>
       )}
 
-      {/* Upload path */}
-      {path === "upload" && !success && (
+      {/* Upload path (always shown in new-version mode) */}
+      {(isNewVersion || path === "upload") && !success && (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          <div>
-            <label className="modal-form-label">Name</label>
-            <input
-              className="modal-form-input"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. my-web-app"
-            />
-          </div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <div style={{ flex: 1 }}>
-              <label className="modal-form-label">Type</label>
-              <SelectField
-                value={type}
-                onChange={setType}
-                options={ARTIFACT_TYPE_OPTIONS}
+          {!isNewVersion && (
+            <div>
+              <label className="modal-form-label">Name</label>
+              <input
+                className="modal-form-input"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g. my-web-app"
               />
             </div>
+          )}
+          <div style={{ display: "flex", gap: 8 }}>
+            {!isNewVersion && (
+              <div style={{ flex: 1 }}>
+                <label className="modal-form-label">Type</label>
+                <SelectField
+                  value={type}
+                  onChange={setType}
+                  options={ARTIFACT_TYPE_OPTIONS}
+                />
+              </div>
+            )}
             <div style={{ flex: 1 }}>
               <label className="modal-form-label">Version</label>
               <input
@@ -151,7 +175,7 @@ export default function AddArtifactModal({ onClose }: Props) {
               className="modal-form-input"
               value={source}
               onChange={(e) => setSource(e.target.value)}
-              placeholder="e.g. docker.io/myorg/myapp"
+              placeholder={isNewVersion ? "e.g. manual-upload" : "e.g. docker.io/myorg/myapp"}
             />
           </div>
           <button
@@ -160,13 +184,13 @@ export default function AddArtifactModal({ onClose }: Props) {
             disabled={submitting}
             style={{ alignSelf: "flex-start", fontSize: 13 }}
           >
-            {submitting ? "Uploading..." : "Upload Artifact"}
+            {submitting ? "Uploading..." : isNewVersion ? "Upload New Version" : "Upload Artifact"}
           </button>
         </div>
       )}
 
       {/* Registry path */}
-      {path === "registry" && !success && (
+      {!isNewVersion && path === "registry" && !success && (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>
             Connect a container registry. Synth will watch for new images and ingest them automatically.
@@ -201,7 +225,7 @@ export default function AddArtifactModal({ onClose }: Props) {
       )}
 
       {/* Pipeline path */}
-      {path === "pipeline" && !success && (
+      {!isNewVersion && path === "pipeline" && !success && (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>
             Set up a CI/CD webhook. Your pipeline will push artifacts to Synth on each build.

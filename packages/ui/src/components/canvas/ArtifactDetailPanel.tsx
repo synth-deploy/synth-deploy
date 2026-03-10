@@ -2,7 +2,6 @@ import { useState, useMemo } from "react";
 import {
   getArtifact,
   addArtifactAnnotation,
-  addArtifactVersion,
   listDeployments,
   listEnvironments,
 } from "../../api.js";
@@ -11,13 +10,14 @@ import { useCanvas } from "../../context/CanvasContext.js";
 import { useQuery, invalidateExact } from "../../hooks/useQuery.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
 import SectionHeader from "../SectionHeader.js";
+import AddArtifactModal from "../AddArtifactModal.js";
 
 interface Props {
   artifactId: string;
   title: string;
 }
 
-type TabKey = "analysis" | "annotations" | "learning" | "versions" | "deployments";
+type TabKey = "analysis" | "annotations" | "versions" | "deployments";
 
 function confidenceColor(c: number): string {
   if (c >= 0.7) return "var(--status-succeeded)";
@@ -61,12 +61,7 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
   const [annotationSubmitting, setAnnotationSubmitting] = useState(false);
   const [annotationError, setAnnotationError] = useState<string | null>(null);
 
-  // Version form
-  const [showVersionForm, setShowVersionForm] = useState(false);
-  const [versionString, setVersionString] = useState("");
-  const [versionSource, setVersionSource] = useState("");
-  const [versionSubmitting, setVersionSubmitting] = useState(false);
-  const [versionError, setVersionError] = useState<string | null>(null);
+  const [showVersionModal, setShowVersionModal] = useState(false);
 
   async function handleAnnotationSubmit() {
     if (!annotationCorrection.trim()) {
@@ -89,28 +84,6 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
     }
   }
 
-  async function handleVersionSubmit() {
-    if (!versionString.trim()) {
-      setVersionError("Version string is required");
-      return;
-    }
-    setVersionSubmitting(true);
-    setVersionError(null);
-    try {
-      await addArtifactVersion(artifactId, {
-        version: versionString.trim(),
-        source: versionSource.trim() || "manual",
-      });
-      invalidateExact(`artifact:${artifactId}`);
-      setVersionString("");
-      setVersionSource("");
-      setShowVersionForm(false);
-    } catch (err: unknown) {
-      setVersionError(err instanceof Error ? err.message : "Failed to add version");
-    } finally {
-      setVersionSubmitting(false);
-    }
-  }
 
   if (loading)
     return (
@@ -155,6 +128,7 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
     : null;
 
   return (
+    <>
     <CanvasPanelHost title={title} hideRootCrumb dismissible={false}>
       <div className="v2-detail-view">
 
@@ -252,13 +226,13 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
         {/* Tabs */}
         <div style={{ display: "flex", justifyContent: "center", padding: "16px 16px 0" }}>
           <div className="segmented-control">
-            {(["analysis", "annotations", "learning", "versions", "deployments"] as const).map((tab) => (
+            {(["analysis", "annotations", "versions", "deployments"] as const).map((tab) => (
               <button
                 key={tab}
                 className={`segmented-control-btn ${activeTab === tab ? "segmented-control-btn-active" : ""}`}
                 onClick={() => setActiveTab(tab)}
               >
-                {tab === "learning" ? "Learning History" : tab.charAt(0).toUpperCase() + tab.slice(1)}
+                {tab.charAt(0).toUpperCase() + tab.slice(1)}
               </button>
             ))}
           </div>
@@ -458,57 +432,67 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
 
             {/* Annotations list */}
             {annotations.length > 0 ? (
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {annotations.map((ann, i) => (
-                  <div key={i} style={{ padding: "10px 14px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                      <span style={{ fontSize: 11, fontWeight: 600, color: "var(--status-warning)", textTransform: "uppercase", letterSpacing: "0.04em" }}>{ann.field}</span>
-                      <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{new Date(ann.annotatedAt).toLocaleString()}</span>
+              <>
+                <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.5, color: "var(--text-muted)", fontFamily: "monospace", margin: "16px 0 8px" }}>
+                  Submitted Corrections
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {annotations.map((ann, i) => (
+                    <div key={i} style={{ padding: "10px 14px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                        <span style={{ fontSize: 10, fontWeight: 700, color: "var(--status-warning)", textTransform: "uppercase", letterSpacing: "0.06em", fontFamily: "monospace", background: "color-mix(in srgb, var(--status-warning) 10%, transparent)", padding: "2px 6px", borderRadius: 4 }}>
+                          Correction · {ann.field}
+                        </span>
+                        <span style={{ fontSize: 11, color: "var(--text-muted)", marginLeft: "auto" }}>{new Date(ann.annotatedAt).toLocaleString()}</span>
+                      </div>
+                      <div style={{ fontSize: 13, color: "var(--text)", lineHeight: 1.5 }}>{ann.correction}</div>
+                      {ann.annotatedBy && <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>by {ann.annotatedBy}</div>}
                     </div>
-                    <div style={{ fontSize: 13, color: "var(--text)", lineHeight: 1.5 }}>{ann.correction}</div>
-                    {ann.annotatedBy && <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>by {ann.annotatedBy}</div>}
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              </>
             ) : (
               <div style={{ fontSize: 13, color: "var(--text-muted)", padding: "8px 0" }}>
                 No annotations yet. Use the form above to correct any analysis that needs improvement.
               </div>
             )}
-          </div>
-        )}
 
-        {/* --- Learning History Tab --- */}
-        {activeTab === "learning" && (
-          <div style={{ padding: "16px" }}>
-            <SectionHeader color="var(--accent)" shape="circle" label="Learning History" />
-
-            {(artifact.learningHistory ?? []).length > 0 ? (
-              <div style={{ position: "relative", paddingLeft: 20 }}>
-                <div style={{ position: "absolute", left: 6, top: 8, bottom: 8, width: 2, background: "var(--border)" }} />
-                {(artifact.learningHistory ?? []).map((entry, i) => {
-                  const source = (entry as unknown as Record<string, unknown>).source as string | undefined;
-                  return (
-                    <div key={i} style={{ position: "relative", marginBottom: 16 }}>
-                      <div style={{ position: "absolute", left: -17, top: 6, width: 10, height: 10, borderRadius: "50%", background: "var(--accent)", border: "2px solid var(--input-bg)" }} />
-                      <div style={{ padding: "10px 14px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)" }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                          <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text)" }}>{entry.event}</span>
-                          <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{new Date(entry.timestamp).toLocaleString()}</span>
-                        </div>
-                        <div style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.5 }}>{entry.details}</div>
-                        {source && (
-                          <div style={{ marginTop: 6, fontSize: 10, fontWeight: 600, color: "var(--accent)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
-                            {sourceLabels[source] ?? source}
+            {/* Learning History — system-initiated events only (user corrections already shown above) */}
+            {(artifact.learningHistory ?? []).filter((entry) => {
+              const source = (entry as unknown as Record<string, unknown>).source as string | undefined;
+              return source !== "user-correction" && !entry.event.toLowerCase().includes("annotation");
+            }).length > 0 && (
+              <>
+                <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.5, color: "var(--text-muted)", fontFamily: "monospace", margin: "24px 0 10px" }}>
+                  System Events
+                </div>
+                <div style={{ position: "relative", paddingLeft: 20 }}>
+                  <div style={{ position: "absolute", left: 6, top: 8, bottom: 8, width: 2, background: "var(--border)" }} />
+                  {(artifact.learningHistory ?? []).filter((entry) => {
+                    const source = (entry as unknown as Record<string, unknown>).source as string | undefined;
+                    return source !== "user-correction" && !entry.event.toLowerCase().includes("annotation");
+                  }).map((entry, i) => {
+                    const source = (entry as unknown as Record<string, unknown>).source as string | undefined;
+                    return (
+                      <div key={i} style={{ position: "relative", marginBottom: 12 }}>
+                        <div style={{ position: "absolute", left: -17, top: 6, width: 10, height: 10, borderRadius: "50%", background: "var(--accent)", border: "2px solid var(--input-bg)" }} />
+                        <div style={{ padding: "10px 14px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                            <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text)" }}>{entry.event}</span>
+                            <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{new Date(entry.timestamp).toLocaleString()}</span>
                           </div>
-                        )}
+                          <div style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.5 }}>{entry.details}</div>
+                          {source && (
+                            <div style={{ marginTop: 6, fontSize: 10, fontWeight: 600, color: "var(--accent)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                              {sourceLabels[source] ?? source}
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div style={{ fontSize: 13, color: "var(--text-muted)", padding: "8px 0" }}>No learning history entries yet.</div>
+                    );
+                  })}
+                </div>
+              </>
             )}
           </div>
         )}
@@ -518,27 +502,10 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
           <div style={{ padding: "16px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
               <SectionHeader color="var(--accent)" shape="square" label="Versions" />
-              <button className="btn btn-primary" onClick={() => setShowVersionForm(!showVersionForm)} style={{ fontSize: 12, padding: "6px 14px" }}>
-                {showVersionForm ? "Cancel" : "+ Add Version"}
+              <button className="btn btn-primary" onClick={() => setShowVersionModal(true)} style={{ fontSize: 12, padding: "6px 14px" }}>
+                Upload New Version
               </button>
             </div>
-
-            {showVersionForm && (
-              <div style={{ padding: 12, borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)", marginBottom: 16, display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap" }}>
-                <div style={{ flex: "1 1 150px" }}>
-                  <label style={{ fontSize: 11, color: "var(--text-muted)", display: "block", marginBottom: 3 }}>Version</label>
-                  <input value={versionString} onChange={(e) => setVersionString(e.target.value)} onKeyDown={(e) => e.key === "Enter" && handleVersionSubmit()} placeholder="e.g. 2.1.0" style={{ width: "100%", fontSize: 13, padding: "6px 10px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--input-bg)", color: "var(--text)" }} />
-                </div>
-                <div style={{ flex: "1 1 150px" }}>
-                  <label style={{ fontSize: 11, color: "var(--text-muted)", display: "block", marginBottom: 3 }}>Source</label>
-                  <input value={versionSource} onChange={(e) => setVersionSource(e.target.value)} placeholder="e.g. ci-pipeline" style={{ width: "100%", fontSize: 13, padding: "6px 10px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--input-bg)", color: "var(--text)" }} />
-                </div>
-                <button className="btn btn-primary" onClick={handleVersionSubmit} disabled={versionSubmitting} style={{ fontSize: 12, padding: "6px 14px", flexShrink: 0 }}>
-                  {versionSubmitting ? "Adding..." : "Add"}
-                </button>
-                {versionError && <div style={{ width: "100%", color: "var(--status-failed)", fontSize: 12 }}>{versionError}</div>}
-              </div>
-            )}
 
             {versions.length > 0 ? (
               <div style={{ borderRadius: 10, border: "1px solid var(--border)", background: "var(--surface)" }}>
@@ -589,5 +556,13 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
         )}
       </div>
     </CanvasPanelHost>
+
+    {showVersionModal && (
+      <AddArtifactModal
+        onClose={() => setShowVersionModal(false)}
+        newVersionFor={{ artifactId: artifact.id, artifactName: artifact.name, artifactType: artifact.type }}
+      />
+    )}
+    </>
   );
 }
