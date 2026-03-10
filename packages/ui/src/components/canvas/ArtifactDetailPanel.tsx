@@ -300,8 +300,10 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
             {/* Configuration Expectations */}
             {configEntries.length > 0 && (
               <>
-                <SectionHeader color="var(--status-warning)" shape="square" label="Configuration Expectations" />
-                <div className="canvas-var-table" style={{ marginBottom: 20 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.5, color: "var(--text-muted)", fontFamily: "monospace", marginBottom: 10 }}>
+                  Configuration Expectations
+                </div>
+                <div className="canvas-var-table" style={{ marginBottom: 24 }}>
                   {configEntries.map(([key, val]) => (
                     <div key={key} className="canvas-var-row">
                       <span className="mono">{key}</span>
