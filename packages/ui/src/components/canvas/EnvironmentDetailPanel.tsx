@@ -17,10 +17,6 @@ export default function EnvironmentDetailPanel({ environmentId, title }: Props) 
   const { data: allDeployments, loading: l2 } = useQuery<Deployment[]>("list:deployments", () => listDeployments());
   const { data: artifacts, loading: l3 } = useQuery<Artifact[]>("list:artifacts", () => listArtifacts());
   const loading = l1 || l2 || l3;
-  const deployments = (allDeployments ?? []).filter((dep) => dep.environmentId === environmentId);
-
-  if (loading) return <CanvasPanelHost title={title} hideRootCrumb><div className="loading">Loading...</div></CanvasPanelHost>;
-  if (!environment) return <CanvasPanelHost title={title} hideRootCrumb><div className="error-msg">Environment not found</div></CanvasPanelHost>;
 
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
@@ -28,6 +24,11 @@ export default function EnvironmentDetailPanel({ environmentId, title }: Props) 
   const [newKey, setNewKey] = useState("");
   const [newValue, setNewValue] = useState("");
   const [varSaving, setVarSaving] = useState(false);
+
+  const deployments = (allDeployments ?? []).filter((dep) => dep.environmentId === environmentId);
+
+  if (loading) return <CanvasPanelHost title={title} hideRootCrumb dismissible={false}><div className="loading">Loading...</div></CanvasPanelHost>;
+  if (!environment) return <CanvasPanelHost title={title} hideRootCrumb dismissible={false}><div className="error-msg">Environment not found</div></CanvasPanelHost>;
 
   async function saveVariable(key: string, value: string) {
     if (!environment) return;
@@ -66,8 +67,8 @@ export default function EnvironmentDetailPanel({ environmentId, title }: Props) 
   );
 
   return (
-    <CanvasPanelHost title={title} hideRootCrumb>
-      <div className="canvas-detail">
+    <CanvasPanelHost title={title} hideRootCrumb dismissible={false}>
+      <div className="v2-detail-view">
         <div className="canvas-summary-strip">
           <div className="canvas-summary-item">
             <span className="canvas-summary-value">{deployments.length}</span>
@@ -100,14 +101,16 @@ export default function EnvironmentDetailPanel({ environmentId, title }: Props) 
                 placeholder="Key"
                 value={newKey}
                 onChange={(e) => setNewKey(e.target.value)}
-                style={{ flex: 1, fontSize: 12, padding: "4px 8px", borderRadius: 4, border: "1px solid var(--border)", background: "var(--input-bg)", color: "var(--text)", fontFamily: "var(--font-mono)" }}
+                className="v2-input"
+                style={{ flex: 1 }}
               />
               <input
                 placeholder="Value"
                 value={newValue}
                 onChange={(e) => setNewValue(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && newKey.trim() && saveVariable(newKey.trim(), newValue)}
-                style={{ flex: 2, fontSize: 12, padding: "4px 8px", borderRadius: 4, border: "1px solid var(--border)", background: "var(--input-bg)", color: "var(--text)", fontFamily: "var(--font-mono)" }}
+                className="v2-input"
+                style={{ flex: 2 }}
               />
               <button className="btn btn-sm btn-primary" disabled={varSaving || !newKey.trim()} onClick={() => saveVariable(newKey.trim(), newValue)} style={{ fontSize: 11 }}>Save</button>
               <button className="btn btn-sm" onClick={() => setAddingVar(false)} style={{ fontSize: 11 }}>Cancel</button>
@@ -124,7 +127,7 @@ export default function EnvironmentDetailPanel({ environmentId, title }: Props) 
                       onChange={(e) => setEditValue(e.target.value)}
                       onKeyDown={(e) => e.key === "Enter" && saveVariable(k, editValue)}
                       autoFocus
-                      style={{ flex: 2, fontSize: 12, padding: "2px 6px", borderRadius: 4, border: "1px solid var(--accent-border)", background: "var(--input-bg)", color: "var(--text)", fontFamily: "var(--font-mono)" }}
+                      className="v2-input" style={{ flex: 2 }}
                     />
                     <button className="btn btn-sm btn-primary" style={{ fontSize: 11, marginLeft: 4 }} disabled={varSaving} onClick={() => saveVariable(k, editValue)}>Save</button>
                     <button className="btn btn-sm" style={{ fontSize: 11, marginLeft: 2 }} onClick={() => setEditingKey(null)}>Cancel</button>
@@ -170,7 +173,7 @@ export default function EnvironmentDetailPanel({ environmentId, title }: Props) 
                     params: { id: d.id },
                   })}
                 >
-                  <span className={`badge badge-${d.status}`}>{d.status}</span>
+                  <div className={`v2-deploy-status-pill v2-pill-${d.status}`}>{d.status}</div>
                   <span className="canvas-activity-version">{d.version}</span>
                   <span className="canvas-activity-artifact">
                     {(artifacts ?? []).find((a) => a.id === d.artifactId)?.name ?? d.artifactId.slice(0, 8)}
