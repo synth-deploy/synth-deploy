@@ -4321,6 +4321,36 @@ table a:hover {
   border-color: rgba(99, 225, 190, 0.4);
 }
 
+.llm-gate-retry:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.llm-gate-key-input {
+  width: 100%;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-family: var(--font-mono, monospace);
+  padding: 9px 12px;
+  margin-bottom: 8px;
+  box-sizing: border-box;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.llm-gate-key-input:focus {
+  border-color: rgba(99, 225, 190, 0.4);
+}
+
+.llm-gate-save-error {
+  font-size: 12px;
+  color: var(--status-failed, #f87171);
+  margin-bottom: 8px;
+}
+
 /* Warning banner for configured-but-unhealthy state */
 
 .llm-gate-warning-banner {

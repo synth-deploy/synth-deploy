@@ -1,9 +1,76 @@
 import { useState, useEffect, type ReactNode } from "react";
-import { getLlmHealth } from "../api.js";
+import { getLlmHealth, updateSettings } from "../api.js";
 import type { LlmHealthStatus } from "../api.js";
 
 interface LlmGateProps {
   children: ReactNode;
+}
+
+function LlmGateSetup({ onConfigured }: { onConfigured: (status: LlmHealthStatus) => void }) {
+  const [apiKey, setApiKey] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!apiKey.trim()) return;
+    setSaving(true);
+    setSaveError(null);
+    try {
+      await updateSettings({ llm: { apiKey: apiKey.trim() } } as never);
+      const result = await getLlmHealth();
+      if (result.configured) {
+        onConfigured(result);
+      } else {
+        setSaveError("Key saved but LLM health check still failing — verify the key is valid.");
+      }
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Failed to save API key");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="llm-gate-container">
+      <div className="llm-gate-card">
+        <div className="llm-gate-logo">Synth</div>
+        <div className="llm-gate-title">LLM Connection Required</div>
+        <div className="llm-gate-message">
+          Synth requires an LLM connection to function. The intelligence
+          is the product — without it, there is no deployment reasoning,
+          no risk assessment, and no plan generation.
+        </div>
+        <form className="llm-gate-setup" onSubmit={handleSubmit}>
+          <div className="llm-gate-setup-title">Connect your LLM</div>
+          <div className="llm-gate-setup-step">
+            <span className="llm-gate-step-number">1</span>
+            <span>Enter your API key below. Anthropic Claude is the default provider.</span>
+          </div>
+          <div className="llm-gate-setup-step">
+            <span className="llm-gate-step-number">2</span>
+            <span>
+              To use a different provider (<code>openai-compatible</code>, <code>bedrock</code>, <code>vertex</code>),
+              set <code>SYNTH_LLM_PROVIDER</code> in your environment and restart.
+            </span>
+          </div>
+          <input
+            className="llm-gate-key-input"
+            type="password"
+            placeholder="sk-ant-..."
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+            autoComplete="off"
+            spellCheck={false}
+          />
+          {saveError && <div className="llm-gate-save-error">{saveError}</div>}
+          <button className="llm-gate-retry" type="submit" disabled={saving || !apiKey.trim()}>
+            {saving ? "Connecting…" : "Connect"}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
 }
 
 export default function LlmGate({ children }: LlmGateProps) {
@@ -74,53 +141,9 @@ export default function LlmGate({ children }: LlmGateProps) {
     );
   }
 
-  // Not configured -- full gate, no way past
+  // Not configured -- full gate with inline key entry
   if (status && !status.configured) {
-    return (
-      <div className="llm-gate-container">
-        <div className="llm-gate-card">
-          <div className="llm-gate-logo">Synth</div>
-          <div className="llm-gate-title">LLM Connection Required</div>
-          <div className="llm-gate-message">
-            Synth requires an LLM connection to function. The intelligence
-            is the product -- without it, there is no deployment reasoning,
-            no risk assessment, and no plan generation.
-          </div>
-          <div className="llm-gate-setup">
-            <div className="llm-gate-setup-title">Setup</div>
-            <div className="llm-gate-setup-step">
-              <span className="llm-gate-step-number">1</span>
-              <span>
-                Set <code>SYNTH_LLM_API_KEY</code> to your Anthropic API key
-              </span>
-            </div>
-            <div className="llm-gate-setup-step">
-              <span className="llm-gate-step-number">2</span>
-              <span>
-                Optionally set <code>SYNTH_LLM_PROVIDER</code> (default: <code>anthropic</code>).
-                Supported: <code>anthropic</code>, <code>bedrock</code>, <code>vertex</code>, <code>openai-compatible</code>
-              </span>
-            </div>
-            <div className="llm-gate-setup-step">
-              <span className="llm-gate-step-number">3</span>
-              <span>Restart the Synth server</span>
-            </div>
-          </div>
-          <button
-            className="llm-gate-retry"
-            onClick={() => {
-              setLoading(true);
-              getLlmHealth()
-                .then((result) => { setStatus(result); setError(null); })
-                .catch((err) => setError(err instanceof Error ? err.message : "Failed to check LLM status"))
-                .finally(() => setLoading(false));
-            }}
-          >
-            Re-check Connection
-          </button>
-        </div>
-      </div>
-    );
+    return <LlmGateSetup onConfigured={(result) => setStatus(result)} />;
   }
 
   // Configured but unhealthy -- warning banner, children still render
