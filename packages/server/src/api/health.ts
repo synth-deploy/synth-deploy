@@ -274,6 +274,8 @@ export function registerHealthRoutes(
 // ---------------------------------------------------------------------------
 
 type TaskModelTask = "logClassification" | "diagnosticSynthesis" | "postmortemGeneration" | "queryAnswering";
+// NOTE: "verified" = reachable, "insufficient" = unreachable.
+// "marginal" is unused pending real capability probes (see issue #211).
 type VerifyStatus = "verified" | "marginal" | "insufficient";
 
 function extractApiErrorMessage(raw: string): string {
@@ -290,76 +292,18 @@ interface CapabilityVerificationResult {
   explanation: string;
 }
 
-const PROBE_PROMPTS: Record<TaskModelTask, { system: string; user: string; validator: (text: string) => VerifyStatus }> = {
-  logClassification: {
-    system: "You are a log classifier. Respond ONLY with valid JSON.",
-    user: 'Classify this log line into a category. Log: "ERROR 2025-01-15 Connection refused on port 5432". Respond with JSON: {"category": "<string>", "severity": "<string>"}',
-    validator: (text: string) => {
-      // Greedy match — handles nested objects and markdown-wrapped JSON
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        try {
-          const parsed = JSON.parse(jsonMatch[0]);
-          if (parsed.category && parsed.severity) return "verified";
-          if (parsed.category || parsed.severity) return "marginal";
-        } catch { /* fall through */ }
-      }
-      return "insufficient";
-    },
-  },
-  diagnosticSynthesis: {
-    system: "You are a deployment diagnostics expert. Write concise, actionable reports.",
-    user: "Synthesize a one-paragraph diagnostic from these facts: (1) Deploy started at 14:00, (2) Health check failed at 14:02, (3) Port 8080 was already in use. Include root cause and recommendation.",
-    validator: (text: string) => {
-      const lower = text.toLowerCase();
-      const hasRootCause = lower.includes("port") || lower.includes("cause") || lower.includes("conflict");
-      const hasRecommendation = lower.includes("recommend") || lower.includes("should") || lower.includes("fix") || lower.includes("resolve");
-      if (hasRootCause && hasRecommendation && text.length > 50) return "verified";
-      if (hasRootCause || hasRecommendation) return "marginal";
-      return "insufficient";
-    },
-  },
-  postmortemGeneration: {
-    system: "You are a postmortem writer for deployment incidents. Identify causal chains.",
-    user: "Given: (1) v2.4.1 deployed to production, (2) Migration partially applied, (3) /api/v2/users returned 502, (4) Rolled back to v2.4.0. Write a 2-sentence root cause analysis identifying the causal chain.",
-    validator: (text: string) => {
-      const lower = text.toLowerCase();
-      const hasCausality = lower.includes("because") || lower.includes("caused") || lower.includes("led to") || lower.includes("resulted") || lower.includes("due to");
-      const hasMultipleEvents = (lower.includes("migration") || lower.includes("schema")) && (lower.includes("502") || lower.includes("error") || lower.includes("fail"));
-      if (hasCausality && hasMultipleEvents && text.length > 40) return "verified";
-      if (hasCausality || hasMultipleEvents) return "marginal";
-      return "insufficient";
-    },
-  },
-  queryAnswering: {
-    system: "You are a deployment data analyst. Answer questions based on provided data only.",
-    user: 'Data: {"deployments": 15, "succeeded": 12, "failed": 3, "success_rate": "80%"}. Question: What is the deployment success rate and how many failed? Answer in one sentence citing the numbers.',
-    validator: (text: string) => {
-      const has80 = text.includes("80%") || text.includes("80 percent");
-      const has3 = text.includes("3") || text.includes("three");
-      if (has80 && has3) return "verified";
-      if (has80 || has3) return "marginal";
-      return "insufficient";
-    },
-  },
-};
-
 async function runTaskModelVerification(
   client: LlmClient,
   task: string,
   model: string,
 ): Promise<CapabilityVerificationResult> {
-  const probe = PROBE_PROMPTS[task as TaskModelTask];
-  if (!probe) {
-    return { task, model, status: "insufficient", explanation: `Unknown task: ${task}` };
-  }
-
-  // Use classify() for the probe — it's lightweight and won't use reasoning budget
+  // Connection test only — sends a minimal ping and checks for a response.
+  // Real capability evaluation is tracked in issue #211.
   const result = await client.classify({
-    prompt: probe.user,
-    systemPrompt: probe.system,
-    promptSummary: `Capability verification probe for ${task}`,
-    maxTokens: 256,
+    prompt: "ping",
+    systemPrompt: "Reply with the single word: pong",
+    promptSummary: `Connection test for ${task}`,
+    maxTokens: 16,
   });
 
   if (!result.ok) {
@@ -371,14 +315,12 @@ async function runTaskModelVerification(
     };
   }
 
-  const status = probe.validator(result.text);
-  const explanations: Record<VerifyStatus, string> = {
-    verified: `Model produced expected output format and reasoning quality for ${task}.`,
-    marginal: `Model produced partially correct output for ${task}. It may work but results could be inconsistent.`,
-    insufficient: `Model did not produce usable output for ${task}. Consider using a more capable model.`,
+  return {
+    task,
+    model,
+    status: "verified",
+    explanation: `Model is reachable and responding.`,
   };
-
-  return { task, model, status, explanation: explanations[status] };
 }
 
 function detectProvider(): string | undefined {

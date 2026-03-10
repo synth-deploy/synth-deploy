@@ -538,7 +538,7 @@ export default function SettingsPanel({ title }: Props) {
                 {primaryVerification.reasoning && (
                   <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 3 }}>
                     <span className={`status-badge status-${primaryVerification.reasoning.status === "verified" ? "succeeded" : primaryVerification.reasoning.status === "marginal" ? "pending" : "failed"}`}>
-                      {primaryVerification.reasoning.status}
+                      {primaryVerification.reasoning.status === "verified" ? "reachable" : primaryVerification.reasoning.status}
                     </span>
                     {primaryVerification.reasoning.status !== "verified" && (
                       <span style={{ fontSize: 11, color: primaryVerification.reasoning.status === "insufficient" ? "#f87171" : "#fbbf24", maxWidth: 280, lineHeight: 1.4 }}>
@@ -556,7 +556,7 @@ export default function SettingsPanel({ title }: Props) {
                 {primaryVerification.classification && (
                   <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 3 }}>
                     <span className={`status-badge status-${primaryVerification.classification.status === "verified" ? "succeeded" : primaryVerification.classification.status === "marginal" ? "pending" : "failed"}`}>
-                      {primaryVerification.classification.status}
+                      {primaryVerification.classification.status === "verified" ? "reachable" : primaryVerification.classification.status}
                     </span>
                     {primaryVerification.classification.status !== "verified" && (
                       <span style={{ fontSize: 11, color: primaryVerification.classification.status === "insufficient" ? "#f87171" : "#fbbf24", maxWidth: 280, lineHeight: 1.4 }}>
@@ -599,7 +599,7 @@ export default function SettingsPanel({ title }: Props) {
                     {result && (
                       <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 3 }}>
                         <span className={`status-badge status-${result.status === "verified" ? "succeeded" : result.status === "marginal" ? "pending" : "failed"}`}>
-                          {result.status}
+                          {result.status === "verified" ? "reachable" : result.status}
                         </span>
                         {result.status !== "verified" && (
                           <span style={{ fontSize: 11, color: result.status === "insufficient" ? "#f87171" : "#fbbf24", maxWidth: 280, lineHeight: 1.4 }}>
