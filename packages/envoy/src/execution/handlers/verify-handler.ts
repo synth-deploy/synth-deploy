@@ -19,6 +19,8 @@ import type { OperationHandler, HandlerResult } from "../operation-registry.js";
  */
 export class VerifyHandler implements OperationHandler {
   readonly name = "verify";
+  readonly actionKeywords = ["verify", "health", "check", "validate", "test"] as const;
+  readonly toolDependencies = [] as const;
 
   private defaultTimeoutMs: number;
 

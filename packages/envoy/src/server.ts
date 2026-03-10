@@ -128,6 +128,7 @@ export function createEnvoyServer(
 
   app.get("/health", async () => {
     const status = agent.getStatus();
+    const capabilities = agent.getCapabilities();
     return {
       status: status.healthy ? "healthy" : "degraded",
       service: "synth-envoy",
@@ -137,6 +138,7 @@ export function createEnvoyServer(
       readiness: status.readiness,
       summary: status.summary,
       lifecycle: status.lifecycle,
+      capabilities,
     };
   });
 

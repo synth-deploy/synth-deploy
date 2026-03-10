@@ -228,7 +228,7 @@ export type {
   PlanningResult,
 } from "./agent/envoy-agent.js";
 export { EnvironmentScanner } from "./agent/environment-scanner.js";
-export type { EnvironmentScanResult } from "./agent/environment-scanner.js";
+export type { EnvironmentScanResult, ToolProbeResult } from "./agent/environment-scanner.js";
 export { LocalStateStore } from "./state/local-state.js";
 export { PersistentEnvoyKnowledgeStore } from "./state/persistent-knowledge-store.js";
 export type {

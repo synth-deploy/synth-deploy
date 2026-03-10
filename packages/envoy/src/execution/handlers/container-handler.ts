@@ -22,6 +22,8 @@ import type { OperationHandler, HandlerResult } from "../operation-registry.js";
  */
 export class ContainerHandler implements OperationHandler {
   readonly name = "container";
+  readonly actionKeywords = ["docker", "container", "compose", "pull", "image"] as const;
+  readonly toolDependencies = ["docker", "docker-compose"] as const;
 
   private timeoutMs: number;
 

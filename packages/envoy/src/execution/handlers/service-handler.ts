@@ -16,6 +16,8 @@ import type { OperationHandler, HandlerResult } from "../operation-registry.js";
  */
 export class ServiceHandler implements OperationHandler {
   readonly name = "service";
+  readonly actionKeywords = ["start", "stop", "restart", "service", "reload"] as const;
+  readonly toolDependencies = ["systemctl", "launchctl"] as const;
 
   constructor(private adapter: PlatformAdapter) {}
 

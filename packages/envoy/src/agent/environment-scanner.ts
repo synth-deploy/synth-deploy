@@ -1,11 +1,24 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { execFile } from "node:child_process";
 import type { EnvoyKnowledgeStore } from "../state/knowledge-store.js";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
+
+/**
+ * Result of probing for a specific tool on the local system.
+ */
+export interface ToolProbeResult {
+  /** Tool name (e.g. "docker", "npm") */
+  name: string;
+  /** Whether the tool was found on PATH */
+  available: boolean;
+  /** Version string if available, null otherwise */
+  version: string | null;
+}
 
 export interface EnvironmentScanResult {
   /** Machine hostname or identifier */
@@ -27,6 +40,8 @@ export interface EnvironmentScanResult {
     activeEnvironments: number;
     lastDeploymentAt: Date | null;
   };
+  /** Installed tools on this machine — populated by scanTools() */
+  installedTools: ToolProbeResult[];
 }
 
 // ---------------------------------------------------------------------------
@@ -43,7 +58,32 @@ export interface EnvironmentScanResult {
  * - Local deployment history (from LocalStateStore)
  * - Environment readiness (can we deploy here?)
  */
+/**
+ * Tools to probe at startup. Each entry is [toolName, versionArgs].
+ * The version args are used to extract a version string — if the tool
+ * is found, we run `toolName ...versionArgs` and capture the first
+ * line of output.
+ */
+const PROBED_TOOLS: Array<[string, string[]]> = [
+  ["docker", ["--version"]],
+  ["docker-compose", ["--version"]],
+  ["npm", ["--version"]],
+  ["node", ["--version"]],
+  ["systemctl", ["--version"]],
+  ["launchctl", ["version"]],
+  ["apt", ["--version"]],
+  ["yum", ["--version"]],
+  ["brew", ["--version"]],
+  ["git", ["--version"]],
+  ["curl", ["--version"]],
+  ["wget", ["--version"]],
+  ["tar", ["--version"]],
+  ["unzip", ["-v"]],
+];
+
 export class EnvironmentScanner {
+  private cachedTools: ToolProbeResult[] | null = null;
+
   constructor(
     private baseDir: string,
     private stateStore: EnvoyKnowledgeStore,
@@ -81,7 +121,31 @@ export class EnvironmentScanner {
         activeEnvironments: this.stateStore.listEnvironments().length,
         lastDeploymentAt: lastDeployment?.receivedAt ?? null,
       },
+      installedTools: this.cachedTools ?? [],
     };
+  }
+
+  /**
+   * Probe for installed tools on the local system. Results are cached
+   * so subsequent scan() calls include them without re-probing.
+   *
+   * Call this once at startup — probing is async because it spawns
+   * child processes.
+   */
+  async scanTools(): Promise<ToolProbeResult[]> {
+    const results = await Promise.all(
+      PROBED_TOOLS.map(([name, versionArgs]) => this.probeTool(name, versionArgs)),
+    );
+    this.cachedTools = results;
+    return results;
+  }
+
+  /**
+   * Return cached tool probe results, or empty if scanTools() hasn't
+   * been called yet.
+   */
+  getInstalledTools(): ToolProbeResult[] {
+    return this.cachedTools ?? [];
   }
 
   /**
@@ -110,6 +174,21 @@ export class EnvironmentScanner {
     }
 
     return { ready: true, reason: "Workspace is ready for deployments." };
+  }
+
+  private probeTool(name: string, versionArgs: string[]): Promise<ToolProbeResult> {
+    return new Promise((resolve) => {
+      execFile(name, versionArgs, { timeout: 5000 }, (error, stdout, stderr) => {
+        if (error) {
+          resolve({ name, available: false, version: null });
+          return;
+        }
+        // Extract first non-empty line from stdout or stderr as the version
+        const output = (stdout || stderr || "").trim();
+        const firstLine = output.split("\n")[0]?.trim() ?? null;
+        resolve({ name, available: true, version: firstLine });
+      });
+    });
   }
 
   private checkWritable(dir: string): boolean {

@@ -27,6 +27,20 @@ export interface OperationHandler {
   name: string;
 
   /**
+   * The action vocabulary this handler recognizes. These are the keywords
+   * that canHandle() matches against — exposed here so the planner can
+   * know what actions are available without calling canHandle() on every
+   * possible string.
+   */
+  actionKeywords: readonly string[];
+
+  /**
+   * External tool dependencies this handler requires (e.g. "docker",
+   * "systemctl"). Empty if the handler uses only Node built-ins.
+   */
+  toolDependencies: readonly string[];
+
+  /**
    * Return true if this handler can execute the given action on the
    * current platform. The executor calls canHandle on each registered
    * handler until one matches.
@@ -83,10 +97,46 @@ export class DefaultOperationRegistry {
   }
 
   /**
-   * List all registered handlers and the platforms they support.
-   * Useful for diagnostics and debrief entries.
+   * List all registered handlers with their full vocabulary and tool
+   * dependencies. Used by the planner to understand what actions the
+   * Envoy can execute and what external tools are required.
    */
-  listCapabilities(): Array<{ name: string }> {
-    return this.handlers.map((h) => ({ name: h.name }));
+  listCapabilities(): Array<{
+    name: string;
+    actionKeywords: readonly string[];
+    toolDependencies: readonly string[];
+  }> {
+    return this.handlers.map((h) => ({
+      name: h.name,
+      actionKeywords: h.actionKeywords,
+      toolDependencies: h.toolDependencies,
+    }));
+  }
+
+  /**
+   * Return the complete action vocabulary across all registered handlers.
+   * This is the full set of keywords the Envoy recognizes in action strings.
+   */
+  allActionKeywords(): string[] {
+    const keywords = new Set<string>();
+    for (const h of this.handlers) {
+      for (const kw of h.actionKeywords) {
+        keywords.add(kw);
+      }
+    }
+    return [...keywords];
+  }
+
+  /**
+   * Return all external tool dependencies across all registered handlers.
+   */
+  allToolDependencies(): string[] {
+    const deps = new Set<string>();
+    for (const h of this.handlers) {
+      for (const dep of h.toolDependencies) {
+        deps.add(dep);
+      }
+    }
+    return [...deps];
   }
 }

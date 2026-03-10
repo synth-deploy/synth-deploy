@@ -194,6 +194,7 @@ export interface ExecutionResult {
  */
 export class EnvoyAgent {
   private operationExecutor: DefaultOperationExecutor | null = null;
+  private operationRegistry: DefaultOperationRegistry | null = null;
   private scanner: EnvironmentScanner;
   private investigator: DiagnosticInvestigator;
   private reporter: ServerReporter | null;
@@ -230,13 +231,21 @@ export class EnvoyAgent {
     registry.register(new ProcessHandler());
     registry.register(new VerifyHandler());
 
-    const validator = new BoundaryValidator();
+    this.operationRegistry = registry;
+
+    // Pass the registry to the validator so it derives classification
+    // from registered handler vocabularies instead of a hardcoded list
+    const validator = new BoundaryValidator(registry);
     this.operationExecutor = new DefaultOperationExecutor(
       registry,
       validator,
       adapter.platform,
       this.debrief,
     );
+
+    // Probe for installed tools in background — results are cached
+    // in the scanner for subsequent scan() calls
+    await this.scanner.scanTools();
   }
 
   // -------------------------------------------------------------------------
@@ -1201,6 +1210,26 @@ Existing deployments on disk: ${scanResult.disk.deploymentCount}
 Known deployments in state: ${scanResult.knownState.totalDeployments}
 Active environments: ${scanResult.knownState.activeEnvironments}`);
 
+    // Include capability surface so the LLM only produces executable plans
+    const capabilities = this.getCapabilities();
+    const availableTools = capabilities.installedTools
+      .filter((t) => t.available)
+      .map((t) => `${t.name} (${t.version ?? "version unknown"})`)
+      .join(", ");
+    const unavailableTools = capabilities.installedTools
+      .filter((t) => !t.available)
+      .map((t) => t.name)
+      .join(", ");
+
+    sections.push(`## Envoy Capabilities — ONLY use actions and tools listed here
+Action keywords the executor recognizes: ${capabilities.allActionKeywords.join(", ")}
+Handlers: ${capabilities.handlers.map((h) => `${h.name} [${h.actionKeywords.join(", ")}]`).join("; ")}
+Installed tools: ${availableTools || "none"}
+Unavailable tools: ${unavailableTools || "none"}
+Unsatisfied handler dependencies: ${capabilities.unsatisfiedDependencies.join(", ") || "none"}
+
+IMPORTANT: Every step's "action" field MUST contain at least one of the recognized action keywords above, or the executor will reject it. Do NOT use tools that are listed as unavailable.`);
+
     if (systemKnowledge.length > 0) {
       sections.push(`## System Knowledge
 ${systemKnowledge.map((k) => `[${k.category}] ${k.key}: ${JSON.stringify(k.value)}`).join("\n")}`);
@@ -1787,6 +1816,45 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
       summary,
       readiness,
       lifecycle: this._lifecycleState,
+    };
+  }
+
+  /**
+   * Return the Envoy's capability surface: what action keywords it
+   * recognizes, which handlers are registered, what tools are installed,
+   * and which tool dependencies are satisfied.
+   *
+   * This is surfaced to the server so the LLM planner can produce plans
+   * that the Envoy can actually execute.
+   */
+  getCapabilities(): {
+    handlers: Array<{
+      name: string;
+      actionKeywords: readonly string[];
+      toolDependencies: readonly string[];
+    }>;
+    allActionKeywords: string[];
+    installedTools: Array<{ name: string; available: boolean; version: string | null }>;
+    unsatisfiedDependencies: string[];
+  } {
+    const handlers = this.operationRegistry?.listCapabilities() ?? [];
+    const allKeywords = this.operationRegistry?.allActionKeywords() ?? [];
+    const allDeps = this.operationRegistry?.allToolDependencies() ?? [];
+    const installedTools = this.scanner.getInstalledTools();
+
+    // Determine which handler tool dependencies are not installed
+    const availableToolNames = new Set(
+      installedTools.filter((t) => t.available).map((t) => t.name),
+    );
+    const unsatisfiedDependencies = allDeps.filter(
+      (dep) => !availableToolNames.has(dep),
+    );
+
+    return {
+      handlers,
+      allActionKeywords: allKeywords,
+      installedTools,
+      unsatisfiedDependencies,
     };
   }
 }

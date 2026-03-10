@@ -119,14 +119,20 @@ export class DefaultOperationExecutor {
     const handler = this.registry.resolve(step.action, this.platform);
     if (!handler) {
       const completedAt = new Date();
+      const caps = this.registry.listCapabilities();
+      const handlerSummary = caps
+        .map((c) => `${c.name} [keywords: ${c.actionKeywords.join(", ")}]`)
+        .join("; ");
+      const allKeywords = this.registry.allActionKeywords();
       return {
         step,
         status: "failed",
         output: "",
         error:
           `No handler registered for action "${step.action}" on platform ` +
-          `"${this.platform}". Available handlers: ` +
-          `${this.registry.listCapabilities().map((c) => c.name).join(", ") || "none"}`,
+          `"${this.platform}". The action string must contain at least one ` +
+          `recognized keyword. Available handlers: ${handlerSummary || "none"}. ` +
+          `Recognized action keywords: ${allKeywords.join(", ") || "none"}.`,
         startedAt,
         completedAt,
         durationMs: completedAt.getTime() - startedAt.getTime(),

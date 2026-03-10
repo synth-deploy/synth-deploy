@@ -21,6 +21,8 @@ import type { OperationHandler, HandlerResult } from "../operation-registry.js";
  */
 export class ProcessHandler implements OperationHandler {
   readonly name = "process";
+  readonly actionKeywords = ["run", "execute", "command", "script"] as const;
+  readonly toolDependencies = [] as const;
 
   private defaultTimeoutMs: number;
 

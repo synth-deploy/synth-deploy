@@ -19,6 +19,8 @@ import type { OperationHandler, HandlerResult } from "../operation-registry.js";
  */
 export class ConfigHandler implements OperationHandler {
   readonly name = "config";
+  readonly actionKeywords = ["config", "template", "substitute", "transform"] as const;
+  readonly toolDependencies = [] as const;
 
   canHandle(action: string, _platform: Platform): boolean {
     const lower = action.toLowerCase();
