@@ -251,16 +251,18 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
         </div>
 
         {/* Tabs */}
-        <div className="v2-tab-bar">
-          {(["analysis", "annotations", "learning", "versions", "deployments"] as const).map((tab) => (
-            <button
-              key={tab}
-              className={`v2-tab ${activeTab === tab ? "v2-tab-active" : ""}`}
-              onClick={() => setActiveTab(tab)}
-            >
-              {tab === "learning" ? "learning history" : tab}
-            </button>
-          ))}
+        <div style={{ display: "flex", justifyContent: "center", padding: "16px 16px 0" }}>
+          <div className="segmented-control">
+            {(["analysis", "annotations", "learning", "versions", "deployments"] as const).map((tab) => (
+              <button
+                key={tab}
+                className={`segmented-control-btn ${activeTab === tab ? "segmented-control-btn-active" : ""}`}
+                onClick={() => setActiveTab(tab)}
+              >
+                {tab === "learning" ? "Learning History" : tab.charAt(0).toUpperCase() + tab.slice(1)}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* --- Analysis Tab --- */}
