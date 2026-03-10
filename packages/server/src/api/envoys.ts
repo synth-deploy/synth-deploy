@@ -120,9 +120,32 @@ export function registerEnvoyRoutes(
       assignedPartitions?: string[];
     };
 
+    const existing = registry.get(id);
     const updated = registry.update(id, body);
     if (!updated) {
       return reply.status(404).send({ error: "Envoy not found" });
+    }
+
+    const actor = (request.user?.email) ?? "anonymous";
+    if (body.assignedEnvironments !== undefined && existing) {
+      const prev = new Set(existing.assignedEnvironments);
+      const next = new Set(body.assignedEnvironments);
+      for (const envId of next) {
+        if (!prev.has(envId)) telemetry.record({ actor, action: "envoy.connection.added", target: { type: "envoy", id }, details: { connectionType: "environment", targetId: envId } });
+      }
+      for (const envId of prev) {
+        if (!next.has(envId)) telemetry.record({ actor, action: "envoy.connection.removed", target: { type: "envoy", id }, details: { connectionType: "environment", targetId: envId } });
+      }
+    }
+    if (body.assignedPartitions !== undefined && existing) {
+      const prev = new Set(existing.assignedPartitions);
+      const next = new Set(body.assignedPartitions);
+      for (const partId of next) {
+        if (!prev.has(partId)) telemetry.record({ actor, action: "envoy.connection.added", target: { type: "envoy", id }, details: { connectionType: "partition", targetId: partId } });
+      }
+      for (const partId of prev) {
+        if (!next.has(partId)) telemetry.record({ actor, action: "envoy.connection.removed", target: { type: "envoy", id }, details: { connectionType: "partition", targetId: partId } });
+      }
     }
 
     return {
