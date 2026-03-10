@@ -57,7 +57,6 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
   const [activeTab, setActiveTab] = useState<TabKey>("analysis");
 
   // Annotation form
-  const [annotationField, setAnnotationField] = useState("summary");
   const [annotationCorrection, setAnnotationCorrection] = useState("");
   const [annotationSubmitting, setAnnotationSubmitting] = useState(false);
   const [annotationError, setAnnotationError] = useState<string | null>(null);
@@ -78,7 +77,7 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
     setAnnotationError(null);
     try {
       await addArtifactAnnotation(artifactId, {
-        field: annotationField,
+        field: "summary",
         correction: annotationCorrection.trim(),
       });
       invalidateExact(`artifact:${artifactId}`);
@@ -367,16 +366,7 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
                     color: isLowConf ? "var(--status-warning)" : "var(--accent)",
                   }}
                 >
-                  {isLowConf ? "Annotate Artifact" : "Suggest a Correction"}
-                </button>
-                <button
-                  onClick={() => setActiveTab("annotations")}
-                  style={{
-                    padding: "9px 18px", borderRadius: 6, cursor: "pointer", fontFamily: "monospace", fontSize: 12, fontWeight: 600,
-                    border: "1px solid var(--border)", background: "transparent", color: "var(--text-muted)",
-                  }}
-                >
-                  Flag Incorrect Analysis
+                  Suggest a Correction
                 </button>
               </div>
             </div>
@@ -442,30 +432,20 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
 
             {/* Add correction form */}
             <div style={{ padding: 12, borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)", marginBottom: 16 }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text)", marginBottom: 8 }}>
-                {confidence < 0.5 ? "Annotate Artifact" : confidence < 0.7 ? "Suggest a Correction" : "Flag Incorrect Analysis"}
+              <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text)", marginBottom: 4 }}>
+                Suggest a Correction
+              </div>
+              <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 8, lineHeight: 1.5 }}>
+                Describe what Synth got wrong about this artifact's analysis. This will be recorded and surfaced during re-analysis.
               </div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
-                <div style={{ flex: "0 0 200px" }}>
-                  <label style={{ fontSize: 11, color: "var(--text-muted)", display: "block", marginBottom: 3 }}>Field</label>
-                  <select
-                    value={annotationField}
-                    onChange={(e) => setAnnotationField(e.target.value)}
-                    style={{ width: "100%", fontSize: 13, padding: "6px 10px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--input-bg)", color: "var(--text)" }}
-                  >
-                    <option value="summary">Summary</option>
-                    <option value="dependencies">Dependencies</option>
-                    <option value="configurationExpectations">Configuration Expectations</option>
-                    <option value="deploymentIntent">Deployment Intent</option>
-                  </select>
-                </div>
                 <div style={{ flex: "1 1 250px" }}>
-                  <label style={{ fontSize: 11, color: "var(--text-muted)", display: "block", marginBottom: 3 }}>Correction</label>
+                  <label style={{ fontSize: 11, color: "var(--text-muted)", display: "block", marginBottom: 3 }}>What's wrong</label>
                   <input
                     value={annotationCorrection}
                     onChange={(e) => setAnnotationCorrection(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && handleAnnotationSubmit()}
-                    placeholder="What should be corrected..."
+                    placeholder="Describe what the analysis got wrong..."
                     style={{ width: "100%", fontSize: 13, padding: "6px 10px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--input-bg)", color: "var(--text)", boxSizing: "border-box" }}
                   />
                 </div>
