@@ -703,8 +703,12 @@ export class PersistentSettingsStore {
     get: Database.Statement;
     upsert: Database.Statement;
   };
+  private encryptionKey: Buffer | undefined;
 
-  constructor(private db: Database.Database) {
+  constructor(private db: Database.Database, encryptionSecret?: string) {
+    if (encryptionSecret) {
+      this.encryptionKey = deriveEncryptionKey(encryptionSecret);
+    }
     this.stmts = {
       get: db.prepare(`SELECT value FROM settings WHERE key = ?`),
       upsert: db.prepare(
@@ -721,6 +725,17 @@ export class PersistentSettingsStore {
         value: JSON.stringify(DEFAULT_APP_SETTINGS),
       });
     }
+  }
+
+  setSecret(key: string, value: string): void {
+    const stored = this.encryptionKey ? encryptValue(value, this.encryptionKey) : value;
+    this.stmts.upsert.run({ key: `secret:${key}`, value: stored });
+  }
+
+  getSecret(key: string): string | null {
+    const row = this.stmts.get.get(`secret:${key}`) as { value: string } | undefined;
+    if (!row) return null;
+    return this.encryptionKey ? decryptValue(row.value, this.encryptionKey) : row.value;
   }
 
   get(): AppSettings {
@@ -755,6 +770,9 @@ export class PersistentSettingsStore {
     }
     if (partial.llm !== undefined) {
       current.llm = partial.llm;
+    }
+    if (partial.defaultTheme !== undefined) {
+      current.defaultTheme = partial.defaultTheme;
     }
     this.stmts.upsert.run({ key: "app", value: JSON.stringify(current) });
     return structuredClone(current);

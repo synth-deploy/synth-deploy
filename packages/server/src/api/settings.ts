@@ -63,12 +63,17 @@ export function registerSettingsRoutes(
   app.put("/api/settings", { preHandler: [requirePermission("settings.manage")] }, async (request, reply) => {
     const parsed = UpdateSettingsSchema.safeParse(request.body);
     if (!parsed.success) {
-      return reply.status(400).send({ error: "Invalid input", details: parsed.error.format() });
+      const msg = parsed.error.issues.map(i => `${i.path.join(".")}: ${i.message}`).join("; ");
+      return reply.status(400).send({ error: msg || "Invalid input" });
     }
 
-    // Strip API key from LLM config before persisting
+    // Persist API key encrypted in DB and apply to process env, then strip before storing settings
     const data = parsed.data as Partial<AppSettings> & { llm?: LlmProviderConfig & { apiKey?: string } };
     if (data.llm) {
+      if (data.llm.apiKey && data.llm.apiKey.length > 0) {
+        settings.setSecret("llm_api_key", data.llm.apiKey);
+        process.env.SYNTH_LLM_API_KEY = data.llm.apiKey;
+      }
       data.llm = stripApiKeyFromConfig(data.llm);
     }
 

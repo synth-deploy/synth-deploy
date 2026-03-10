@@ -84,6 +84,8 @@ export interface IDeploymentStore {
 export interface ISettingsStore {
   get(): AppSettings;
   update(partial: Partial<AppSettings>): AppSettings;
+  setSecret(key: string, value: string): void;
+  getSecret(key: string): string | null;
 }
 
 export interface ITelemetryStore {

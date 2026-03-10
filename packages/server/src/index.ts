@@ -52,9 +52,11 @@ mkdirSync(DATA_DIR, { recursive: true });
 
 const debrief = new PersistentDecisionDebrief(path.join(DATA_DIR, "debrief.db"));
 const entityDb = openEntityDatabase(path.join(DATA_DIR, "synth.db"));
+const hasDedicatedEncryptionKey = !!process.env.SYNTH_ENCRYPTION_KEY;
+const idpEncryptionSecret = process.env.SYNTH_ENCRYPTION_KEY ?? process.env.SYNTH_JWT_SECRET;
 const partitions = new PersistentPartitionStore(entityDb);
 const environments = new PersistentEnvironmentStore(entityDb);
-const settings = new PersistentSettingsStore(entityDb);
+const settings = new PersistentSettingsStore(entityDb, idpEncryptionSecret);
 const deployments = new PersistentDeploymentStore(entityDb);
 const artifactStore = new PersistentArtifactStore(entityDb);
 const securityBoundaryStore = new PersistentSecurityBoundaryStore(entityDb);
@@ -64,10 +66,14 @@ const roleStore = new PersistentRoleStore(entityDb);
 const userRoleStore = new PersistentUserRoleStore(entityDb, roleStore);
 const sessionStore = new PersistentSessionStore(entityDb);
 const apiKeyStore = new ApiKeyStore();
-const hasDedicatedEncryptionKey = !!process.env.SYNTH_ENCRYPTION_KEY;
-const idpEncryptionSecret = process.env.SYNTH_ENCRYPTION_KEY ?? process.env.SYNTH_JWT_SECRET;
 const idpProviderStore = new PersistentIdpProviderStore(entityDb, idpEncryptionSecret);
 const roleMappingStore = new PersistentRoleMappingStore(entityDb);
+
+// Load persisted LLM API key into env if not already set via environment
+if (!process.env.SYNTH_LLM_API_KEY) {
+  const storedKey = settings.getSecret("llm_api_key");
+  if (storedKey) process.env.SYNTH_LLM_API_KEY = storedKey;
+}
 
 // Warn if IdP providers exist but no dedicated encryption key is configured
 if (!hasDedicatedEncryptionKey && idpProviderStore.list().length > 0) {

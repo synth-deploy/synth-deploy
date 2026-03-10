@@ -193,9 +193,7 @@ export const UpdateSettingsSchema = z.object({
     taskModels: TaskModelConfigSchema.optional(),
   }).optional(),
   envoy: z.object({
-    url: z.string().url().refine(isSsrfSafeUrl, {
-      message: "URL must not point to private/internal IP ranges (SSRF prevention)",
-    }).optional(),
+    url: z.string().url().optional(),
     timeoutMs: z.number().int().positive().optional(),
   }).optional(),
   coBranding: z.object({

@@ -6,7 +6,7 @@ import { TASK_MODEL_META } from "../../types.js";
 import { useSettings } from "../../context/SettingsContext.js";
 import { useAuth } from "../../context/AuthContext.js";
 import { useTheme } from "../../context/ThemeContext.js";
-import { useQuery } from "../../hooks/useQuery.js";
+import { useQuery, invalidateExact } from "../../hooks/useQuery.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
 import SelectField from "../SelectField.js";
 
@@ -97,6 +97,8 @@ export default function SettingsPanel({ title }: Props) {
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [apiKeyInput, setApiKeyInput] = useState("");
+  const [showApiKeyInput, setShowApiKeyInput] = useState(false);
 
   // MCP sub-state
   const [mcpNewName, setMcpNewName] = useState("");
@@ -107,6 +109,10 @@ export default function SettingsPanel({ title }: Props) {
   const [useOneModel, setUseOneModel] = useState(true);
   const [verificationResults, setVerificationResults] = useState<Record<string, CapabilityVerificationResult>>({});
   const [verifyingTask, setVerifyingTask] = useState<string | null>(null);
+
+  // Primary model verification
+  const [primaryVerification, setPrimaryVerification] = useState<{ reasoning?: CapabilityVerificationResult; classification?: CapabilityVerificationResult }>({});
+  const [verifyingPrimary, setVerifyingPrimary] = useState<"reasoning" | "classification" | null>(null);
 
   // IdP state
   const { data: idpData } = useQuery("list:idpProviders", listIdpProviders);
@@ -194,8 +200,14 @@ export default function SettingsPanel({ title }: Props) {
     setSaving(true);
     setSaveError(null);
     try {
-      const updated = await updateSettings(settings);
+      const payload = (apiKeyInput && settings.llm)
+        ? { ...settings, llm: { ...settings.llm, apiKey: apiKeyInput } }
+        : settings;
+      const updated = await updateSettings(payload);
+      invalidateExact("settings");
       setSettings(updated);
+      setApiKeyInput("");
+      setShowApiKeyInput(false);
       setSavedAt(new Date().toLocaleTimeString());
       await refreshGlobalSettings();
       setTimeout(() => setSavedAt(null), 3000);
@@ -236,6 +248,21 @@ export default function SettingsPanel({ title }: Props) {
       setVerificationResults(prev => ({ ...prev, [task]: { task, model, status: "insufficient" as const, explanation: "Verification request failed." } }));
     } finally {
       setVerifyingTask(null);
+    }
+  }
+
+  async function handleVerifyPrimaryModel(which: "reasoning" | "classification") {
+    const model = which === "reasoning" ? settings?.llm?.reasoningModel : settings?.llm?.classificationModel;
+    if (!model) return;
+    const proxyTask = which === "reasoning" ? "diagnosticSynthesis" : "logClassification";
+    setVerifyingPrimary(which);
+    try {
+      const result = await verifyTaskModel(proxyTask as TaskModelTask, model);
+      setPrimaryVerification(prev => ({ ...prev, [which]: result }));
+    } catch {
+      setPrimaryVerification(prev => ({ ...prev, [which]: { task: proxyTask, model, status: "insufficient" as const, explanation: "Verification request failed." } }));
+    } finally {
+      setVerifyingPrimary(null);
     }
   }
 
@@ -487,17 +514,57 @@ export default function SettingsPanel({ title }: Props) {
                   width={200}
                 />
               </SettingRow>
-              <SettingRow label="API Key" description="Stored in SYNTH_LLM_API_KEY environment variable. Never persisted to disk.">
-                {settings.llm?.apiKeyConfigured
-                  ? <><span style={{ fontFamily: "var(--font-mono)", fontSize: 13, color: "var(--text-muted)" }}>sk-••••••••••••••••</span><Pill text="Set" success /></>
-                  : <Pill text="Not set" muted />
-                }
+              <SettingRow label="API Key" description="Stored encrypted in the database. Never exposed after save.">
+                {showApiKeyInput ? (
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <SI value={apiKeyInput} onChange={setApiKeyInput} placeholder="sk-..." type="password" width={260} />
+                    <button className="btn btn-ghost" style={{ fontSize: 12 }} onClick={() => { setShowApiKeyInput(false); setApiKeyInput(""); }}>Cancel</button>
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    {settings.llm?.apiKeyConfigured && <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, color: "var(--text-muted)" }}>sk-••••••••••••••••</span>}
+                    <Pill text={settings.llm?.apiKeyConfigured ? "Set" : "Not set"} success={settings.llm?.apiKeyConfigured} muted={!settings.llm?.apiKeyConfigured} />
+                    <button className="btn btn-ghost" style={{ fontSize: 12 }} onClick={() => setShowApiKeyInput(true)}>
+                      {settings.llm?.apiKeyConfigured ? "Change" : "Set key"}
+                    </button>
+                  </div>
+                )}
               </SettingRow>
               <SettingRow label="Reasoning model" description="Plan generation, diagnostics, and complex decisions.">
-                <SI value={settings.llm?.reasoningModel ?? ""} onChange={v => setSettings({ ...settings, llm: { ...(settings.llm ?? { provider: "claude", reasoningModel: "", classificationModel: "", timeoutMs: 30000, rateLimitPerMin: 60, apiKeyConfigured: false }), reasoningModel: v } })} placeholder="e.g. claude-sonnet-4-5" width={260} />
+                <SI value={settings.llm?.reasoningModel ?? ""} onChange={v => { setPrimaryVerification(prev => ({ ...prev, reasoning: undefined })); setSettings({ ...settings, llm: { ...(settings.llm ?? { provider: "claude", reasoningModel: "", classificationModel: "", timeoutMs: 30000, rateLimitPerMin: 60, apiKeyConfigured: false }), reasoningModel: v } }); }} placeholder="e.g. claude-sonnet-4-5" width={260} />
+                <button className="btn" onClick={() => handleVerifyPrimaryModel("reasoning")} disabled={!settings.llm?.reasoningModel || verifyingPrimary === "reasoning"} style={{ padding: "4px 10px", fontSize: 11 }}>
+                  {verifyingPrimary === "reasoning" ? "…" : "Test"}
+                </button>
+                {primaryVerification.reasoning && (
+                  <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 3 }}>
+                    <span className={`status-badge status-${primaryVerification.reasoning.status === "verified" ? "succeeded" : primaryVerification.reasoning.status === "marginal" ? "pending" : "failed"}`}>
+                      {primaryVerification.reasoning.status}
+                    </span>
+                    {primaryVerification.reasoning.status !== "verified" && (
+                      <span style={{ fontSize: 11, color: primaryVerification.reasoning.status === "insufficient" ? "#f87171" : "#fbbf24", maxWidth: 280, lineHeight: 1.4 }}>
+                        {primaryVerification.reasoning.explanation}
+                      </span>
+                    )}
+                  </span>
+                )}
               </SettingRow>
               <SettingRow label="Classification model" description="Log classification and lightweight pattern matching.">
-                <SI value={settings.llm?.classificationModel ?? ""} onChange={v => setSettings({ ...settings, llm: { ...(settings.llm ?? { provider: "claude", reasoningModel: "", classificationModel: "", timeoutMs: 30000, rateLimitPerMin: 60, apiKeyConfigured: false }), classificationModel: v } })} placeholder="e.g. claude-haiku-4-5" width={260} />
+                <SI value={settings.llm?.classificationModel ?? ""} onChange={v => { setPrimaryVerification(prev => ({ ...prev, classification: undefined })); setSettings({ ...settings, llm: { ...(settings.llm ?? { provider: "claude", reasoningModel: "", classificationModel: "", timeoutMs: 30000, rateLimitPerMin: 60, apiKeyConfigured: false }), classificationModel: v } }); }} placeholder="e.g. claude-haiku-4-5" width={260} />
+                <button className="btn" onClick={() => handleVerifyPrimaryModel("classification")} disabled={!settings.llm?.classificationModel || verifyingPrimary === "classification"} style={{ padding: "4px 10px", fontSize: 11 }}>
+                  {verifyingPrimary === "classification" ? "…" : "Test"}
+                </button>
+                {primaryVerification.classification && (
+                  <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 3 }}>
+                    <span className={`status-badge status-${primaryVerification.classification.status === "verified" ? "succeeded" : primaryVerification.classification.status === "marginal" ? "pending" : "failed"}`}>
+                      {primaryVerification.classification.status}
+                    </span>
+                    {primaryVerification.classification.status !== "verified" && (
+                      <span style={{ fontSize: 11, color: primaryVerification.classification.status === "insufficient" ? "#f87171" : "#fbbf24", maxWidth: 280, lineHeight: 1.4 }}>
+                        {primaryVerification.classification.explanation}
+                      </span>
+                    )}
+                  </span>
+                )}
               </SettingRow>
               <SettingRow label="Timeout">
                 <SI value={String(settings.llm?.timeoutMs ?? 30000)} onChange={v => setSettings({ ...settings, llm: { ...(settings.llm ?? { provider: "claude", reasoningModel: "", classificationModel: "", timeoutMs: 30000, rateLimitPerMin: 60, apiKeyConfigured: false }), timeoutMs: Number(v) } })} type="number" width={90} />
@@ -530,8 +597,15 @@ export default function SettingsPanel({ title }: Props) {
                       {verifyingTask === task ? "…" : "Test"}
                     </button>
                     {result && (
-                      <span className={`status-badge status-${result.status === "verified" ? "succeeded" : result.status === "marginal" ? "pending" : "failed"}`} title={result.explanation}>
-                        {result.status}
+                      <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 3 }}>
+                        <span className={`status-badge status-${result.status === "verified" ? "succeeded" : result.status === "marginal" ? "pending" : "failed"}`}>
+                          {result.status}
+                        </span>
+                        {result.status !== "verified" && (
+                          <span style={{ fontSize: 11, color: result.status === "insufficient" ? "#f87171" : "#fbbf24", maxWidth: 280, lineHeight: 1.4 }}>
+                            {result.explanation}
+                          </span>
+                        )}
                       </span>
                     )}
                   </SettingRow>
@@ -970,7 +1044,11 @@ export default function SettingsPanel({ title }: Props) {
           {isIdpOrIntakeTab ? "Identity and intake changes apply immediately." : "Changes are not saved until you click Save."}
         </span>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          {saveError && <span style={{ fontSize: 12, color: "var(--error)", fontFamily: "var(--font-mono)" }}>{saveError}</span>}
+          {saveError && (
+            <span style={{ fontSize: 12, color: "#f87171", fontFamily: "var(--font-mono)", background: "rgba(248,113,113,0.1)", border: "1px solid rgba(248,113,113,0.3)", borderRadius: 6, padding: "4px 10px" }}>
+              {saveError}
+            </span>
+          )}
           {savedAt && <span style={{ fontSize: 12, color: "var(--accent)", fontFamily: "var(--font-mono)" }}>Saved at {savedAt}</span>}
           <button
             className="btn btn-primary"

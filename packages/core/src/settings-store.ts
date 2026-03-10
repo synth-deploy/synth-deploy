@@ -7,6 +7,7 @@ import { DEFAULT_APP_SETTINGS } from "./types.js";
  */
 export class SettingsStore {
   private settings: AppSettings = structuredClone(DEFAULT_APP_SETTINGS);
+  private secrets = new Map<string, string>();
 
   get(): AppSettings {
     return structuredClone(this.settings);
@@ -38,5 +39,13 @@ export class SettingsStore {
       this.settings.llm = partial.llm;
     }
     return structuredClone(this.settings);
+  }
+
+  setSecret(key: string, value: string): void {
+    this.secrets.set(key, value);
+  }
+
+  getSecret(key: string): string | null {
+    return this.secrets.get(key) ?? null;
   }
 }

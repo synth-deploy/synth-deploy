@@ -186,7 +186,8 @@ function taskDescription(task: TaskModelTask): string {
 export class LlmClient {
   private _anthropicClient: unknown = null;
   private _initialized = false;
-  private readonly _apiKey: string | undefined;
+  private _lastInitializedApiKey: string | undefined = undefined;
+  private readonly _configuredApiKey: string | undefined;
   private readonly _provider: LlmSdkProvider;
   private readonly _baseUrl: string | undefined;
   private readonly _reasoningModel: string;
@@ -203,7 +204,7 @@ export class LlmClient {
     private readonly _agent: AgentType,
     config: LlmConfig = {},
   ) {
-    this._apiKey = config.apiKey ?? process.env.SYNTH_LLM_API_KEY;
+    this._configuredApiKey = config.apiKey;
     this._provider =
       config.provider ??
       (process.env.SYNTH_LLM_PROVIDER as LlmSdkProvider | undefined) ??
@@ -228,6 +229,14 @@ export class LlmClient {
         ? parseInt(process.env.SYNTH_LLM_RATE_LIMIT, 10)
         : DEFAULT_RATE_LIMIT_PER_MINUTE);
     this._taskModels = config.taskModels ?? {};
+  }
+
+  /**
+   * Returns the effective API key — prefers explicitly configured key,
+   * falls back to env var read at call time (not cached at construction).
+   */
+  private get _apiKey(): string | undefined {
+    return this._configuredApiKey ?? process.env.SYNTH_LLM_API_KEY;
   }
 
   /**
@@ -286,13 +295,15 @@ export class LlmClient {
       const timer = setTimeout(() => controller.abort(), 5000);
 
       try {
-        await client.messages.create({
-          model: this._classificationModel,
-          max_tokens: 1,
-          system: "health check",
-          messages: [{ role: "user", content: "ping" }],
-          signal: controller.signal,
-        });
+        await client.messages.create(
+          {
+            model: this._classificationModel,
+            max_tokens: 1,
+            system: "health check",
+            messages: [{ role: "user", content: "ping" }],
+          },
+          { signal: controller.signal },
+        );
 
         const status: LlmHealthStatus = {
           configured: true,
@@ -517,13 +528,15 @@ export class LlmClient {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), this._timeoutMs);
       try {
-        const response = await client.messages.create({
-          model,
-          max_tokens: params.maxTokens ?? DEFAULT_MAX_TOKENS,
-          system: params.systemPrompt,
-          messages: [{ role: "user", content: params.prompt }],
-          signal: controller.signal,
-        });
+        const response = await client.messages.create(
+          {
+            model,
+            max_tokens: params.maxTokens ?? DEFAULT_MAX_TOKENS,
+            system: params.systemPrompt,
+            messages: [{ role: "user", content: params.prompt }],
+          },
+          { signal: controller.signal },
+        );
 
         const responseTimeMs = Date.now() - startTime;
 
@@ -576,12 +589,16 @@ export class LlmClient {
    * can be loaded without optional SDKs installed (graceful degradation).
    */
   private async _ensureInitialized(): Promise<void> {
-    if (this._initialized) return;
+    const currentKey = this._apiKey;
+    if (this._initialized && currentKey === this._lastInitializedApiKey) return;
+    // Reset so we re-initialize with the current key
+    this._initialized = false;
+    this._lastInitializedApiKey = currentKey;
 
     switch (this._provider) {
       case "anthropic": {
         const { default: Anthropic } = await import("@anthropic-ai/sdk");
-        this._anthropicClient = new Anthropic({ apiKey: this._apiKey });
+        this._anthropicClient = new Anthropic({ apiKey: currentKey });
         break;
       }
 
@@ -770,6 +787,23 @@ export function createOpenAICompatibleAdapter(
 }
 
 // ---------------------------------------------------------------------------
+// Error message helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Extracts a human-readable error message from raw API error strings.
+ * Anthropic SDK errors include the HTTP status + raw JSON body — this
+ * pulls out just the "message" field from the JSON when present.
+ */
+export function extractApiErrorMessage(raw: string): string {
+  const match = raw.match(/"message"\s*:\s*"([^"]+)"/);
+  if (match) return match[1];
+  // If no JSON message found, strip any JSON-looking blobs
+  const stripped = raw.replace(/\{[^}]{20,}\}/g, "").trim();
+  return stripped || raw;
+}
+
+// ---------------------------------------------------------------------------
 // Capability Verification
 // ---------------------------------------------------------------------------
 
@@ -789,16 +823,16 @@ const TASK_PROBE_PROMPTS: Record<TaskModelTask, { system: string; user: string; 
     system: "You are a log classifier. Respond ONLY with valid JSON.",
     user: 'Classify this log line into a category. Log: "ERROR 2025-01-15 Connection refused on port 5432". Respond with JSON: {"category": "<string>", "severity": "<string>"}',
     validator: (text: string) => {
-      try {
-        const parsed = JSON.parse(text.trim());
-        if (parsed.category && parsed.severity) return "verified";
-        return "marginal";
-      } catch {
-        // Check if it contains JSON-like structure even with surrounding text
-        const jsonMatch = text.match(/\{[^}]*"category"[^}]*\}/);
-        if (jsonMatch) return "marginal";
-        return "insufficient";
+      // Extract JSON object from the response — greedy so nested objects don't truncate early
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        try {
+          const parsed = JSON.parse(jsonMatch[0]);
+          if (parsed.category && parsed.severity) return "verified";
+          if (parsed.category || parsed.severity) return "marginal";
+        } catch { /* fall through */ }
       }
+      return "insufficient";
     },
   },
   diagnosticSynthesis: {
@@ -862,19 +896,20 @@ export async function verifyModelCapability(
   );
 
   if (!result.ok) {
+    const cleanReason = extractApiErrorMessage(result.reason);
     // Record insufficient capability when the model cannot be reached
     client.recordCapability({
       task,
       model,
       level: "insufficient",
       verifiedAt: new Date(),
-      details: `Model could not be reached: ${result.reason}`,
+      details: `Model could not be reached: ${cleanReason}`,
     });
     return {
       task,
       model,
       status: "insufficient",
-      explanation: `Model could not be reached: ${result.reason}`,
+      explanation: `Model could not be reached: ${cleanReason}`,
     };
   }
 

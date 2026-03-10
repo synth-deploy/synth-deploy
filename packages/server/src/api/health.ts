@@ -276,6 +276,13 @@ export function registerHealthRoutes(
 type TaskModelTask = "logClassification" | "diagnosticSynthesis" | "postmortemGeneration" | "queryAnswering";
 type VerifyStatus = "verified" | "marginal" | "insufficient";
 
+function extractApiErrorMessage(raw: string): string {
+  const match = raw.match(/"message"\s*:\s*"([^"]+)"/);
+  if (match) return match[1];
+  const stripped = raw.replace(/\{[^}]{20,}\}/g, "").trim();
+  return stripped || raw;
+}
+
 interface CapabilityVerificationResult {
   task: string;
   model: string;
@@ -288,15 +295,16 @@ const PROBE_PROMPTS: Record<TaskModelTask, { system: string; user: string; valid
     system: "You are a log classifier. Respond ONLY with valid JSON.",
     user: 'Classify this log line into a category. Log: "ERROR 2025-01-15 Connection refused on port 5432". Respond with JSON: {"category": "<string>", "severity": "<string>"}',
     validator: (text: string) => {
-      try {
-        const parsed = JSON.parse(text.trim());
-        if (parsed.category && parsed.severity) return "verified";
-        return "marginal";
-      } catch {
-        const jsonMatch = text.match(/\{[^}]*"category"[^}]*\}/);
-        if (jsonMatch) return "marginal";
-        return "insufficient";
+      // Greedy match — handles nested objects and markdown-wrapped JSON
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        try {
+          const parsed = JSON.parse(jsonMatch[0]);
+          if (parsed.category && parsed.severity) return "verified";
+          if (parsed.category || parsed.severity) return "marginal";
+        } catch { /* fall through */ }
       }
+      return "insufficient";
     },
   },
   diagnosticSynthesis: {
@@ -359,7 +367,7 @@ async function runTaskModelVerification(
       task,
       model,
       status: "insufficient",
-      explanation: `Model could not be reached: ${result.reason}`,
+      explanation: `Model could not be reached: ${extractApiErrorMessage(result.reason)}`,
     };
   }
 
