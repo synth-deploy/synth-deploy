@@ -75,27 +75,33 @@ if (!process.env.SYNTH_LLM_API_KEY) {
   if (storedKey) process.env.SYNTH_LLM_API_KEY = storedKey;
 }
 
-// Warn if IdP providers exist but no dedicated encryption key is configured
+// Require SYNTH_ENCRYPTION_KEY when IdP providers are configured
 if (!hasDedicatedEncryptionKey && idpProviderStore.list().length > 0) {
-  console.warn(
-    "[Synth] WARNING: SYNTH_ENCRYPTION_KEY is not set. " +
-    "IdP client secrets are encrypted with SYNTH_JWT_SECRET, which means a single compromised key " +
-    "exposes both session tokens and at-rest IdP credentials. " +
-    "Set SYNTH_ENCRYPTION_KEY to a dedicated secret for IdP encryption.",
+  console.error(
+    "[Synth] FATAL: SYNTH_ENCRYPTION_KEY is not set but IdP providers are configured. " +
+    "A dedicated encryption key is required to protect IdP client secrets at rest. " +
+    "Set SYNTH_ENCRYPTION_KEY to a dedicated secret separate from SYNTH_JWT_SECRET. Exiting.",
   );
+  process.exit(1);
+}
+
+// Startup validation — log warnings for missing optional env vars
+if (!process.env.SYNTH_LLM_API_KEY) {
+  console.warn("[Synth] WARNING: SYNTH_LLM_API_KEY is not set. LLM features will be unavailable until configured via settings.");
+}
+if (!process.env.SYNTH_DATA_DIR) {
+  console.warn("[Synth] WARNING: SYNTH_DATA_DIR is not set. Using default ./data directory.");
 }
 
 const envoyRegistry = new EnvoyRegistry();
 
-// --- JWT secret ---
+// --- JWT secret (required) ---
 const jwtSecretEnv = process.env.SYNTH_JWT_SECRET;
-let jwtSecret: Uint8Array;
-if (jwtSecretEnv) {
-  jwtSecret = new TextEncoder().encode(jwtSecretEnv);
-} else {
-  jwtSecret = crypto.getRandomValues(new Uint8Array(32));
-  console.warn("[Synth] SYNTH_JWT_SECRET not set — generated random secret (sessions will not survive restarts)");
+if (!jwtSecretEnv) {
+  console.error("[Synth] FATAL: SYNTH_JWT_SECRET is not set. This environment variable is required for secure session management. Exiting.");
+  process.exit(1);
 }
+const jwtSecret: Uint8Array = new TextEncoder().encode(jwtSecretEnv);
 
 // --- Seed default roles ---
 const ALL_PERMISSIONS: Permission[] = [

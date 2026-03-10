@@ -1,8 +1,10 @@
+import path from "node:path";
 import type {
   PlannedStep,
   SecurityBoundary,
   SecurityBoundaryType,
 } from "@synth-deploy/core";
+import type { DefaultOperationRegistry } from "./operation-registry.js";
 
 // ---------------------------------------------------------------------------
 // Types — validation results
@@ -28,6 +30,24 @@ export interface PlanValidationResult {
 }
 
 // ---------------------------------------------------------------------------
+// Handler-name to boundary-type mapping
+// ---------------------------------------------------------------------------
+
+/**
+ * Maps handler names to security boundary types. This is the single source
+ * of truth for which handler category maps to which boundary. When the
+ * registry is available, classifyAction() uses handler vocabulary directly.
+ */
+const HANDLER_BOUNDARY_MAP: Record<string, SecurityBoundaryType> = {
+  service: "service",
+  file: "filesystem",
+  config: "filesystem",
+  container: "execution",
+  process: "execution",
+  verify: "network",
+};
+
+// ---------------------------------------------------------------------------
 // BoundaryValidator — enforces security boundaries on planned steps
 // ---------------------------------------------------------------------------
 
@@ -44,8 +64,16 @@ export interface PlanValidationResult {
  * Every step is validated BEFORE execution begins. If any step
  * violates a boundary, the entire plan is rejected — no partial
  * execution.
+ *
+ * When constructed with a registry reference, classifyAction() derives
+ * its vocabulary from registered handlers instead of a hardcoded list.
  */
 export class BoundaryValidator {
+  private registry: DefaultOperationRegistry | null;
+
+  constructor(registry?: DefaultOperationRegistry) {
+    this.registry = registry ?? null;
+  }
   /**
    * Validate a single step against the provided boundaries.
    */
@@ -127,10 +155,31 @@ export class BoundaryValidator {
 
   /**
    * Classify an action string into a security boundary type.
+   *
+   * When a registry is available, this derives the classification from
+   * registered handler vocabularies — no duplicated keyword lists.
+   * Falls back to a static mapping when no registry is configured.
+   *
    * Returns undefined if the action doesn't match any known type.
    */
   private classifyAction(action: string): SecurityBoundaryType | undefined {
     const lower = action.toLowerCase();
+
+    // When registry is available, match against handler vocabularies
+    if (this.registry) {
+      const capabilities = this.registry.listCapabilities();
+      for (const cap of capabilities) {
+        const matches = cap.actionKeywords.some((kw) => lower.includes(kw));
+        if (matches) {
+          const boundaryType = HANDLER_BOUNDARY_MAP[cap.name];
+          if (boundaryType) return boundaryType;
+        }
+      }
+      return undefined;
+    }
+
+    // Fallback: static classification (used when no registry is provided,
+    // e.g. in standalone validation scenarios)
 
     // Service actions
     if (
@@ -207,16 +256,24 @@ export class BoundaryValidator {
 
     switch (boundary.boundaryType) {
       case "filesystem": {
-        // Filesystem boundaries define allowed paths
+        // Filesystem boundaries define allowed paths.
+        // We resolve both the target and allowed paths to prevent
+        // path traversal attacks (e.g., /allowed/../etc/shadow).
         const allowedPaths = config.allowedPaths as string[] | undefined;
         if (allowedPaths && allowedPaths.length > 0) {
-          const target = step.target;
-          const inAllowedPath = allowedPaths.some(
-            (p) => target.startsWith(p) || target === p,
-          );
+          const resolvedTarget = path.resolve(step.target);
+          const inAllowedPath = allowedPaths.some((p) => {
+            const resolvedAllowed = path.resolve(p);
+            // Use trailing separator to prevent prefix attacks:
+            // e.g., /app-secret should not match allowed path /app
+            const prefix = resolvedAllowed.endsWith(path.sep)
+              ? resolvedAllowed
+              : resolvedAllowed + path.sep;
+            return resolvedTarget === resolvedAllowed || resolvedTarget.startsWith(prefix);
+          });
           if (!inAllowedPath) {
             return (
-              `Step targets "${target}" which is outside the allowed ` +
+              `Step targets "${step.target}" (resolved: ${path.resolve(step.target)}) which is outside the allowed ` +
               `filesystem paths: ${allowedPaths.join(", ")}. This boundary ` +
               `restricts file operations to specific directories to prevent ` +
               `unintended modifications to the host system.`

@@ -9,7 +9,7 @@ import { requirePermission } from "../middleware/permissions.js";
 import type { IntakeChannelStore, IntakeEventStore } from "../intake/intake-store.js";
 import type { IntakeProcessor } from "../intake/intake-processor.js";
 import type { RegistryPoller } from "../intake/registry-poller.js";
-import { parseWebhook } from "../intake/webhook-handlers.js";
+import { parseWebhook, verifyWebhookSignature } from "../intake/webhook-handlers.js";
 import type { RegistryConfig } from "@synth-deploy/core";
 
 /** Extract a semver-like version from a filename. Returns null if none found. */
@@ -226,6 +226,20 @@ export function registerIntakeRoutes(
 
       if (!token || token !== channel.authToken) {
         return reply.status(401).send({ error: "Invalid or missing intake token" });
+      }
+
+      // Verify webhook signature (GitHub X-Hub-Signature-256, GitLab X-Gitlab-Token)
+      const webhookSource = (channel.config as Record<string, unknown>).source as string ?? "generic";
+      const webhookSecret = (channel.config as Record<string, unknown>).secretToken as string | undefined;
+      const rawBody = typeof request.body === "string" ? request.body : JSON.stringify(request.body);
+      const sigResult = verifyWebhookSignature(
+        webhookSource,
+        webhookSecret,
+        request.headers as Record<string, string | string[] | undefined>,
+        rawBody,
+      );
+      if (!sigResult.verified) {
+        return reply.status(401).send({ error: sigResult.error ?? "Webhook signature verification failed" });
       }
 
       // Create intake event

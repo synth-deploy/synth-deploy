@@ -16,6 +16,8 @@ import type { OperationHandler, HandlerResult } from "../operation-registry.js";
  */
 export class FileHandler implements OperationHandler {
   readonly name = "file";
+  readonly actionKeywords = ["copy", "move", "backup", "permission", "symlink", "file", "write", "mkdir", "delete"] as const;
+  readonly toolDependencies = [] as const;
 
   constructor(private adapter: PlatformAdapter) {}
 
@@ -80,6 +82,27 @@ export class FileHandler implements OperationHandler {
         const linkTarget = (params.linkTarget as string) ?? (params.source as string) ?? "";
         if (!linkTarget) {
           return { success: false, output: "", error: "Symlink requires a linkTarget or source parameter" };
+        }
+        // Validate that the symlink target resolves within allowed boundaries.
+        // The linkTarget is resolved relative to the symlink's parent directory
+        // to catch traversal attacks (e.g., linkTarget: "../../../../etc/shadow").
+        const allowedPaths = (params.allowedPaths as string[] | undefined) ?? [];
+        const resolvedLinkTarget = path.resolve(path.dirname(target), linkTarget);
+        if (allowedPaths.length > 0) {
+          const withinBoundary = allowedPaths.some((p) => {
+            const resolvedAllowed = path.resolve(p);
+            const prefix = resolvedAllowed.endsWith(path.sep)
+              ? resolvedAllowed
+              : resolvedAllowed + path.sep;
+            return resolvedLinkTarget === resolvedAllowed || resolvedLinkTarget.startsWith(prefix);
+          });
+          if (!withinBoundary) {
+            return {
+              success: false,
+              output: "",
+              error: `Symlink target "${linkTarget}" resolves to "${resolvedLinkTarget}" which is outside allowed paths: ${allowedPaths.join(", ")}`,
+            };
+          }
         }
         await fs.symlink(linkTarget, target);
         return { success: true, output: `Created symlink ${target} -> ${linkTarget}` };

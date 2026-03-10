@@ -1,10 +1,57 @@
 import crypto from "node:crypto";
+import { z } from "zod";
 import type {
   DeploymentGraph,
   DeploymentGraphNode,
   DeploymentGraphEdge,
 } from "@synth-deploy/core";
 import type { LlmClient, LlmResult, IArtifactStore } from "@synth-deploy/core";
+
+// ---------------------------------------------------------------------------
+// Prompt injection sanitization
+// ---------------------------------------------------------------------------
+
+/**
+ * Sanitize user-controlled strings before inclusion in LLM prompts.
+ * Strips characters and patterns commonly used in prompt injection attacks:
+ * - Control characters (except newline/tab)
+ * - Markdown/prompt delimiters that could reframe the prompt context
+ * - System/assistant role injection attempts
+ */
+function sanitizeForPrompt(input: string): string {
+  // Strip control characters except \n and \t
+  let sanitized = input.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "");
+
+  // Neutralize prompt injection patterns:
+  // - "System:", "Assistant:", "Human:" role injection
+  // - Triple backtick blocks that could reframe context
+  // - XML-style tags used to inject system instructions
+  sanitized = sanitized
+    .replace(/\b(system|assistant|human)\s*:/gi, (match) => match.replace(":", "\uFF1A"))
+    .replace(/```/g, "'''")
+    .replace(/<\/?(?:system|prompt|instruction|context|message)[^>]*>/gi, "");
+
+  return sanitized;
+}
+
+// ---------------------------------------------------------------------------
+// Zod schema for LLM graph inference response validation
+// ---------------------------------------------------------------------------
+
+const InferredEdgeSchema = z.object({
+  from: z.string(),
+  to: z.string(),
+  type: z.enum(["depends_on", "data_flow"]),
+  dataBinding: z.object({
+    outputName: z.string(),
+    inputVariable: z.string(),
+  }).optional(),
+});
+
+const GraphInferenceResponseSchema = z.object({
+  edges: z.array(InferredEdgeSchema),
+  reasoning: z.string().optional(),
+});
 
 // ---------------------------------------------------------------------------
 // GraphInferenceEngine — uses LLM to reason about deployment ordering
@@ -15,13 +62,6 @@ interface InferGraphParams {
   envoyAssignments: Record<string, string>; // artifactId -> envoyId
   partitionId?: string;
   graphName?: string;
-}
-
-interface InferredEdge {
-  from: string; // artifactId
-  to: string;   // artifactId
-  type: "depends_on" | "data_flow";
-  dataBinding?: { outputName: string; inputVariable: string };
 }
 
 const GRAPH_INFERENCE_SYSTEM_PROMPT = `You are a deployment orchestration expert. Given a set of deployment artifacts with their analyses, determine the correct execution order and any data flow between them.
@@ -113,12 +153,12 @@ export class GraphInferenceEngine {
 
       artifactContext.push(
         `- ID: ${artifactId}\n` +
-        `  Name: ${artifact.name}\n` +
-        `  Type: ${artifact.type}\n` +
-        `  Summary: ${artifact.analysis.summary}\n` +
-        `  Dependencies: ${JSON.stringify(artifact.analysis.dependencies)}\n` +
-        `  Config expectations: ${JSON.stringify(artifact.analysis.configurationExpectations)}\n` +
-        `  Deployment intent: ${artifact.analysis.deploymentIntent ?? "unknown"}`,
+        `  Name: ${sanitizeForPrompt(artifact.name)}\n` +
+        `  Type: ${sanitizeForPrompt(artifact.type)}\n` +
+        `  Summary: ${sanitizeForPrompt(artifact.analysis.summary)}\n` +
+        `  Dependencies: ${sanitizeForPrompt(JSON.stringify(artifact.analysis.dependencies))}\n` +
+        `  Config expectations: ${sanitizeForPrompt(JSON.stringify(artifact.analysis.configurationExpectations))}\n` +
+        `  Deployment intent: ${sanitizeForPrompt(artifact.analysis.deploymentIntent ?? "unknown")}`,
       );
     }
 
@@ -141,12 +181,11 @@ export class GraphInferenceEngine {
       const jsonMatch = result.text.match(/\{[\s\S]*\}/);
       if (!jsonMatch) return [];
 
-      const parsed = JSON.parse(jsonMatch[0]) as {
-        edges?: InferredEdge[];
-        reasoning?: string;
-      };
+      const raw = JSON.parse(jsonMatch[0]);
+      const parseResult = GraphInferenceResponseSchema.safeParse(raw);
+      if (!parseResult.success) return [];
 
-      if (!parsed.edges || !Array.isArray(parsed.edges)) return [];
+      const parsed = parseResult.data;
 
       // Convert artifact-level edges to node-level edges
       const graphEdges: DeploymentGraphEdge[] = [];

@@ -1,3 +1,5 @@
+import crypto from "node:crypto";
+
 /**
  * Webhook payload parsers for CI/CD system integrations.
  *
@@ -231,6 +233,77 @@ export function parseGenericWebhook(body: unknown): WebhookPayload | null {
     downloadUrl: (data.downloadUrl as string) ?? undefined,
     metadata: (data.metadata as Record<string, unknown>) ?? {},
   };
+}
+
+// ---------------------------------------------------------------------------
+// Webhook signature verification
+// ---------------------------------------------------------------------------
+
+export interface WebhookVerificationResult {
+  verified: boolean;
+  error?: string;
+}
+
+/**
+ * Verify a webhook signature from GitHub (X-Hub-Signature-256) or
+ * GitLab (X-Gitlab-Token). Returns { verified: true } if the signature
+ * is valid, or { verified: false, error } if not.
+ *
+ * If no secretToken is configured for the channel, verification is skipped
+ * (returns verified: true) to allow backwards-compatible operation.
+ */
+export function verifyWebhookSignature(
+  source: string,
+  secretToken: string | undefined,
+  headers: Record<string, string | string[] | undefined>,
+  rawBody: string,
+): WebhookVerificationResult {
+  // If no secret is configured, skip verification
+  if (!secretToken) {
+    return { verified: true };
+  }
+
+  switch (source) {
+    case "github-actions": {
+      const signature = headers["x-hub-signature-256"] as string | undefined;
+      if (!signature) {
+        return { verified: false, error: "Missing X-Hub-Signature-256 header" };
+      }
+      const expected = "sha256=" + crypto
+        .createHmac("sha256", secretToken)
+        .update(rawBody)
+        .digest("hex");
+      const valid = crypto.timingSafeEqual(
+        Buffer.from(signature),
+        Buffer.from(expected),
+      );
+      return valid
+        ? { verified: true }
+        : { verified: false, error: "Invalid GitHub webhook signature" };
+    }
+
+    case "gitlab-ci": {
+      const token = headers["x-gitlab-token"] as string | undefined;
+      if (!token) {
+        return { verified: false, error: "Missing X-Gitlab-Token header" };
+      }
+      // GitLab uses a shared secret token (not HMAC) — compare in constant time
+      if (token.length !== secretToken.length) {
+        return { verified: false, error: "Invalid GitLab webhook token" };
+      }
+      const valid = crypto.timingSafeEqual(
+        Buffer.from(token),
+        Buffer.from(secretToken),
+      );
+      return valid
+        ? { verified: true }
+        : { verified: false, error: "Invalid GitLab webhook token" };
+    }
+
+    default:
+      // For other sources, no standard signature mechanism — skip verification
+      return { verified: true };
+  }
 }
 
 // ---------------------------------------------------------------------------

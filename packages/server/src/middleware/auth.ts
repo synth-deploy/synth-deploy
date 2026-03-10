@@ -37,8 +37,8 @@ export function registerAuthMiddleware(
     if (EXEMPT_ROUTES.some((r) => request.url.startsWith(r))) return;
     // Skip OIDC auth routes (dynamic paths)
     if (EXEMPT_PREFIXES.some((p) => request.url.startsWith(p))) return;
-    // Also skip static file serving (non-API routes)
-    if (!request.url.startsWith("/api/") && request.url !== "/mcp") return;
+    // Also skip static file serving (non-API routes), but NOT /mcp — it requires auth
+    if (!request.url.startsWith("/api/") && !request.url.startsWith("/mcp")) return;
 
     const authHeader = request.headers.authorization;
     if (!authHeader?.startsWith("Bearer ")) {
