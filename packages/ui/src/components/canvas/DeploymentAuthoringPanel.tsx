@@ -84,7 +84,7 @@ export default function DeploymentAuthoringPanel({ title, preselectedArtifactId,
 
       const result = await createDeployment({
         artifactId: primaryArtifactId,
-        environmentId: environmentsEnabled ? selectedEnvironmentId : undefined,
+        environmentId: selectedEnvironmentId || undefined,
         partitionId: selectedPartitionId || undefined,
       });
 

@@ -46,9 +46,9 @@ export function registerDeploymentRoutes(
       return reply.status(404).send({ error: `Artifact not found: ${artifactId}` });
     }
 
-    // Validate environment exists
-    const environment = environments.get(environmentId);
-    if (!environment) {
+    // Validate environment exists (optional when targeting a partition or envoy)
+    const environment = environmentId ? environments.get(environmentId) : undefined;
+    if (environmentId && !environment) {
       return reply.status(404).send({ error: `Environment not found: ${environmentId}` });
     }
 
@@ -60,8 +60,8 @@ export function registerDeploymentRoutes(
       }
     }
 
-    // Resolve variables
-    const envVars = environment.variables;
+    // Resolve variables — partition vars are base, environment vars take precedence if present
+    const envVars = environment ? environment.variables : {};
     const partitionVars = partitionId ? (partitions.get(partitionId)?.variables ?? {}) : {};
     const resolved: Record<string, string> = { ...partitionVars, ...envVars };
 
