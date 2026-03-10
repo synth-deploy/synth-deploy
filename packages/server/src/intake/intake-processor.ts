@@ -73,6 +73,7 @@ export class IntakeProcessor {
           name: payload.artifactName,
           type: payload.artifactType,
           source: payload.source,
+          content: payload.content,
           metadata: stringMetadata,
         });
 

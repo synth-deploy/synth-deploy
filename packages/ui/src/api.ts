@@ -42,6 +42,24 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   return res.json();
 }
 
+/** Like fetchJson but does NOT set Content-Type — lets the browser set multipart boundaries. */
+async function fetchJsonRaw<T>(url: string, init?: RequestInit): Promise<T> {
+  const headers: Record<string, string> = { ...(init?.headers as Record<string, string>) };
+  if (authToken) {
+    headers["Authorization"] = `Bearer ${authToken}`;
+  }
+
+  const res = await fetch(`${BASE}${url}`, {
+    ...init,
+    headers,
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error ?? `Request failed: ${res.status}`);
+  }
+  return res.json();
+}
+
 // --- Auth ---
 
 interface AuthLoginResult {
@@ -858,6 +876,16 @@ export async function manualUploadArtifact(data: {
     method: "POST",
     body: JSON.stringify({ ...data, source: "manual-upload" }),
   });
+}
+
+export async function uploadArtifactFile(
+  file: File,
+  existingArtifactId?: string,
+): Promise<{ eventId: string; artifactId: string; versionId: string }> {
+  const form = new FormData();
+  form.append("file", file);
+  if (existingArtifactId) form.append("existingArtifactId", existingArtifactId);
+  return fetchJsonRaw("/api/intake/upload", { method: "POST", body: form });
 }
 
 export async function listIntakeEvents(params?: { channelId?: string; limit?: number }): Promise<IntakeEvent[]> {

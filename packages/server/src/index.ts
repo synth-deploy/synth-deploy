@@ -7,6 +7,7 @@ import fastifyCors from "@fastify/cors";
 import rateLimit from "@fastify/rate-limit";
 import fastifyStatic from "@fastify/static";
 import fastifyFormBody from "@fastify/formbody";
+import fastifyMultipart from "@fastify/multipart";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { PersistentDecisionDebrief, openEntityDatabase, PersistentPartitionStore, PersistentEnvironmentStore, PersistentSettingsStore, PersistentDeploymentStore, PersistentArtifactStore, PersistentSecurityBoundaryStore, PersistentTelemetryStore, PersistentUserStore, PersistentRoleStore, PersistentUserRoleStore, PersistentSessionStore, PersistentIdpProviderStore, PersistentRoleMappingStore, LlmClient, ApiKeyStore } from "@synth-deploy/core";
 import type { Deployment, Artifact, ArtifactVersion, SecurityBoundary, Permission, RoleId } from "@synth-deploy/core";
@@ -625,6 +626,9 @@ await app.register(fastifyCors, {
 
 // Form body parsing (required for SAML POST callbacks)
 await app.register(fastifyFormBody);
+
+// Multipart/form-data parsing (required for file upload intake)
+await app.register(fastifyMultipart, { limits: { fileSize: 100 * 1024 * 1024 } });
 
 // Rate limiting — configurable via environment variables
 await app.register(rateLimit, {

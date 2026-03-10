@@ -12,6 +12,8 @@ export interface WebhookPayload {
   source: string;
   downloadUrl?: string;
   metadata: Record<string, unknown>;
+  /** Raw file content — passed through to the analyzer for deterministic extraction */
+  content?: Buffer;
 }
 
 // ---------------------------------------------------------------------------

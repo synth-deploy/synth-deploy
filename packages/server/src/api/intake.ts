@@ -12,6 +12,25 @@ import type { RegistryPoller } from "../intake/registry-poller.js";
 import { parseWebhook } from "../intake/webhook-handlers.js";
 import type { RegistryConfig } from "@synth-deploy/core";
 
+/** Extract a semver-like version from a filename. Returns null if none found. */
+function extractVersionFromFilename(filename: string): string | null {
+  const match = filename.match(/[-_v](\d+\.\d+[\.\d-]*)(?:\.\w+)*$/);
+  return match ? match[1] : null;
+}
+
+/** Strip version suffix and extension(s) from a filename to get the artifact name. */
+function extractNameFromFilename(filename: string): string {
+  // Remove all extensions first
+  let name = filename;
+  // Strip common multi-part extensions like .tar.gz, .tar.bz2
+  name = name.replace(/\.tar\.\w+$/, "");
+  // Strip remaining single extension
+  name = name.replace(/\.\w+$/, "");
+  // Strip trailing version suffix: -1.2.3 or _1.2.3 or -v1.2.3
+  name = name.replace(/[-_]v?\d+[\d.\-]*$/, "");
+  return name || filename;
+}
+
 export function registerIntakeRoutes(
   app: FastifyInstance,
   channelStore: IntakeChannelStore,
@@ -379,6 +398,101 @@ export function registerIntakeRoutes(
         });
         return reply.status(500).send({
           error: "Intake processing failed",
+          eventId: event.id,
+        });
+      }
+    },
+  );
+
+  // -----------------------------------------------------------------------
+  // File upload — multipart/form-data artifact submission
+  // -----------------------------------------------------------------------
+
+  app.post(
+    "/api/intake/upload",
+    { preHandler: [requirePermission("artifact.create")] },
+    async (request, reply) => {
+      let fileBuffer: Buffer | null = null;
+      let originalFilename = "";
+      let existingArtifactId: string | undefined;
+
+      try {
+        const parts = request.parts();
+        for await (const part of parts) {
+          if (part.type === "file") {
+            const chunks: Buffer[] = [];
+            for await (const chunk of part.file) {
+              chunks.push(chunk as Buffer);
+            }
+            fileBuffer = Buffer.concat(chunks);
+            originalFilename = part.filename ?? "unknown";
+          } else if (part.type === "field" && part.fieldname === "existingArtifactId") {
+            existingArtifactId = String(part.value ?? "").trim() || undefined;
+          }
+        }
+      } catch (err) {
+        return reply.status(400).send({ error: "Failed to parse multipart upload" });
+      }
+
+      if (!fileBuffer || !originalFilename) {
+        return reply.status(400).send({ error: "File is required" });
+      }
+
+      // If attaching to an existing artifact, look it up to get the canonical name
+      let artifactName: string;
+      let artifactType: string;
+      if (existingArtifactId) {
+        const existing = artifactStore.get(existingArtifactId);
+        if (!existing) {
+          return reply.status(404).send({ error: "Artifact not found" });
+        }
+        artifactName = existing.name;
+        artifactType = existing.type;
+      } else {
+        artifactName = extractNameFromFilename(originalFilename);
+        artifactType = "unknown";
+      }
+
+      const version = extractVersionFromFilename(originalFilename) ?? "unknown";
+
+      const event = eventStore.create({
+        channelId: "manual-upload",
+        status: "processing",
+        payload: { filename: originalFilename, artifactName, version },
+      });
+
+      try {
+        const result = await processor.process(
+          {
+            artifactName,
+            artifactType,
+            version,
+            source: "manual-upload",
+            metadata: { filename: originalFilename },
+            content: fileBuffer,
+          },
+          "manual-upload",
+        );
+
+        eventStore.update(event.id, {
+          status: "completed",
+          artifactId: result.artifactId,
+          processedAt: new Date(),
+        });
+
+        return reply.status(201).send({
+          eventId: event.id,
+          artifactId: result.artifactId,
+          versionId: result.versionId,
+        });
+      } catch (err) {
+        eventStore.update(event.id, {
+          status: "failed",
+          error: err instanceof Error ? err.message : "Processing failed",
+          processedAt: new Date(),
+        });
+        return reply.status(500).send({
+          error: "Upload processing failed",
           eventId: event.id,
         });
       }

@@ -1,16 +1,16 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import {
   getArtifact,
   addArtifactAnnotation,
   listDeployments,
   listEnvironments,
+  uploadArtifactFile,
 } from "../../api.js";
 import type { Deployment, Environment } from "../../types.js";
 import { useCanvas } from "../../context/CanvasContext.js";
-import { useQuery, invalidateExact } from "../../hooks/useQuery.js";
+import { useQuery, invalidateExact, invalidate } from "../../hooks/useQuery.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
 import SectionHeader from "../SectionHeader.js";
-import AddArtifactModal from "../AddArtifactModal.js";
 
 interface Props {
   artifactId: string;
@@ -61,7 +61,10 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
   const [annotationSubmitting, setAnnotationSubmitting] = useState(false);
   const [annotationError, setAnnotationError] = useState<string | null>(null);
 
-  const [showVersionModal, setShowVersionModal] = useState(false);
+  // Version file upload
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingVersion, setUploadingVersion] = useState(false);
+  const [versionUploadError, setVersionUploadError] = useState<string | null>(null);
 
   async function handleAnnotationSubmit() {
     if (!annotationCorrection.trim()) {
@@ -502,10 +505,39 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
           <div style={{ padding: "16px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
               <SectionHeader color="var(--accent)" shape="square" label="Versions" />
-              <button className="btn btn-primary" onClick={() => setShowVersionModal(true)} style={{ fontSize: 12, padding: "6px 14px" }}>
-                Upload New Version
+              <button
+                className="btn btn-primary"
+                onClick={() => { setVersionUploadError(null); fileInputRef.current?.click(); }}
+                disabled={uploadingVersion}
+                style={{ fontSize: 12, padding: "6px 14px" }}
+              >
+                {uploadingVersion ? "Uploading..." : "Upload New Version"}
               </button>
             </div>
+            {versionUploadError && (
+              <div style={{ marginBottom: 10, color: "var(--status-failed)", fontSize: 12 }}>{versionUploadError}</div>
+            )}
+            <input
+              ref={fileInputRef}
+              type="file"
+              style={{ display: "none" }}
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                e.target.value = "";
+                setUploadingVersion(true);
+                setVersionUploadError(null);
+                try {
+                  await uploadArtifactFile(file, artifactId);
+                  invalidateExact(`artifact:${artifactId}`);
+                  invalidate("list:artifacts");
+                } catch (err: unknown) {
+                  setVersionUploadError(err instanceof Error ? err.message : "Upload failed");
+                } finally {
+                  setUploadingVersion(false);
+                }
+              }}
+            />
 
             {versions.length > 0 ? (
               <div style={{ borderRadius: 10, border: "1px solid var(--border)", background: "var(--surface)" }}>
@@ -537,7 +569,7 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
                   <div
                     key={d.id}
                     className="v2-deploy-row"
-                    onClick={() => pushPanel({ type: "deployment-detail", title: `Deployment ${d.version}`, params: { id: d.id } })}
+                    onClick={() => pushPanel({ type: "debrief", title: "Debriefs", params: { deploymentId: d.id } })}
                   >
                     <div className={`v2-deploy-dot v2-deploy-${d.status}`} />
                     <div className="v2-deploy-info">
@@ -556,13 +588,6 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
         )}
       </div>
     </CanvasPanelHost>
-
-    {showVersionModal && (
-      <AddArtifactModal
-        onClose={() => setShowVersionModal(false)}
-        newVersionFor={{ artifactId: artifact.id, artifactName: artifact.name, artifactType: artifact.type }}
-      />
-    )}
     </>
   );
 }
