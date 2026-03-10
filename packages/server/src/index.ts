@@ -685,7 +685,7 @@ registerArtifactRoutes(app, artifactStore, telemetryStore, artifactAnalyzer);
 registerSecurityBoundaryRoutes(app, securityBoundaryStore, telemetryStore);
 registerPartitionRoutes(app, partitions, deployments, debrief, telemetryStore);
 registerEnvironmentRoutes(app, environments, deployments, telemetryStore);
-registerAgentRoutes(app, agent, partitions, environments, artifactStore, deployments, debrief, settings, llm, envoyRegistry, telemetryStore);
+registerAgentRoutes(app, agent, partitions, environments, artifactStore, deployments, debrief, settings, llm, envoyRegistry, telemetryStore, artifactAnalyzer);
 registerSettingsRoutes(app, settings, telemetryStore);
 registerTelemetryRoutes(app, telemetryStore);
 registerEnvoyRoutes(app, settings, envoyRegistry, telemetryStore, deployments, debrief);

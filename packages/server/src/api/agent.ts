@@ -3,6 +3,7 @@ import type { IPartitionStore, IEnvironmentStore, IArtifactStore, ISettingsStore
 import type { LlmClient } from "@synth-deploy/core";
 import type { SynthAgent, DeploymentStore } from "../agent/synth-agent.js";
 import type { EnvoyRegistry } from "../agent/envoy-registry.js";
+import type { ArtifactAnalyzer } from "../artifact-analyzer.js";
 import { z } from "zod";
 import { QueryRequestSchema } from "./schemas.js";
 
@@ -283,6 +284,7 @@ export function registerAgentRoutes(
   llm?: LlmClient,
   envoyRegistry?: EnvoyRegistry,
   telemetry?: ITelemetryStore,
+  analyzer?: ArtifactAnalyzer,
 ): void {
   /**
    * Get deployment context — signals, trends, health, drift.
@@ -320,6 +322,48 @@ export function registerAgentRoutes(
         deployments, debrief, queryEntityExposure !== "none",
       );
       if (llmAction) {
+        // For "annotate" action: save annotation to artifact, trigger re-analysis
+        if (llmAction.action === "annotate") {
+          const { artifactName, field, correction } = llmAction.params as Record<string, string>;
+          const target = allArtifacts.find(
+            (a) => a.name.toLowerCase() === (artifactName ?? "").toLowerCase(),
+          );
+          if (target && correction) {
+            artifacts.addAnnotation(target.id, {
+              field: field || "summary",
+              correction,
+              annotatedBy: "channel",
+              annotatedAt: new Date(),
+            });
+            debrief.record({
+              partitionId: null,
+              deploymentId: null,
+              agent: "command",
+              decisionType: "artifact-analysis",
+              decision: `User correction recorded for "${target.name}" via channel: ${correction}`,
+              reasoning: `Operator typed a natural-language correction into the Synth Channel. Field: ${field || "summary"}.`,
+              context: { artifactName: target.name, field: field || "summary", correction, source: "channel" },
+            });
+            // Trigger async re-analysis with the new annotation
+            if (analyzer) {
+              const updated = artifacts.get(target.id);
+              if (updated) {
+                analyzer.reanalyzeWithAnnotations(updated).then((revised) => {
+                  if (revised) artifacts.update(target.id, { analysis: revised });
+                }).catch(() => {});
+              }
+            }
+            return {
+              action: "answer" as const,
+              view: "",
+              params: {},
+              title: "Correction recorded",
+              content: `Got it — I've noted that **${target.name}** ${correction}. Re-analyzing now to update my understanding.`,
+            };
+          }
+          // Artifact not found — fall through to answer
+        }
+
         // For "answer" action: fetch real data and generate a markdown response
         if (llmAction.action === "answer") {
           const answered = await answerQueryWithData(
@@ -354,6 +398,40 @@ export function registerAgentRoutes(
     }
 
     // --- Regex fallback classification ---
+
+    // Artifact correction: "Dockerfile.server is actually for nginx", "api-service is a nodejs app"
+    const correctionPatterns = [
+      /\b(?:is\s+actually|is\s+really|should\s+be|is\s+a|is\s+an)\b/i,
+      /\bcorrect(?:ion)?:/i,
+      /\bactually\s+(?:a|an|the)\b/i,
+    ];
+    if (correctionPatterns.some((p) => p.test(query))) {
+      for (const art of allArtifacts) {
+        if (query.toLowerCase().includes(art.name.toLowerCase())) {
+          artifacts.addAnnotation(art.id, {
+            field: "summary",
+            correction: query,
+            annotatedBy: "channel",
+            annotatedAt: new Date(),
+          });
+          if (analyzer) {
+            const updated = artifacts.get(art.id);
+            if (updated) {
+              analyzer.reanalyzeWithAnnotations(updated).then((revised) => {
+                if (revised) artifacts.update(art.id, { analysis: revised });
+              }).catch(() => {});
+            }
+          }
+          return {
+            action: "answer" as const,
+            view: "",
+            params: {},
+            title: "Correction recorded",
+            content: `Got it — I've noted your correction about **${art.name}**. Re-analyzing now.`,
+          };
+        }
+      }
+    }
 
     // Create partition: "create partition Acme Corp" → return create intent for UI confirmation
     const createPartitionMatch = query.match(/\bcreate\s+partition\s+(.+)/i);
@@ -813,11 +891,12 @@ function buildQueryClassificationPrompt(): string {
 1. "navigate" — The user wants to drill into a specific named entity (e.g., "show partition Alpha", "open environment staging", "view deployment abc-123"). Only use this when there is a specific entity to navigate to.
 2. "create" — The user wants to create a new entity (e.g., "create partition Acme Corp", "create operation api-service")
 3. "answer" — Use this for EVERYTHING ELSE: data requests, lists, filters, analysis, comparisons, summaries. Examples: "show me failed deployments", "what failed", "recent deployments", "how many succeeded last week", "give me all deployments for api-service", "compare environments", "summarize activity". The response will be rendered as a formatted markdown table or narrative — NOT a navigation panel.
+4. "annotate" — The user is providing a correction or clarification about a specific artifact. Examples: "Dockerfile.server is actually for nginx", "that artifact is a Node.js app not a docker image", "the api-service type should be nodejs", "correct: Dockerfile.envoy is the load balancer". Use this when the user is teaching Synth something about an artifact.
 
 Return a JSON object with this exact schema:
 {
-  "action": "navigate" | "create" | "answer",
-  "view": "<view-name or empty string for answer/create>",
+  "action": "navigate" | "create" | "answer" | "annotate",
+  "view": "<view-name or empty string for answer/create/annotate>",
   "params": { ... },
   "title": "<human-readable title, e.g. 'Failed Deployments' or 'Deployment History'>"
 }
@@ -829,12 +908,16 @@ View names (for navigate only):
 - "overview" — show the operational overview (params: {})
 - "settings" — show application settings (params: {})
 
+For "annotate" actions, set view to "" and params to:
+{ "artifactName": "<exact artifact name from the known artifacts list>", "field": "summary|type|deploymentIntent", "correction": "<the user's correction in their own words>" }
+
 Rules:
 - ONLY use entity names from the provided lists. Never invent names.
 - If the query is a data/list/filter request, ALWAYS use "answer" — never "navigate".
 - If the query is ambiguous between navigation and data, prefer "answer".
 - For "create" actions, include the entity name in params: { "name": "..." }.
 - For "answer" and "create" actions, set view to "" and params to {}.
+- For "annotate", artifactName MUST match an artifact from the known list exactly.
 - Return ONLY valid JSON, no markdown, no explanation.`;
 }
 
