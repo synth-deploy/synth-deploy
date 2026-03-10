@@ -1,0 +1,12 @@
+apiVersion: v2
+name: synth-demo-app
+description: A demo web application for Synth integration testing
+type: application
+version: 0.1.0
+appVersion: "1.2.0"
+
+dependencies:
+  - name: redis
+    version: "17.x.x"
+    repository: https://charts.bitnami.com/bitnami
+    condition: redis.enabled

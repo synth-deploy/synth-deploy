@@ -1,0 +1,40 @@
+replicaCount: 2
+
+image:
+  repository: synth-demo-app
+  tag: "1.2.0"
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: false
+  host: demo.example.com
+
+env:
+  APP_ENV: production
+  LOG_LEVEL: warn
+  DB_HOST: ""
+  DB_PORT: "5432"
+  DB_NAME: demo
+  REDIS_URL: ""
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+redis:
+  enabled: true
+  auth:
+    enabled: false
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 10

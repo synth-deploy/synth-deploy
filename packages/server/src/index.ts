@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import path from "node:path";
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import Fastify from "fastify";
 import fastifyCors from "@fastify/cors";
@@ -49,11 +49,26 @@ import { registerGraphRoutes } from "./api/graph.js";
 
 const DATA_DIR = path.resolve(process.env.SYNTH_DATA_DIR ?? "data");
 mkdirSync(DATA_DIR, { recursive: true });
+chmodSync(DATA_DIR, 0o700);
+
+// --- JWT secret — auto-generated on first run, persisted to disk ---
+// SYNTH_JWT_SECRET env var takes precedence (for CI, multi-instance, key rotation).
+// When absent, a secret is generated once and stored at DATA_DIR/jwt-secret (mode 0600).
+const JWT_SECRET_FILE = path.join(DATA_DIR, "jwt-secret");
+function resolveJwtSecret(): string {
+  if (process.env.SYNTH_JWT_SECRET) return process.env.SYNTH_JWT_SECRET;
+  if (existsSync(JWT_SECRET_FILE)) return readFileSync(JWT_SECRET_FILE, "utf-8").trim();
+  const generated = crypto.randomBytes(32).toString("hex");
+  writeFileSync(JWT_SECRET_FILE, generated, { mode: 0o600 });
+  console.log(`[Synth] Generated JWT secret — stored at ${JWT_SECRET_FILE}`);
+  return generated;
+}
+const resolvedJwtSecret = resolveJwtSecret();
 
 const debrief = new PersistentDecisionDebrief(path.join(DATA_DIR, "debrief.db"));
 const entityDb = openEntityDatabase(path.join(DATA_DIR, "synth.db"));
 const hasDedicatedEncryptionKey = !!process.env.SYNTH_ENCRYPTION_KEY;
-const idpEncryptionSecret = process.env.SYNTH_ENCRYPTION_KEY ?? process.env.SYNTH_JWT_SECRET;
+const idpEncryptionSecret = process.env.SYNTH_ENCRYPTION_KEY ?? resolvedJwtSecret;
 const partitions = new PersistentPartitionStore(entityDb);
 const environments = new PersistentEnvironmentStore(entityDb);
 const settings = new PersistentSettingsStore(entityDb, idpEncryptionSecret);
@@ -96,13 +111,7 @@ if (!process.env.SYNTH_DATA_DIR) {
 const envoyRegistryStore = new PersistentEnvoyRegistryStore(entityDb);
 const envoyRegistry = new EnvoyRegistry(envoyRegistryStore);
 
-// --- JWT secret (required) ---
-const jwtSecretEnv = process.env.SYNTH_JWT_SECRET;
-if (!jwtSecretEnv) {
-  console.error("[Synth] FATAL: SYNTH_JWT_SECRET is not set. This environment variable is required for secure session management. Exiting.");
-  process.exit(1);
-}
-const jwtSecret: Uint8Array = new TextEncoder().encode(jwtSecretEnv);
+const jwtSecret: Uint8Array = new TextEncoder().encode(resolvedJwtSecret);
 
 // --- Seed default roles ---
 const ALL_PERMISSIONS: Permission[] = [
