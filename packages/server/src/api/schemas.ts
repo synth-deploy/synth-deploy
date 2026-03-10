@@ -226,6 +226,7 @@ export const CreateDeploymentSchema = z.object({
   artifactId: z.string().min(1),
   environmentId: z.string().min(1).optional(),
   partitionId: z.string().optional(),
+  envoyId: z.string().optional(),
   version: z.string().optional(),
 });
 

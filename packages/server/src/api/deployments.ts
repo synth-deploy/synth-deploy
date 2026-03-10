@@ -13,7 +13,8 @@ import {
   ProgressEventSchema,
 } from "./schemas.js";
 import type { ProgressEventStore } from "./progress-event-store.js";
-import type { EnvoyClient } from "../agent/envoy-client.js";
+import { EnvoyClient } from "../agent/envoy-client.js";
+import type { EnvoyRegistry } from "../agent/envoy-registry.js";
 
 /**
  * REST API routes for deployments. These are the traditional (non-MCP) interface
@@ -30,6 +31,7 @@ export function registerDeploymentRoutes(
   telemetry: ITelemetryStore,
   progressStore?: ProgressEventStore,
   envoyClient?: EnvoyClient,
+  envoyRegistry?: EnvoyRegistry,
 ): void {
   // Create a deployment (plan phase)
   app.post("/api/deployments", { preHandler: [requirePermission("deployment.create")] }, async (request, reply) => {
@@ -38,7 +40,7 @@ export function registerDeploymentRoutes(
       return reply.status(400).send({ error: parsed.error.message });
     }
 
-    const { artifactId, environmentId, partitionId, version } = parsed.data;
+    const { artifactId, environmentId, partitionId, envoyId, version } = parsed.data;
 
     // Validate artifact exists
     const artifact = artifactStore.get(artifactId);
@@ -53,16 +55,20 @@ export function registerDeploymentRoutes(
     }
 
     // Validate partition if provided
-    if (partitionId) {
-      const partition = partitions.get(partitionId);
-      if (!partition) {
-        return reply.status(404).send({ error: `Partition not found: ${partitionId}` });
-      }
+    const partition = partitionId ? partitions.get(partitionId) : undefined;
+    if (partitionId && !partition) {
+      return reply.status(404).send({ error: `Partition not found: ${partitionId}` });
+    }
+
+    // Validate envoy if provided
+    const targetEnvoy = envoyId ? envoyRegistry?.get(envoyId) : undefined;
+    if (envoyId && !targetEnvoy) {
+      return reply.status(404).send({ error: `Envoy not found: ${envoyId}` });
     }
 
     // Resolve variables — partition vars are base, environment vars take precedence if present
     const envVars = environment ? environment.variables : {};
-    const partitionVars = partitionId ? (partitions.get(partitionId)?.variables ?? {}) : {};
+    const partitionVars = partition?.variables ?? {};
     const resolved: Record<string, string> = { ...partitionVars, ...envVars };
 
     const deployment = {
@@ -70,6 +76,7 @@ export function registerDeploymentRoutes(
       artifactId,
       environmentId,
       partitionId,
+      envoyId: targetEnvoy?.id,
       version: version ?? "",
       status: "pending" as const,
       variables: resolved,
@@ -78,7 +85,85 @@ export function registerDeploymentRoutes(
     };
 
     deployments.save(deployment);
-    telemetry.record({ actor: (request.user?.email) ?? "anonymous", action: "deployment.created", target: { type: "deployment", id: deployment.id }, details: { artifactId, environmentId, partitionId } });
+    telemetry.record({ actor: (request.user?.email) ?? "anonymous", action: "deployment.created", target: { type: "deployment", id: deployment.id }, details: { artifactId, environmentId, partitionId, envoyId } });
+
+    // Dispatch planning to the appropriate envoy asynchronously.
+    // The envoy reasons about the deployment (read-only) and POSTs back a plan,
+    // which transitions the deployment to awaiting_approval.
+    if (envoyRegistry) {
+      // Find the target envoy: explicit envoyId > environment-assigned > first available
+      const planningEnvoy = targetEnvoy
+        ?? (environment ? envoyRegistry.findForEnvironment(environment.name) : undefined)
+        ?? envoyRegistry.list()[0];
+
+      if (planningEnvoy) {
+        const planningClient = new EnvoyClient(planningEnvoy.url);
+        const environmentForPlanning = environment
+          ? { id: environment.id, name: environment.name, variables: environment.variables }
+          : { id: `direct:${planningEnvoy.id}`, name: planningEnvoy.name, variables: {} };
+
+        planningClient.requestPlan({
+          deploymentId: deployment.id,
+          artifact: {
+            id: artifact.id,
+            name: artifact.name,
+            type: artifact.type,
+            analysis: {
+              summary: artifact.analysis.summary,
+              dependencies: artifact.analysis.dependencies,
+              configurationExpectations: artifact.analysis.configurationExpectations,
+              deploymentIntent: artifact.analysis.deploymentIntent,
+              confidence: artifact.analysis.confidence,
+            },
+          },
+          environment: environmentForPlanning,
+          partition: partition
+            ? { id: partition.id, name: partition.name, variables: partition.variables }
+            : undefined,
+          version: deployment.version,
+          resolvedVariables: resolved,
+        }).then((result) => {
+          // Plan received — transition deployment to awaiting_approval
+          const dep = deployments.get(deployment.id);
+          if (!dep || dep.status !== "pending") return;
+
+          dep.plan = result.plan;
+          dep.rollbackPlan = result.rollbackPlan;
+          dep.status = "awaiting_approval" as typeof dep.status;
+          dep.recommendation = computeRecommendation(dep, deployments);
+          dep.envoyId = planningEnvoy.id;
+          deployments.save(dep);
+
+          debrief.record({
+            partitionId: dep.partitionId ?? null,
+            deploymentId: dep.id,
+            agent: "envoy",
+            decisionType: "plan-generation" as Parameters<typeof debrief.record>[0]["decisionType"],
+            decision: `Deployment plan generated with ${result.plan.steps.length} steps`,
+            reasoning: result.plan.reasoning,
+            context: { stepCount: result.plan.steps.length, envoyId: planningEnvoy.id, delta: result.delta },
+          });
+        }).catch((err) => {
+          // Planning failed — mark deployment failed so UI doesn't wait forever
+          const dep = deployments.get(deployment.id);
+          if (!dep || dep.status !== "pending") return;
+
+          dep.status = "failed" as typeof dep.status;
+          dep.failureReason = err instanceof Error ? err.message : "Planning failed";
+          deployments.save(dep);
+
+          debrief.record({
+            partitionId: dep.partitionId ?? null,
+            deploymentId: dep.id,
+            agent: "command",
+            decisionType: "deployment-failure" as Parameters<typeof debrief.record>[0]["decisionType"],
+            decision: "Envoy planning failed",
+            reasoning: dep.failureReason!,
+            context: { error: dep.failureReason, envoyId: planningEnvoy.id },
+          });
+        });
+      }
+    }
 
     return reply.status(201).send({ deployment });
   });

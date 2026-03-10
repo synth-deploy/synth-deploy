@@ -7,11 +7,13 @@ import {
   AddAnnotationSchema,
   AddArtifactVersionSchema,
 } from "./schemas.js";
+import type { ArtifactAnalyzer } from "../artifact-analyzer.js";
 
 export function registerArtifactRoutes(
   app: FastifyInstance,
   artifactStore: IArtifactStore,
   telemetry: ITelemetryStore,
+  analyzer?: ArtifactAnalyzer,
 ): void {
   // List all artifacts
   app.get("/api/artifacts", { preHandler: [requirePermission("artifact.view")] }, async () => {
@@ -113,6 +115,18 @@ export function registerArtifactRoutes(
       });
 
       telemetry.record({ actor: (request.user?.email) ?? "anonymous", action: "artifact.annotated", target: { type: "artifact", id: request.params.id }, details: { field: parsed.data.field } });
+
+      // Fire async LLM re-analysis incorporating user corrections — don't block the response
+      if (analyzer && updated) {
+        analyzer.reanalyzeWithAnnotations(updated).then((revised) => {
+          if (!revised) return;
+          const latest = artifactStore.get(request.params.id);
+          if (!latest) return;
+          latest.analysis = revised;
+          artifactStore.update(request.params.id, { analysis: revised });
+        }).catch(() => {});
+      }
+
       return reply.status(201).send({ artifact: updated });
     },
   );

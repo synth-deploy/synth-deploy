@@ -1,4 +1,4 @@
-import type { ArtifactAnalysis } from "@synth-deploy/core";
+import type { ArtifactAnalysis, Artifact } from "@synth-deploy/core";
 import type { LlmClient, LlmResult } from "@synth-deploy/core";
 import type { DebriefWriter } from "@synth-deploy/core";
 import type { PatternStore, PatternMatch, DerivedAnalysis } from "./pattern-store.js";
@@ -689,6 +689,81 @@ export class ArtifactAnalyzer {
       method,
       matchedPatterns: matchedPatterns.length > 0 ? matchedPatterns : undefined,
     };
+  }
+
+  /**
+   * Re-analyze an artifact using its stored annotations as correction context.
+   * Calls the LLM with the existing analysis + user corrections and returns
+   * a revised analysis. Returns null if LLM is unavailable.
+   */
+  async reanalyzeWithAnnotations(artifact: Artifact): Promise<ArtifactAnalysis | null> {
+    if (!this._llm.isAvailable() || artifact.annotations.length === 0) return null;
+
+    const correctionsText = artifact.annotations
+      .map((a) => `- ${a.field}: ${a.correction}`)
+      .join("\n");
+
+    const prompt = `An artifact's analysis has user corrections. Revise the analysis to incorporate them.
+
+Artifact Name: ${artifact.name}
+Type: ${artifact.type}
+
+Current Analysis:
+Summary: ${artifact.analysis.summary}
+Dependencies: ${JSON.stringify(artifact.analysis.dependencies)}
+Configuration Expectations: ${JSON.stringify(artifact.analysis.configurationExpectations)}
+Deployment Intent: ${artifact.analysis.deploymentIntent ?? "unknown"}
+Confidence: ${artifact.analysis.confidence}
+
+User Corrections:
+${correctionsText}
+
+Produce a JSON analysis that incorporates all user corrections. Raise confidence proportional to how much the corrections clarify the artifact's purpose.`;
+
+    const result: LlmResult = await this._llm.reason({
+      prompt,
+      systemPrompt: ANALYSIS_SYSTEM_PROMPT,
+      promptSummary: `Re-analysis of "${artifact.name}" with ${artifact.annotations.length} user correction(s)`,
+    });
+
+    if (!result.ok) return null;
+
+    try {
+      const jsonMatch = result.text.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) return null;
+
+      const parsed = JSON.parse(jsonMatch[0]) as {
+        summary?: string;
+        dependencies?: string[];
+        configurationExpectations?: Record<string, string>;
+        deploymentIntent?: string;
+        confidence?: number;
+      };
+
+      const revised: ArtifactAnalysis = {
+        summary: parsed.summary ?? artifact.analysis.summary,
+        dependencies: parsed.dependencies ?? artifact.analysis.dependencies,
+        configurationExpectations: parsed.configurationExpectations ?? artifact.analysis.configurationExpectations,
+        deploymentIntent: parsed.deploymentIntent ?? artifact.analysis.deploymentIntent,
+        confidence: typeof parsed.confidence === "number"
+          ? Math.max(parsed.confidence, artifact.analysis.confidence)
+          : artifact.analysis.confidence,
+      };
+
+      this._debrief.record({
+        partitionId: null,
+        deploymentId: null,
+        agent: "command",
+        decisionType: "artifact-analysis",
+        decision: `Re-analyzed "${artifact.name}" with ${artifact.annotations.length} user correction(s). Confidence: ${revised.confidence}.`,
+        reasoning: `User corrections prompted LLM re-analysis. Corrections: ${correctionsText}`,
+        context: { artifactName: artifact.name, corrections: artifact.annotations.length, confidence: revised.confidence },
+      });
+
+      return revised;
+    } catch {
+      return null;
+    }
   }
 
   // -------------------------------------------------------------------------

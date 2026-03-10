@@ -57,6 +57,104 @@ function buildContextText(enrichment: DeploymentEnrichment | null, envName: stri
   return parts.join(" · ");
 }
 
+// ── Pending / reasoning view ─────────────────────────────────────────────────
+
+const REASONING_STEPS = [
+  "Scanning local environment state",
+  "Loading previous deployment history",
+  "Analyzing artifact dependencies",
+  "Reasoning about deployment strategy",
+  "Building rollback plan",
+  "Finalizing plan",
+];
+
+function PlanPendingView({
+  artifactName,
+  createdAt,
+  onMinimize,
+}: {
+  deploymentId: string;
+  artifactName: string;
+  createdAt: Date | string;
+  onMinimize: () => void;
+}) {
+  const [elapsed, setElapsed] = useState(0);
+  const [stepIndex, setStepIndex] = useState(0);
+
+  useEffect(() => {
+    const start = new Date(createdAt).getTime();
+    const tick = setInterval(() => {
+      const secs = Math.floor((Date.now() - start) / 1000);
+      setElapsed(secs);
+      // Advance through reasoning steps roughly every 4 seconds
+      setStepIndex(Math.min(Math.floor(secs / 4), REASONING_STEPS.length - 1));
+    }, 1000);
+    return () => clearInterval(tick);
+  }, [createdAt]);
+
+  const mins = Math.floor(elapsed / 60);
+  const secs = elapsed % 60;
+  const elapsedLabel = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+  const slow = elapsed > 45;
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal-card" style={{ maxWidth: 520, padding: "40px 32px", textAlign: "center" }}>
+        <SynthMark size={44} active />
+        <p style={{ color: "var(--text-secondary)", fontSize: 15, fontWeight: 600, marginTop: 16, marginBottom: 6 }}>
+          Reasoning about {artifactName}
+        </p>
+        <p style={{ color: "var(--text-muted)", fontSize: 12, margin: "0 0 20px", fontFamily: "var(--font-mono)" }}>
+          {REASONING_STEPS[stepIndex]}…
+        </p>
+
+        {/* Step progress dots */}
+        <div style={{ display: "flex", justifyContent: "center", gap: 6, marginBottom: 20 }}>
+          {REASONING_STEPS.map((_, i) => (
+            <div
+              key={i}
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: "50%",
+                background: i <= stepIndex ? "var(--accent)" : "var(--border)",
+                transition: "background 0.4s",
+              }}
+            />
+          ))}
+        </div>
+
+        <p style={{ color: "var(--text-muted)", fontSize: 11, margin: "0 0 4px", fontFamily: "var(--font-mono)" }}>
+          {elapsedLabel} elapsed
+        </p>
+
+        {slow && (
+          <p style={{ color: "var(--text-muted)", fontSize: 11, margin: "0 0 16px", opacity: 0.7 }}>
+            LLM reasoning can take a moment — hang tight
+          </p>
+        )}
+
+        <button
+          onClick={onMinimize}
+          style={{
+            marginTop: 12,
+            padding: "7px 16px",
+            borderRadius: 6,
+            border: "1px solid var(--border)",
+            background: "transparent",
+            color: "var(--text-muted)",
+            fontSize: 12,
+            fontFamily: "var(--font-mono)",
+            cursor: "pointer",
+          }}
+        >
+          Minimize ↓
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── Modal shell ──────────────────────────────────────────────────────────────
 function PlanModal({ children }: { onClose: () => void; children: React.ReactNode }) {
   return (
@@ -163,35 +261,12 @@ export default function PlanReviewPanel({ deploymentId }: Props) {
   if (deployment.status === "pending") {
     const pendingArtName =
       (artifacts ?? []).find((a) => a.id === deployment.artifactId)?.name ?? deployment.artifactId.slice(0, 8);
-    return (
-      <PlanModal onClose={popPanel}>
-        <div style={{ textAlign: "center", padding: "40px 0" }}>
-          <SynthMark size={44} active />
-          <p style={{ color: "var(--text-secondary)", fontSize: 14, marginTop: 14, marginBottom: 4 }}>
-            Envoy is reasoning about this deployment…
-          </p>
-          <p style={{ color: "var(--text-muted)", fontSize: 12, margin: 0 }}>
-            Scanning local state · Loading previous plans · Building strategy
-          </p>
-          <button
-            onClick={() => minimizeDeployment({ deploymentId, artifactName: pendingArtName, panelType: "plan-review" })}
-            style={{
-              marginTop: 24,
-              padding: "7px 16px",
-              borderRadius: 6,
-              border: "1px solid var(--border)",
-              background: "transparent",
-              color: "var(--text-muted)",
-              fontSize: 12,
-              fontFamily: "var(--font-mono)",
-              cursor: "pointer",
-            }}
-          >
-            Minimize ↓
-          </button>
-        </div>
-      </PlanModal>
-    );
+    return <PlanPendingView
+      deploymentId={deploymentId}
+      artifactName={pendingArtName}
+      createdAt={deployment.createdAt}
+      onMinimize={() => minimizeDeployment({ deploymentId, artifactName: pendingArtName, panelType: "plan-review" })}
+    />;
   }
 
   if (deployment.status !== "awaiting_approval") {

@@ -74,9 +74,16 @@ export async function generateTokens(
   userId: UserId,
   jwtSecret: Uint8Array,
 ): Promise<{ token: string; refreshToken: string; expiresAt: Date }> {
+  const sessionTtl = process.env.SYNTH_SESSION_TTL ?? "8h";
+  const sessionTtlMs = sessionTtl.endsWith("h")
+    ? parseInt(sessionTtl) * 60 * 60 * 1000
+    : sessionTtl.endsWith("m")
+    ? parseInt(sessionTtl) * 60 * 1000
+    : 8 * 60 * 60 * 1000;
+
   const token = await new SignJWT({ sub: userId })
     .setProtectedHeader({ alg: "HS256" })
-    .setExpirationTime("15m")
+    .setExpirationTime(sessionTtl)
     .sign(jwtSecret);
 
   const refreshToken = await new SignJWT({ sub: userId, type: "refresh" })
@@ -84,5 +91,5 @@ export async function generateTokens(
     .setExpirationTime("7d")
     .sign(jwtSecret);
 
-  return { token, refreshToken, expiresAt: new Date(Date.now() + 15 * 60 * 1000) };
+  return { token, refreshToken, expiresAt: new Date(Date.now() + sessionTtlMs) };
 }

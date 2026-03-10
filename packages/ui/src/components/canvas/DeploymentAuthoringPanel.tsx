@@ -45,7 +45,7 @@ export default function DeploymentAuthoringPanel({ title, preselectedArtifactId,
     preselectedArtifactId ? [preselectedArtifactId] : [],
   );
   const [deployScope, setDeployScope] = useState<DeployScope>(
-    preselectedPartitionId ? "partition" : "environment",
+    preselectedPartitionId ? "partition" : preselectedEnvironmentId ? "environment" : "envoy",
   );
   const [selectedEnvironmentId, setSelectedEnvironmentId] = useState<string>(preselectedEnvironmentId ?? "");
   const [selectedPartitionId, setSelectedPartitionId] = useState<string>(preselectedPartitionId ?? "");
@@ -86,6 +86,7 @@ export default function DeploymentAuthoringPanel({ title, preselectedArtifactId,
         artifactId: primaryArtifactId,
         environmentId: selectedEnvironmentId || undefined,
         partitionId: selectedPartitionId || undefined,
+        envoyId: deployScope === "envoy" ? (selectedEnvoyId || undefined) : undefined,
       });
 
       pushPanel({

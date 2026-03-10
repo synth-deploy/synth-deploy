@@ -20,12 +20,13 @@ function extractVersionFromFilename(filename: string): string | null {
 
 /** Strip version suffix and extension(s) from a filename to get the artifact name. */
 function extractNameFromFilename(filename: string): string {
-  // Remove all extensions first
   let name = filename;
   // Strip common multi-part extensions like .tar.gz, .tar.bz2
   name = name.replace(/\.tar\.\w+$/, "");
-  // Strip remaining single extension
-  name = name.replace(/\.\w+$/, "");
+  // Strip remaining single extension — only if it's a short, lowercase-alpha extension
+  // (≤4 chars, all lowercase letters). This preserves qualifier suffixes like
+  // Dockerfile.server, Dockerfile.envoy, nginx.conf.template, etc.
+  name = name.replace(/\.[a-z]{1,4}$/, "");
   // Strip trailing version suffix: -1.2.3 or _1.2.3 or -v1.2.3
   name = name.replace(/[-_]v?\d+[\d.\-]*$/, "");
   return name || filename;

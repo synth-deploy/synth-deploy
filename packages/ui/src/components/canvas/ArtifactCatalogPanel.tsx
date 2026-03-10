@@ -25,7 +25,8 @@ const confLabels: Record<ConfidenceLevel, string> = { high: "High", medium: "Med
 
 export default function ArtifactCatalogPanel({ title }: Props) {
   const { pushPanel } = useCanvas();
-  const { data: artifacts, loading } = useQuery<Artifact[]>("list:artifacts", listArtifacts);
+  // Poll every 5s so newly-uploaded artifacts and in-flight analysis appear automatically
+  const { data: artifacts, loading } = useQuery<Artifact[]>("list:artifacts", listArtifacts, { refetchInterval: 5000 });
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<string | null>(null);
   const [confidenceFilter, setConfidenceFilter] = useState<ConfidenceLevel | null>(null);
@@ -116,8 +117,15 @@ export default function ArtifactCatalogPanel({ title }: Props) {
     return Object.entries(typeIcons).find(([k]) => key.includes(k))?.[1] ?? "◇";
   }
 
+  function isAnalyzing(art: Artifact): boolean {
+    if (art.analysis.confidence > 0) return false;
+    const ageMs = Date.now() - new Date(art.createdAt).getTime();
+    return ageMs < 3 * 60 * 1000; // within 3 minutes and no confidence yet
+  }
+
   function renderArtifactRow(art: Artifact) {
     const isSelected = selectedArtifact?.id === art.id;
+    const analyzing = isAnalyzing(art);
     return (
       <div
         key={art.id}
@@ -146,7 +154,7 @@ export default function ArtifactCatalogPanel({ title }: Props) {
           color: isSelected ? "var(--accent)" : "var(--text-muted)",
           flexShrink: 0,
         }}>
-          {getTypeIcon(art.type)}
+          {analyzing ? <SynthMark size={18} active /> : getTypeIcon(art.type)}
         </span>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
@@ -155,10 +163,18 @@ export default function ArtifactCatalogPanel({ title }: Props) {
             </span>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 3 }}>
-            <span style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
-              {art.type}
-            </span>
-            <ConfidenceIndicator value={art.analysis.confidence} />
+            {analyzing ? (
+              <span style={{ fontSize: 11, color: "var(--accent)", fontFamily: "var(--font-mono)", animation: "pulse 1.5s ease-in-out infinite" }}>
+                Analyzing…
+              </span>
+            ) : (
+              <>
+                <span style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                  {art.type}
+                </span>
+                <ConfidenceIndicator value={art.analysis.confidence} />
+              </>
+            )}
           </div>
         </div>
       </div>

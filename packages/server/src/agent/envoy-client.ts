@@ -215,6 +215,56 @@ export class EnvoyClient {
   }
 
   /**
+   * Ask the Envoy to produce a deployment plan (read-only reasoning phase).
+   * Returns the plan and rollback plan; the server then submits them to
+   * POST /api/deployments/:id/plan to move the deployment to awaiting_approval.
+   */
+  async requestPlan(params: {
+    deploymentId: string;
+    artifact: {
+      id: string;
+      name: string;
+      type: string;
+      analysis: {
+        summary: string;
+        dependencies: string[];
+        configurationExpectations: Record<string, string>;
+        deploymentIntent?: string;
+        confidence: number;
+      };
+    };
+    environment: {
+      id: string;
+      name: string;
+      variables: Record<string, string>;
+    };
+    partition?: {
+      id: string;
+      name: string;
+      variables: Record<string, string>;
+    };
+    version: string;
+    resolvedVariables: Record<string, string>;
+  }): Promise<{ plan: DeploymentPlan; rollbackPlan: DeploymentPlan; delta?: string }> {
+    const response = await fetchWithRetry(
+      `${this.baseUrl}/plan`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(params),
+      },
+      this.timeoutMs * 8, // planning may take time (LLM reasoning)
+    );
+
+    if (!response.ok) {
+      const body = await response.text().catch(() => "");
+      throw new Error(`Envoy planning failed (HTTP ${response.status}): ${body}`);
+    }
+
+    return (await response.json()) as { plan: DeploymentPlan; rollbackPlan: DeploymentPlan; delta?: string };
+  }
+
+  /**
    * Validate a modified plan against the Envoy's security boundaries.
    */
   async validatePlan(steps: PlannedStep[]): Promise<{ valid: boolean; violations: Array<{ step: string; reason: string }> }> {

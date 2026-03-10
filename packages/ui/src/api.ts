@@ -293,6 +293,7 @@ export async function createDeployment(trigger: {
   artifactId: string;
   environmentId?: string;
   partitionId?: string;
+  envoyId?: string;
   version?: string;
 }): Promise<{ deployment: Deployment }> {
   return fetchJson("/api/deployments", {

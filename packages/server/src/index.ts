@@ -172,6 +172,7 @@ const envoyUrl = settings.get().envoy?.url;
 const healthChecker = envoyUrl ? new EnvoyHealthChecker(envoyUrl) : undefined;
 const agent = new SynthAgent(debrief, deployments, artifactStore, environments, partitions, healthChecker, {}, settings);
 const llm = new LlmClient(debrief, "command");
+const artifactAnalyzer = new ArtifactAnalyzer({ llm, debrief });
 
 // --- Connect to external MCP servers (if configured) ---
 
@@ -678,9 +679,9 @@ registerHealthRoutes(app, {
 });
 const progressStore = new ProgressEventStore();
 const defaultEnvoyClient = new EnvoyClient(settings.get().envoy.url, settings.get().envoy.timeoutMs);
-registerDeploymentRoutes(app, deployments, debrief, partitions, environments, artifactStore, settings, telemetryStore, progressStore, defaultEnvoyClient);
+registerDeploymentRoutes(app, deployments, debrief, partitions, environments, artifactStore, settings, telemetryStore, progressStore, defaultEnvoyClient, envoyRegistry);
 registerEnvoyReportRoutes(app, debrief, deployments);
-registerArtifactRoutes(app, artifactStore, telemetryStore);
+registerArtifactRoutes(app, artifactStore, telemetryStore, artifactAnalyzer);
 registerSecurityBoundaryRoutes(app, securityBoundaryStore, telemetryStore);
 registerPartitionRoutes(app, partitions, deployments, debrief, telemetryStore);
 registerEnvironmentRoutes(app, environments, deployments, telemetryStore);
@@ -709,7 +710,6 @@ registerGraphRoutes(app, graphStore, graphInferenceEngine, envoyRegistry, artifa
 
 const intakeChannelStore = new IntakeChannelStore(entityDb);
 const intakeEventStore = new IntakeEventStore(entityDb);
-const artifactAnalyzer = new ArtifactAnalyzer({ llm, debrief });
 const intakeProcessor = new IntakeProcessor(artifactStore, artifactAnalyzer);
 const registryPollerVersionStore = new PersistentRegistryPollerVersionStore(entityDb);
 const registryPoller = new RegistryPoller(async (channelId, payload) => {
