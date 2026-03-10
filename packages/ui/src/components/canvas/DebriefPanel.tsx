@@ -168,13 +168,9 @@ function DeploymentDebriefDetail({ deploymentId, onBack }: { deploymentId: strin
             → {envName}{partName ? ` · ${partName}` : ""}
           </div>
         </div>
-        <span className={`badge badge-${deployment.status}`} style={{
-          padding: "4px 10px", borderRadius: 6, fontFamily: "var(--font-mono)",
-          letterSpacing: "0.06em", textTransform: "uppercase", fontSize: 11, fontWeight: 700,
-          border: "1px solid currentColor",
-        }}>
+        <div className={`v2-deploy-status-pill v2-pill-${deployment.status}`}>
           {statusLabel(deployment.status)}
-        </span>
+        </div>
       </div>
 
       {/* What's New */}
@@ -563,19 +559,9 @@ export default function DebriefPanel({ title, filterPartitionId, filterDecisionT
                           <span style={{ color: "var(--text-muted)" }}>→</span>
                           <span style={{ fontSize: 12, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>{envName}</span>
                         </div>
-                        <span
-                          className={`badge badge-${dep.status}`}
-                          style={{
-                            borderRadius: 4,
-                            fontFamily: "var(--font-mono)",
-                            letterSpacing: "0.03em",
-                            textTransform: "uppercase",
-                            fontSize: 10,
-                            border: "1px solid currentColor",
-                          }}
-                        >
+                        <div className={`v2-deploy-status-pill v2-pill-${dep.status}`}>
                           {statusLabel(dep.status)}
-                        </span>
+                        </div>
                       </div>
                       <div style={{ display: "flex", gap: 20, fontSize: 12, color: "var(--text-muted)" }}>
                         <span>{timeAgo(dep.createdAt)}</span>

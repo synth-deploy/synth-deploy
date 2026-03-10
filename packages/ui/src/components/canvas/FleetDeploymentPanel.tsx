@@ -107,15 +107,15 @@ export default function FleetDeploymentPanel({ fleetDeploymentId, title }: Props
               fontSize: 12,
               fontWeight: 600,
               color: status.color,
-              border: `1px solid ${status.color}30`,
-              background: `${status.color}15`,
+              border: `1px solid color-mix(in srgb, ${status.color} 30%, transparent)`,
+              background: `color-mix(in srgb, ${status.color} 15%, transparent)`,
               borderRadius: 12,
               padding: "3px 12px",
             }}
           >
             {status.label}
           </span>
-          <span style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "monospace" }}>
+          <span style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
             {fleet.id.slice(0, 8)}
           </span>
         </div>
@@ -194,7 +194,7 @@ export default function FleetDeploymentPanel({ fleetDeploymentId, title }: Props
             marginBottom: 16,
           }}
         >
-          <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", marginBottom: 8 }}>
+          <div className="section-label" style={{ marginBottom: 8 }}>
             Rollout Configuration
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px 16px", fontSize: 12 }}>
@@ -234,7 +234,7 @@ export default function FleetDeploymentPanel({ fleetDeploymentId, title }: Props
         {/* Per-envoy status table */}
         {fleet.validationResult && fleet.validationResult.results.length > 0 && (
           <div style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", marginBottom: 8 }}>
+            <div className="section-label" style={{ marginBottom: 8 }}>
               Envoy Status ({fleet.validationResult.validated}/{fleet.validationResult.total} validated)
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
@@ -265,7 +265,7 @@ export default function FleetDeploymentPanel({ fleetDeploymentId, title }: Props
                   />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <span style={{ fontWeight: 600, color: "var(--text)" }}>{result.envoyName}</span>
-                    <span style={{ color: "var(--text-muted)", marginLeft: 6, fontFamily: "monospace", fontSize: 10 }}>
+                    <span style={{ color: "var(--text-muted)", marginLeft: 6, fontFamily: "var(--font-mono)", fontSize: 10 }}>
                       {result.envoyId.slice(0, 8)}
                     </span>
                   </div>
@@ -275,7 +275,7 @@ export default function FleetDeploymentPanel({ fleetDeploymentId, title }: Props
                       fontWeight: 600,
                       color: result.validated ? "var(--status-succeeded)" : "var(--status-failed)",
                       padding: "2px 8px",
-                      border: `1px solid ${result.validated ? "var(--status-succeeded)" : "var(--status-failed)"}30`,
+                      border: `1px solid color-mix(in srgb, ${result.validated ? "var(--status-succeeded)" : "var(--status-failed)"} 30%, transparent)`,
                       borderRadius: 10,
                     }}
                   >
@@ -298,20 +298,9 @@ export default function FleetDeploymentPanel({ fleetDeploymentId, title }: Props
         <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
           {(fleet.status === "selecting_representatives" || fleet.status === "awaiting_approval") && (
             <button
-              className="v2-btn v2-btn-primary"
+              className="btn btn-primary"
               disabled={actionLoading}
               onClick={() => handleAction(() => approveFleetDeployment(fleet.id))}
-              style={{
-                background: "var(--accent)",
-                color: "var(--bg)",
-                border: "none",
-                borderRadius: 6,
-                padding: "8px 16px",
-                fontSize: 13,
-                fontWeight: 600,
-                cursor: actionLoading ? "not-allowed" : "pointer",
-                opacity: actionLoading ? 0.6 : 1,
-              }}
             >
               {actionLoading ? "Approving..." : "Approve & Validate"}
             </button>
@@ -319,20 +308,9 @@ export default function FleetDeploymentPanel({ fleetDeploymentId, title }: Props
 
           {(fleet.status === "validated" || fleet.status === "paused") && (
             <button
-              className="v2-btn v2-btn-primary"
+              className="btn btn-primary"
               disabled={actionLoading}
               onClick={() => handleAction(() => executeFleetDeployment(fleet.id))}
-              style={{
-                background: "var(--status-succeeded)",
-                color: "var(--bg)",
-                border: "none",
-                borderRadius: 6,
-                padding: "8px 16px",
-                fontSize: 13,
-                fontWeight: 600,
-                cursor: actionLoading ? "not-allowed" : "pointer",
-                opacity: actionLoading ? 0.6 : 1,
-              }}
             >
               {actionLoading ? "Starting..." : fleet.status === "paused" ? "Resume Rollout" : "Execute Rollout"}
             </button>
@@ -340,20 +318,9 @@ export default function FleetDeploymentPanel({ fleetDeploymentId, title }: Props
 
           {fleet.status === "executing" && (
             <button
-              className="v2-btn"
+              className="btn-accent-outline"
               disabled={actionLoading}
               onClick={() => handleAction(() => pauseFleetDeployment(fleet.id))}
-              style={{
-                background: "transparent",
-                color: "var(--status-warning)",
-                border: "1px solid var(--status-warning)",
-                borderRadius: 6,
-                padding: "8px 16px",
-                fontSize: 13,
-                fontWeight: 600,
-                cursor: actionLoading ? "not-allowed" : "pointer",
-                opacity: actionLoading ? 0.6 : 1,
-              }}
             >
               {actionLoading ? "Pausing..." : "Pause Rollout"}
             </button>

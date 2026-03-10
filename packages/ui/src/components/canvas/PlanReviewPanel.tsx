@@ -60,18 +60,11 @@ function buildContextText(enrichment: DeploymentEnrichment | null, envName: stri
 // ── Modal shell ──────────────────────────────────────────────────────────────
 function PlanModal({ children }: { onClose: () => void; children: React.ReactNode }) {
   return (
-    <div style={{
-      position: "fixed", inset: 0, zIndex: 100,
-      display: "flex", alignItems: "center", justifyContent: "center",
-      background: "var(--overlay-bg)", backdropFilter: "blur(20px)",
-      WebkitBackdropFilter: "blur(20px)",
-    }}>
-      <div style={{
-        width: "100%", maxWidth: 620, maxHeight: "85vh", overflow: "auto",
-        background: "var(--surface)", borderRadius: 14,
-        border: "1px solid var(--border-strong, rgba(128,128,128,0.18))",
-        padding: "30px 34px", boxShadow: "var(--modal-shadow)",
-      }}>
+    <div className="modal-overlay">
+      <div
+        className="modal-card"
+        style={{ maxWidth: 620, maxHeight: "85vh", overflow: "auto" }}
+      >
         {children}
       </div>
     </div>
@@ -330,15 +323,7 @@ export default function PlanReviewPanel({ deploymentId }: Props) {
       {/* ── Plan header ── */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24 }}>
         <div>
-          <div style={{
-            fontSize: 10,
-            color: "var(--text-muted)",
-            textTransform: "uppercase",
-            letterSpacing: "1.5px",
-            fontWeight: 700,
-            fontFamily: "var(--font-mono)",
-            marginBottom: 6,
-          }}>
+          <div className="modal-label">
             Deployment Plan
             {revised && <span style={{ color: "var(--accent)", marginLeft: 6 }}>· Revised</span>}
           </div>
@@ -365,13 +350,7 @@ export default function PlanReviewPanel({ deploymentId }: Props) {
         </div>
         <button
           onClick={popPanel}
-          style={{
-            width: 30, height: 30, borderRadius: 6,
-            border: "1px solid var(--border)", background: "var(--surface)",
-            color: "var(--text-muted)", fontSize: 16, cursor: "pointer",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            flexShrink: 0,
-          }}
+          className="modal-close"
         >
           ×
         </button>
@@ -399,15 +378,7 @@ export default function PlanReviewPanel({ deploymentId }: Props) {
       {/* ── Envoy's Plan (review mode) ── */}
       {mode !== "modify" && plan && (
         <div style={{ marginBottom: 22 }}>
-          <div style={{
-            fontSize: 10,
-            color: "var(--text-muted)",
-            fontWeight: 700,
-            textTransform: "uppercase",
-            letterSpacing: "1.5px",
-            fontFamily: "var(--font-mono)",
-            marginBottom: 10,
-          }}>
+          <div className="section-label">
             Envoy&apos;s Plan{revised && " (Revised)"}
           </div>
           {plan.steps.map((step, i) => {
@@ -474,6 +445,7 @@ export default function PlanReviewPanel({ deploymentId }: Props) {
         background: "var(--surface-alt)",
         border: "1px solid var(--border)",
       }}>
+        {/* letterSpacing and fontWeight differ from .section-label (1px vs 1.5px, 600 vs 700) — no exact class match */}
         <div style={{
           fontSize: 10,
           color: "var(--text-muted)",
@@ -616,34 +588,16 @@ export default function PlanReviewPanel({ deploymentId }: Props) {
             <button
               onClick={() => { setMode("review"); setError(null); setRefineFeedback(""); }}
               disabled={refining}
-              style={{
-                padding: "8px 14px",
-                borderRadius: 6,
-                border: "1px solid var(--border)",
-                background: "transparent",
-                color: "var(--text-muted)",
-                fontSize: 12,
-                fontFamily: "var(--font-mono)",
-                cursor: "pointer",
-              }}
+              className="plan-btn plan-btn-reject"
             >
               Cancel
             </button>
+            {/* --text-on-dark does not exist; color: #fff left as-is until var is added to app.css */}
             <button
               onClick={handleRefine}
               disabled={refining}
-              style={{
-                padding: "8px 18px",
-                borderRadius: 6,
-                border: "none",
-                background: "var(--accent)",
-                color: "#fff",
-                fontSize: 12,
-                fontWeight: 600,
-                fontFamily: "var(--font-mono)",
-                cursor: "pointer",
-                opacity: refining ? 0.6 : 1,
-              }}
+              className="v2-btn v2-btn-primary"
+              style={{ opacity: refining ? 0.6 : 1 }}
             >
               {refining ? "Revising..." : "Revise Plan"}
             </button>
@@ -726,6 +680,7 @@ export default function PlanReviewPanel({ deploymentId }: Props) {
           >
             Cancel
           </button>
+          {/* --text-on-dark does not exist; color: #fff left as-is until var is added to app.css */}
           <button
             onClick={handleReject}
             disabled={actionLoading}
@@ -761,21 +716,12 @@ export default function PlanReviewPanel({ deploymentId }: Props) {
           >
             Cancel
           </button>
+          {/* --text-on-dark does not exist; color: #fff left as-is until var is added to app.css */}
           <button
             onClick={handleSaveModifications}
             disabled={actionLoading}
-            style={{
-              padding: "13px 20px",
-              borderRadius: 8,
-              border: "none",
-              background: "var(--accent)",
-              color: "#fff",
-              fontSize: 14,
-              fontFamily: "var(--font-mono)",
-              fontWeight: 600,
-              cursor: "pointer",
-              opacity: actionLoading ? 0.5 : 1,
-            }}
+            className="v2-btn v2-btn-primary"
+            style={{ opacity: actionLoading ? 0.5 : 1 }}
           >
             {actionLoading ? "Saving..." : "Save Modifications"}
           </button>

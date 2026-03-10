@@ -267,7 +267,7 @@ function LiveProgressSection({ events, stale }: { events: ProgressEvent[]; stale
             borderRadius: 4,
             padding: "8px 10px",
             fontSize: 11,
-            fontFamily: "monospace",
+            fontFamily: "var(--font-mono)",
             color: "var(--text-muted)",
             lineHeight: 1.6,
           }}
@@ -337,8 +337,8 @@ export default function DeploymentDetailPanel({ deploymentId, title }: Props) {
     }
   }, [streamCompleted, refreshDeployment]);
 
-  if (loading) return <CanvasPanelHost title={title}><div className="loading">Loading...</div></CanvasPanelHost>;
-  if (!deployment) return <CanvasPanelHost title={title}><div className="error-msg">Deployment not found</div></CanvasPanelHost>;
+  if (loading) return <CanvasPanelHost title={title} hideRootCrumb dismissible={false}><div className="loading">Loading...</div></CanvasPanelHost>;
+  if (!deployment) return <CanvasPanelHost title={title} hideRootCrumb dismissible={false}><div className="error-msg">Deployment not found</div></CanvasPanelHost>;
 
   const envName = (environments ?? []).find((e) => e.id === deployment.environmentId)?.name ?? deployment.environmentId;
   const artName = (artifacts ?? []).find((a) => a.id === deployment.artifactId)?.name ?? deployment.artifactId.slice(0, 8);
@@ -367,8 +367,8 @@ export default function DeploymentDetailPanel({ deploymentId, title }: Props) {
     : 0;
 
   return (
-    <CanvasPanelHost title={title}>
-      <div style={{ display: "flex", flexDirection: "column" }}>
+    <CanvasPanelHost title={title} hideRootCrumb dismissible={false}>
+      <div className="v2-detail-view">
 
         {isRunning ? (
           <>

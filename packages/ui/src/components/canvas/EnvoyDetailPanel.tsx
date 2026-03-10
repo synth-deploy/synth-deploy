@@ -46,7 +46,7 @@ function HealthBadge({ health }: { health: EnvoyRegistryEntry["health"] }) {
   const styles: Record<string, React.CSSProperties> = {
     OK: { background: "var(--status-succeeded-bg)", color: "var(--status-succeeded)", border: "1px solid var(--status-succeeded-border)" },
     Degraded: { background: "var(--status-warning-bg)", color: "var(--status-warning)", border: "1px solid var(--status-warning-border)" },
-    Unreachable: { background: "var(--status-failed-bg)", color: "var(--status-failed)", border: "1px solid rgba(196,48,48,0.25)" },
+    Unreachable: { background: "var(--status-failed-bg)", color: "var(--status-failed)", border: "1px solid color-mix(in srgb, var(--status-failed) 25%, transparent)" },
   };
   const labels: Record<string, string> = { OK: "Healthy", Degraded: "Degraded", Unreachable: "Unreachable" };
   return (
@@ -70,7 +70,7 @@ function DeploymentBadge({ status }: { status: string }) {
     style = { background: "var(--status-succeeded-bg)", color: "var(--status-succeeded)", border: "1px solid var(--status-succeeded-border)" };
     label = "SUCCESS";
   } else if (isRolledBack) {
-    style = { background: "var(--status-failed-bg)", color: "var(--status-failed)", border: "1px solid rgba(196,48,48,0.25)" };
+    style = { background: "var(--status-failed-bg)", color: "var(--status-failed)", border: "1px solid color-mix(in srgb, var(--status-failed) 25%, transparent)" };
     label = "ROLLED BACK";
   } else if (isRunning) {
     style = { background: "var(--accent-dim)", color: "var(--accent)", border: "1px solid var(--accent-border)" };
@@ -125,13 +125,6 @@ function boundaryDescription(b: EnvoySecurityBoundary): string {
       return JSON.stringify(cfg);
   }
 }
-
-const SectionLabel = ({ children }: { children: React.ReactNode }) => (
-  <h3 style={{
-    fontSize: 10, fontWeight: 700, fontFamily: "var(--font-mono)", textTransform: "uppercase",
-    letterSpacing: 1, color: "var(--text-muted)", margin: "0 0 10px 0",
-  }}>{children}</h3>
-);
 
 const StatCard = ({ label, value }: { label: string; value: React.ReactNode }) => (
   <div style={{ flex: 1, padding: "14px 16px", borderRadius: 8, background: "var(--surface)", border: "1px solid var(--border)" }}>
@@ -247,7 +240,7 @@ export default function EnvoyDetailPanel({ envoyId, title }: Props) {
 
       {/* ── Knowledge Store ── */}
       <div style={{ marginBottom: 24 }}>
-        <SectionLabel>Knowledge Store</SectionLabel>
+        <div className="section-label">Knowledge Store</div>
         <div style={{ display: "flex", gap: 12 }}>
           <KnowledgeCard label="Successful Plans" value={envoy.summary?.succeeded ?? 0} color="var(--status-succeeded)" />
           <KnowledgeCard label="Failed Plans" value={envoy.summary?.failed ?? 0} color="var(--status-failed)" />
@@ -258,16 +251,17 @@ export default function EnvoyDetailPanel({ envoyId, title }: Props) {
 
       {/* ── Connections ── */}
       <div style={{ marginBottom: 24 }}>
-        <SectionLabel>Connections</SectionLabel>
+        <div className="section-label">Connections</div>
         <div style={{ display: "flex", gap: 12 }}>
           {/* Environments */}
           <div style={{ flex: 1, padding: "14px 18px", borderRadius: 10, background: "var(--surface)", border: "1px solid var(--border)" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-              <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-muted)", fontFamily: "var(--font-mono)", textTransform: "uppercase", letterSpacing: 1 }}>
+              <div className="section-label" style={{ margin: 0 }}>
                 Environments
-              </span>
+              </div>
               <button
-                style={{ padding: "3px 10px", borderRadius: 4, border: "1px solid var(--accent-border)", background: "transparent", color: "var(--accent)", fontSize: 10, fontFamily: "var(--font-mono)", fontWeight: 600, cursor: "pointer" }}
+                className="btn-accent-outline"
+                style={{ padding: "3px 10px", fontSize: 10 }}
                 onClick={() => setShowEnvPicker(!showEnvPicker)}
               >
                 + Assign
@@ -308,11 +302,12 @@ export default function EnvoyDetailPanel({ envoyId, title }: Props) {
           {/* Partitions */}
           <div style={{ flex: 1, padding: "14px 18px", borderRadius: 10, background: "var(--surface)", border: "1px solid var(--border)" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-              <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text-muted)", fontFamily: "var(--font-mono)", textTransform: "uppercase", letterSpacing: 1 }}>
+              <div className="section-label" style={{ margin: 0 }}>
                 Partitions
-              </span>
+              </div>
               <button
-                style={{ padding: "3px 10px", borderRadius: 4, border: "1px solid var(--accent-border)", background: "transparent", color: "var(--accent)", fontSize: 10, fontFamily: "var(--font-mono)", fontWeight: 600, cursor: "pointer" }}
+                className="btn-accent-outline"
+                style={{ padding: "3px 10px", fontSize: 10 }}
                 onClick={() => setShowPartPicker(!showPartPicker)}
               >
                 + Assign
@@ -355,7 +350,7 @@ export default function EnvoyDetailPanel({ envoyId, title }: Props) {
       {/* ── Security Boundaries ── */}
       {!l4 && (
         <div style={{ marginBottom: 24 }}>
-          <SectionLabel>Security Boundaries</SectionLabel>
+          <div className="section-label">Security Boundaries</div>
           <div style={{ padding: "16px 20px", borderRadius: 10, background: "var(--surface)", border: "1px solid var(--border)" }}>
             {(boundaries ?? []).length > 0 ? (
               (boundaries ?? []).map((b, i, arr) => (
@@ -386,7 +381,7 @@ export default function EnvoyDetailPanel({ envoyId, title }: Props) {
       {/* ── Currently Deployed ── */}
       {!l6 && !l7 && (
         <div style={{ marginBottom: 24 }}>
-          <SectionLabel>Currently Deployed</SectionLabel>
+          <div className="section-label">Currently Deployed</div>
           <div style={{ borderRadius: 10, overflow: "hidden", border: "1px solid var(--border)", background: "var(--surface)" }}>
             {currentlyDeployed.length > 0 ? (
               currentlyDeployed.map((d, i, arr) => (
@@ -422,7 +417,7 @@ export default function EnvoyDetailPanel({ envoyId, title }: Props) {
       {/* ── Recent Plans ── */}
       {!l6 && recentPlans.length > 0 && (
         <div style={{ marginBottom: 24 }}>
-          <SectionLabel>Recent Plans</SectionLabel>
+          <div className="section-label">Recent Plans</div>
           <div style={{ borderRadius: 10, overflow: "hidden", border: "1px solid var(--border)", background: "var(--surface)" }}>
             {recentPlans.map((d, i, arr) => {
               const artifactName = artifactMap.get(d.artifactId) ?? d.artifactId;
@@ -474,7 +469,7 @@ export default function EnvoyDetailPanel({ envoyId, title }: Props) {
       {/* ── Accumulated System Knowledge ── */}
       {!l5 && (knowledge ?? []).length > 0 && (
         <div style={{ marginBottom: 24 }}>
-          <SectionLabel>Accumulated System Knowledge</SectionLabel>
+          <div className="section-label">Accumulated System Knowledge</div>
           <div style={{ padding: "16px 20px", borderRadius: 10, background: "var(--surface-alt, var(--surface))", border: "1px solid var(--border)" }}>
             {(knowledge ?? []).map((item) => (
               <div key={item.id} style={{ display: "flex", gap: 10, padding: "5px 0" }}>

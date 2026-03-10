@@ -53,6 +53,27 @@ export default function OperationalOverview() {
 // EmptyState — guided first-deployment onboarding (#137)
 // ---------------------------------------------------------------------------
 
+// Static structural styles shared by all step cards (no CSS class covers these)
+const stepCardBase: React.CSSProperties = {
+  border: "1px solid var(--border)",
+  borderRadius: 10,
+  padding: 20,
+  marginBottom: 12,
+  transition: "all 0.2s",
+};
+
+// Static structural styles for step number circle
+const stepNumberBase: React.CSSProperties = {
+  width: 28,
+  height: 28,
+  borderRadius: "50%",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  fontSize: 13,
+  fontWeight: 700,
+};
+
 function EmptyState({ onComplete }: { onComplete: () => void }) {
   const { pushPanel } = useCanvas();
   const { settings } = useSettings();
@@ -197,27 +218,21 @@ function EmptyState({ onComplete }: { onComplete: () => void }) {
     }
   }
 
-  const stepStyle = (s: number): React.CSSProperties => ({
-    border: "1px solid var(--border)",
-    borderRadius: 10,
-    padding: 20,
-    marginBottom: 12,
+  // Dynamic-only: background and opacity depend on current step
+  const stepCardDynamic = (s: number): React.CSSProperties => ({
     background: step > s ? "color-mix(in srgb, var(--status-succeeded) 4%, transparent)" : step === s ? "var(--surface)" : "color-mix(in srgb, var(--text-muted) 4%, transparent)",
     opacity: step < s ? 0.5 : 1,
-    transition: "all 0.2s",
+  });
+
+  // Dynamic-only: background and color depend on current step
+  const stepNumberDynamic = (s: number): React.CSSProperties => ({
+    background: step > s ? "var(--status-succeeded)" : step === s ? "color-mix(in srgb, var(--accent) 20%, transparent)" : "color-mix(in srgb, var(--text-muted) 15%, transparent)",
+    color: step > s ? "var(--bg)" : step === s ? "var(--accent)" : "var(--text-muted)",
   });
 
   const stepHeaderStyle: React.CSSProperties = {
     display: "flex", alignItems: "center", gap: 10, marginBottom: 12,
   };
-
-  const stepNumberStyle = (s: number): React.CSSProperties => ({
-    width: 28, height: 28, borderRadius: "50%",
-    display: "flex", alignItems: "center", justifyContent: "center",
-    fontSize: 13, fontWeight: 700,
-    background: step > s ? "var(--status-succeeded)" : step === s ? "color-mix(in srgb, var(--accent) 20%, transparent)" : "color-mix(in srgb, var(--text-muted) 15%, transparent)",
-    color: step > s ? "var(--bg)" : step === s ? "var(--accent)" : "var(--text-muted)",
-  });
 
   const statusLabel: Record<string, string> = {
     pending: "Waiting to start...",
@@ -242,9 +257,9 @@ function EmptyState({ onComplete }: { onComplete: () => void }) {
       </div>
 
       {/* Step 1: Artifact */}
-      <div style={stepStyle(1)}>
+      <div style={{ ...stepCardBase, ...stepCardDynamic(1) }}>
         <div style={stepHeaderStyle}>
-          <div style={stepNumberStyle(1)}>
+          <div style={{ ...stepNumberBase, ...stepNumberDynamic(1) }}>
             {step > 1 ? "\u2713" : "1"}
           </div>
           <div>
@@ -297,7 +312,8 @@ function EmptyState({ onComplete }: { onComplete: () => void }) {
             </div>
             {analysisPolling && !analysisSummary && (
               <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 6, display: "flex", alignItems: "center", gap: 6 }}>
-                <span className="v2-envoy-spinner" style={{ width: 12, height: 12, border: "2px solid color-mix(in srgb, var(--accent) 20%, transparent)", borderTopColor: "var(--accent)", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
+                {/* v2-envoy-spinner uses position:absolute in app.css — inline spinner styles retained */}
+                <span style={{ display: "inline-block", width: 12, height: 12, border: "2px solid color-mix(in srgb, var(--accent) 20%, transparent)", borderTopColor: "var(--accent)", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
                 Analyzing artifact...
               </div>
             )}
@@ -311,9 +327,9 @@ function EmptyState({ onComplete }: { onComplete: () => void }) {
       </div>
 
       {/* Step 2: Envoy */}
-      <div style={stepStyle(2)}>
+      <div style={{ ...stepCardBase, ...stepCardDynamic(2) }}>
         <div style={stepHeaderStyle}>
-          <div style={stepNumberStyle(2)}>
+          <div style={{ ...stepNumberBase, ...stepNumberDynamic(2) }}>
             {step > 2 ? "\u2713" : "2"}
           </div>
           <div>
@@ -343,7 +359,8 @@ function EmptyState({ onComplete }: { onComplete: () => void }) {
               </div>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--text-muted)" }}>
-              <span className="v2-envoy-spinner" style={{ width: 14, height: 14, border: "2px solid color-mix(in srgb, var(--accent) 20%, transparent)", borderTopColor: "var(--accent)", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
+              {/* v2-envoy-spinner uses position:absolute in app.css — inline spinner styles retained */}
+              <span style={{ display: "inline-block", width: 14, height: 14, border: "2px solid color-mix(in srgb, var(--accent) 20%, transparent)", borderTopColor: "var(--accent)", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
               Waiting for envoy connection...
               {envoys.length > 0 && (
                 <span style={{ color: "var(--status-warning)" }}>
@@ -379,9 +396,9 @@ function EmptyState({ onComplete }: { onComplete: () => void }) {
       </div>
 
       {/* Step 3: Deploy */}
-      <div style={stepStyle(3)}>
+      <div style={{ ...stepCardBase, ...stepCardDynamic(3) }}>
         <div style={stepHeaderStyle}>
-          <div style={stepNumberStyle(3)}>
+          <div style={{ ...stepNumberBase, ...stepNumberDynamic(3) }}>
             {deploymentStatus === "succeeded" ? "\u2713" : "3"}
           </div>
           <div>
@@ -442,7 +459,8 @@ function EmptyState({ onComplete }: { onComplete: () => void }) {
             {/* Deployment status indicator */}
             {deploymentStatus && deploymentStatus !== "succeeded" && deploymentStatus !== "failed" && deploymentStatus !== "rolled_back" && (
               <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--text-muted)" }}>
-                <span className="v2-envoy-spinner" style={{ width: 14, height: 14, border: "2px solid color-mix(in srgb, var(--accent) 20%, transparent)", borderTopColor: "var(--accent)", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
+                {/* v2-envoy-spinner uses position:absolute in app.css — inline spinner styles retained */}
+                <span style={{ display: "inline-block", width: 14, height: 14, border: "2px solid color-mix(in srgb, var(--accent) 20%, transparent)", borderTopColor: "var(--accent)", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
                 {statusLabel[deploymentStatus] ?? "Processing..."}
               </div>
             )}
@@ -450,9 +468,7 @@ function EmptyState({ onComplete }: { onComplete: () => void }) {
             {/* Debrief entries — live during deployment */}
             {deploymentDebrief.length > 0 && (
               <div style={{ marginTop: 4 }}>
-                <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text-muted)", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                  Debrief
-                </div>
+                <div className="section-label">Debrief</div>
                 {deploymentDebrief.map((entry) => (
                   <div key={entry.id} style={{ fontSize: 12, color: "var(--text-muted)", padding: "4px 0", borderBottom: "1px solid color-mix(in srgb, var(--text-muted) 10%, transparent)" }}>
                     <span style={{ color: entry.agent === "envoy" ? "var(--status-succeeded)" : "var(--accent)", fontWeight: 500 }}>
@@ -563,10 +579,7 @@ function NormalState({ stats: _stats, signals, assessment }: { stats: SystemStat
 
         {/* Label row: "SYNTH ASSESSMENT" + confidence indicator */}
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-          <span style={{
-            fontSize: 10, fontWeight: 700, textTransform: "uppercase",
-            letterSpacing: "0.1em", color: "var(--accent)", fontFamily: "var(--font-mono)",
-          }}>
+          <span className="section-label" style={{ color: "var(--accent)", marginBottom: 0 }}>
             Synth Assessment
           </span>
           <ConfidenceIndicator value={avgConfidence} qualifier="confidence" />
@@ -593,11 +606,7 @@ function NormalState({ stats: _stats, signals, assessment }: { stats: SystemStat
       {/* --- Signals --- */}
       {signals && signals.length > 0 && (
         <div>
-          <div style={{
-            fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 600,
-            letterSpacing: "0.05em", color: "var(--text-muted)", textTransform: "uppercase",
-            marginBottom: 10,
-          }}>Signals</div>
+          <div className="section-label">Signals</div>
           {signals.map((signal, i) => {
             const dotColor = signal.severity === "critical"
               ? "var(--status-failed)"
@@ -649,11 +658,7 @@ function NormalState({ stats: _stats, signals, assessment }: { stats: SystemStat
       {/* --- Recent Deployments --- */}
       {recentDeploys.length > 0 && (
         <div>
-          <div style={{
-            fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 600,
-            letterSpacing: "0.05em", color: "var(--text-muted)", textTransform: "uppercase",
-            marginBottom: 10, display: "flex", alignItems: "center", justifyContent: "space-between",
-          }}>
+          <div className="section-label" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <span>Recent Deployments</span>
             <button
               onClick={() => pushPanel({ type: "debrief", title: "Debriefs", params: {} })}

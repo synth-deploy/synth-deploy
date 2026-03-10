@@ -142,7 +142,7 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
               <h1 style={{ fontSize: 22, fontWeight: 500, color: "var(--text)", margin: "0 0 6px 0", lineHeight: 1.2, fontFamily: "var(--font-display)" }}>
                 {artifact.name}
                 {latestVersion && (
-                  <span style={{ fontSize: 14, fontWeight: 400, color: "var(--text-muted)", marginLeft: 10, fontFamily: "monospace" }}>
+                  <span style={{ fontSize: 14, fontWeight: 400, color: "var(--text-muted)", marginLeft: 10, fontFamily: "var(--font-mono)" }}>
                     {latestVersion}
                   </span>
                 )}
@@ -155,7 +155,7 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
                   <div style={{ width: 44, height: 3, borderRadius: 2, background: "color-mix(in srgb, var(--text) 10%, transparent)", overflow: "hidden" }}>
                     <div style={{ width: `${Math.round(confidence * 100)}%`, height: "100%", borderRadius: 2, background: cColor }} />
                   </div>
-                  <span style={{ fontSize: 10, fontFamily: "monospace", fontWeight: 600, color: cColor }}>
+                  <span style={{ fontSize: 10, fontFamily: "var(--font-mono)", fontWeight: 600, color: cColor }}>
                     {cLabel}
                   </span>
                   <span style={{ fontSize: 10, color: "var(--text-muted)" }}>understanding</span>
@@ -172,7 +172,7 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
                 color: "var(--status-succeeded)",
                 fontSize: 12,
                 fontWeight: 600,
-                fontFamily: "monospace",
+                fontFamily: "var(--font-mono)",
                 cursor: "pointer",
                 flexShrink: 0,
                 marginTop: 2,
@@ -186,13 +186,13 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
           <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
             {/* Dependencies */}
             <div style={{ flex: 1, padding: "12px 14px", borderRadius: 8, background: "var(--surface)", border: "1px solid var(--border)" }}>
-              <div style={{ fontSize: 10, color: "var(--text-muted)", fontFamily: "monospace", textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>
+              <div style={{ fontSize: 10, color: "var(--text-muted)", fontFamily: "var(--font-mono)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>
                 Dependencies
               </div>
               {techTags.length > 0 ? (
                 <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
                   {techTags.map((t, i) => (
-                    <span key={i} style={{ padding: "2px 8px", borderRadius: 4, fontSize: 11, background: "color-mix(in srgb, var(--text) 6%, transparent)", color: "var(--text-muted)", fontFamily: "monospace", border: "1px solid var(--border)" }}>
+                    <span key={i} style={{ padding: "2px 8px", borderRadius: 4, fontSize: 11, background: "color-mix(in srgb, var(--text) 6%, transparent)", color: "var(--text-muted)", fontFamily: "var(--font-mono)", border: "1px solid var(--border)" }}>
                       {t}
                     </span>
                   ))}
@@ -204,10 +204,10 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
 
             {/* Deployments */}
             <div style={{ flex: 1, padding: "12px 14px", borderRadius: 8, background: "var(--surface)", border: "1px solid var(--border)" }}>
-              <div style={{ fontSize: 10, color: "var(--text-muted)", fontFamily: "monospace", textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>
+              <div style={{ fontSize: 10, color: "var(--text-muted)", fontFamily: "var(--font-mono)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>
                 Deployments
               </div>
-              <div style={{ fontSize: 20, fontWeight: 600, color: "var(--text)", fontFamily: "monospace", lineHeight: 1 }}>{deployCount}</div>
+              <div style={{ fontSize: 20, fontWeight: 600, color: "var(--text)", fontFamily: "var(--font-mono)", lineHeight: 1 }}>{deployCount}</div>
               {successRate !== null ? (
                 <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 3 }}>{Math.round(successRate * 100)}% success rate</div>
               ) : (
@@ -217,10 +217,10 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
 
             {/* Corrections */}
             <div style={{ flex: 1, padding: "12px 14px", borderRadius: 8, background: "var(--surface)", border: "1px solid var(--border)" }}>
-              <div style={{ fontSize: 10, color: "var(--text-muted)", fontFamily: "monospace", textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>
+              <div style={{ fontSize: 10, color: "var(--text-muted)", fontFamily: "var(--font-mono)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>
                 Corrections
               </div>
-              <div style={{ fontSize: 20, fontWeight: 600, color: correctionCount > 0 ? "var(--accent)" : "var(--text)", fontFamily: "monospace", lineHeight: 1 }}>{correctionCount}</div>
+              <div style={{ fontSize: 20, fontWeight: 600, color: correctionCount > 0 ? "var(--accent)" : "var(--text)", fontFamily: "var(--font-mono)", lineHeight: 1 }}>{correctionCount}</div>
               <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 3 }}>from user feedback</div>
             </div>
           </div>
@@ -246,7 +246,7 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
           <div style={{ padding: "20px 16px" }}>
 
             {/* What Synth Understands */}
-            <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.5, color: "var(--text-muted)", fontFamily: "monospace", marginBottom: 10 }}>
+            <div className="section-label">
               What Synth Understands
             </div>
             <div style={{
@@ -257,14 +257,14 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
               border: "1px solid color-mix(in srgb, var(--accent) 18%, transparent)",
             }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-                <span style={{ fontSize: 10, fontWeight: 700, color: "var(--accent)", textTransform: "uppercase", letterSpacing: 1, fontFamily: "monospace" }}>
+                <span style={{ fontSize: 10, fontWeight: 700, color: "var(--accent)", textTransform: "uppercase", letterSpacing: 1, fontFamily: "var(--font-mono)" }}>
                   Analysis
                 </span>
                 <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
                   <div style={{ width: 44, height: 3, borderRadius: 2, background: "color-mix(in srgb, var(--text) 10%, transparent)", overflow: "hidden" }}>
                     <div style={{ width: `${Math.round(confidence * 100)}%`, height: "100%", borderRadius: 2, background: cColor }} />
                   </div>
-                  <span style={{ fontSize: 10, fontFamily: "monospace", fontWeight: 600, color: cColor }}>{cLabel}</span>
+                  <span style={{ fontSize: 10, fontFamily: "var(--font-mono)", fontWeight: 600, color: cColor }}>{cLabel}</span>
                 </div>
                 <span style={{ fontSize: 10, color: "var(--text-muted)" }}>understanding</span>
               </div>
@@ -276,7 +276,7 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
             {/* Configuration Expectations */}
             {configEntries.length > 0 && (
               <>
-                <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.5, color: "var(--text-muted)", fontFamily: "monospace", marginBottom: 10 }}>
+                <div className="section-label">
                   Configuration Expectations
                 </div>
                 <div className="canvas-var-table" style={{ marginBottom: 24 }}>
@@ -293,7 +293,7 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
             {/* Inferred Deployment Pattern */}
             {analysis.deploymentIntent && (
               <>
-                <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.5, color: "var(--text-muted)", fontFamily: "monospace", marginBottom: 10 }}>
+                <div className="section-label">
                   Inferred Deployment Pattern
                 </div>
                 <div style={{ padding: "14px 18px", borderRadius: 10, marginBottom: 24, background: "var(--surface)", border: "1px solid var(--border)" }}>
@@ -305,7 +305,7 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
             )}
 
             {/* Feedback Section */}
-            <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.5, color: "var(--text-muted)", fontFamily: "monospace", marginBottom: 10 }}>
+            <div className="section-label">
               Feedback
             </div>
             <div style={{
@@ -337,7 +337,7 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
                 <button
                   onClick={() => setActiveTab("annotations")}
                   style={{
-                    padding: "9px 18px", borderRadius: 6, cursor: "pointer", fontFamily: "monospace", fontSize: 12, fontWeight: 600,
+                    padding: "9px 18px", borderRadius: 6, cursor: "pointer", fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 600,
                     border: `1.5px solid ${isLowConf ? "var(--status-warning)" : "var(--accent)"}`,
                     background: "transparent",
                     color: isLowConf ? "var(--status-warning)" : "var(--accent)",
@@ -351,7 +351,7 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
             {/* Correction History (inline, last 3) */}
             {correctionCount > 0 && (
               <>
-                <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.5, color: "var(--text-muted)", fontFamily: "monospace", marginBottom: 10 }}>
+                <div className="section-label">
                   Correction History
                 </div>
                 <div style={{ borderRadius: 10, border: "1px solid var(--border)", background: "var(--surface)" }}>
@@ -436,14 +436,14 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
             {/* Annotations list */}
             {annotations.length > 0 ? (
               <>
-                <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.5, color: "var(--text-muted)", fontFamily: "monospace", margin: "16px 0 8px" }}>
+                <div className="section-label" style={{ margin: "16px 0 8px" }}>
                   Submitted Corrections
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                   {annotations.map((ann, i) => (
                     <div key={i} style={{ padding: "10px 14px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                        <span style={{ fontSize: 10, fontWeight: 700, color: "var(--status-warning)", textTransform: "uppercase", letterSpacing: "0.06em", fontFamily: "monospace", background: "color-mix(in srgb, var(--status-warning) 10%, transparent)", padding: "2px 6px", borderRadius: 4 }}>
+                        <span style={{ fontSize: 10, fontWeight: 700, color: "var(--status-warning)", textTransform: "uppercase", letterSpacing: "0.06em", fontFamily: "var(--font-mono)", background: "color-mix(in srgb, var(--status-warning) 10%, transparent)", padding: "2px 6px", borderRadius: 4 }}>
                           Correction · {ann.field}
                         </span>
                         <span style={{ fontSize: 11, color: "var(--text-muted)", marginLeft: "auto" }}>{new Date(ann.annotatedAt).toLocaleString()}</span>
@@ -466,7 +466,7 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
               return source !== "user-correction" && !entry.event.toLowerCase().includes("annotation");
             }).length > 0 && (
               <>
-                <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.5, color: "var(--text-muted)", fontFamily: "monospace", margin: "24px 0 10px" }}>
+                <div className="section-label" style={{ margin: "24px 0 10px" }}>
                   System Events
                 </div>
                 <div style={{ position: "relative", paddingLeft: 20 }}>
@@ -543,7 +543,7 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
               <div style={{ borderRadius: 10, border: "1px solid var(--border)", background: "var(--surface)" }}>
                 {[...versions].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).map((ver, i, arr) => (
                   <div key={ver.id} style={{ padding: "12px 16px", borderBottom: i < arr.length - 1 ? "1px solid var(--border)" : "none", display: "flex", alignItems: "center", gap: 12 }}>
-                    <span style={{ fontWeight: 600, fontSize: 13, color: "var(--accent)", fontFamily: "monospace" }}>{ver.version}</span>
+                    <span style={{ fontWeight: 600, fontSize: 13, color: "var(--accent)", fontFamily: "var(--font-mono)" }}>{ver.version}</span>
                     <span style={{ fontSize: 12, color: "var(--text-muted)" }}>{ver.source}</span>
                     {ver.metadata && Object.keys(ver.metadata).length > 0 && (
                       <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{Object.entries(ver.metadata).map(([k, v]) => `${k}=${v}`).join(", ")}</span>
