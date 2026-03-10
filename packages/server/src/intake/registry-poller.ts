@@ -1,18 +1,27 @@
 /**
  * Registry poller — periodically checks container and package registries
  * for new versions and emits intake events when new versions are found.
+ *
+ * Known versions are persisted via PersistentRegistryPollerVersionStore
+ * so that server restarts don't re-trigger deployments for already-seen versions.
  */
 
 import type { IntakeChannel, RegistryConfig } from "@synth-deploy/core";
+import type { PersistentRegistryPollerVersionStore } from "@synth-deploy/core";
 import type { WebhookPayload } from "./webhook-handlers.js";
 
 export class RegistryPoller {
   private intervals = new Map<string, NodeJS.Timeout>();
   private knownVersions = new Map<string, Set<string>>();
   private onNewVersion: (channelId: string, payload: WebhookPayload) => Promise<void>;
+  private versionStore?: PersistentRegistryPollerVersionStore;
 
-  constructor(onNewVersion: (channelId: string, payload: WebhookPayload) => Promise<void>) {
+  constructor(
+    onNewVersion: (channelId: string, payload: WebhookPayload) => Promise<void>,
+    versionStore?: PersistentRegistryPollerVersionStore,
+  ) {
     this.onNewVersion = onNewVersion;
+    this.versionStore = versionStore;
   }
 
   startPolling(channel: IntakeChannel): void {
@@ -22,9 +31,13 @@ export class RegistryPoller {
     const config = channel.config as unknown as RegistryConfig;
     const intervalMs = config.pollIntervalMs || 300_000; // Default: 5 minutes
 
-    // Initialize known versions set
+    // Load persisted known versions, or initialize empty set
     if (!this.knownVersions.has(channel.id)) {
-      this.knownVersions.set(channel.id, new Set());
+      if (this.versionStore) {
+        this.knownVersions.set(channel.id, this.versionStore.getKnownVersions(channel.id));
+      } else {
+        this.knownVersions.set(channel.id, new Set());
+      }
     }
 
     // Poll immediately on start
@@ -54,6 +67,20 @@ export class RegistryPoller {
     for (const [id] of this.intervals) {
       this.stopPolling(id);
     }
+  }
+
+  /**
+   * Record a version as known, both in memory and in the persistent store.
+   * Returns true if the version was newly seen (not previously known).
+   */
+  private recordVersion(channelId: string, versionKey: string): boolean {
+    const known = this.knownVersions.get(channelId) ?? new Set();
+    if (known.has(versionKey)) return false;
+
+    known.add(versionKey);
+    this.knownVersions.set(channelId, known);
+    this.versionStore?.addVersion(channelId, versionKey);
+    return true;
   }
 
   private async poll(channel: IntakeChannel): Promise<void> {
@@ -94,26 +121,24 @@ export class RegistryPoller {
         const data = await res.json() as { tags?: string[] };
         const tags = data.tags ?? [];
         const known = this.knownVersions.get(channel.id) ?? new Set();
+        const isFirstPoll = known.size === 0;
 
         for (const tag of tags) {
           const key = `${image}:${tag}`;
-          if (!known.has(key)) {
-            known.add(key);
-            // Skip emitting on first poll (seed known versions)
-            if (known.size > tags.length) {
-              await this.onNewVersion(channel.id, {
-                artifactName: image,
-                artifactType: "docker",
-                version: tag,
-                source: `docker-registry:${baseUrl}`,
-                downloadUrl: `${baseUrl}/v2/${image}/manifests/${tag}`,
-                metadata: { registry: baseUrl, image, tag },
-              });
-            }
+          const isNew = this.recordVersion(channel.id, key);
+
+          // Don't emit events on first poll (seed phase)
+          if (isNew && !isFirstPoll) {
+            await this.onNewVersion(channel.id, {
+              artifactName: image,
+              artifactType: "docker",
+              version: tag,
+              source: `docker-registry:${baseUrl}`,
+              downloadUrl: `${baseUrl}/v2/${image}/manifests/${tag}`,
+              metadata: { registry: baseUrl, image, tag },
+            });
           }
         }
-
-        this.knownVersions.set(channel.id, known);
       } catch (err) {
         console.error(`[RegistryPoller] Docker poll error for ${image}:`, err);
       }
@@ -137,25 +162,23 @@ export class RegistryPoller {
         const data = await res.json() as { versions?: Record<string, unknown> };
         const versions = Object.keys(data.versions ?? {});
         const known = this.knownVersions.get(channel.id) ?? new Set();
+        const isFirstPoll = known.size === 0;
 
         for (const version of versions) {
           const key = `${pkg}@${version}`;
-          if (!known.has(key)) {
-            known.add(key);
-            if (known.size > versions.length) {
-              await this.onNewVersion(channel.id, {
-                artifactName: pkg,
-                artifactType: "npm",
-                version,
-                source: `npm-registry:${baseUrl}`,
-                downloadUrl: `${baseUrl}/${encodeURIComponent(pkg)}/-/${pkg}-${version}.tgz`,
-                metadata: { registry: baseUrl, package: pkg, version },
-              });
-            }
+          const isNew = this.recordVersion(channel.id, key);
+
+          if (isNew && !isFirstPoll) {
+            await this.onNewVersion(channel.id, {
+              artifactName: pkg,
+              artifactType: "npm",
+              version,
+              source: `npm-registry:${baseUrl}`,
+              downloadUrl: `${baseUrl}/${encodeURIComponent(pkg)}/-/${pkg}-${version}.tgz`,
+              metadata: { registry: baseUrl, package: pkg, version },
+            });
           }
         }
-
-        this.knownVersions.set(channel.id, known);
       } catch (err) {
         console.error(`[RegistryPoller] npm poll error for ${pkg}:`, err);
       }
@@ -183,24 +206,22 @@ export class RegistryPoller {
         const data = await res.json() as { versions?: string[] };
         const versions = data.versions ?? [];
         const known = this.knownVersions.get(channel.id) ?? new Set();
+        const isFirstPoll = known.size === 0;
 
         for (const version of versions) {
           const key = `${pkg}@${version}`;
-          if (!known.has(key)) {
-            known.add(key);
-            if (known.size > versions.length) {
-              await this.onNewVersion(channel.id, {
-                artifactName: pkg,
-                artifactType: "nuget",
-                version,
-                source: `nuget-registry:${baseUrl}`,
-                metadata: { registry: baseUrl, package: pkg, version },
-              });
-            }
+          const isNew = this.recordVersion(channel.id, key);
+
+          if (isNew && !isFirstPoll) {
+            await this.onNewVersion(channel.id, {
+              artifactName: pkg,
+              artifactType: "nuget",
+              version,
+              source: `nuget-registry:${baseUrl}`,
+              metadata: { registry: baseUrl, package: pkg, version },
+            });
           }
         }
-
-        this.knownVersions.set(channel.id, known);
       } catch (err) {
         console.error(`[RegistryPoller] NuGet poll error for ${pkg}:`, err);
       }

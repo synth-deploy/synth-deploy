@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { EnvoyClient } from "./envoy-client.js";
 import type { EnvoyHealthResponse } from "./envoy-client.js";
+import type { PersistentEnvoyRegistryStore, PersistedEnvoyRegistration } from "@synth-deploy/core";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -36,11 +37,51 @@ export interface EnvoyRegistryEntry extends EnvoyRegistration {
 }
 
 // ---------------------------------------------------------------------------
-// EnvoyRegistry — in-memory registry for multiple Envoy instances
+// Helpers to convert between persisted and domain types
+// ---------------------------------------------------------------------------
+
+function fromPersisted(p: PersistedEnvoyRegistration): EnvoyRegistration {
+  return {
+    id: p.id,
+    name: p.name,
+    url: p.url,
+    token: p.token,
+    assignedEnvironments: p.assignedEnvironments,
+    assignedPartitions: p.assignedPartitions,
+    registeredAt: p.registeredAt,
+    lastHealthCheck: p.lastHealthCheck,
+    lastHealthStatus: p.lastHealthStatus,
+    cachedHostname: p.cachedHostname,
+    cachedOs: p.cachedOs,
+    cachedSummary: p.cachedSummary as EnvoyHealthResponse["summary"] | null,
+    cachedReadiness: p.cachedReadiness as EnvoyHealthResponse["readiness"] | null,
+  };
+}
+
+function toPersisted(r: EnvoyRegistration): PersistedEnvoyRegistration {
+  return {
+    id: r.id,
+    name: r.name,
+    url: r.url,
+    token: r.token,
+    assignedEnvironments: r.assignedEnvironments,
+    assignedPartitions: r.assignedPartitions,
+    registeredAt: r.registeredAt,
+    lastHealthCheck: r.lastHealthCheck,
+    lastHealthStatus: r.lastHealthStatus,
+    cachedHostname: r.cachedHostname,
+    cachedOs: r.cachedOs,
+    cachedSummary: r.cachedSummary,
+    cachedReadiness: r.cachedReadiness,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// EnvoyRegistry — SQLite-backed registry for multiple Envoy instances
 // ---------------------------------------------------------------------------
 
 export class EnvoyRegistry {
-  private envoys = new Map<string, EnvoyRegistration>();
+  constructor(private store?: PersistentEnvoyRegistryStore) {}
 
   /**
    * Register a new Envoy. Returns the registration with a generated token.
@@ -70,7 +111,7 @@ export class EnvoyRegistry {
       cachedReadiness: null,
     };
 
-    this.envoys.set(id, registration);
+    this.store?.insert(toPersisted(registration));
     return registration;
   }
 
@@ -78,14 +119,20 @@ export class EnvoyRegistry {
    * Deregister an Envoy by ID.
    */
   deregister(id: string): boolean {
-    return this.envoys.delete(id);
+    if (this.store) {
+      return this.store.delete(id);
+    }
+    return false;
   }
 
   /**
    * List all registered Envoys.
    */
   list(): EnvoyRegistration[] {
-    return Array.from(this.envoys.values());
+    if (this.store) {
+      return this.store.list().map(fromPersisted);
+    }
+    return [];
   }
 
   /**
@@ -97,51 +144,47 @@ export class EnvoyRegistry {
     assignedEnvironments?: string[];
     assignedPartitions?: string[];
   }): EnvoyRegistration | undefined {
-    const existing = this.envoys.get(id);
+    if (!this.store) return undefined;
+    const existing = this.store.getById(id);
     if (!existing) return undefined;
 
-    if (updates.name !== undefined) existing.name = updates.name;
-    if (updates.url !== undefined) existing.url = updates.url;
-    if (updates.assignedEnvironments !== undefined) {
-      existing.assignedEnvironments = updates.assignedEnvironments;
-    }
-    if (updates.assignedPartitions !== undefined) {
-      existing.assignedPartitions = updates.assignedPartitions;
-    }
+    this.store.update(id, {
+      name: updates.name,
+      url: updates.url,
+      assignedEnvironments: updates.assignedEnvironments,
+      assignedPartitions: updates.assignedPartitions,
+    });
 
-    return existing;
+    return fromPersisted(this.store.getById(id)!);
   }
 
   /**
    * Rotate the token for an Envoy. Returns the new token.
    */
   rotateToken(id: string): string | undefined {
-    const existing = this.envoys.get(id);
+    if (!this.store) return undefined;
+    const existing = this.store.getById(id);
     if (!existing) return undefined;
 
-    existing.token = crypto.randomBytes(32).toString("hex");
-    return existing.token;
+    const newToken = crypto.randomBytes(32).toString("hex");
+    this.store.updateToken(id, newToken);
+    return newToken;
   }
 
   /**
    * Validate a token against a registered Envoy.
    */
   validateToken(token: string): EnvoyRegistration | undefined {
-    for (const envoy of this.envoys.values()) {
-      if (envoy.token === token) return envoy;
-    }
-    return undefined;
+    if (!this.store) return undefined;
+    const persisted = this.store.getByToken(token);
+    return persisted ? fromPersisted(persisted) : undefined;
   }
 
   /**
    * Update health status for an Envoy (called after probing).
    */
   updateHealth(id: string, status: "healthy" | "degraded" | "unreachable"): void {
-    const existing = this.envoys.get(id);
-    if (existing) {
-      existing.lastHealthCheck = new Date().toISOString();
-      existing.lastHealthStatus = status;
-    }
+    this.store?.updateHealth(id, status, new Date().toISOString());
   }
 
   /**
@@ -186,8 +229,10 @@ export class EnvoyRegistry {
    * Return cached registry entry without probing (instant).
    */
   get(id: string): EnvoyRegistryEntry | undefined {
-    const reg = this.envoys.get(id);
-    if (!reg) return undefined;
+    if (!this.store) return undefined;
+    const persisted = this.store.getById(id);
+    if (!persisted) return undefined;
+    const reg = fromPersisted(persisted);
     const healthMap: Record<string, "OK" | "Degraded" | "Unreachable"> = {
       healthy: "OK",
       degraded: "Degraded",
@@ -208,30 +253,56 @@ export class EnvoyRegistry {
    * Return all cached registry entries without probing (instant).
    */
   listEntries(): EnvoyRegistryEntry[] {
-    return Array.from(this.envoys.values()).map((reg) => this.get(reg.id)!);
+    return this.list().map((reg) => {
+      const healthMap: Record<string, "OK" | "Degraded" | "Unreachable"> = {
+        healthy: "OK",
+        degraded: "Degraded",
+        unreachable: "Unreachable",
+      };
+      return {
+        ...reg,
+        health: healthMap[reg.lastHealthStatus ?? "unreachable"] ?? "Unreachable",
+        hostname: reg.cachedHostname,
+        os: reg.cachedOs,
+        lastSeen: reg.lastHealthCheck,
+        summary: reg.cachedSummary,
+        readiness: reg.cachedReadiness,
+      };
+    });
   }
 
   /**
    * Probe an Envoy's health and update its registry entry.
    */
   async probe(id: string): Promise<EnvoyRegistryEntry | undefined> {
-    const registration = this.envoys.get(id);
-    if (!registration) return undefined;
+    if (!this.store) return undefined;
+    const persisted = this.store.getById(id);
+    if (!persisted) return undefined;
+    const registration = fromPersisted(persisted);
 
     const client = new EnvoyClient(registration.url, 5000);
     try {
       const health = await client.checkHealth();
       const status = health.status === "healthy" ? "healthy" : "degraded";
-      this.updateHealth(id, status);
+      const timestamp = new Date().toISOString();
 
-      // Persist probe results so get() returns fresh data without re-probing
-      registration.cachedHostname = health.hostname;
-      registration.cachedOs = health.os ?? null;
-      registration.cachedSummary = health.summary;
-      registration.cachedReadiness = health.readiness;
+      this.store.updateCachedProbe(id, {
+        lastHealthCheck: timestamp,
+        lastHealthStatus: status,
+        cachedHostname: health.hostname,
+        cachedOs: health.os ?? null,
+        cachedSummary: health.summary,
+        cachedReadiness: health.readiness,
+      });
 
       return {
         ...registration,
+        lastHealthCheck: timestamp,
+        lastHealthStatus: status,
+        cachedHostname: health.hostname,
+        cachedOs: health.os ?? null,
+        cachedSummary: health.summary,
+        cachedReadiness: health.readiness,
         health: status === "healthy" ? "OK" : "Degraded",
         hostname: health.hostname,
         os: health.os ?? null,
@@ -240,9 +311,23 @@ export class EnvoyRegistry {
         readiness: health.readiness,
       };
     } catch {
-      this.updateHealth(id, "unreachable");
+      const timestamp = new Date().toISOString();
+      this.store.updateCachedProbe(id, {
+        lastHealthCheck: timestamp,
+        lastHealthStatus: "unreachable",
+        cachedHostname: null,
+        cachedOs: null,
+        cachedSummary: null,
+        cachedReadiness: null,
+      });
       return {
         ...registration,
+        lastHealthCheck: timestamp,
+        lastHealthStatus: "unreachable",
+        cachedHostname: null,
+        cachedOs: null,
+        cachedSummary: null,
+        cachedReadiness: null,
         health: "Unreachable",
         hostname: null,
         os: null,
@@ -258,7 +343,7 @@ export class EnvoyRegistry {
    */
   async probeAll(): Promise<EnvoyRegistryEntry[]> {
     const entries: EnvoyRegistryEntry[] = [];
-    for (const envoy of this.envoys.values()) {
+    for (const envoy of this.list()) {
       const entry = await this.probe(envoy.id);
       if (entry) entries.push(entry);
     }

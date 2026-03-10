@@ -130,7 +130,14 @@ export {
   PersistentSessionStore,
   PersistentIdpProviderStore,
   PersistentRoleMappingStore,
+  PersistentApiKeyStore,
+  PersistentEnvoyRegistryStore,
+  PersistentIntakeChannelStore,
+  PersistentIntakeEventStore,
+  PersistentRegistryPollerVersionStore,
+  PersistentFleetDeploymentStore,
 } from "./persistent-stores.js";
+export type { PersistedEnvoyRegistration } from "./persistent-stores.js";
 export { ArtifactStore } from "./artifact-store.js";
 export { SecurityBoundaryStore } from "./security-boundary-store.js";
 export { TelemetryStore } from "./telemetry-store.js";

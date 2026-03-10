@@ -29,6 +29,16 @@ import type {
   Session,
   IdpProvider,
   RoleMappingRule,
+  ApiKey,
+  ApiKeyId,
+  IntakeChannel,
+  IntakeChannelType,
+  IntakeEvent,
+  FleetDeployment,
+  FleetDeploymentStatus,
+  FleetProgress,
+  RolloutConfig,
+  FleetValidationResult,
 } from "./types.js";
 import { DEFAULT_APP_SETTINGS } from "./types.js";
 
@@ -36,7 +46,7 @@ import { DEFAULT_APP_SETTINGS } from "./types.js";
 // Schema version — bump when table definitions change
 // ---------------------------------------------------------------------------
 
-const SCHEMA_VERSION = 6;
+const SCHEMA_VERSION = 7;
 
 // ---------------------------------------------------------------------------
 // Safe JSON parse — returns fallback on corruption instead of crashing
@@ -265,6 +275,85 @@ export function openEntityDatabase(dbPath: string): Database.Database {
       expires_at TEXT NOT NULL,
       created_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS api_keys (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      key_prefix TEXT NOT NULL,
+      key_suffix TEXT NOT NULL,
+      key_hash TEXT NOT NULL,
+      permissions TEXT NOT NULL DEFAULT '[]',
+      created_at TEXT NOT NULL,
+      last_used_at TEXT,
+      revoked_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_api_keys_user ON api_keys(user_id);
+
+    CREATE TABLE IF NOT EXISTS envoy_registrations (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      url TEXT NOT NULL,
+      token TEXT NOT NULL,
+      assigned_environments TEXT NOT NULL DEFAULT '[]',
+      assigned_partitions TEXT NOT NULL DEFAULT '[]',
+      registered_at TEXT NOT NULL,
+      last_health_check TEXT,
+      last_health_status TEXT,
+      cached_hostname TEXT,
+      cached_os TEXT,
+      cached_summary TEXT,
+      cached_readiness TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS intake_channels (
+      id TEXT PRIMARY KEY,
+      type TEXT NOT NULL,
+      name TEXT NOT NULL,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      config TEXT NOT NULL DEFAULT '{}',
+      auth_token TEXT,
+      last_polled_at TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS intake_events (
+      id TEXT PRIMARY KEY,
+      channel_id TEXT NOT NULL,
+      artifact_id TEXT,
+      status TEXT NOT NULL,
+      payload TEXT NOT NULL DEFAULT '{}',
+      error TEXT,
+      created_at TEXT NOT NULL,
+      processed_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_intake_events_channel ON intake_events(channel_id);
+    CREATE INDEX IF NOT EXISTS idx_intake_events_created ON intake_events(created_at);
+
+    CREATE TABLE IF NOT EXISTS registry_poller_versions (
+      channel_id TEXT NOT NULL,
+      version_key TEXT NOT NULL,
+      first_seen_at TEXT NOT NULL,
+      PRIMARY KEY (channel_id, version_key)
+    );
+
+    CREATE TABLE IF NOT EXISTS fleet_deployments (
+      id TEXT PRIMARY KEY,
+      artifact_id TEXT NOT NULL,
+      artifact_version_id TEXT NOT NULL,
+      environment_id TEXT NOT NULL,
+      envoy_filter TEXT,
+      rollout_config TEXT NOT NULL,
+      representative_envoy_ids TEXT NOT NULL DEFAULT '[]',
+      representative_plan_id TEXT,
+      status TEXT NOT NULL,
+      validation_result TEXT,
+      progress TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_fleet_deployments_status ON fleet_deployments(status);
   `);
 
   // --- Schema version validation & migrations ---
@@ -313,6 +402,93 @@ export function openEntityDatabase(dbPath: string): Database.Database {
     } catch { /* column may already exist */ }
     db.prepare(`UPDATE schema_version SET version = ?`).run(6);
     console.log("[Synth] Migrated database schema from v5 to v6 (session UA/IP)");
+  }
+
+  // Migrate from v6 to v7: add persistent stores for api_keys, envoy_registrations,
+  // intake_channels, intake_events, registry_poller_versions, fleet_deployments
+  if (versionRow && versionRow.version < 7) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS api_keys (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        key_prefix TEXT NOT NULL,
+        key_suffix TEXT NOT NULL,
+        key_hash TEXT NOT NULL,
+        permissions TEXT NOT NULL DEFAULT '[]',
+        created_at TEXT NOT NULL,
+        last_used_at TEXT,
+        revoked_at TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_api_keys_user ON api_keys(user_id);
+
+      CREATE TABLE IF NOT EXISTS envoy_registrations (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        url TEXT NOT NULL,
+        token TEXT NOT NULL,
+        assigned_environments TEXT NOT NULL DEFAULT '[]',
+        assigned_partitions TEXT NOT NULL DEFAULT '[]',
+        registered_at TEXT NOT NULL,
+        last_health_check TEXT,
+        last_health_status TEXT,
+        cached_hostname TEXT,
+        cached_os TEXT,
+        cached_summary TEXT,
+        cached_readiness TEXT
+      );
+
+      CREATE TABLE IF NOT EXISTS intake_channels (
+        id TEXT PRIMARY KEY,
+        type TEXT NOT NULL,
+        name TEXT NOT NULL,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        config TEXT NOT NULL DEFAULT '{}',
+        auth_token TEXT,
+        last_polled_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS intake_events (
+        id TEXT PRIMARY KEY,
+        channel_id TEXT NOT NULL,
+        artifact_id TEXT,
+        status TEXT NOT NULL,
+        payload TEXT NOT NULL DEFAULT '{}',
+        error TEXT,
+        created_at TEXT NOT NULL,
+        processed_at TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_intake_events_channel ON intake_events(channel_id);
+      CREATE INDEX IF NOT EXISTS idx_intake_events_created ON intake_events(created_at);
+
+      CREATE TABLE IF NOT EXISTS registry_poller_versions (
+        channel_id TEXT NOT NULL,
+        version_key TEXT NOT NULL,
+        first_seen_at TEXT NOT NULL,
+        PRIMARY KEY (channel_id, version_key)
+      );
+
+      CREATE TABLE IF NOT EXISTS fleet_deployments (
+        id TEXT PRIMARY KEY,
+        artifact_id TEXT NOT NULL,
+        artifact_version_id TEXT NOT NULL,
+        environment_id TEXT NOT NULL,
+        envoy_filter TEXT,
+        rollout_config TEXT NOT NULL,
+        representative_envoy_ids TEXT NOT NULL DEFAULT '[]',
+        representative_plan_id TEXT,
+        status TEXT NOT NULL,
+        validation_result TEXT,
+        progress TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_fleet_deployments_status ON fleet_deployments(status);
+    `);
+    db.prepare(`UPDATE schema_version SET version = ?`).run(7);
+    console.log("[Synth] Migrated database schema from v6 to v7 (persistent api_keys, envoy_registrations, intake, fleet)");
   }
 
   if (!versionRow) {
@@ -1856,5 +2032,712 @@ export class PersistentRoleMappingStore {
 
   delete(id: string): void {
     this.stmts.deleteById.run(id);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// PersistentApiKeyStore
+// ---------------------------------------------------------------------------
+
+interface ApiKeyRow {
+  id: string;
+  user_id: string;
+  name: string;
+  key_prefix: string;
+  key_suffix: string;
+  key_hash: string;
+  permissions: string;
+  created_at: string;
+  last_used_at: string | null;
+  revoked_at: string | null;
+}
+
+function rowToApiKey(row: ApiKeyRow): ApiKey {
+  return {
+    id: row.id as ApiKeyId,
+    userId: row.user_id as UserId,
+    name: row.name,
+    keyPrefix: row.key_prefix,
+    keySuffix: row.key_suffix,
+    keyHash: row.key_hash,
+    permissions: safeJsonParse(row.permissions, [], { table: "api_keys", rowId: row.id, column: "permissions" }),
+    createdAt: new Date(row.created_at),
+    lastUsedAt: row.last_used_at ? new Date(row.last_used_at) : null,
+    revokedAt: row.revoked_at ? new Date(row.revoked_at) : null,
+  };
+}
+
+export class PersistentApiKeyStore {
+  private stmts: {
+    insert: Database.Statement;
+    getById: Database.Statement;
+    listByUser: Database.Statement;
+    updateLastUsed: Database.Statement;
+    revoke: Database.Statement;
+    updateHash: Database.Statement;
+    deleteById: Database.Statement;
+  };
+
+  constructor(private db: Database.Database) {
+    this.stmts = {
+      insert: db.prepare(
+        `INSERT INTO api_keys (id, user_id, name, key_prefix, key_suffix, key_hash, permissions, created_at, last_used_at, revoked_at)
+         VALUES (@id, @user_id, @name, @key_prefix, @key_suffix, @key_hash, @permissions, @created_at, @last_used_at, @revoked_at)`,
+      ),
+      getById: db.prepare(`SELECT * FROM api_keys WHERE id = ?`),
+      listByUser: db.prepare(`SELECT * FROM api_keys WHERE user_id = ? ORDER BY created_at DESC`),
+      updateLastUsed: db.prepare(`UPDATE api_keys SET last_used_at = @last_used_at WHERE id = @id`),
+      revoke: db.prepare(`UPDATE api_keys SET revoked_at = @revoked_at WHERE id = @id`),
+      updateHash: db.prepare(
+        `UPDATE api_keys SET key_hash = @key_hash, key_prefix = @key_prefix, key_suffix = @key_suffix WHERE id = @id`,
+      ),
+      deleteById: db.prepare(`DELETE FROM api_keys WHERE id = ?`),
+    };
+  }
+
+  create(key: ApiKey): ApiKey {
+    this.stmts.insert.run({
+      id: key.id,
+      user_id: key.userId,
+      name: key.name,
+      key_prefix: key.keyPrefix,
+      key_suffix: key.keySuffix,
+      key_hash: key.keyHash,
+      permissions: JSON.stringify(key.permissions),
+      created_at: key.createdAt.toISOString(),
+      last_used_at: key.lastUsedAt?.toISOString() ?? null,
+      revoked_at: key.revokedAt?.toISOString() ?? null,
+    });
+    return structuredClone(key);
+  }
+
+  getById(id: ApiKeyId): ApiKey | undefined {
+    const row = this.stmts.getById.get(id) as ApiKeyRow | undefined;
+    return row ? rowToApiKey(row) : undefined;
+  }
+
+  listByUserId(userId: UserId): ApiKey[] {
+    const rows = this.stmts.listByUser.all(userId) as ApiKeyRow[];
+    return rows.map(rowToApiKey);
+  }
+
+  updateLastUsed(id: ApiKeyId, at: Date): void {
+    this.stmts.updateLastUsed.run({ id, last_used_at: at.toISOString() });
+  }
+
+  revoke(id: ApiKeyId): void {
+    this.stmts.revoke.run({ id, revoked_at: new Date().toISOString() });
+  }
+
+  updateHash(id: ApiKeyId, keyHash: string, keyPrefix: string, keySuffix: string): void {
+    this.stmts.updateHash.run({ id, key_hash: keyHash, key_prefix: keyPrefix, key_suffix: keySuffix });
+  }
+
+  delete(id: ApiKeyId): void {
+    this.stmts.deleteById.run(id);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// PersistentEnvoyRegistry
+// ---------------------------------------------------------------------------
+
+interface EnvoyRegistrationRow {
+  id: string;
+  name: string;
+  url: string;
+  token: string;
+  assigned_environments: string;
+  assigned_partitions: string;
+  registered_at: string;
+  last_health_check: string | null;
+  last_health_status: string | null;
+  cached_hostname: string | null;
+  cached_os: string | null;
+  cached_summary: string | null;
+  cached_readiness: string | null;
+}
+
+/** Shape of an envoy registration persisted to SQLite. */
+export interface PersistedEnvoyRegistration {
+  id: string;
+  name: string;
+  url: string;
+  token: string;
+  assignedEnvironments: string[];
+  assignedPartitions: string[];
+  registeredAt: string;
+  lastHealthCheck: string | null;
+  lastHealthStatus: "healthy" | "degraded" | "unreachable" | null;
+  cachedHostname: string | null;
+  cachedOs: string | null;
+  cachedSummary: unknown | null;
+  cachedReadiness: unknown | null;
+}
+
+function rowToEnvoyRegistration(row: EnvoyRegistrationRow): PersistedEnvoyRegistration {
+  return {
+    id: row.id,
+    name: row.name,
+    url: row.url,
+    token: row.token,
+    assignedEnvironments: safeJsonParse(row.assigned_environments, [], { table: "envoy_registrations", rowId: row.id, column: "assigned_environments" }),
+    assignedPartitions: safeJsonParse(row.assigned_partitions, [], { table: "envoy_registrations", rowId: row.id, column: "assigned_partitions" }),
+    registeredAt: row.registered_at,
+    lastHealthCheck: row.last_health_check,
+    lastHealthStatus: row.last_health_status as PersistedEnvoyRegistration["lastHealthStatus"],
+    cachedHostname: row.cached_hostname,
+    cachedOs: row.cached_os,
+    cachedSummary: safeJsonParse(row.cached_summary, null, { table: "envoy_registrations", rowId: row.id, column: "cached_summary" }),
+    cachedReadiness: safeJsonParse(row.cached_readiness, null, { table: "envoy_registrations", rowId: row.id, column: "cached_readiness" }),
+  };
+}
+
+export class PersistentEnvoyRegistryStore {
+  private stmts: {
+    insert: Database.Statement;
+    getById: Database.Statement;
+    list: Database.Statement;
+    update: Database.Statement;
+    updateToken: Database.Statement;
+    updateHealth: Database.Statement;
+    updateCachedProbe: Database.Statement;
+    deleteById: Database.Statement;
+    getByToken: Database.Statement;
+  };
+
+  constructor(private db: Database.Database) {
+    this.stmts = {
+      insert: db.prepare(
+        `INSERT INTO envoy_registrations (id, name, url, token, assigned_environments, assigned_partitions, registered_at, last_health_check, last_health_status, cached_hostname, cached_os, cached_summary, cached_readiness)
+         VALUES (@id, @name, @url, @token, @assigned_environments, @assigned_partitions, @registered_at, @last_health_check, @last_health_status, @cached_hostname, @cached_os, @cached_summary, @cached_readiness)`,
+      ),
+      getById: db.prepare(`SELECT * FROM envoy_registrations WHERE id = ?`),
+      list: db.prepare(`SELECT * FROM envoy_registrations ORDER BY registered_at ASC`),
+      update: db.prepare(
+        `UPDATE envoy_registrations SET name = @name, url = @url, assigned_environments = @assigned_environments, assigned_partitions = @assigned_partitions WHERE id = @id`,
+      ),
+      updateToken: db.prepare(`UPDATE envoy_registrations SET token = @token WHERE id = @id`),
+      updateHealth: db.prepare(
+        `UPDATE envoy_registrations SET last_health_check = @last_health_check, last_health_status = @last_health_status WHERE id = @id`,
+      ),
+      updateCachedProbe: db.prepare(
+        `UPDATE envoy_registrations SET last_health_check = @last_health_check, last_health_status = @last_health_status, cached_hostname = @cached_hostname, cached_os = @cached_os, cached_summary = @cached_summary, cached_readiness = @cached_readiness WHERE id = @id`,
+      ),
+      deleteById: db.prepare(`DELETE FROM envoy_registrations WHERE id = ?`),
+      getByToken: db.prepare(`SELECT * FROM envoy_registrations WHERE token = ?`),
+    };
+  }
+
+  insert(reg: PersistedEnvoyRegistration): void {
+    this.stmts.insert.run({
+      id: reg.id,
+      name: reg.name,
+      url: reg.url,
+      token: reg.token,
+      assigned_environments: JSON.stringify(reg.assignedEnvironments),
+      assigned_partitions: JSON.stringify(reg.assignedPartitions),
+      registered_at: reg.registeredAt,
+      last_health_check: reg.lastHealthCheck,
+      last_health_status: reg.lastHealthStatus,
+      cached_hostname: reg.cachedHostname,
+      cached_os: reg.cachedOs,
+      cached_summary: reg.cachedSummary ? JSON.stringify(reg.cachedSummary) : null,
+      cached_readiness: reg.cachedReadiness ? JSON.stringify(reg.cachedReadiness) : null,
+    });
+  }
+
+  getById(id: string): PersistedEnvoyRegistration | undefined {
+    const row = this.stmts.getById.get(id) as EnvoyRegistrationRow | undefined;
+    return row ? rowToEnvoyRegistration(row) : undefined;
+  }
+
+  list(): PersistedEnvoyRegistration[] {
+    const rows = this.stmts.list.all() as EnvoyRegistrationRow[];
+    return rows.map(rowToEnvoyRegistration);
+  }
+
+  update(id: string, updates: { name?: string; url?: string; assignedEnvironments?: string[]; assignedPartitions?: string[] }): void {
+    const existing = this.getById(id);
+    if (!existing) return;
+    this.stmts.update.run({
+      id,
+      name: updates.name ?? existing.name,
+      url: updates.url ?? existing.url,
+      assigned_environments: JSON.stringify(updates.assignedEnvironments ?? existing.assignedEnvironments),
+      assigned_partitions: JSON.stringify(updates.assignedPartitions ?? existing.assignedPartitions),
+    });
+  }
+
+  updateToken(id: string, token: string): void {
+    this.stmts.updateToken.run({ id, token });
+  }
+
+  updateHealth(id: string, status: string, timestamp: string): void {
+    this.stmts.updateHealth.run({ id, last_health_check: timestamp, last_health_status: status });
+  }
+
+  updateCachedProbe(id: string, data: {
+    lastHealthCheck: string;
+    lastHealthStatus: string;
+    cachedHostname: string | null;
+    cachedOs: string | null;
+    cachedSummary: unknown | null;
+    cachedReadiness: unknown | null;
+  }): void {
+    this.stmts.updateCachedProbe.run({
+      id,
+      last_health_check: data.lastHealthCheck,
+      last_health_status: data.lastHealthStatus,
+      cached_hostname: data.cachedHostname,
+      cached_os: data.cachedOs,
+      cached_summary: data.cachedSummary ? JSON.stringify(data.cachedSummary) : null,
+      cached_readiness: data.cachedReadiness ? JSON.stringify(data.cachedReadiness) : null,
+    });
+  }
+
+  delete(id: string): boolean {
+    const result = this.stmts.deleteById.run(id);
+    return result.changes > 0;
+  }
+
+  getByToken(token: string): PersistedEnvoyRegistration | undefined {
+    const row = this.stmts.getByToken.get(token) as EnvoyRegistrationRow | undefined;
+    return row ? rowToEnvoyRegistration(row) : undefined;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// PersistentIntakeChannelStore
+// ---------------------------------------------------------------------------
+
+interface IntakeChannelRow {
+  id: string;
+  type: string;
+  name: string;
+  enabled: number;
+  config: string;
+  auth_token: string | null;
+  last_polled_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+function rowToIntakeChannel(row: IntakeChannelRow): IntakeChannel {
+  return {
+    id: row.id,
+    type: row.type as IntakeChannelType,
+    name: row.name,
+    enabled: row.enabled === 1,
+    config: safeJsonParse(row.config, {}, { table: "intake_channels", rowId: row.id, column: "config" }),
+    authToken: row.auth_token ?? undefined,
+    lastPolledAt: row.last_polled_at ? new Date(row.last_polled_at) : undefined,
+    createdAt: new Date(row.created_at),
+    updatedAt: new Date(row.updated_at),
+  };
+}
+
+export class PersistentIntakeChannelStore {
+  private stmts: {
+    insert: Database.Statement;
+    getById: Database.Statement;
+    getByToken: Database.Statement;
+    list: Database.Statement;
+    update: Database.Statement;
+    deleteById: Database.Statement;
+  };
+
+  constructor(private db: Database.Database) {
+    this.stmts = {
+      insert: db.prepare(
+        `INSERT INTO intake_channels (id, type, name, enabled, config, auth_token, last_polled_at, created_at, updated_at)
+         VALUES (@id, @type, @name, @enabled, @config, @auth_token, @last_polled_at, @created_at, @updated_at)`,
+      ),
+      getById: db.prepare(`SELECT * FROM intake_channels WHERE id = ?`),
+      getByToken: db.prepare(`SELECT * FROM intake_channels WHERE auth_token = ?`),
+      list: db.prepare(`SELECT * FROM intake_channels ORDER BY created_at ASC`),
+      update: db.prepare(
+        `UPDATE intake_channels SET name = @name, enabled = @enabled, config = @config, last_polled_at = @last_polled_at, updated_at = @updated_at WHERE id = @id`,
+      ),
+      deleteById: db.prepare(`DELETE FROM intake_channels WHERE id = ?`),
+    };
+  }
+
+  create(channel: Omit<IntakeChannel, "id" | "createdAt" | "updatedAt">): IntakeChannel {
+    const id = crypto.randomUUID();
+    const now = new Date();
+    const full: IntakeChannel = {
+      ...channel,
+      id,
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.stmts.insert.run({
+      id: full.id,
+      type: full.type,
+      name: full.name,
+      enabled: full.enabled ? 1 : 0,
+      config: JSON.stringify(full.config),
+      auth_token: full.authToken ?? null,
+      last_polled_at: full.lastPolledAt?.toISOString() ?? null,
+      created_at: full.createdAt.toISOString(),
+      updated_at: full.updatedAt.toISOString(),
+    });
+    return full;
+  }
+
+  get(id: string): IntakeChannel | undefined {
+    const row = this.stmts.getById.get(id) as IntakeChannelRow | undefined;
+    return row ? rowToIntakeChannel(row) : undefined;
+  }
+
+  getByToken(token: string): IntakeChannel | undefined {
+    const row = this.stmts.getByToken.get(token) as IntakeChannelRow | undefined;
+    return row ? rowToIntakeChannel(row) : undefined;
+  }
+
+  list(): IntakeChannel[] {
+    const rows = this.stmts.list.all() as IntakeChannelRow[];
+    return rows.map(rowToIntakeChannel);
+  }
+
+  update(id: string, updates: Partial<Pick<IntakeChannel, "name" | "enabled" | "config" | "lastPolledAt">>): IntakeChannel {
+    const existing = this.get(id);
+    if (!existing) throw new Error(`Intake channel ${id} not found`);
+
+    const updated: IntakeChannel = {
+      ...existing,
+      ...updates,
+      updatedAt: new Date(),
+    };
+    this.stmts.update.run({
+      id,
+      name: updated.name,
+      enabled: updated.enabled ? 1 : 0,
+      config: JSON.stringify(updated.config),
+      last_polled_at: updated.lastPolledAt?.toISOString() ?? null,
+      updated_at: updated.updatedAt.toISOString(),
+    });
+    return updated;
+  }
+
+  delete(id: string): boolean {
+    const result = this.stmts.deleteById.run(id);
+    return result.changes > 0;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// PersistentIntakeEventStore
+// ---------------------------------------------------------------------------
+
+interface IntakeEventRow {
+  id: string;
+  channel_id: string;
+  artifact_id: string | null;
+  status: string;
+  payload: string;
+  error: string | null;
+  created_at: string;
+  processed_at: string | null;
+}
+
+function rowToIntakeEvent(row: IntakeEventRow): IntakeEvent {
+  return {
+    id: row.id,
+    channelId: row.channel_id,
+    artifactId: row.artifact_id ?? undefined,
+    status: row.status as IntakeEvent["status"],
+    payload: safeJsonParse(row.payload, {}, { table: "intake_events", rowId: row.id, column: "payload" }),
+    error: row.error ?? undefined,
+    createdAt: new Date(row.created_at),
+    processedAt: row.processed_at ? new Date(row.processed_at) : undefined,
+  };
+}
+
+/**
+ * SQLite-backed intake event store with retention policy.
+ * Events are persisted but trimmed to MAX_EVENTS_PER_CHANNEL per channel
+ * to prevent unbounded growth. Recent events are preserved; oldest are pruned.
+ */
+export class PersistentIntakeEventStore {
+  private static readonly MAX_EVENTS_PER_CHANNEL = 1000;
+
+  private stmts: {
+    insert: Database.Statement;
+    getById: Database.Statement;
+    update: Database.Statement;
+    listByChannel: Database.Statement;
+    listRecent: Database.Statement;
+    pruneOldest: Database.Statement;
+    countByChannel: Database.Statement;
+  };
+
+  constructor(private db: Database.Database) {
+    this.stmts = {
+      insert: db.prepare(
+        `INSERT INTO intake_events (id, channel_id, artifact_id, status, payload, error, created_at, processed_at)
+         VALUES (@id, @channel_id, @artifact_id, @status, @payload, @error, @created_at, @processed_at)`,
+      ),
+      getById: db.prepare(`SELECT * FROM intake_events WHERE id = ?`),
+      update: db.prepare(
+        `UPDATE intake_events SET status = @status, artifact_id = @artifact_id, error = @error, processed_at = @processed_at WHERE id = @id`,
+      ),
+      listByChannel: db.prepare(
+        `SELECT * FROM intake_events WHERE channel_id = ? ORDER BY created_at DESC LIMIT ?`,
+      ),
+      listRecent: db.prepare(
+        `SELECT * FROM intake_events ORDER BY created_at DESC LIMIT ?`,
+      ),
+      pruneOldest: db.prepare(
+        `DELETE FROM intake_events WHERE channel_id = @channel_id AND id NOT IN (
+           SELECT id FROM intake_events WHERE channel_id = @channel_id ORDER BY created_at DESC LIMIT @keep
+         )`,
+      ),
+      countByChannel: db.prepare(
+        `SELECT COUNT(*) as cnt FROM intake_events WHERE channel_id = ?`,
+      ),
+    };
+  }
+
+  create(event: Omit<IntakeEvent, "id" | "createdAt">): IntakeEvent {
+    const id = crypto.randomUUID();
+    const full: IntakeEvent = {
+      ...event,
+      id,
+      createdAt: new Date(),
+    };
+    this.stmts.insert.run({
+      id: full.id,
+      channel_id: full.channelId,
+      artifact_id: full.artifactId ?? null,
+      status: full.status,
+      payload: JSON.stringify(full.payload),
+      error: full.error ?? null,
+      created_at: full.createdAt.toISOString(),
+      processed_at: full.processedAt?.toISOString() ?? null,
+    });
+
+    // Enforce retention policy
+    const count = (this.stmts.countByChannel.get(full.channelId) as { cnt: number }).cnt;
+    if (count > PersistentIntakeEventStore.MAX_EVENTS_PER_CHANNEL) {
+      this.stmts.pruneOldest.run({
+        channel_id: full.channelId,
+        keep: PersistentIntakeEventStore.MAX_EVENTS_PER_CHANNEL,
+      });
+    }
+
+    return full;
+  }
+
+  get(id: string): IntakeEvent | undefined {
+    const row = this.stmts.getById.get(id) as IntakeEventRow | undefined;
+    return row ? rowToIntakeEvent(row) : undefined;
+  }
+
+  update(id: string, updates: Partial<Pick<IntakeEvent, "status" | "artifactId" | "error" | "processedAt">>): IntakeEvent {
+    const existing = this.get(id);
+    if (!existing) throw new Error(`Intake event ${id} not found`);
+
+    const updated: IntakeEvent = { ...existing, ...updates };
+    this.stmts.update.run({
+      id,
+      status: updated.status,
+      artifact_id: updated.artifactId ?? null,
+      error: updated.error ?? null,
+      processed_at: updated.processedAt?.toISOString() ?? null,
+    });
+    return updated;
+  }
+
+  listByChannel(channelId: string, limit = 50): IntakeEvent[] {
+    const rows = this.stmts.listByChannel.all(channelId, limit) as IntakeEventRow[];
+    return rows.map(rowToIntakeEvent);
+  }
+
+  listRecent(limit = 50): IntakeEvent[] {
+    const rows = this.stmts.listRecent.all(limit) as IntakeEventRow[];
+    return rows.map(rowToIntakeEvent);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// PersistentRegistryPollerVersionStore
+// ---------------------------------------------------------------------------
+
+/**
+ * Persists known registry versions so restarts don't re-trigger deployments
+ * for already-seen artifact versions.
+ */
+export class PersistentRegistryPollerVersionStore {
+  private stmts: {
+    upsert: Database.Statement;
+    listByChannel: Database.Statement;
+    deleteByChannel: Database.Statement;
+  };
+
+  constructor(private db: Database.Database) {
+    this.stmts = {
+      upsert: db.prepare(
+        `INSERT OR IGNORE INTO registry_poller_versions (channel_id, version_key, first_seen_at) VALUES (@channel_id, @version_key, @first_seen_at)`,
+      ),
+      listByChannel: db.prepare(
+        `SELECT version_key FROM registry_poller_versions WHERE channel_id = ?`,
+      ),
+      deleteByChannel: db.prepare(
+        `DELETE FROM registry_poller_versions WHERE channel_id = ?`,
+      ),
+    };
+  }
+
+  /** Record a version as known. Returns true if it was newly inserted (not previously seen). */
+  addVersion(channelId: string, versionKey: string): boolean {
+    const result = this.stmts.upsert.run({
+      channel_id: channelId,
+      version_key: versionKey,
+      first_seen_at: new Date().toISOString(),
+    });
+    return result.changes > 0;
+  }
+
+  /** Load all known version keys for a channel. */
+  getKnownVersions(channelId: string): Set<string> {
+    const rows = this.stmts.listByChannel.all(channelId) as { version_key: string }[];
+    return new Set(rows.map((r) => r.version_key));
+  }
+
+  /** Remove all known versions for a channel (e.g., when channel is deleted). */
+  clearChannel(channelId: string): void {
+    this.stmts.deleteByChannel.run(channelId);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// PersistentFleetDeploymentStore
+// ---------------------------------------------------------------------------
+
+interface FleetDeploymentRow {
+  id: string;
+  artifact_id: string;
+  artifact_version_id: string;
+  environment_id: string;
+  envoy_filter: string | null;
+  rollout_config: string;
+  representative_envoy_ids: string;
+  representative_plan_id: string | null;
+  status: string;
+  validation_result: string | null;
+  progress: string;
+  created_at: string;
+  updated_at: string;
+}
+
+function rowToFleetDeployment(row: FleetDeploymentRow): FleetDeployment {
+  return {
+    id: row.id,
+    artifactId: row.artifact_id,
+    artifactVersionId: row.artifact_version_id,
+    environmentId: row.environment_id,
+    envoyFilter: row.envoy_filter ? safeJsonParse(row.envoy_filter, [], { table: "fleet_deployments", rowId: row.id, column: "envoy_filter" }) : undefined,
+    rolloutConfig: safeJsonParse(row.rollout_config, {} as RolloutConfig, { table: "fleet_deployments", rowId: row.id, column: "rollout_config" }),
+    representativeEnvoyIds: safeJsonParse(row.representative_envoy_ids, [], { table: "fleet_deployments", rowId: row.id, column: "representative_envoy_ids" }),
+    representativePlanId: row.representative_plan_id ?? undefined,
+    status: row.status as FleetDeploymentStatus,
+    validationResult: row.validation_result ? safeJsonParse(row.validation_result, undefined, { table: "fleet_deployments", rowId: row.id, column: "validation_result" }) : undefined,
+    progress: safeJsonParse(row.progress, { totalEnvoys: 0, validated: 0, executing: 0, succeeded: 0, failed: 0, pending: 0 } as FleetProgress, { table: "fleet_deployments", rowId: row.id, column: "progress" }),
+    createdAt: new Date(row.created_at),
+    updatedAt: new Date(row.updated_at),
+  };
+}
+
+/**
+ * SQLite-backed fleet deployment store.
+ *
+ * Note: In-flight fleet operations that are mid-execution when the server
+ * crashes cannot be resumed — their status is persisted, but the active
+ * orchestration state (batch progress, in-flight envoy connections) is
+ * ephemeral. On restart, in-flight operations will appear as stale entries
+ * that users can inspect and manually re-trigger. Terminal states (completed,
+ * failed, rolled_back) are fully durable.
+ */
+export class PersistentFleetDeploymentStore {
+  private stmts: {
+    upsert: Database.Statement;
+    getById: Database.Statement;
+    list: Database.Statement;
+    deleteById: Database.Statement;
+  };
+
+  constructor(private db: Database.Database) {
+    this.stmts = {
+      upsert: db.prepare(
+        `INSERT INTO fleet_deployments (id, artifact_id, artifact_version_id, environment_id, envoy_filter, rollout_config, representative_envoy_ids, representative_plan_id, status, validation_result, progress, created_at, updated_at)
+         VALUES (@id, @artifact_id, @artifact_version_id, @environment_id, @envoy_filter, @rollout_config, @representative_envoy_ids, @representative_plan_id, @status, @validation_result, @progress, @created_at, @updated_at)
+         ON CONFLICT(id) DO UPDATE SET
+           status = excluded.status,
+           validation_result = excluded.validation_result,
+           progress = excluded.progress,
+           representative_envoy_ids = excluded.representative_envoy_ids,
+           representative_plan_id = excluded.representative_plan_id,
+           updated_at = excluded.updated_at`,
+      ),
+      getById: db.prepare(`SELECT * FROM fleet_deployments WHERE id = ?`),
+      list: db.prepare(`SELECT * FROM fleet_deployments ORDER BY created_at DESC`),
+      deleteById: db.prepare(`DELETE FROM fleet_deployments WHERE id = ?`),
+    };
+  }
+
+  create(deployment: FleetDeployment): FleetDeployment {
+    this.stmts.upsert.run({
+      id: deployment.id,
+      artifact_id: deployment.artifactId,
+      artifact_version_id: deployment.artifactVersionId,
+      environment_id: deployment.environmentId,
+      envoy_filter: deployment.envoyFilter ? JSON.stringify(deployment.envoyFilter) : null,
+      rollout_config: JSON.stringify(deployment.rolloutConfig),
+      representative_envoy_ids: JSON.stringify(deployment.representativeEnvoyIds),
+      representative_plan_id: deployment.representativePlanId ?? null,
+      status: deployment.status,
+      validation_result: deployment.validationResult ? JSON.stringify(deployment.validationResult) : null,
+      progress: JSON.stringify(deployment.progress),
+      created_at: deployment.createdAt.toISOString(),
+      updated_at: deployment.updatedAt.toISOString(),
+    });
+    return deployment;
+  }
+
+  getById(id: string): FleetDeployment | undefined {
+    const row = this.stmts.getById.get(id) as FleetDeploymentRow | undefined;
+    return row ? rowToFleetDeployment(row) : undefined;
+  }
+
+  update(deployment: FleetDeployment): FleetDeployment {
+    deployment.updatedAt = new Date();
+    this.stmts.upsert.run({
+      id: deployment.id,
+      artifact_id: deployment.artifactId,
+      artifact_version_id: deployment.artifactVersionId,
+      environment_id: deployment.environmentId,
+      envoy_filter: deployment.envoyFilter ? JSON.stringify(deployment.envoyFilter) : null,
+      rollout_config: JSON.stringify(deployment.rolloutConfig),
+      representative_envoy_ids: JSON.stringify(deployment.representativeEnvoyIds),
+      representative_plan_id: deployment.representativePlanId ?? null,
+      status: deployment.status,
+      validation_result: deployment.validationResult ? JSON.stringify(deployment.validationResult) : null,
+      progress: JSON.stringify(deployment.progress),
+      created_at: deployment.createdAt.toISOString(),
+      updated_at: deployment.updatedAt.toISOString(),
+    });
+    return deployment;
+  }
+
+  list(): FleetDeployment[] {
+    const rows = this.stmts.list.all() as FleetDeploymentRow[];
+    return rows.map(rowToFleetDeployment);
+  }
+
+  delete(id: string): boolean {
+    const result = this.stmts.deleteById.run(id);
+    return result.changes > 0;
   }
 }

@@ -9,7 +9,7 @@ import fastifyStatic from "@fastify/static";
 import fastifyFormBody from "@fastify/formbody";
 import fastifyMultipart from "@fastify/multipart";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { PersistentDecisionDebrief, openEntityDatabase, PersistentPartitionStore, PersistentEnvironmentStore, PersistentSettingsStore, PersistentDeploymentStore, PersistentArtifactStore, PersistentSecurityBoundaryStore, PersistentTelemetryStore, PersistentUserStore, PersistentRoleStore, PersistentUserRoleStore, PersistentSessionStore, PersistentIdpProviderStore, PersistentRoleMappingStore, LlmClient, ApiKeyStore } from "@synth-deploy/core";
+import { PersistentDecisionDebrief, openEntityDatabase, PersistentPartitionStore, PersistentEnvironmentStore, PersistentSettingsStore, PersistentDeploymentStore, PersistentArtifactStore, PersistentSecurityBoundaryStore, PersistentTelemetryStore, PersistentUserStore, PersistentRoleStore, PersistentUserRoleStore, PersistentSessionStore, PersistentIdpProviderStore, PersistentRoleMappingStore, PersistentApiKeyStore, PersistentEnvoyRegistryStore, PersistentRegistryPollerVersionStore, LlmClient } from "@synth-deploy/core";
 import type { Deployment, Artifact, ArtifactVersion, SecurityBoundary, Permission, RoleId } from "@synth-deploy/core";
 import { SynthAgent } from "./agent/synth-agent.js";
 import { EnvoyHealthChecker } from "./agent/health-checker.js";
@@ -65,7 +65,7 @@ const userStore = new PersistentUserStore(entityDb);
 const roleStore = new PersistentRoleStore(entityDb);
 const userRoleStore = new PersistentUserRoleStore(entityDb, roleStore);
 const sessionStore = new PersistentSessionStore(entityDb);
-const apiKeyStore = new ApiKeyStore();
+const apiKeyStore = new PersistentApiKeyStore(entityDb);
 const idpProviderStore = new PersistentIdpProviderStore(entityDb, idpEncryptionSecret);
 const roleMappingStore = new PersistentRoleMappingStore(entityDb);
 
@@ -93,7 +93,8 @@ if (!process.env.SYNTH_DATA_DIR) {
   console.warn("[Synth] WARNING: SYNTH_DATA_DIR is not set. Using default ./data directory.");
 }
 
-const envoyRegistry = new EnvoyRegistry();
+const envoyRegistryStore = new PersistentEnvoyRegistryStore(entityDb);
+const envoyRegistry = new EnvoyRegistry(envoyRegistryStore);
 
 // --- JWT secret (required) ---
 const jwtSecretEnv = process.env.SYNTH_JWT_SECRET;
@@ -680,7 +681,7 @@ registerUserRoutes(app, userStore, roleStore, userRoleStore);
 registerIdpRoutes(app, idpProviderStore, roleMappingStore, userStore, roleStore, userRoleStore, sessionStore, jwtSecret, { hasDedicatedEncryptionKey });
 
 // Fleet (large-scale) deployment orchestration
-const fleetStore = new FleetDeploymentStore();
+const fleetStore = new FleetDeploymentStore(entityDb);
 const fleetExecutor = new FleetExecutor(envoyRegistry, (url, token) => new EnvoyClient(url));
 registerFleetRoutes(app, fleetStore, envoyRegistry, deployments, fleetExecutor, debrief);
 
@@ -692,10 +693,11 @@ registerGraphRoutes(app, graphStore, graphInferenceEngine, envoyRegistry, artifa
 
 // --- Artifact Intake Pipeline ---
 
-const intakeChannelStore = new IntakeChannelStore();
-const intakeEventStore = new IntakeEventStore();
+const intakeChannelStore = new IntakeChannelStore(entityDb);
+const intakeEventStore = new IntakeEventStore(entityDb);
 const artifactAnalyzer = new ArtifactAnalyzer({ llm, debrief });
 const intakeProcessor = new IntakeProcessor(artifactStore, artifactAnalyzer);
+const registryPollerVersionStore = new PersistentRegistryPollerVersionStore(entityDb);
 const registryPoller = new RegistryPoller(async (channelId, payload) => {
   const event = intakeEventStore.create({ channelId, status: "processing", payload: payload as unknown as Record<string, unknown> });
   try {
@@ -704,7 +706,7 @@ const registryPoller = new RegistryPoller(async (channelId, payload) => {
   } catch (err) {
     intakeEventStore.update(event.id, { status: "failed", error: err instanceof Error ? err.message : "Processing failed", processedAt: new Date() });
   }
-});
+}, registryPollerVersionStore);
 registerIntakeRoutes(app, intakeChannelStore, intakeEventStore, intakeProcessor, registryPoller, artifactStore);
 
 // Start polling for any pre-existing enabled registry channels
