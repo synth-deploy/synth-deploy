@@ -7,6 +7,7 @@ import {
   listPartitions,
   listDeployments,
   listArtifacts,
+  updateEnvoy,
 } from "../../api.js";
 import type {
   EnvoyRegistryEntry,
@@ -15,7 +16,7 @@ import type {
 } from "../../api.js";
 import type { Environment, Partition, Deployment, Artifact } from "../../types.js";
 import { useCanvas } from "../../context/CanvasContext.js";
-import { useQuery } from "../../hooks/useQuery.js";
+import { useQuery, invalidateExact } from "../../hooks/useQuery.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
 
 interface Props {
@@ -160,6 +161,8 @@ export default function EnvoyDetailPanel({ envoyId, title }: Props) {
   const loading = l1 || l2 || l3;
   const [showEnvPicker, setShowEnvPicker] = useState(false);
   const [showPartPicker, setShowPartPicker] = useState(false);
+  const [localEnvIds, setLocalEnvIds] = useState<string[] | null>(null);
+  const [localPartIds, setLocalPartIds] = useState<string[] | null>(null);
 
   if (loading) {
     return (
@@ -177,12 +180,61 @@ export default function EnvoyDetailPanel({ envoyId, title }: Props) {
     );
   }
 
+  const effectiveEnvIds = localEnvIds ?? envoy.assignedEnvironments;
+  const effectivePartIds = localPartIds ?? (envoy.assignedPartitions ?? []);
+
   const assignedEnvs = (environments ?? []).filter(
-    (e) => envoy.assignedEnvironments.includes(e.id) || envoy.assignedEnvironments.includes(e.name)
+    (e) => effectiveEnvIds.includes(e.id) || effectiveEnvIds.includes(e.name)
+  );
+  const assignedParts = (partitions ?? []).filter(
+    (p) => effectivePartIds.includes(p.id) || effectivePartIds.includes(p.name)
   );
 
-  // assignedPartitions not yet in EnvoyRegistryEntry — placeholder
-  const assignedParts: Partition[] = [];
+  async function assignEnvironment(env: Environment) {
+    const next = [...effectiveEnvIds, env.id];
+    setLocalEnvIds(next);
+    setShowEnvPicker(false);
+    try {
+      await updateEnvoy(envoyId, { assignedEnvironments: next });
+      invalidateExact(`envoyHealth:${envoyId}`);
+    } catch {
+      setLocalEnvIds(effectiveEnvIds);
+    }
+  }
+
+  async function removeEnvironment(env: Environment) {
+    const next = effectiveEnvIds.filter((id) => id !== env.id && id !== env.name);
+    setLocalEnvIds(next);
+    try {
+      await updateEnvoy(envoyId, { assignedEnvironments: next });
+      invalidateExact(`envoyHealth:${envoyId}`);
+    } catch {
+      setLocalEnvIds(effectiveEnvIds);
+    }
+  }
+
+  async function assignPartition(part: Partition) {
+    const next = [...effectivePartIds, part.id];
+    setLocalPartIds(next);
+    setShowPartPicker(false);
+    try {
+      await updateEnvoy(envoyId, { assignedPartitions: next });
+      invalidateExact(`envoyHealth:${envoyId}`);
+    } catch {
+      setLocalPartIds(effectivePartIds);
+    }
+  }
+
+  async function removePartition(part: Partition) {
+    const next = effectivePartIds.filter((id) => id !== part.id && id !== part.name);
+    setLocalPartIds(next);
+    try {
+      await updateEnvoy(envoyId, { assignedPartitions: next });
+      invalidateExact(`envoyHealth:${envoyId}`);
+    } catch {
+      setLocalPartIds(effectivePartIds);
+    }
+  }
 
   const envLabel = envoy.assignedEnvironments[0] ?? "No environment";
 
@@ -269,12 +321,12 @@ export default function EnvoyDetailPanel({ envoyId, title }: Props) {
             </div>
             {showEnvPicker && (
               <div style={{ marginBottom: 8, display: "flex", flexDirection: "column", gap: 2 }}>
-                {(environments ?? []).map((env) => (
+                {(environments ?? []).filter((e) => !effectiveEnvIds.includes(e.id) && !effectiveEnvIds.includes(e.name)).map((env) => (
                   <button
                     key={env.id}
                     className="canvas-activity-row"
                     style={{ fontSize: 12, padding: "4px 8px", textAlign: "left" }}
-                    onClick={() => setShowEnvPicker(false)}
+                    onClick={() => assignEnvironment(env)}
                   >
                     {env.name}
                   </button>
@@ -291,7 +343,7 @@ export default function EnvoyDetailPanel({ envoyId, title }: Props) {
                   >
                     {env.name}
                   </button>
-                  <span style={{ fontSize: 10, color: "var(--text-muted)", cursor: "pointer" }}>✕</span>
+                  <span style={{ fontSize: 10, color: "var(--text-muted)", cursor: "pointer" }} onClick={() => removeEnvironment(env)}>✕</span>
                 </div>
               ))
             ) : (
@@ -315,12 +367,12 @@ export default function EnvoyDetailPanel({ envoyId, title }: Props) {
             </div>
             {showPartPicker && (
               <div style={{ marginBottom: 8, display: "flex", flexDirection: "column", gap: 2 }}>
-                {(partitions ?? []).map((part) => (
+                {(partitions ?? []).filter((p) => !effectivePartIds.includes(p.id) && !effectivePartIds.includes(p.name)).map((part) => (
                   <button
                     key={part.id}
                     className="canvas-activity-row"
                     style={{ fontSize: 12, padding: "4px 8px", textAlign: "left" }}
-                    onClick={() => setShowPartPicker(false)}
+                    onClick={() => assignPartition(part)}
                   >
                     {part.name}
                   </button>
@@ -337,7 +389,7 @@ export default function EnvoyDetailPanel({ envoyId, title }: Props) {
                   >
                     {part.name}
                   </button>
-                  <span style={{ fontSize: 10, color: "var(--text-muted)", cursor: "pointer" }}>✕</span>
+                  <span style={{ fontSize: 10, color: "var(--text-muted)", cursor: "pointer" }} onClick={() => removePartition(part)}>✕</span>
                 </div>
               ))
             ) : (

@@ -577,6 +577,7 @@ export interface EnvoyRegistryEntry {
   os: string | null;
   lastSeen: string | null;
   assignedEnvironments: string[];
+  assignedPartitions: string[];
   summary: {
     totalDeployments: number;
     succeeded: number;
@@ -597,6 +598,17 @@ export async function listEnvoys(): Promise<EnvoyRegistryEntry[]> {
 
 export async function getEnvoyHealth(id: string): Promise<EnvoyRegistryEntry> {
   const data = await fetchJson<{ envoy: EnvoyRegistryEntry }>(`/api/envoys/${id}/health`);
+  return data.envoy;
+}
+
+export async function updateEnvoy(
+  id: string,
+  updates: { assignedEnvironments?: string[]; assignedPartitions?: string[]; name?: string; url?: string },
+): Promise<EnvoyRegistryEntry> {
+  const data = await fetchJson<{ envoy: EnvoyRegistryEntry }>(`/api/envoys/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(updates),
+  });
   return data.envoy;
 }
 

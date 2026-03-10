@@ -14,6 +14,8 @@ export interface EnvoyRegistration {
   token: string;
   /** Environments this Envoy is assigned to (empty = available for any) */
   assignedEnvironments: string[];
+  /** Partitions this Envoy is assigned to */
+  assignedPartitions: string[];
   registeredAt: string;
   lastHealthCheck: string | null;
   lastHealthStatus: "healthy" | "degraded" | "unreachable" | null;
@@ -47,6 +49,7 @@ export class EnvoyRegistry {
     name: string;
     url: string;
     assignedEnvironments?: string[];
+    assignedPartitions?: string[];
   }): EnvoyRegistration {
     const id = crypto.randomUUID();
     const token = crypto.randomBytes(32).toString("hex");
@@ -57,6 +60,7 @@ export class EnvoyRegistry {
       url: params.url,
       token,
       assignedEnvironments: params.assignedEnvironments ?? [],
+      assignedPartitions: params.assignedPartitions ?? [],
       registeredAt: new Date().toISOString(),
       lastHealthCheck: null,
       lastHealthStatus: null,
@@ -91,6 +95,7 @@ export class EnvoyRegistry {
     name?: string;
     url?: string;
     assignedEnvironments?: string[];
+    assignedPartitions?: string[];
   }): EnvoyRegistration | undefined {
     const existing = this.envoys.get(id);
     if (!existing) return undefined;
@@ -99,6 +104,9 @@ export class EnvoyRegistry {
     if (updates.url !== undefined) existing.url = updates.url;
     if (updates.assignedEnvironments !== undefined) {
       existing.assignedEnvironments = updates.assignedEnvironments;
+    }
+    if (updates.assignedPartitions !== undefined) {
+      existing.assignedPartitions = updates.assignedPartitions;
     }
 
     return existing;

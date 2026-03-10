@@ -40,6 +40,7 @@ export function registerEnvoyRoutes(
         summary: e.summary,
         readiness: e.readiness,
         assignedEnvironments: e.assignedEnvironments,
+        assignedPartitions: e.assignedPartitions,
       })),
     };
   });
@@ -50,6 +51,7 @@ export function registerEnvoyRoutes(
       name: string;
       url: string;
       assignedEnvironments?: string[];
+      assignedPartitions?: string[];
     };
 
     if (!body.name || !body.url) {
@@ -60,6 +62,7 @@ export function registerEnvoyRoutes(
       name: body.name,
       url: body.url,
       assignedEnvironments: body.assignedEnvironments,
+      assignedPartitions: body.assignedPartitions,
     });
 
     // Probe health immediately after registration
@@ -74,6 +77,7 @@ export function registerEnvoyRoutes(
         url: registration.url,
         token: registration.token,
         assignedEnvironments: registration.assignedEnvironments,
+        assignedPartitions: registration.assignedPartitions,
         registeredAt: registration.registeredAt,
         health: entry?.health ?? "Unreachable",
       },
@@ -101,6 +105,7 @@ export function registerEnvoyRoutes(
         summary: entry.summary,
         readiness: entry.readiness,
         assignedEnvironments: entry.assignedEnvironments,
+        assignedPartitions: entry.assignedPartitions,
       },
     };
   });
@@ -112,6 +117,7 @@ export function registerEnvoyRoutes(
       name?: string;
       url?: string;
       assignedEnvironments?: string[];
+      assignedPartitions?: string[];
     };
 
     const updated = registry.update(id, body);
@@ -125,6 +131,7 @@ export function registerEnvoyRoutes(
         name: updated.name,
         url: updated.url,
         assignedEnvironments: updated.assignedEnvironments,
+        assignedPartitions: updated.assignedPartitions,
       },
     };
   });
