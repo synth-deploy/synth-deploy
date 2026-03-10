@@ -96,6 +96,7 @@ export default function SettingsPanel({ title }: Props) {
   const [settingsTab, setSettingsTab] = useState<Tab>("general");
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   // MCP sub-state
   const [mcpNewName, setMcpNewName] = useState("");
@@ -191,12 +192,15 @@ export default function SettingsPanel({ title }: Props) {
   async function handleSave() {
     if (!settings || saving) return;
     setSaving(true);
+    setSaveError(null);
     try {
       const updated = await updateSettings(settings);
       setSettings(updated);
       setSavedAt(new Date().toLocaleTimeString());
       await refreshGlobalSettings();
       setTimeout(() => setSavedAt(null), 3000);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Save failed");
     } finally {
       setSaving(false);
     }
@@ -966,6 +970,7 @@ export default function SettingsPanel({ title }: Props) {
           {isIdpOrIntakeTab ? "Identity and intake changes apply immediately." : "Changes are not saved until you click Save."}
         </span>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          {saveError && <span style={{ fontSize: 12, color: "var(--error)", fontFamily: "var(--font-mono)" }}>{saveError}</span>}
           {savedAt && <span style={{ fontSize: 12, color: "var(--accent)", fontFamily: "var(--font-mono)" }}>Saved at {savedAt}</span>}
           <button
             className="btn btn-primary"
