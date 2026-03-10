@@ -191,7 +191,7 @@ export function buildPostmortemPrompt(
   lines.push(`Status: ${deployment.status}`);
   lines.push(`Version: ${deployment.version}`);
   lines.push(`Artifact: ${deployment.artifactId}`);
-  lines.push(`Environment: ${deployment.environmentId}`);
+  if (deployment.environmentId) lines.push(`Environment: ${deployment.environmentId}`);
   if (deployment.partitionId) {
     lines.push(`Partition: ${deployment.partitionId}`);
   }

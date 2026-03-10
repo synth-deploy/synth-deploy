@@ -418,11 +418,10 @@ export function registerDeploymentRoutes(
       const now = new Date();
       const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
-      // Count recent deployments to the same environment
-      const recentDeploymentsToEnv = deployments.countByEnvironment(
-        deployment.environmentId,
-        twentyFourHoursAgo,
-      );
+      // Count recent deployments to the same environment (only meaningful when environmentId is set)
+      const recentDeploymentsToEnv = deployment.environmentId
+        ? deployments.countByEnvironment(deployment.environmentId, twentyFourHoursAgo)
+        : 0;
 
       // Check if the same artifact version was previously rolled back
       const previouslyRolledBack = deployment.version
@@ -434,16 +433,21 @@ export function registerDeploymentRoutes(
         : false;
 
       // Check for other in-progress deployments to the same environment
-      const allEnvDeployments = deployments.list().filter(
-        (d) =>
-          d.environmentId === deployment.environmentId &&
-          d.id !== deployment.id &&
-          ((d.status as string) === "running" || (d.status as string) === "approved" || (d.status as string) === "awaiting_approval"),
-      );
-      const conflictingDeployments = allEnvDeployments.map((d) => d.id);
+      const conflictingDeployments = deployment.environmentId
+        ? deployments.list()
+            .filter(
+              (d) =>
+                d.environmentId === deployment.environmentId &&
+                d.id !== deployment.id &&
+                ((d.status as string) === "running" || (d.status as string) === "approved" || (d.status as string) === "awaiting_approval"),
+            )
+            .map((d) => d.id)
+        : [];
 
       // Find last deployment to the same environment
-      const lastDeploy = deployments.findLatestByEnvironment(deployment.environmentId);
+      const lastDeploy = deployment.environmentId
+        ? deployments.findLatestByEnvironment(deployment.environmentId)
+        : undefined;
       const lastDeploymentToEnv = lastDeploy && lastDeploy.id !== deployment.id
         ? {
             id: lastDeploy.id,
@@ -632,27 +636,33 @@ function computeRecommendation(
     }
   }
 
-  // Check for conflicting deployments
-  const conflicting = store.list().filter(
-    (d) =>
-      d.environmentId === deployment.environmentId &&
-      d.id !== deployment.id &&
-      ((d.status as string) === "running" || (d.status as string) === "approved"),
-  );
-  if (conflicting.length > 0) {
-    verdict = "hold";
-    factors.push(`${conflicting.length} other deployment(s) in progress for this environment`);
+  // Check for conflicting deployments (only meaningful when environmentId is set)
+  if (deployment.environmentId) {
+    const conflicting = store.list().filter(
+      (d) =>
+        d.environmentId === deployment.environmentId &&
+        d.id !== deployment.id &&
+        ((d.status as string) === "running" || (d.status as string) === "approved"),
+    );
+    if (conflicting.length > 0) {
+      verdict = "hold";
+      factors.push(`${conflicting.length} other deployment(s) in progress for this environment`);
+    }
   }
 
   // Check deployment frequency
-  const recentCount = store.countByEnvironment(deployment.environmentId, twentyFourHoursAgo);
+  const recentCount = deployment.environmentId
+    ? store.countByEnvironment(deployment.environmentId, twentyFourHoursAgo)
+    : 0;
   if (recentCount > 5) {
     if (verdict === "proceed") verdict = "caution";
     factors.push(`High deployment frequency: ${recentCount} deployments in the last 24h`);
   }
 
   // Check last deployment status
-  const lastDeploy = store.findLatestByEnvironment(deployment.environmentId);
+  const lastDeploy = deployment.environmentId
+    ? store.findLatestByEnvironment(deployment.environmentId)
+    : undefined;
   if (lastDeploy && lastDeploy.id !== deployment.id) {
     if ((lastDeploy.status as string) === "failed" || (lastDeploy.status as string) === "rolled_back") {
       if (verdict === "proceed") verdict = "caution";

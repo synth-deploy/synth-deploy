@@ -103,7 +103,7 @@ export function openEntityDatabase(dbPath: string): Database.Database {
       artifact_id TEXT NOT NULL,
       artifact_version_id TEXT,
       envoy_id TEXT,
-      environment_id TEXT NOT NULL,
+      environment_id TEXT,
       partition_id TEXT,
       version TEXT NOT NULL,
       status TEXT NOT NULL,
@@ -121,6 +121,45 @@ export function openEntityDatabase(dbPath: string): Database.Database {
     CREATE INDEX IF NOT EXISTS idx_deployments_partition ON deployments(partition_id);
     CREATE INDEX IF NOT EXISTS idx_deployments_artifact ON deployments(artifact_id);
     CREATE INDEX IF NOT EXISTS idx_deployments_status ON deployments(status);
+  `);
+
+  // Migration: drop NOT NULL on environment_id to support partition/envoy-scoped deployments
+  const colInfo = db.prepare(`PRAGMA table_info(deployments)`).all() as Array<{ name: string; notnull: number }>;
+  const envCol = colInfo.find((c) => c.name === "environment_id");
+  if (envCol?.notnull) {
+    db.exec(`
+      PRAGMA foreign_keys = OFF;
+      ALTER TABLE deployments RENAME TO _deployments_old;
+      CREATE TABLE deployments (
+        id TEXT PRIMARY KEY,
+        artifact_id TEXT NOT NULL,
+        artifact_version_id TEXT,
+        envoy_id TEXT,
+        environment_id TEXT,
+        partition_id TEXT,
+        version TEXT NOT NULL,
+        status TEXT NOT NULL,
+        variables TEXT NOT NULL DEFAULT '{}',
+        plan TEXT,
+        rollback_plan TEXT,
+        execution_record TEXT,
+        approved_by TEXT,
+        approved_at TEXT,
+        debrief_entry_ids TEXT NOT NULL DEFAULT '[]',
+        created_at TEXT NOT NULL,
+        completed_at TEXT,
+        failure_reason TEXT
+      );
+      INSERT INTO deployments SELECT * FROM _deployments_old;
+      DROP TABLE _deployments_old;
+      CREATE INDEX IF NOT EXISTS idx_deployments_partition ON deployments(partition_id);
+      CREATE INDEX IF NOT EXISTS idx_deployments_artifact ON deployments(artifact_id);
+      CREATE INDEX IF NOT EXISTS idx_deployments_status ON deployments(status);
+      PRAGMA foreign_keys = ON;
+    `);
+  }
+
+  db.exec(`
 
     CREATE TABLE IF NOT EXISTS artifacts (
       id TEXT PRIMARY KEY,
@@ -612,7 +651,7 @@ interface DeploymentRow {
   artifact_id: string;
   artifact_version_id: string | null;
   envoy_id: string | null;
-  environment_id: string;
+  environment_id: string | null;
   partition_id: string | null;
   version: string;
   status: string;
@@ -632,7 +671,7 @@ function rowToDeployment(row: DeploymentRow): Deployment {
   const deployment: Deployment = {
     id: row.id,
     artifactId: row.artifact_id,
-    environmentId: row.environment_id,
+    environmentId: row.environment_id ?? undefined,
     version: row.version,
     status: row.status as Deployment["status"],
     variables: safeJsonParse(row.variables, {}, { table: "deployments", rowId: row.id, column: "variables" }),

@@ -108,7 +108,7 @@ export interface Deployment {
   artifactId: ArtifactId;
   artifactVersionId?: ArtifactVersionId;
   envoyId?: EnvoyId;
-  environmentId: EnvironmentId;
+  environmentId?: EnvironmentId;
   partitionId?: PartitionId;
   version: string;
   status: DeploymentStatus;
