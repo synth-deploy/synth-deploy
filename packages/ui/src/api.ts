@@ -596,6 +596,14 @@ export async function listEnvoys(): Promise<EnvoyRegistryEntry[]> {
   return data.envoys;
 }
 
+export async function registerEnvoy(name: string, url: string): Promise<EnvoyRegistryEntry> {
+  const data = await fetchJson<{ envoy: EnvoyRegistryEntry }>("/api/envoys", {
+    method: "POST",
+    body: JSON.stringify({ name, url }),
+  });
+  return data.envoy;
+}
+
 export async function getEnvoyHealth(id: string): Promise<EnvoyRegistryEntry> {
   const data = await fetchJson<{ envoy: EnvoyRegistryEntry }>(`/api/envoys/${id}/health`);
   return data.envoy;

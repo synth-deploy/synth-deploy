@@ -54,10 +54,11 @@ still on disk. Delete it for a genuinely clean start:
 rm -rf data/ .envoy/
 ```
 
-`data/` is the server's SQLite directory (default `SYNTH_DATA_DIR`).
-`.envoy/` is where the local envoy stores its knowledge database and deployment workspaces
-(default `ENVOY_BASE_DIR` — set by the `ENVOY_BASE_DIR` env var or defaults to `.envoy/` in
-the envoy's working directory).
+This works because the integration testing section of `.env` pins both data directories to the
+repo root via `SYNTH_DATA_DIR=data` and `ENVOY_BASE_DIR=.envoy`. Without those settings, npm
+workspace scripts run from each package's own directory, putting data in
+`packages/server/data/` and `packages/envoy/.envoy/` — which is hard to find and easy to miss
+when wiping.
 
 ---
 
@@ -98,9 +99,11 @@ precedence. Watch for:
 
 1. Open `http://localhost:5173`
 2. Log in (first run: create an account — RBAC is seeded but auth is local)
-3. Go to **Envoys** → **Register Envoy**
-4. Name: `local`, URL: `http://localhost:3001`
-5. The envoy status should show as healthy
+3. Go to the **Topology** tab (or click the health pill in the header)
+4. Click **+ Add Envoy** (top right)
+5. Switch to the **Manual** tab
+6. Name: `local`, URL: `http://localhost:3001`
+7. Click **Connect** — the envoy status should show as healthy
 
 ---
 
