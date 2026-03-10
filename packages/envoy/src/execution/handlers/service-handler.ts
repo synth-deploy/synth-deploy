@@ -1,6 +1,7 @@
+import type { PlannedStep } from "@synth-deploy/core";
 import type { Platform } from "../platform.js";
 import type { PlatformAdapter } from "../platform.js";
-import type { OperationHandler, HandlerResult } from "../operation-registry.js";
+import type { OperationHandler, HandlerResult, DryRunResult } from "../operation-registry.js";
 
 // ---------------------------------------------------------------------------
 // ServiceHandler — start/stop/restart system services
@@ -91,5 +92,87 @@ export class ServiceHandler implements OperationHandler {
     }
 
     return true;
+  }
+
+  async dryRun(
+    step: PlannedStep,
+    _predictedOutcomes: Map<number, Record<string, unknown>>,
+  ): Promise<DryRunResult> {
+    const preconditions: DryRunResult["preconditions"] = [];
+    const lower = step.action.toLowerCase();
+    const target = step.target;
+    const unknowns: string[] = [];
+
+    try {
+      // Check if the service exists in the service manager
+      const status = await this.adapter.serviceManager.status(target);
+
+      preconditions.push({
+        check: "service-exists",
+        passed: true,
+        detail: `Service "${target}" found in service manager — currently ${status.running ? "running" : "stopped"}`,
+      });
+
+      // For start: warn if already running (not a failure, but notable)
+      if (lower.includes("start") && !lower.includes("restart")) {
+        if (status.running) {
+          preconditions.push({
+            check: "service-state",
+            passed: true,
+            detail: `Service "${target}" is already running — start will be a no-op or restart`,
+          });
+        } else {
+          preconditions.push({
+            check: "service-state",
+            passed: true,
+            detail: `Service "${target}" is stopped — ready to start`,
+          });
+        }
+      }
+
+      // For stop: check it's actually running
+      if (lower.includes("stop")) {
+        preconditions.push({
+          check: "service-state",
+          passed: true,
+          detail: status.running
+            ? `Service "${target}" is running — ready to stop`
+            : `Service "${target}" is already stopped — stop will be a no-op`,
+        });
+      }
+
+      unknowns.push(
+        `Actual ${lower.includes("restart") ? "restart" : lower.includes("stop") ? "stop" : "start"} success depends on service configuration and runtime state`,
+      );
+
+      const allPassed = preconditions.every((p) => p.passed);
+
+      return {
+        canExecute: allPassed,
+        preconditions,
+        predictedOutcome: {
+          serviceState: lower.includes("stop") ? "stopped" : "running",
+          serviceName: target,
+        },
+        fidelity: "speculative",
+        recoverable: true,
+        unknowns,
+      };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      preconditions.push({
+        check: "service-exists",
+        passed: false,
+        detail: `Service "${target}" not found in service manager: ${message}`,
+      });
+
+      return {
+        canExecute: false,
+        preconditions,
+        fidelity: "speculative",
+        recoverable: true,
+        unknowns: [`Service "${target}" could not be queried — it may not be installed`],
+      };
+    }
   }
 }

@@ -1,3 +1,4 @@
+import type { PlannedStep } from "@synth-deploy/core";
 import type { Platform } from "./platform.js";
 
 // ---------------------------------------------------------------------------
@@ -11,6 +12,23 @@ export interface HandlerResult {
   success: boolean;
   output: string;
   error?: string;
+}
+
+/**
+ * Result of a handler's dry-run precondition check against real system state.
+ * Used to validate plan steps before presenting them to the user.
+ */
+export interface DryRunResult {
+  canExecute: boolean;
+  preconditions: Array<{ check: string; passed: boolean; detail: string }>;
+  /** State changes this step would produce — fed into subsequent steps' context */
+  predictedOutcome?: Record<string, unknown>;
+  /** How confident the dry-run is in its prediction */
+  fidelity: "deterministic" | "speculative" | "unknown";
+  /** Whether the planner can work around this failure */
+  recoverable: boolean;
+  /** What couldn't be verified */
+  unknowns?: string[];
 }
 
 /**
@@ -63,6 +81,20 @@ export interface OperationHandler {
    * actually took effect.
    */
   verify?(action: string, target: string): Promise<boolean>;
+
+  /**
+   * Dry-run precondition check: validates that a planned step can
+   * execute against the current system state without actually making
+   * changes. Used to ground plan confidence before presenting to users.
+   *
+   * The predictedOutcomes map contains predicted state changes from
+   * preceding steps (e.g., directories that would be created), allowing
+   * the handler to account for not-yet-executed earlier steps.
+   */
+  dryRun(
+    step: PlannedStep,
+    predictedOutcomes: Map<number, Record<string, unknown>>,
+  ): Promise<DryRunResult>;
 }
 
 // ---------------------------------------------------------------------------

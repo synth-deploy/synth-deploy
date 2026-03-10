@@ -1,7 +1,8 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import type { PlannedStep } from "@synth-deploy/core";
 import type { Platform } from "../platform.js";
-import type { OperationHandler, HandlerResult } from "../operation-registry.js";
+import type { OperationHandler, HandlerResult, DryRunResult } from "../operation-registry.js";
 
 // ---------------------------------------------------------------------------
 // ConfigHandler — template substitution and config transforms
@@ -71,6 +72,99 @@ export class ConfigHandler implements OperationHandler {
       return !content.includes("{{");
     } catch {
       return false;
+    }
+  }
+
+  async dryRun(
+    step: PlannedStep,
+    _predictedOutcomes: Map<number, Record<string, unknown>>,
+  ): Promise<DryRunResult> {
+    const preconditions: DryRunResult["preconditions"] = [];
+    const target = step.target;
+
+    try {
+      // Check that the template source exists and is readable
+      let templateContent: string | null = null;
+      try {
+        templateContent = await fs.readFile(target, "utf-8");
+        preconditions.push({
+          check: "template-readable",
+          passed: true,
+          detail: `Template/config file "${target}" exists and is readable (${templateContent.length} bytes)`,
+        });
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        preconditions.push({
+          check: "template-readable",
+          passed: false,
+          detail: `Cannot read template/config file "${target}": ${message}`,
+        });
+      }
+
+      // If we could read the template, check for unresolved variables
+      if (templateContent !== null) {
+        const pattern = /\{\{(\w+)\}\}/g;
+        const required = new Set<string>();
+        let match: RegExpExecArray | null;
+        while ((match = pattern.exec(templateContent)) !== null) {
+          required.add(match[1]);
+        }
+
+        if (required.size > 0) {
+          preconditions.push({
+            check: "template-variables-present",
+            passed: true,
+            detail: `Template contains ${required.size} variable(s) requiring substitution: ${[...required].join(", ")}`,
+          });
+        } else {
+          preconditions.push({
+            check: "template-variables-present",
+            passed: true,
+            detail: `Template contains no {{variable}} patterns — no substitution needed`,
+          });
+        }
+      }
+
+      // Check output directory is writable
+      const outputDir = path.dirname(target);
+      try {
+        await fs.access(outputDir, (await import("node:fs")).constants.W_OK);
+        preconditions.push({
+          check: "output-directory-writable",
+          passed: true,
+          detail: `Output directory "${outputDir}" is writable`,
+        });
+      } catch {
+        preconditions.push({
+          check: "output-directory-writable",
+          passed: false,
+          detail: `Output directory "${outputDir}" is not writable — config output will fail`,
+        });
+      }
+
+      const allPassed = preconditions.every((p) => p.passed);
+
+      return {
+        canExecute: allPassed,
+        preconditions,
+        predictedOutcome: { configWritten: target },
+        fidelity: "deterministic",
+        recoverable: true,
+      };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      return {
+        canExecute: false,
+        preconditions: [
+          {
+            check: "dry-run-error",
+            passed: false,
+            detail: `Dry-run check failed unexpectedly: ${message}`,
+          },
+        ],
+        fidelity: "deterministic",
+        recoverable: true,
+      };
     }
   }
 

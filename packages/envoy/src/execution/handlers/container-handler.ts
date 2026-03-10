@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
+import type { PlannedStep } from "@synth-deploy/core";
 import type { Platform } from "../platform.js";
-import type { OperationHandler, HandlerResult } from "../operation-registry.js";
+import type { OperationHandler, HandlerResult, DryRunResult } from "../operation-registry.js";
 
 // ---------------------------------------------------------------------------
 // ContainerHandler — Docker and Docker Compose operations
@@ -145,6 +146,116 @@ export class ContainerHandler implements OperationHandler {
       return true;
     } catch {
       return false;
+    }
+  }
+
+  async dryRun(
+    step: PlannedStep,
+    _predictedOutcomes: Map<number, Record<string, unknown>>,
+  ): Promise<DryRunResult> {
+    const preconditions: DryRunResult["preconditions"] = [];
+    const lower = step.action.toLowerCase();
+    const target = step.target;
+    const unknowns: string[] = [];
+
+    try {
+      // Check if docker CLI is available
+      const dockerAvailable = await new Promise<boolean>((resolve) => {
+        execFile("docker", ["version", "--format", "{{.Server.Version}}"], { timeout: 5000 }, (error) => {
+          resolve(!error);
+        });
+      });
+
+      preconditions.push({
+        check: "docker-available",
+        passed: dockerAvailable,
+        detail: dockerAvailable
+          ? `Docker daemon is running and accessible`
+          : `Docker daemon is not running or docker CLI is not installed — all container operations will fail`,
+      });
+
+      if (!dockerAvailable) {
+        return {
+          canExecute: false,
+          preconditions,
+          fidelity: "speculative",
+          recoverable: false,
+          unknowns: ["Docker is required but not available"],
+        };
+      }
+
+      // For pull: check if image is already available locally
+      if (lower.includes("pull") || lower.includes("image")) {
+        const imageExists = await new Promise<boolean>((resolve) => {
+          execFile("docker", ["image", "inspect", target], { timeout: 10000 }, (error) => {
+            resolve(!error);
+          });
+        });
+
+        preconditions.push({
+          check: "image-available",
+          passed: true, // Pull will fetch it if not local
+          detail: imageExists
+            ? `Image "${target}" is already available locally — pull will update if newer`
+            : `Image "${target}" is not available locally — will be pulled from registry`,
+        });
+      }
+
+      // For run/start: check for container name collision
+      if (lower.includes("run") || lower.includes("start")) {
+        const containerExists = await new Promise<{ exists: boolean; running: boolean }>((resolve) => {
+          execFile("docker", ["inspect", "--format", "{{.State.Running}}", target], { timeout: 5000 }, (error, stdout) => {
+            if (error) {
+              resolve({ exists: false, running: false });
+            } else {
+              resolve({ exists: true, running: stdout.trim() === "true" });
+            }
+          });
+        });
+
+        if (containerExists.exists) {
+          preconditions.push({
+            check: "container-name-collision",
+            passed: !containerExists.running || lower.includes("start"),
+            detail: containerExists.running
+              ? `Container "${target}" already exists and is running — name collision will cause failure`
+              : `Container "${target}" exists but is stopped — start will succeed`,
+          });
+        }
+      }
+
+      unknowns.push(
+        `Container startup success depends on image configuration and runtime environment`,
+      );
+
+      const allPassed = preconditions.every((p) => p.passed);
+
+      return {
+        canExecute: allPassed,
+        preconditions,
+        predictedOutcome: {
+          containerAction: lower.includes("stop") ? "stopped" : lower.includes("pull") ? "pulled" : "running",
+          containerName: target,
+        },
+        fidelity: "speculative",
+        recoverable: true,
+        unknowns,
+      };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      return {
+        canExecute: false,
+        preconditions: [
+          {
+            check: "dry-run-error",
+            passed: false,
+            detail: `Dry-run check failed unexpectedly: ${message}`,
+          },
+        ],
+        fidelity: "speculative",
+        recoverable: true,
+        unknowns: [`Could not verify container environment for "${target}"`],
+      };
     }
   }
 

@@ -3,7 +3,7 @@ import type {
   SecurityBoundary,
   DebriefWriter,
 } from "@synth-deploy/core";
-import type { DefaultOperationRegistry } from "./operation-registry.js";
+import type { DefaultOperationRegistry, DryRunResult } from "./operation-registry.js";
 import type { BoundaryValidator } from "./boundary-validator.js";
 import type { Platform } from "./platform.js";
 
@@ -66,6 +66,33 @@ export interface PlanExecutionResult {
   totalDurationMs: number;
 }
 
+/**
+ * Aggregate result of dry-running an entire plan. Contains per-step results
+ * and an overall confidence assessment.
+ */
+export interface DryRunPlanResult {
+  /** True if all steps passed their precondition checks */
+  allPassed: boolean;
+  /** Per-step dry-run results, in plan order */
+  stepResults: Array<{
+    step: PlannedStep;
+    stepIndex: number;
+    result: DryRunResult;
+  }>;
+  /** Steps that failed precondition checks */
+  failures: Array<{
+    step: PlannedStep;
+    stepIndex: number;
+    result: DryRunResult;
+  }>;
+  /** Overall confidence: worst fidelity across all steps */
+  overallFidelity: "deterministic" | "speculative" | "unknown";
+  /** Whether all failures are recoverable by the planner */
+  allRecoverable: boolean;
+  /** All unknowns aggregated across steps */
+  allUnknowns: string[];
+}
+
 // ---------------------------------------------------------------------------
 // DefaultOperationExecutor — orchestrates plan execution
 // ---------------------------------------------------------------------------
@@ -90,6 +117,86 @@ export class DefaultOperationExecutor {
     private platform: Platform,
     private debrief?: DebriefWriter,
   ) {}
+
+  /**
+   * Dry-run an entire plan: walk steps in order, call handler.dryRun()
+   * on each, feed predicted outcomes from earlier steps into later ones.
+   * Returns aggregate results with overall confidence assessment.
+   *
+   * This is read-only — no side effects on the target system.
+   */
+  async executeDryRun(steps: PlannedStep[]): Promise<DryRunPlanResult> {
+    const stepResults: DryRunPlanResult["stepResults"] = [];
+    const failures: DryRunPlanResult["failures"] = [];
+    const predictedOutcomes = new Map<number, Record<string, unknown>>();
+    const allUnknowns: string[] = [];
+    let worstFidelity: DryRunPlanResult["overallFidelity"] = "deterministic";
+    let allRecoverable = true;
+
+    for (let i = 0; i < steps.length; i++) {
+      const step = steps[i];
+
+      // Resolve handler for this step
+      const handler = this.registry.resolve(step.action, this.platform);
+      if (!handler) {
+        const result: DryRunResult = {
+          canExecute: false,
+          preconditions: [
+            {
+              check: "handler-exists",
+              passed: false,
+              detail:
+                `No handler registered for action "${step.action}" on platform ` +
+                `"${this.platform}". The action must contain a recognized keyword.`,
+            },
+          ],
+          fidelity: "deterministic",
+          recoverable: true,
+        };
+        stepResults.push({ step, stepIndex: i, result });
+        failures.push({ step, stepIndex: i, result });
+        continue;
+      }
+
+      // Run the handler's dry-run check with predicted outcomes from prior steps
+      const result = await handler.dryRun(step, predictedOutcomes);
+
+      stepResults.push({ step, stepIndex: i, result });
+
+      if (!result.canExecute) {
+        failures.push({ step, stepIndex: i, result });
+        if (!result.recoverable) {
+          allRecoverable = false;
+        }
+      }
+
+      // Record predicted outcome for subsequent steps
+      if (result.predictedOutcome) {
+        predictedOutcomes.set(i, result.predictedOutcome);
+      }
+
+      // Track unknowns
+      if (result.unknowns) {
+        allUnknowns.push(...result.unknowns);
+      }
+
+      // Track worst fidelity
+      if (result.fidelity === "unknown") {
+        worstFidelity = "unknown";
+      } else if (result.fidelity === "speculative" && worstFidelity === "deterministic") {
+        worstFidelity = "speculative";
+      }
+    }
+
+    return {
+      allPassed: failures.length === 0,
+      stepResults,
+      failures,
+      overallFidelity: worstFidelity,
+      allRecoverable,
+      allUnknowns,
+    };
+  }
 
   /**
    * Execute a single step after boundary validation.

@@ -30,6 +30,7 @@ import {
   ContainerHandler,
   VerifyHandler,
 } from "../execution/index.js";
+import type { DryRunPlanResult } from "../execution/operation-executor.js";
 import { createCallbackReporter } from "../execution/progress-reporter.js";
 
 // ---------------------------------------------------------------------------
@@ -1345,24 +1346,316 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
       return this.buildFallbackPlan(instruction);
     }
 
-    // Build the deployment plan
-    const plan: DeploymentPlan = {
-      steps: parsed.steps.map((s) => ({
-        description: s.description,
-        action: s.action,
-        target: s.target,
-        reversible: s.reversible,
-        rollbackAction: s.rollbackAction,
-        execPreview: s.execPreview,
-      })),
-      reasoning: parsed.reasoning,
-      diffFromPreviousPlan: latestPlan
-        ? parsed.delta
-        : undefined,
-    };
+    // Build plan and run dry-run validation loop (max 3 attempts)
+    const MAX_DRY_RUN_ATTEMPTS = 3;
+    let currentParsed = parsed;
+    let lastDryRunResult: DryRunPlanResult | null = null;
+    let previousFailures: Array<{ stepDescription: string; failures: string[] }> = [];
 
-    // Build the rollback plan — reverse order of reversible steps
-    const rollbackPlan: DeploymentPlan = {
+    for (let attempt = 1; attempt <= MAX_DRY_RUN_ATTEMPTS; attempt++) {
+      const plan: DeploymentPlan = {
+        steps: currentParsed.steps.map((s) => ({
+          description: s.description,
+          action: s.action,
+          target: s.target,
+          reversible: s.reversible,
+          rollbackAction: s.rollbackAction,
+          execPreview: s.execPreview,
+        })),
+        reasoning: currentParsed.reasoning,
+        diffFromPreviousPlan: latestPlan
+          ? currentParsed.delta
+          : undefined,
+      };
+
+      // --- Dry-run precondition checks against real system state ---
+      await this.executorReady;
+
+      if (!this.operationExecutor) {
+        // Executor not available — skip dry-run, return plan as-is
+        recordEntry({
+          partitionId: instruction.partition?.id ?? null,
+          deploymentId: instruction.deploymentId,
+          agent: "envoy",
+          decisionType: "plan-generation",
+          decision:
+            `Generated deployment plan (dry-run skipped — executor not initialized): ` +
+            `${plan.steps.length} step(s) for ${instruction.artifact.name} v${instruction.version}`,
+          reasoning: currentParsed.reasoning,
+          context: { dryRunSkipped: true },
+        });
+
+        return {
+          plan,
+          rollbackPlan: this.buildRollbackPlan(plan, instruction),
+          delta: currentParsed.delta,
+        };
+      }
+
+      lastDryRunResult = await this.operationExecutor.executeDryRun(plan.steps);
+
+      // --- All preconditions pass: return grounded plan ---
+      if (lastDryRunResult.allPassed) {
+        const rollbackPlan = this.buildRollbackPlan(plan, instruction);
+
+        // Augment reasoning with dry-run confidence
+        plan.reasoning =
+          currentParsed.reasoning +
+          ` [Dry-run validated: all ${lastDryRunResult.stepResults.length} step(s) passed ` +
+          `precondition checks. Confidence: ${lastDryRunResult.overallFidelity}.` +
+          `${lastDryRunResult.allUnknowns.length > 0 ? ` Unknowns: ${lastDryRunResult.allUnknowns.join("; ")}.` : ""}]`;
+
+        recordEntry({
+          partitionId: instruction.partition?.id ?? null,
+          deploymentId: instruction.deploymentId,
+          agent: "envoy",
+          decisionType: "plan-generation",
+          decision:
+            `Generated and validated deployment plan: ${plan.steps.length} step(s) for ` +
+            `${instruction.artifact.name} v${instruction.version} → "${instruction.environment.name}" ` +
+            `(dry-run passed on attempt ${attempt})`,
+          reasoning: currentParsed.reasoning,
+          context: {
+            artifactType: instruction.artifact.type,
+            environmentName: instruction.environment.name,
+            llmAvailable: true,
+            stepCount: plan.steps.length,
+            rollbackStepCount: rollbackPlan.steps.length,
+            previousSuccessfulPlans: successfulPlans.length,
+            previousFailedPlans: failedPlans.length,
+            hasDelta: !!currentParsed.delta,
+            dryRunAttempt: attempt,
+            dryRunFidelity: lastDryRunResult.overallFidelity,
+            dryRunUnknowns: lastDryRunResult.allUnknowns,
+          },
+        });
+
+        return {
+          plan,
+          rollbackPlan,
+          delta: currentParsed.delta,
+        };
+      }
+
+      // --- Unrecoverable failure: exit immediately ---
+      if (!lastDryRunResult.allRecoverable) {
+        const unrecoverableFailures = lastDryRunResult.failures
+          .filter((f) => !f.result.recoverable)
+          .map((f) => {
+            const failedChecks = f.result.preconditions
+              .filter((p) => !p.passed)
+              .map((p) => p.detail);
+            return `Step ${f.stepIndex + 1} "${f.step.description}": ${failedChecks.join("; ")}`;
+          });
+
+        recordEntry({
+          partitionId: instruction.partition?.id ?? null,
+          deploymentId: instruction.deploymentId,
+          agent: "envoy",
+          decisionType: "plan-generation",
+          decision:
+            `Plan rejected — unrecoverable precondition failure(s) found during dry-run`,
+          reasoning:
+            `Dry-run found ${unrecoverableFailures.length} unrecoverable failure(s) that ` +
+            `the planner cannot work around. Failures: ${unrecoverableFailures.join(". ")}. ` +
+            `These require manual intervention or infrastructure changes before deployment ` +
+            `can proceed.`,
+          context: {
+            dryRunAttempt: attempt,
+            unrecoverableFailures,
+            allFailures: lastDryRunResult.failures.length,
+          },
+        });
+
+        // Return the plan with failure information in reasoning so the user sees it
+        plan.reasoning =
+          `PLAN BLOCKED — unrecoverable precondition failures: ${unrecoverableFailures.join(". ")}. ` +
+          `These failures cannot be resolved by re-planning and require manual intervention.`;
+
+        return {
+          plan,
+          rollbackPlan: this.buildRollbackPlan(plan, instruction),
+          delta: currentParsed.delta,
+        };
+      }
+
+      // --- Recoverable failure: check for stuck loop ---
+      const currentFailureSummary = lastDryRunResult.failures.map((f) => ({
+        stepDescription: f.step.description,
+        failures: f.result.preconditions
+          .filter((p) => !p.passed)
+          .map((p) => p.detail),
+      }));
+
+      // Detect stuck: same failures repeating across iterations
+      const isStuck =
+        previousFailures.length > 0 &&
+        JSON.stringify(currentFailureSummary) === JSON.stringify(previousFailures);
+
+      if (isStuck) {
+        const stuckDetails = currentFailureSummary
+          .map((f) => `"${f.stepDescription}": ${f.failures.join("; ")}`)
+          .join(". ");
+
+        recordEntry({
+          partitionId: instruction.partition?.id ?? null,
+          deploymentId: instruction.deploymentId,
+          agent: "envoy",
+          decisionType: "plan-generation",
+          decision:
+            `Plan generation stuck — same precondition failures after ${attempt} attempts`,
+          reasoning:
+            `Re-planning produced the same failures as the previous attempt, indicating ` +
+            `the LLM cannot resolve these issues. Stuck on: ${stuckDetails}. ` +
+            `Returning the best available plan with failure annotations.`,
+          context: { dryRunAttempt: attempt, stuckOn: currentFailureSummary },
+        });
+
+        plan.reasoning =
+          `Plan has unresolved precondition issues (stuck after ${attempt} re-planning attempts): ` +
+          `${stuckDetails}. Review these issues before approving.`;
+
+        return {
+          plan,
+          rollbackPlan: this.buildRollbackPlan(plan, instruction),
+          delta: currentParsed.delta,
+        };
+      }
+
+      previousFailures = currentFailureSummary;
+
+      // --- Last attempt: return with unresolved failures listed ---
+      if (attempt === MAX_DRY_RUN_ATTEMPTS) {
+        const failureDetails = currentFailureSummary
+          .map((f) => `"${f.stepDescription}": ${f.failures.join("; ")}`)
+          .join(". ");
+
+        recordEntry({
+          partitionId: instruction.partition?.id ?? null,
+          deploymentId: instruction.deploymentId,
+          agent: "envoy",
+          decisionType: "plan-generation",
+          decision:
+            `Plan generated with unresolved precondition issues after ${MAX_DRY_RUN_ATTEMPTS} attempts`,
+          reasoning:
+            `Dry-run validation failed on all ${MAX_DRY_RUN_ATTEMPTS} attempts. ` +
+            `Unresolved: ${failureDetails}. Returning the last plan with annotations.`,
+          context: {
+            dryRunAttempt: attempt,
+            maxAttempts: MAX_DRY_RUN_ATTEMPTS,
+            unresolvedFailures: currentFailureSummary,
+          },
+        });
+
+        plan.reasoning =
+          `Plan has ${lastDryRunResult.failures.length} unresolved precondition issue(s) ` +
+          `after ${MAX_DRY_RUN_ATTEMPTS} re-planning attempts: ${failureDetails}. ` +
+          `Review these issues before approving.`;
+
+        return {
+          plan,
+          rollbackPlan: this.buildRollbackPlan(plan, instruction),
+          delta: currentParsed.delta,
+        };
+      }
+
+      // --- Recoverable failure, not stuck, not last attempt: re-invoke LLM ---
+      const failureFeedback = lastDryRunResult.failures.map((f) => {
+        const failedChecks = f.result.preconditions
+          .filter((p) => !p.passed)
+          .map((p) => `[${p.check}] ${p.detail}`);
+        return `Step ${f.stepIndex + 1} "${f.step.description}" (action: "${f.step.action}", target: "${f.step.target}"): FAILED — ${failedChecks.join("; ")}`;
+      });
+
+      recordEntry({
+        partitionId: instruction.partition?.id ?? null,
+        deploymentId: instruction.deploymentId,
+        agent: "envoy",
+        decisionType: "plan-generation",
+        decision:
+          `Dry-run found ${lastDryRunResult.failures.length} recoverable issue(s) — re-invoking LLM (attempt ${attempt + 1}/${MAX_DRY_RUN_ATTEMPTS})`,
+        reasoning:
+          `Precondition failures: ${failureFeedback.join(". ")}. ` +
+          `All failures are recoverable. Re-invoking LLM with failure context to generate a corrected plan.`,
+        context: { dryRunAttempt: attempt, failures: failureFeedback },
+      });
+
+      // Build re-planning prompt with failure context
+      const replanPrompt =
+        `Your previous deployment plan failed dry-run precondition checks against the real system state.\n\n` +
+        `## Original Plan\n` +
+        `${currentParsed.steps.map((s, i) => `${i + 1}. [${s.action}] ${s.description} → ${s.target}`).join("\n")}\n\n` +
+        `## Precondition Failures\n` +
+        `${failureFeedback.join("\n")}\n\n` +
+        `## System State Evidence\n` +
+        `${lastDryRunResult.failures.flatMap((f) => f.result.preconditions.map((p) => `- ${p.detail}`)).join("\n")}\n\n` +
+        `Generate a corrected plan that avoids these failures. All other constraints from the original prompt still apply.\n\n` +
+        `IMPORTANT: Respond with valid JSON only, same format as before.`;
+
+      const replanResult = await this.llmClient!.reason({
+        prompt: replanPrompt,
+        systemPrompt:
+          `You are the Envoy planning engine for Synth. A previous plan failed dry-run ` +
+          `validation. Generate a corrected plan that addresses the precondition failures. ` +
+          `Respond with valid JSON only, same format as before: ` +
+          `{ "reasoning": "...", "steps": [...], "delta": "..." }`,
+        promptSummary:
+          `Re-plan deployment of ${instruction.artifact.name} v${instruction.version} ` +
+          `(attempt ${attempt + 1} — addressing dry-run failures)`,
+        partitionId: instruction.partition?.id ?? null,
+        deploymentId: instruction.deploymentId,
+        maxTokens: 4096,
+      });
+
+      if (!replanResult.ok) {
+        // LLM re-planning failed — return current plan with annotations
+        plan.reasoning =
+          `Dry-run found issues but LLM re-planning failed (${replanResult.reason}). ` +
+          `Original plan returned with known issues: ` +
+          `${failureFeedback.join(". ")}`;
+
+        return {
+          plan,
+          rollbackPlan: this.buildRollbackPlan(plan, instruction),
+          delta: currentParsed.delta,
+        };
+      }
+
+      // Parse re-planning response
+      try {
+        let text = replanResult.text.trim();
+        if (text.startsWith("```")) {
+          text = text.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "");
+        }
+        currentParsed = JSON.parse(text);
+      } catch {
+        // Parse failed — return current plan with annotations
+        plan.reasoning =
+          `Dry-run found issues but LLM re-planning response could not be parsed. ` +
+          `Original plan returned with known issues: ` +
+          `${failureFeedback.join(". ")}`;
+
+        return {
+          plan,
+          rollbackPlan: this.buildRollbackPlan(plan, instruction),
+          delta: currentParsed.delta,
+        };
+      }
+    }
+
+    // Should not reach here, but TypeScript needs it
+    throw new Error("Unreachable: dry-run loop exited without returning");
+  }
+
+  /**
+   * Build a rollback plan from a deployment plan — reverse order of
+   * reversible steps.
+   */
+  private buildRollbackPlan(
+    plan: DeploymentPlan,
+    instruction: PlanningInstruction,
+  ): DeploymentPlan {
+    return {
       steps: plan.steps
         .filter((s) => s.reversible && s.rollbackAction)
         .reverse()
@@ -1376,33 +1669,6 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
         `Rollback plan for ${instruction.artifact.name} v${instruction.version}: ` +
         `undo ${plan.steps.filter((s) => s.reversible).length} reversible step(s) ` +
         `in reverse order.`,
-    };
-
-    recordEntry({
-      partitionId: instruction.partition?.id ?? null,
-      deploymentId: instruction.deploymentId,
-      agent: "envoy",
-      decisionType: "plan-generation",
-      decision:
-        `Generated intelligent deployment plan: ${plan.steps.length} step(s) for ` +
-        `${instruction.artifact.name} v${instruction.version} → "${instruction.environment.name}"`,
-      reasoning: parsed.reasoning,
-      context: {
-        artifactType: instruction.artifact.type,
-        environmentName: instruction.environment.name,
-        llmAvailable: true,
-        stepCount: plan.steps.length,
-        rollbackStepCount: rollbackPlan.steps.length,
-        previousSuccessfulPlans: successfulPlans.length,
-        previousFailedPlans: failedPlans.length,
-        hasDelta: !!parsed.delta,
-      },
-    });
-
-    return {
-      plan,
-      rollbackPlan,
-      delta: parsed.delta,
     };
   }
 

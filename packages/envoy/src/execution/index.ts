@@ -9,6 +9,7 @@ export type {
   ExecutionProgressEvent,
   ProgressCallback,
   PlanExecutionResult,
+  DryRunPlanResult,
 } from "./operation-executor.js";
 
 // Registry
@@ -16,6 +17,7 @@ export { DefaultOperationRegistry } from "./operation-registry.js";
 export type {
   OperationHandler,
   HandlerResult,
+  DryRunResult,
 } from "./operation-registry.js";
 
 // Boundary validation

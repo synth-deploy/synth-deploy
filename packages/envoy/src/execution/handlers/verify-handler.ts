@@ -1,8 +1,9 @@
 import net from "node:net";
 import fs from "node:fs/promises";
 import { execFile } from "node:child_process";
+import type { PlannedStep } from "@synth-deploy/core";
 import type { Platform } from "../platform.js";
-import type { OperationHandler, HandlerResult } from "../operation-registry.js";
+import type { OperationHandler, HandlerResult, DryRunResult } from "../operation-registry.js";
 
 // ---------------------------------------------------------------------------
 // VerifyHandler — health checks and verification operations
@@ -84,6 +85,91 @@ export class VerifyHandler implements OperationHandler {
         success: false,
         output: "",
         error: `Verification "${action}" on "${target}" failed: ${message}`,
+      };
+    }
+  }
+
+  async dryRun(
+    step: PlannedStep,
+    _predictedOutcomes: Map<number, Record<string, unknown>>,
+  ): Promise<DryRunResult> {
+    const preconditions: DryRunResult["preconditions"] = [];
+    const target = step.target;
+    const unknowns: string[] = [];
+
+    try {
+      // For HTTP targets: basic reachability check (DNS resolve, not full request)
+      if (target.startsWith("http://") || target.startsWith("https://")) {
+        try {
+          const url = new URL(target);
+          // Check if hostname resolves — lightweight DNS check
+          const dns = await import("node:dns/promises");
+          await dns.lookup(url.hostname);
+          preconditions.push({
+            check: "target-resolvable",
+            passed: true,
+            detail: `Hostname "${url.hostname}" resolves — target is reachable for verification`,
+          });
+        } catch (err: unknown) {
+          const message = err instanceof Error ? err.message : String(err);
+          preconditions.push({
+            check: "target-resolvable",
+            passed: false,
+            detail: `Cannot resolve hostname for "${target}": ${message} — verification will fail`,
+          });
+        }
+      }
+
+      // For port targets (host:port format)
+      else if (target.includes(":") && /^\d+$/.test(target.split(":").pop() ?? "")) {
+        const parts = target.split(":");
+        const port = parseInt(parts.pop() ?? "0", 10);
+        const host = parts.join(":") || "localhost";
+
+        preconditions.push({
+          check: "port-format-valid",
+          passed: port > 0 && port <= 65535,
+          detail: port > 0 && port <= 65535
+            ? `Port ${port} on ${host} is a valid target for connectivity check`
+            : `Port ${port} is not a valid port number`,
+        });
+      }
+
+      // For file targets
+      else {
+        preconditions.push({
+          check: "verification-target-noted",
+          passed: true,
+          detail: `Will verify file existence at "${target}" post-deployment`,
+        });
+      }
+
+      unknowns.push(
+        `Verification results cannot be predicted before deployment — this step runs post-deployment`,
+      );
+
+      // Verification steps are always recoverable since they don't modify state
+      return {
+        canExecute: true,
+        preconditions,
+        fidelity: "unknown",
+        recoverable: true,
+        unknowns,
+      };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      return {
+        canExecute: true, // Verification failure shouldn't block planning
+        preconditions: [
+          {
+            check: "dry-run-error",
+            passed: true,
+            detail: `Dry-run connectivity check failed (${message}) — verification will still be attempted post-deployment`,
+          },
+        ],
+        fidelity: "unknown",
+        recoverable: true,
+        unknowns: [`Could not pre-validate verification target "${target}"`],
       };
     }
   }

@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
+import type { PlannedStep } from "@synth-deploy/core";
 import type { Platform } from "../platform.js";
-import type { OperationHandler, HandlerResult } from "../operation-registry.js";
+import type { OperationHandler, HandlerResult, DryRunResult } from "../operation-registry.js";
 
 // ---------------------------------------------------------------------------
 // ProcessHandler — bounded command execution
@@ -82,6 +83,67 @@ export class ProcessHandler implements OperationHandler {
         error:
           `Command "${target}" failed with ${e.code ? `exit code ${e.code}` : "an error"}. ` +
           `stderr: ${e.stderr ?? e.message}`,
+      };
+    }
+  }
+
+  async dryRun(
+    step: PlannedStep,
+    _predictedOutcomes: Map<number, Record<string, unknown>>,
+  ): Promise<DryRunResult> {
+    const preconditions: DryRunResult["preconditions"] = [];
+    const target = step.target; // The command/binary to run
+    const unknowns: string[] = [];
+
+    try {
+      // Check if the binary exists on PATH
+      const binaryFound = await new Promise<{ found: boolean; path?: string }>((resolve) => {
+        const cmd = process.platform === "win32" ? "where" : "which";
+        execFile(cmd, [target], { timeout: 5000 }, (error, stdout) => {
+          if (error) {
+            resolve({ found: false });
+          } else {
+            resolve({ found: true, path: stdout.trim().split("\n")[0] });
+          }
+        });
+      });
+
+      preconditions.push({
+        check: "binary-exists",
+        passed: binaryFound.found,
+        detail: binaryFound.found
+          ? `Binary "${target}" found at ${binaryFound.path}`
+          : `Binary "${target}" not found on PATH — command will fail`,
+      });
+
+      unknowns.push(
+        `Command startup success depends on arguments, environment, and application state`,
+      );
+
+      const allPassed = preconditions.every((p) => p.passed);
+
+      return {
+        canExecute: allPassed,
+        preconditions,
+        predictedOutcome: { commandExecuted: target },
+        fidelity: "speculative",
+        recoverable: !allPassed, // Missing binary is recoverable by the planner
+        unknowns,
+      };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      return {
+        canExecute: false,
+        preconditions: [
+          {
+            check: "dry-run-error",
+            passed: false,
+            detail: `Dry-run check failed unexpectedly: ${message}`,
+          },
+        ],
+        fidelity: "speculative",
+        recoverable: true,
+        unknowns: [`Could not verify binary "${target}" availability`],
       };
     }
   }

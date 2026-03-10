@@ -1,7 +1,8 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import type { PlannedStep } from "@synth-deploy/core";
 import type { Platform, PlatformAdapter } from "../platform.js";
-import type { OperationHandler, HandlerResult } from "../operation-registry.js";
+import type { OperationHandler, HandlerResult, DryRunResult } from "../operation-registry.js";
 
 // ---------------------------------------------------------------------------
 // FileHandler — copy, move, backup, permissions, symlink
@@ -143,5 +144,150 @@ export class FileHandler implements OperationHandler {
 
   async verify(_action: string, target: string): Promise<boolean> {
     return this.adapter.filesystem.exists(target);
+  }
+
+  async dryRun(
+    step: PlannedStep,
+    predictedOutcomes: Map<number, Record<string, unknown>>,
+  ): Promise<DryRunResult> {
+    const preconditions: DryRunResult["preconditions"] = [];
+    const lower = step.action.toLowerCase();
+    const target = step.target;
+
+    try {
+      // Check if parent directory exists (or was predicted to be created)
+      const parentDir = path.dirname(target);
+      let parentExists = false;
+      try {
+        const stat = await fs.stat(parentDir);
+        parentExists = stat.isDirectory();
+      } catch {
+        // Check if a prior step predicts creating this directory
+        for (const [, outcome] of predictedOutcomes) {
+          if (
+            outcome.createdDirectory === parentDir ||
+            (typeof outcome.createdDirectory === "string" &&
+              parentDir.startsWith(outcome.createdDirectory + "/"))
+          ) {
+            parentExists = true;
+            break;
+          }
+        }
+      }
+
+      preconditions.push({
+        check: "parent-directory-exists",
+        passed: parentExists,
+        detail: parentExists
+          ? `Parent directory "${parentDir}" exists and is a directory`
+          : `Parent directory "${parentDir}" does not exist — file operations will fail`,
+      });
+
+      // Check parent directory is writable (only if it exists on disk)
+      if (parentExists) {
+        try {
+          await fs.access(parentDir, (await import("node:fs")).constants.W_OK);
+          preconditions.push({
+            check: "parent-directory-writable",
+            passed: true,
+            detail: `Parent directory "${parentDir}" is writable`,
+          });
+        } catch {
+          preconditions.push({
+            check: "parent-directory-writable",
+            passed: false,
+            detail: `Parent directory "${parentDir}" is not writable — permission denied`,
+          });
+        }
+      }
+
+      // For symlinks: validate link target exists
+      if (lower.includes("symlink")) {
+        const linkTarget = target; // The symlink target path
+        try {
+          await fs.stat(linkTarget);
+          preconditions.push({
+            check: "symlink-target-exists",
+            passed: true,
+            detail: `Symlink target "${linkTarget}" exists`,
+          });
+        } catch {
+          preconditions.push({
+            check: "symlink-target-exists",
+            passed: false,
+            detail: `Symlink target "${linkTarget}" does not exist — symlink will be dangling`,
+          });
+        }
+      }
+
+      // For delete: check target exists
+      if (lower.includes("delete")) {
+        try {
+          await fs.stat(target);
+          preconditions.push({
+            check: "delete-target-exists",
+            passed: true,
+            detail: `Delete target "${target}" exists`,
+          });
+        } catch {
+          preconditions.push({
+            check: "delete-target-exists",
+            passed: true, // Deleting a non-existent file is not a failure
+            detail: `Delete target "${target}" does not exist — operation is a no-op`,
+          });
+        }
+      }
+
+      // Check disk space (basic check via statfs)
+      try {
+        const stats = await fs.statfs(parentDir);
+        const freeBytes = stats.bfree * stats.bsize;
+        const freeMB = Math.round(freeBytes / (1024 * 1024));
+        const sufficient = freeBytes > 100 * 1024 * 1024; // 100MB minimum
+        preconditions.push({
+          check: "disk-space",
+          passed: sufficient,
+          detail: sufficient
+            ? `${freeMB}MB free on filesystem containing "${parentDir}"`
+            : `Only ${freeMB}MB free on filesystem containing "${parentDir}" — less than 100MB minimum`,
+        });
+      } catch {
+        // statfs not available or path doesn't exist yet — not a hard failure
+      }
+
+      const allPassed = preconditions.every((p) => p.passed);
+
+      // Predict outcome
+      const predictedOutcome: Record<string, unknown> = {};
+      if (lower.includes("mkdir")) {
+        predictedOutcome.createdDirectory = target;
+      } else if (lower.includes("write") || lower.includes("copy")) {
+        predictedOutcome.createdFile = target;
+      } else if (lower.includes("delete")) {
+        predictedOutcome.deletedPath = target;
+      }
+
+      return {
+        canExecute: allPassed,
+        preconditions,
+        predictedOutcome,
+        fidelity: "deterministic",
+        recoverable: true,
+      };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      return {
+        canExecute: false,
+        preconditions: [
+          {
+            check: "dry-run-error",
+            passed: false,
+            detail: `Dry-run check failed unexpectedly: ${message}`,
+          },
+        ],
+        fidelity: "deterministic",
+        recoverable: true,
+      };
+    }
   }
 }
