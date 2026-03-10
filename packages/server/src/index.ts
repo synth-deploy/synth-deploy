@@ -47,7 +47,12 @@ import { registerGraphRoutes } from "./api/graph.js";
 
 // --- Bootstrap shared state ---
 
-const DATA_DIR = path.resolve(process.env.SYNTH_DATA_DIR ?? "data");
+// Default to repo-root/data, resolved relative to this file so it's consistent
+// regardless of the working directory when the server is started.
+const __serverDir = path.dirname(fileURLToPath(import.meta.url));
+const DATA_DIR = process.env.SYNTH_DATA_DIR
+  ? path.resolve(process.env.SYNTH_DATA_DIR)
+  : path.resolve(__serverDir, "../../../data");
 mkdirSync(DATA_DIR, { recursive: true });
 chmodSync(DATA_DIR, 0o700);
 

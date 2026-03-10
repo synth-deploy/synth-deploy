@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import fs from "node:fs";
 import { DecisionDebrief, LlmClient } from "@synth-deploy/core";
 import { EnvoyAgent } from "./agent/envoy-agent.js";
@@ -14,7 +15,10 @@ import { createEnvoyServer } from "./server.js";
 
 const PORT = parseInt(process.env.ENVOY_PORT ?? "3001", 10);
 const HOST = process.env.ENVOY_HOST ?? "0.0.0.0";
-const BASE_DIR = process.env.ENVOY_BASE_DIR ?? path.join(process.cwd(), ".envoy");
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const BASE_DIR = process.env.ENVOY_BASE_DIR
+  ? path.resolve(process.env.ENVOY_BASE_DIR)
+  : path.resolve(__dirname, "../../../.envoy");
 
 // --- Bootstrap ---
 
