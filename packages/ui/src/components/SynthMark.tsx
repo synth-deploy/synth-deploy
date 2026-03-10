@@ -25,11 +25,13 @@ interface Props {
   size?: number;
   /** Whether the breathing animation is active. Default true. */
   active?: boolean;
+  /** Animation speed multiplier. Default 1. */
+  speed?: number;
   /** RGB triplet string for the stroke color, e.g. "45,91,240". */
   accentRgb?: string;
 }
 
-export default function SynthMark({ size = 20, active = true, accentRgb }: Props) {
+export default function SynthMark({ size = 20, active = true, speed = 1, accentRgb }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const frameRef = useRef(0);
   const rgbRef = useRef(accentRgb);
@@ -49,7 +51,7 @@ export default function SynthMark({ size = 20, active = true, accentRgb }: Props
 
     const draw = () => {
       frameRef.current++;
-      const f = frameRef.current * 3; // base speed (tuned for visible breathing)
+      const f = frameRef.current * speed * 3; // base speed tripled
       ctx.clearRect(0, 0, size, size);
 
       // Resolve color — prop > CSS variable > fallback
@@ -62,7 +64,7 @@ export default function SynthMark({ size = 20, active = true, accentRgb }: Props
       const spacing = 5.5;
       const sX = -36;
       const eX = 36;
-      const segs = Math.max(12, Math.min(36, Math.round(size / 5))); // adaptive segments
+      const segs = 36; // fixed high segment count for smooth curves at all sizes
 
       for (let i = 0; i < lines; i++) {
         const y = (i - (lines - 1) / 2) * spacing;
@@ -91,7 +93,9 @@ export default function SynthMark({ size = 20, active = true, accentRgb }: Props
           const wy1 = Math.sin(t1 * freq * Math.PI + i * 0.8) * amp1;
           const wy2 = Math.sin(t2 * freq * Math.PI + i * 0.8) * amp2;
 
-          const alpha = baseA * (0.45 + t1 * 0.55);
+          // Per-line shimmer: size-independent, visible even at 16px
+          const shimmer = active ? 0.85 + Math.sin(f * 0.02 + i * 0.6) * 0.15 : 1;
+          const alpha = baseA * (0.45 + t1 * 0.55) * shimmer;
           ctx.strokeStyle = `rgba(${rgb},${alpha})`;
           ctx.lineWidth = Math.max(0.8, w1 * sc);
           ctx.lineCap = "round";
@@ -115,7 +119,7 @@ export default function SynthMark({ size = 20, active = true, accentRgb }: Props
 
     draw();
     return () => cancelAnimationFrame(animId);
-  }, [size, active]);
+  }, [size, active, speed]);
 
   return (
     <canvas
