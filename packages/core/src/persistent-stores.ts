@@ -273,7 +273,9 @@ export function openEntityDatabase(dbPath: string): Database.Database {
       token TEXT NOT NULL UNIQUE,
       refresh_token TEXT NOT NULL UNIQUE,
       expires_at TEXT NOT NULL,
-      created_at TEXT NOT NULL
+      created_at TEXT NOT NULL,
+      user_agent TEXT,
+      ip_address TEXT
     );
 
     CREATE TABLE IF NOT EXISTS api_keys (
