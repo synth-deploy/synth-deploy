@@ -115,14 +115,14 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
 
   if (loading)
     return (
-      <CanvasPanelHost title={title}>
+      <CanvasPanelHost title={title} hideRootCrumb>
         <div className="loading">Loading...</div>
       </CanvasPanelHost>
     );
 
   if (!artifact)
     return (
-      <CanvasPanelHost title={title}>
+      <CanvasPanelHost title={title} hideRootCrumb>
         <div className="error-msg">Artifact not found</div>
       </CanvasPanelHost>
     );
@@ -156,14 +156,14 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
     : null;
 
   return (
-    <CanvasPanelHost title={title}>
+    <CanvasPanelHost title={title} hideRootCrumb dismissible={false}>
       <div className="v2-detail-view">
 
         {/* Header */}
         <div style={{ padding: "4px 16px 20px", borderBottom: "1px solid var(--border)" }}>
           <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16 }}>
             <div>
-              <h1 style={{ fontSize: 22, fontWeight: 500, color: "var(--text)", margin: "0 0 6px 0", lineHeight: 1.2 }}>
+              <h1 style={{ fontSize: 22, fontWeight: 500, color: "var(--text)", margin: "0 0 6px 0", lineHeight: 1.2, fontFamily: "var(--font-display)" }}>
                 {artifact.name}
                 {latestVersion && (
                   <span style={{ fontSize: 14, fontWeight: 400, color: "var(--text-muted)", marginLeft: 10, fontFamily: "monospace" }}>
@@ -208,10 +208,10 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
 
           {/* Stats row */}
           <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
-            {/* Technologies */}
+            {/* Dependencies */}
             <div style={{ flex: 1, padding: "12px 14px", borderRadius: 8, background: "var(--surface)", border: "1px solid var(--border)" }}>
               <div style={{ fontSize: 10, color: "var(--text-muted)", fontFamily: "monospace", textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>
-                Technologies
+                Dependencies
               </div>
               {techTags.length > 0 ? (
                 <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
@@ -294,18 +294,6 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
                 {analysis.summary || "No analysis summary available."}
               </div>
             </div>
-
-            {/* Dependencies */}
-            {dependencies.length > 0 && (
-              <>
-                <SectionHeader color="var(--accent)" shape="diamond" label="Dependencies" />
-                <ul style={{ margin: "0 0 20px", paddingLeft: 20, fontSize: 13, color: "var(--text)", lineHeight: 1.8 }}>
-                  {dependencies.map((dep, i) => (
-                    <li key={i}>{dep}</li>
-                  ))}
-                </ul>
-              </>
-            )}
 
             {/* Configuration Expectations */}
             {configEntries.length > 0 && (

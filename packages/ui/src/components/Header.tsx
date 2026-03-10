@@ -6,10 +6,10 @@ import SynthMark from "./SynthMark.js";
 import ThemeToggle from "./ThemeToggle.js";
 
 const TABS = [
-  { id: "deployment-authoring", label: "Deploy" },
-  { id: "artifact-catalog", label: "Artifacts" },
-  { id: "topology", label: "Topology" },
-  { id: "debrief", label: "Debriefs" },
+  { id: "deployment-authoring", label: "Deploy", panelTitle: "Deploy" },
+  { id: "artifact-catalog", label: "Artifacts", panelTitle: "Artifact Catalog" },
+  { id: "topology", label: "Topology", panelTitle: "Topology" },
+  { id: "debrief", label: "Debriefs", panelTitle: "Debriefs" },
 ] as const;
 
 export default function Header() {
@@ -42,7 +42,7 @@ export default function Header() {
             <button
               key={t.id}
               className={`synth-header-tab ${activeTab === t.id ? "synth-header-tab-active" : ""}`}
-              onClick={() => navTo(t.id, t.label)}
+              onClick={() => navTo(t.id, t.panelTitle)}
             >
               {t.label}
             </button>

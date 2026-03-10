@@ -84,7 +84,7 @@ export default function CanvasPanelHost({ title, dismissible = true, noBreadcrum
               <span
                 onClick={item.onClick}
                 className={`v2-breadcrumb-item ${i === breadcrumbPath.length - 1 ? "v2-breadcrumb-current" : ""}`}
-                style={{ cursor: item.onClick ? "pointer" : "default" }}
+                style={{ cursor: item.onClick ? "pointer" : "default", color: item.onClick ? "var(--accent)" : undefined }}
               >
                 {item.label}
               </span>
