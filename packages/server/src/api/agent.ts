@@ -225,7 +225,7 @@ function generateContext(
       lastDeployment: lastDeploy
         ? {
             version: lastDeploy.version,
-            environment: allEnvironments.find((e) => e.id === lastDeploy.environmentId)?.name ?? lastDeploy.environmentId,
+            environment: allEnvironments.find((e) => e.id === lastDeploy.environmentId)?.name ?? lastDeploy.environmentId ?? "—",
             status: lastDeploy.status,
             ago: formatAgo(new Date(lastDeploy.createdAt)),
           }
@@ -519,7 +519,7 @@ export function registerAgentRoutes(
     if (version) {
       const rolledBack = deployments.findByArtifactVersion(artifactId, version, "rolled_back");
       if (rolledBack.length > 0) {
-        const envNames = rolledBack.map((d) => environments.get(d.environmentId)?.name ?? d.environmentId);
+        const envNames = rolledBack.map((d) => environments.get(d.environmentId ?? "")?.name ?? d.environmentId ?? "unknown");
         crossSystemContext.push(
           `This version (${version}) was rolled back from ${envNames.join(", ")} previously`,
         );
@@ -527,7 +527,7 @@ export function registerAgentRoutes(
 
       const failed = deployments.findByArtifactVersion(artifactId, version, "failed");
       if (failed.length > 0) {
-        const envNames = failed.map((d) => environments.get(d.environmentId)?.name ?? d.environmentId);
+        const envNames = failed.map((d) => environments.get(d.environmentId ?? "")?.name ?? d.environmentId ?? "unknown");
         crossSystemContext.push(
           `This version (${version}) failed deployment to ${envNames.join(", ")}`,
         );
@@ -788,7 +788,7 @@ function buildDeploymentTable(
     .slice(0, 50)
     .map((d) => {
       const art = artifactMap.get(d.artifactId) ?? d.artifactId;
-      const env = environmentMap.get(d.environmentId) ?? d.environmentId;
+      const env = (d.environmentId ? environmentMap.get(d.environmentId) : undefined) ?? d.environmentId ?? "—";
       const part = d.partitionId ? (partitionMap.get(d.partitionId) ?? d.partitionId) : "—";
       const date = new Date(d.createdAt).toLocaleString();
       // Embed a synth:// deep-link so the UI can navigate to the deployment detail
@@ -932,7 +932,7 @@ async function answerQueryWithData(
     const ageHours = Math.round(ageMs / (1000 * 60 * 60));
     const age = ageHours < 24 ? `${ageHours}h ago` : `${Math.round(ageHours / 24)}d ago`;
     const art = artifactMap.get(d.artifactId) ?? d.artifactId;
-    const env = environmentMap.get(d.environmentId) ?? d.environmentId;
+    const env = (d.environmentId ? environmentMap.get(d.environmentId) : undefined) ?? d.environmentId ?? "—";
     const part = d.partitionId ? ` (${partitionMap.get(d.partitionId) ?? d.partitionId})` : "";
     // Include synth:// deep-link for UI navigation
     return `- id:${d.id} | ${art} v${d.version} → ${env}${part}: ${d.status} (${age})`;

@@ -240,7 +240,7 @@ export function registerDeploymentRoutes(
           rollbackPlan: deployment.rollbackPlan,
           artifactType: artifact?.type ?? "unknown",
           artifactName: artifact?.name ?? "unknown",
-          environmentId: deployment.environmentId,
+          environmentId: deployment.environmentId ?? "",
           progressCallbackUrl,
         }).catch((err) => {
           // Execution dispatch failed — record failure

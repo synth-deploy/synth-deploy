@@ -1371,7 +1371,7 @@ export class SynthAgent {
       envoyResult = await client.deploy({
         deploymentId: deployment.id,
         partitionId: deployment.partitionId ?? "",
-        environmentId: deployment.environmentId,
+        environmentId: deployment.environmentId ?? "",
         operationId: deployment.artifactId, // Envoy still uses operationId in its API
         version: deployment.version,
         variables: deployment.variables,

@@ -584,7 +584,7 @@ export class PersistentDeploymentStore {
       artifact_id: deployment.artifactId,
       artifact_version_id: deployment.artifactVersionId ?? null,
       envoy_id: deployment.envoyId ?? null,
-      environment_id: deployment.environmentId,
+      environment_id: deployment.environmentId ?? null,
       partition_id: deployment.partitionId ?? null,
       version: deployment.version,
       status: deployment.status,

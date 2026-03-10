@@ -287,7 +287,7 @@ export function registerSystemRoutes(
     );
 
     // Group by artifactId+environmentId
-    type FailureGroup = { artifactId: string; environmentId: string; failures: typeof recentFailures };
+    type FailureGroup = { artifactId: string; environmentId: string | undefined; failures: typeof recentFailures };
     const failureGroups = new Map<string, FailureGroup>();
     for (const dep of recentFailures) {
       const key = `${dep.artifactId}::${dep.environmentId}`;
