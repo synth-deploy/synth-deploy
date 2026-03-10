@@ -429,6 +429,8 @@ export type TelemetryAction =
   | "environment.updated"
   | "settings.updated"
   | "envoy.registered"
+  | "envoy.connection.added"
+  | "envoy.connection.removed"
   | "security-boundary.updated"
   | "agent.pre-flight.generated"
   | "agent.recommendation.followed"

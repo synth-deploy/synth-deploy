@@ -208,7 +208,7 @@ export const UpdateSettingsSchema = z.object({
     }),
     description: z.string().optional(),
   })).optional(),
-  llm: LlmProviderConfigSchema.optional(),
+  llm: LlmProviderConfigSchema.partial().optional(),
 });
 
 // --- Artifacts (update) ---

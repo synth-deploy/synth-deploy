@@ -947,7 +947,9 @@ export class PersistentSettingsStore {
       current.mcpServers = partial.mcpServers;
     }
     if (partial.llm !== undefined) {
-      current.llm = partial.llm;
+      current.llm = current.llm
+        ? { ...current.llm, ...partial.llm }
+        : partial.llm as AppSettings["llm"];
     }
     if (partial.defaultTheme !== undefined) {
       current.defaultTheme = partial.defaultTheme;
