@@ -265,7 +265,7 @@ export default function PartitionDetailPanel({ partitionId, title }: Props) {
                       <>
                         <div className="v2-var-value" style={{ flex: 2 }}>{v}</div>
                         {isScoped ? (
-                          <span style={{ fontSize: 10, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.04em", padding: "1px 6px", borderRadius: 3, background: "var(--surface-alt)" }}>scoped</span>
+                          <span style={{ fontSize: 10, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.04em", padding: "1px 6px", borderRadius: 3, background: "var(--surface-alt)", fontFamily: "var(--font-mono)" }}>scoped</span>
                         ) : (
                           <>
                             <button

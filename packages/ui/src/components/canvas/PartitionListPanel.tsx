@@ -62,7 +62,7 @@ export default function PartitionListPanel({ title }: Props) {
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Partition name"
                 autoFocus
-                style={{ width: "100%", padding: "6px 10px", fontSize: 13, border: "1px solid var(--border)", borderRadius: 4, background: "var(--bg-secondary)", color: "var(--text-primary)" }}
+                className="v2-input"
               />
             </div>
             <button className="v2-create-btn v2-create-btn-partition" onClick={handleCreate} style={{ fontSize: 12, padding: "4px 12px" }}>

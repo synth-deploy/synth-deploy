@@ -309,7 +309,7 @@ export default function ArtifactCatalogPanel({ title }: Props) {
                 color: "var(--accent)",
                 textTransform: "uppercase",
                 letterSpacing: 1.2,
-                fontFamily: "var(--font-mono, monospace)",
+                fontFamily: "var(--font-mono)",
               }}>
                 Synth&rsquo;s Analysis
               </span>
@@ -336,7 +336,7 @@ export default function ArtifactCatalogPanel({ title }: Props) {
                       fontSize: 11, background: "var(--surface-alt)",
                       color: "var(--text-muted)",
                       border: "1px solid var(--border)",
-                      fontFamily: "var(--font-mono, monospace)",
+                      fontFamily: "var(--font-mono)",
                     }}>
                       {dep}
                     </span>
@@ -369,7 +369,7 @@ export default function ArtifactCatalogPanel({ title }: Props) {
                   background: "var(--accent-dim)",
                   color: "var(--accent)",
                   fontSize: 13, fontWeight: 600,
-                  fontFamily: "var(--font-mono, monospace)",
+                  fontFamily: "var(--font-mono)",
                   cursor: "pointer",
                 }}
                 onClick={() => pushPanel({
@@ -387,7 +387,7 @@ export default function ArtifactCatalogPanel({ title }: Props) {
                   background: "var(--status-succeeded-bg)",
                   color: "var(--status-succeeded)",
                   fontSize: 13, fontWeight: 600,
-                  fontFamily: "var(--font-mono, monospace)",
+                  fontFamily: "var(--font-mono)",
                   cursor: "pointer",
                 }}
                 onClick={() => pushPanel({

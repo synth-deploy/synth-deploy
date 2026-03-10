@@ -126,8 +126,8 @@ export default function EnvironmentDetailPanel({ environmentId, title }: Props) 
                       autoFocus
                       style={{ flex: 2, fontSize: 12, padding: "2px 6px", borderRadius: 4, border: "1px solid var(--accent-border)", background: "var(--input-bg)", color: "var(--text)", fontFamily: "var(--font-mono)" }}
                     />
-                    <button style={{ background: "none", border: "none", color: "var(--accent)", cursor: "pointer", fontSize: 11, marginLeft: 4 }} disabled={varSaving} onClick={() => saveVariable(k, editValue)}>Save</button>
-                    <button style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: 11, marginLeft: 2 }} onClick={() => setEditingKey(null)}>Cancel</button>
+                    <button className="btn btn-sm btn-primary" style={{ fontSize: 11, marginLeft: 4 }} disabled={varSaving} onClick={() => saveVariable(k, editValue)}>Save</button>
+                    <button className="btn btn-sm" style={{ fontSize: 11, marginLeft: 2 }} onClick={() => setEditingKey(null)}>Cancel</button>
                   </>
                 ) : (
                   <>
