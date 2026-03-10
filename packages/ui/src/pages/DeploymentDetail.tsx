@@ -79,7 +79,7 @@ export default function DeploymentDetail() {
             )}
             <div className="meta-item">
               <span className="meta-label">Environment</span>
-              {env ? <EnvBadge name={env.name} /> : <span className="meta-value">{deployment.environmentId.slice(0, 8)}</span>}
+              {env ? <EnvBadge name={env.name} /> : <span className="meta-value">{deployment.environmentId?.slice(0, 8) ?? "—"}</span>}
             </div>
             {deployment.approvedBy && (
               <div className="meta-item">

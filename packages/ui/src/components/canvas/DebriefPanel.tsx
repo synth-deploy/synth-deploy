@@ -84,7 +84,7 @@ function DeploymentDebriefDetail({ deploymentId, onBack }: { deploymentId: strin
   if (!deployment) return <div className="error-msg">Deployment not found</div>;
 
   const artName = (artifacts ?? []).find((a) => a.id === deployment.artifactId)?.name ?? deployment.artifactId.slice(0, 8);
-  const envName = (environments ?? []).find((e) => e.id === deployment.environmentId)?.name ?? deployment.environmentId.slice(0, 8);
+  const envName = (environments ?? []).find((e) => e.id === deployment.environmentId)?.name ?? deployment.environmentId?.slice(0, 8) ?? "—";
   const partName = deployment.partitionId
     ? ((partitions ?? []).find((p) => p.id === deployment.partitionId)?.name ?? null)
     : null;
@@ -517,7 +517,7 @@ export default function DebriefPanel({ title, filterPartitionId, filterDecisionT
                 )}
                 {safeDeployments.map((dep) => {
                   const artName = (artifacts ?? []).find((a) => a.id === dep.artifactId)?.name ?? dep.artifactId.slice(0, 8);
-                  const envName = (environments ?? []).find((e) => e.id === dep.environmentId)?.name ?? dep.environmentId.slice(0, 8);
+                  const envName = (environments ?? []).find((e) => e.id === dep.environmentId)?.name ?? dep.environmentId?.slice(0, 8) ?? "—";
                   const duration = formatDuration(dep.createdAt, dep.completedAt);
                   const isFinished = FINISHED_STATUSES.has(dep.status);
                   const isAwaiting = dep.status === "awaiting_approval";

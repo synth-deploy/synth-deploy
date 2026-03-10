@@ -67,7 +67,7 @@ export default function DeploymentTable({ deployments, environments = [], artifa
                   </td>
                 )}
                 <td>
-                  {env ? <EnvBadge name={env.name} /> : <span className="mono">{d.environmentId.slice(0, 8)}</span>}
+                  {env ? <EnvBadge name={env.name} /> : <span className="mono">{d.environmentId?.slice(0, 8) ?? "—"}</span>}
                 </td>
                 <td className="text-secondary">{formatTime(d.createdAt)}</td>
                 <td className="text-secondary">{formatDuration(d.createdAt, d.completedAt)}</td>

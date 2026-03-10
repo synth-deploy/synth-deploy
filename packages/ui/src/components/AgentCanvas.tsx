@@ -271,7 +271,7 @@ export default function AgentCanvas() {
     <div className={chatOpen ? "canvas-split-layout" : "canvas-column-layout"}>
       {/* Canvas content — always DOM-first so React identity is stable */}
       <div className="canvas-main-content">
-        <ErrorBoundary>
+        <ErrorBoundary key={currentPanel.id}>
           <div
             key={currentPanel.id}
             className={slideDir ? `panel-enter-from-${slideDir}` : undefined}

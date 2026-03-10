@@ -43,17 +43,20 @@ const SCHEMA_VERSION = 6;
 // ---------------------------------------------------------------------------
 
 export function safeJsonParse<T>(
-  json: string,
+  json: string | null | undefined,
   fallback: T,
   context?: { table?: string; rowId?: string; column?: string },
 ): T {
+  if (json == null) return fallback;
   try {
-    return JSON.parse(json);
+    const parsed = JSON.parse(json);
+    if (parsed == null) return fallback;
+    return parsed;
   } catch {
     const where = context
       ? ` (table=${context.table}, row=${context.rowId}, column=${context.column})`
       : "";
-    console.warn(`[Synth] Corrupted JSON skipped${where}: ${json.slice(0, 120)}`);
+    console.warn(`[Synth] Corrupted JSON skipped${where}: ${String(json).slice(0, 120)}`);
     return fallback;
   }
 }
