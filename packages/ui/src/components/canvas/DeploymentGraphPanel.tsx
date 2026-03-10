@@ -403,6 +403,7 @@ function GraphDetailView({ title, graphId }: { title: string; graphId: string })
 
   return (
     <CanvasPanelHost title={title}>
+      <div className="v2-detail-view">
       <div className="canvas-detail">
         {/* Header */}
         <SectionHeader
@@ -481,9 +482,9 @@ function GraphDetailView({ title, graphId }: { title: string; graphId: string })
 
         {/* Nodes */}
         <div style={{ marginBottom: 20 }}>
-          <h4 style={{ fontSize: 13, fontWeight: 600, color: "var(--text-muted)", marginBottom: 8, textTransform: "uppercase", letterSpacing: 1 }}>
+          <div className="section-label" style={{ marginBottom: 8 }}>
             Nodes ({graph.nodes.length})
-          </h4>
+          </div>
 
           {graph.nodes
             .sort((a, b) => (orderMap.get(a.id) ?? 0) - (orderMap.get(b.id) ?? 0))
@@ -590,12 +591,12 @@ function GraphDetailView({ title, graphId }: { title: string; graphId: string })
                           placeholder="Name"
                           value={newBindingName}
                           onChange={(e) => setNewBindingName(e.target.value)}
-                          style={inputStyle}
+                          className="v2-input"
                         />
                         <select
                           value={newBindingSource}
                           onChange={(e) => setNewBindingSource(e.target.value as "plan_step_output" | "manual")}
-                          style={inputStyle}
+                          className="v2-input"
                         >
                           <option value="manual">manual</option>
                           <option value="plan_step_output">plan_step_output</option>
@@ -605,7 +606,7 @@ function GraphDetailView({ title, graphId }: { title: string; graphId: string })
                             placeholder="Value"
                             value={newBindingValue}
                             onChange={(e) => setNewBindingValue(e.target.value)}
-                            style={inputStyle}
+                            className="v2-input"
                           />
                         ) : (
                           <>
@@ -613,27 +614,29 @@ function GraphDetailView({ title, graphId }: { title: string; graphId: string })
                               placeholder="Step index"
                               value={newBindingStepIndex}
                               onChange={(e) => setNewBindingStepIndex(e.target.value)}
-                              style={{ ...inputStyle, width: 70 }}
+                              className="v2-input"
+                              style={{ width: 70 }}
                             />
                             <input
                               placeholder="Output key"
                               value={newBindingOutputKey}
                               onChange={(e) => setNewBindingOutputKey(e.target.value)}
-                              style={inputStyle}
+                              className="v2-input"
                             />
                           </>
                         )}
-                        <button onClick={() => handleAddBinding(node.id)} style={smallBtnStyle("var(--status-succeeded)")}>
+                        <button onClick={() => handleAddBinding(node.id)} className="v2-btn" style={{ fontSize: 10, padding: "1px 8px", borderRadius: 3, color: "var(--status-succeeded)", border: "1px solid color-mix(in srgb, var(--status-succeeded) 25%, transparent)", background: "color-mix(in srgb, var(--status-succeeded) 8%, transparent)", cursor: "pointer" }}>
                           Add
                         </button>
-                        <button onClick={() => setBindingNodeId(null)} style={smallBtnStyle("var(--status-failed)")}>
+                        <button onClick={() => setBindingNodeId(null)} className="v2-btn" style={{ fontSize: 10, padding: "1px 8px", borderRadius: 3, color: "var(--status-failed)", border: "1px solid color-mix(in srgb, var(--status-failed) 25%, transparent)", background: "color-mix(in srgb, var(--status-failed) 8%, transparent)", cursor: "pointer" }}>
                           Cancel
                         </button>
                       </div>
                     ) : (
                       <button
                         onClick={() => setBindingNodeId(node.id)}
-                        style={{ ...smallBtnStyle("var(--accent)"), marginTop: 2 }}
+                        className="v2-btn"
+                        style={{ fontSize: 10, padding: "1px 8px", borderRadius: 3, color: "var(--accent)", border: "1px solid color-mix(in srgb, var(--accent) 25%, transparent)", background: "color-mix(in srgb, var(--accent) 8%, transparent)", cursor: "pointer", marginTop: 2 }}
                       >
                         + Add Binding
                       </button>
@@ -646,9 +649,9 @@ function GraphDetailView({ title, graphId }: { title: string; graphId: string })
 
         {/* Edges */}
         <div style={{ marginBottom: 20 }}>
-          <h4 style={{ fontSize: 13, fontWeight: 600, color: "var(--text-muted)", marginBottom: 8, textTransform: "uppercase", letterSpacing: 1 }}>
+          <div className="section-label" style={{ marginBottom: 8 }}>
             Dependencies ({editMode ? editedEdges.length : graph.edges.length})
-          </h4>
+          </div>
 
           {(editMode ? editedEdges : graph.edges).map((edge, i) => {
             const fromNode = graph.nodes.find((n) => n.id === edge.from);
@@ -702,7 +705,7 @@ function GraphDetailView({ title, graphId }: { title: string; graphId: string })
                 Add Edge
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 4, alignItems: "center" }}>
-                <select value={newEdgeFrom} onChange={(e) => setNewEdgeFrom(e.target.value)} style={inputStyle}>
+                <select value={newEdgeFrom} onChange={(e) => setNewEdgeFrom(e.target.value)} className="v2-input">
                   <option value="">From...</option>
                   {graph.nodes.map((n) => (
                     <option key={n.id} value={n.id}>
@@ -710,7 +713,7 @@ function GraphDetailView({ title, graphId }: { title: string; graphId: string })
                     </option>
                   ))}
                 </select>
-                <select value={newEdgeTo} onChange={(e) => setNewEdgeTo(e.target.value)} style={inputStyle}>
+                <select value={newEdgeTo} onChange={(e) => setNewEdgeTo(e.target.value)} className="v2-input">
                   <option value="">To...</option>
                   {graph.nodes.map((n) => (
                     <option key={n.id} value={n.id}>
@@ -721,7 +724,7 @@ function GraphDetailView({ title, graphId }: { title: string; graphId: string })
                 <select
                   value={newEdgeType}
                   onChange={(e) => setNewEdgeType(e.target.value as "depends_on" | "data_flow")}
-                  style={inputStyle}
+                  className="v2-input"
                 >
                   <option value="depends_on">depends_on</option>
                   <option value="data_flow">data_flow</option>
@@ -732,17 +735,17 @@ function GraphDetailView({ title, graphId }: { title: string; graphId: string })
                       placeholder="Output name"
                       value={newEdgeOutputName}
                       onChange={(e) => setNewEdgeOutputName(e.target.value)}
-                      style={inputStyle}
+                      className="v2-input"
                     />
                     <input
                       placeholder="Input variable"
                       value={newEdgeInputVar}
                       onChange={(e) => setNewEdgeInputVar(e.target.value)}
-                      style={inputStyle}
+                      className="v2-input"
                     />
                   </>
                 )}
-                <button onClick={handleAddEdge} style={smallBtnStyle("var(--status-succeeded)")}>
+                <button onClick={handleAddEdge} className="v2-btn" style={{ fontSize: 10, padding: "1px 8px", borderRadius: 3, color: "var(--status-succeeded)", border: "1px solid color-mix(in srgb, var(--status-succeeded) 25%, transparent)", background: "color-mix(in srgb, var(--status-succeeded) 8%, transparent)", cursor: "pointer" }}>
                   Add
                 </button>
               </div>
@@ -750,27 +753,9 @@ function GraphDetailView({ title, graphId }: { title: string; graphId: string })
           )}
         </div>
       </div>
+      </div>
     </CanvasPanelHost>
   );
-}
-
-// ---------------------------------------------------------------------------
-// Shared styles
-// ---------------------------------------------------------------------------
-
-const inputStyle: React.CSSProperties = {
-  fontSize: 11, padding: "2px 6px", borderRadius: 3,
-  border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text-muted)",
-  outline: "none", minWidth: 80,
-};
-
-function smallBtnStyle(color: string): React.CSSProperties {
-  return {
-    fontSize: 10, padding: "1px 8px", borderRadius: 3,
-    border: `1px solid color-mix(in srgb, ${color} 25%, transparent)`,
-    background: `color-mix(in srgb, ${color} 8%, transparent)`,
-    color, cursor: "pointer",
-  };
 }
 
 // ---------------------------------------------------------------------------

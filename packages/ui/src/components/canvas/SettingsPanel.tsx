@@ -37,7 +37,7 @@ function ToggleSwitch({ on, onChange }: { on: boolean; onChange: () => void }) {
 
 function SubLabel({ children }: { children: React.ReactNode }) {
   return (
-    <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.5, color: "var(--text-muted)", fontFamily: "var(--font-mono)", marginBottom: 10, marginTop: 24 }}>
+    <div className="section-label" style={{ marginTop: 24 }}>
       {children}
     </div>
   );
@@ -698,12 +698,12 @@ export default function SettingsPanel({ title }: Props) {
                     )}
                     {idpMappingProviderId === provider.id && (
                       <div style={{ marginTop: 12, paddingLeft: 16, borderLeft: "2px solid var(--border)" }}>
-                        <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.5, color: "var(--text-muted)", fontFamily: "var(--font-mono)", marginBottom: 8 }}>Role Mappings</div>
+                        <div className="section-label" style={{ marginBottom: 8 }}>Role Mappings</div>
                         {(idpMappings[provider.id] ?? []).length > 0 && (
                           <div style={{ borderRadius: 6, overflow: "hidden", border: "1px solid var(--border)", marginBottom: 8 }}>
                             <div style={{ display: "flex", padding: "7px 12px", background: "var(--surface-alt)", borderBottom: "1px solid var(--border)" }}>
-                              <span style={{ flex: 1, fontSize: 10, fontWeight: 700, color: "var(--text-muted)", fontFamily: "var(--font-mono)", textTransform: "uppercase", letterSpacing: 1 }}>IdP Group</span>
-                              <span style={{ flex: 1, fontSize: 10, fontWeight: 700, color: "var(--text-muted)", fontFamily: "var(--font-mono)", textTransform: "uppercase", letterSpacing: 1 }}>Synth Role</span>
+                              <span className="section-label" style={{ flex: 1, marginBottom: 0 }}>IdP Group</span>
+                              <span className="section-label" style={{ flex: 1, marginBottom: 0 }}>Synth Role</span>
                               <span style={{ width: 60 }} />
                             </div>
                             {(idpMappings[provider.id] ?? []).map(mapping => (

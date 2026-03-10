@@ -43,10 +43,7 @@ interface Props {
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <div style={{
-      fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.5,
-      color: "var(--text-muted)", fontFamily: "var(--font-mono)", marginBottom: 10, marginTop: 28,
-    }}>
+    <div className="section-label">
       {children}
     </div>
   );
@@ -466,8 +463,6 @@ export default function UserSettingsPanel({ title }: Props) {
   ];
 
   const DANGER = "var(--status-failed)";
-  const DANGER_SOFT = "var(--status-failed-bg)";
-  const DANGER_BORDER = "color-mix(in srgb, var(--status-failed) 28%, transparent)";
   const SUCCESS = "var(--status-succeeded)";
 
   return (
@@ -524,39 +519,26 @@ export default function UserSettingsPanel({ title }: Props) {
           </div>
           <button
             onClick={logout}
-            style={{
-              padding: "7px 16px", borderRadius: 6, flexShrink: 0,
-              border: `1px solid ${DANGER_BORDER}`,
-              background: DANGER_SOFT, color: DANGER,
-              fontSize: 12, fontWeight: 600, fontFamily: "var(--font-mono)", cursor: "pointer",
-            }}
+            className="v2-btn v2-btn-danger"
+            style={{ flexShrink: 0 }}
           >
             Sign Out
           </button>
         </div>
 
         {/* Segmented control */}
-        <div style={{
-          display: "flex", gap: 4, padding: "3px", borderRadius: 7,
-          background: "var(--surface-alt)", border: "1px solid var(--border)",
-          width: "fit-content", marginBottom: 22,
-        }}>
-          {tabs.map(t => (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              style={{
-                padding: "6px 14px", borderRadius: 5, border: "none", cursor: "pointer",
-                background: tab === t.id ? "var(--surface)" : "transparent",
-                color: tab === t.id ? "var(--text)" : "var(--text-muted)",
-                fontSize: 12, fontWeight: tab === t.id ? 600 : 400,
-                fontFamily: "var(--font-mono)", transition: "all 0.15s",
-                boxShadow: tab === t.id ? "0 1px 3px var(--border)" : "none",
-              }}
-            >
-              {t.label}
-            </button>
-          ))}
+        <div style={{ display: "flex", marginBottom: 22 }}>
+          <div className="segmented-control">
+            {tabs.map(t => (
+              <button
+                key={t.id}
+                className={`segmented-control-btn ${tab === t.id ? "segmented-control-btn-active" : ""}`}
+                onClick={() => setTab(t.id)}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* ════════ PROFILE ════════ */}
@@ -604,12 +586,8 @@ export default function UserSettingsPanel({ title }: Props) {
                 <button
                   onClick={handleSaveProfile}
                   disabled={profileSaving}
-                  style={{
-                    padding: "7px 16px", borderRadius: 5, border: "1px solid var(--accent-border)",
-                    background: "transparent", color: "var(--accent)", fontSize: 12,
-                    fontFamily: "var(--font-mono)", fontWeight: 600, cursor: profileSaving ? "default" : "pointer",
-                    opacity: profileSaving ? 0.6 : 1,
-                  }}
+                  className="btn-accent-outline"
+                  style={{ opacity: profileSaving ? 0.6 : 1 }}
                 >
                   {profileSaving ? "Saving…" : "Save Profile"}
                 </button>
@@ -669,13 +647,8 @@ export default function UserSettingsPanel({ title }: Props) {
                   <button
                     onClick={handleChangePassword}
                     disabled={pwSaving || !currentPw || !newPw || !confirmPw}
-                    style={{
-                      padding: "7px 16px", borderRadius: 5, border: "1px solid var(--accent-border)",
-                      background: "transparent", color: "var(--accent)", fontSize: 12,
-                      fontFamily: "var(--font-mono)", fontWeight: 600,
-                      cursor: (pwSaving || !currentPw || !newPw || !confirmPw) ? "default" : "pointer",
-                      opacity: (pwSaving || !currentPw || !newPw || !confirmPw) ? 0.5 : 1,
-                    }}
+                    className="btn-accent-outline"
+                    style={{ opacity: (pwSaving || !currentPw || !newPw || !confirmPw) ? 0.5 : 1 }}
                   >
                     {pwSaving ? "Saving…" : "Change Password"}
                   </button>
@@ -866,12 +839,7 @@ export default function UserSettingsPanel({ title }: Props) {
                     {!s.current && (
                       <button
                         onClick={() => handleRevokeSession(s.id)}
-                        style={{
-                          padding: "4px 10px", borderRadius: 4,
-                          border: `1px solid ${DANGER_BORDER}`,
-                          background: DANGER_SOFT, color: DANGER,
-                          fontSize: 11, fontFamily: "var(--font-mono)", fontWeight: 600, cursor: "pointer",
-                        }}
+                        className="v2-btn v2-btn-danger"
                       >
                         Revoke
                       </button>
@@ -891,12 +859,7 @@ export default function UserSettingsPanel({ title }: Props) {
             <div style={{ marginTop: 12 }}>
               <button
                 onClick={handleRevokeOtherSessions}
-                style={{
-                  padding: "8px 16px", borderRadius: 6,
-                  border: `1px solid ${DANGER_BORDER}`,
-                  background: DANGER_SOFT, color: DANGER,
-                  fontSize: 12, fontFamily: "var(--font-mono)", fontWeight: 600, cursor: "pointer",
-                }}
+                className="v2-btn v2-btn-danger"
               >
                 Revoke All Other Sessions
               </button>
@@ -973,22 +936,13 @@ export default function UserSettingsPanel({ title }: Props) {
                     <div style={{ display: "flex", gap: 6 }}>
                       <button
                         onClick={() => handleRegenerateKey(k.id)}
-                        style={{
-                          padding: "4px 10px", borderRadius: 4, border: "1px solid var(--border)",
-                          background: "transparent", color: "var(--text-secondary)", fontSize: 11,
-                          fontFamily: "var(--font-mono)", cursor: "pointer",
-                        }}
+                        className="btn-accent-outline"
                       >
                         Regenerate
                       </button>
                       <button
                         onClick={() => handleRevokeKey(k.id)}
-                        style={{
-                          padding: "4px 10px", borderRadius: 4,
-                          border: `1px solid ${DANGER_BORDER}`,
-                          background: DANGER_SOFT, color: DANGER,
-                          fontSize: 11, fontFamily: "var(--font-mono)", fontWeight: 600, cursor: "pointer",
-                        }}
+                        className="v2-btn v2-btn-danger"
                       >
                         Revoke
                       </button>
@@ -1063,23 +1017,14 @@ export default function UserSettingsPanel({ title }: Props) {
                     <button
                       onClick={handleCreateKey}
                       disabled={!newKeyName.trim()}
-                      style={{
-                        padding: "6px 14px", borderRadius: 5, border: "1px solid var(--accent-border)",
-                        background: "var(--accent)", color: "#fff", fontSize: 12,
-                        fontFamily: "var(--font-mono)", fontWeight: 600,
-                        cursor: newKeyName.trim() ? "pointer" : "default",
-                        opacity: newKeyName.trim() ? 1 : 0.5,
-                      }}
+                      className="btn btn-primary"
+                      style={{ opacity: newKeyName.trim() ? 1 : 0.5 }}
                     >
                       Create Key
                     </button>
                     <button
                       onClick={() => { setShowCreateKey(false); setNewKeyName(""); setNewKeyPerms([]); }}
-                      style={{
-                        padding: "6px 14px", borderRadius: 5, border: "1px solid var(--border)",
-                        background: "transparent", color: "var(--text-muted)", fontSize: 12,
-                        fontFamily: "var(--font-mono)", cursor: "pointer",
-                      }}
+                      className="btn-accent-outline"
                     >
                       Cancel
                     </button>
@@ -1088,12 +1033,8 @@ export default function UserSettingsPanel({ title }: Props) {
               ) : (
                 <button
                   onClick={() => setShowCreateKey(true)}
-                  style={{
-                    padding: "6px 14px", borderRadius: 5,
-                    border: "1px solid var(--accent-border)", background: "transparent",
-                    color: "var(--accent)", fontSize: 11,
-                    fontFamily: "var(--font-mono)", fontWeight: 600, cursor: "pointer", marginTop: 4,
-                  }}
+                  className="btn-accent-outline"
+                  style={{ marginTop: 4 }}
                 >
                   + Create API Key
                 </button>

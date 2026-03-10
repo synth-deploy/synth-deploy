@@ -40,30 +40,23 @@ export default function SignalDetailPanel({ signal, title }: Props) {
     return "var(--text-muted)";
   };
 
-  const priorityStyle = (p: string): React.CSSProperties => {
-    if (p === "high") return {
-      background: "color-mix(in srgb, var(--status-warning) 8%, transparent)",
-      color: "var(--status-warning)",
-      border: "1px solid color-mix(in srgb, var(--status-warning) 22%, transparent)",
-    };
-    if (p === "medium") return {
-      background: "color-mix(in srgb, var(--accent) 8%, transparent)",
-      color: "var(--accent)",
-      border: "1px solid color-mix(in srgb, var(--accent) 22%, transparent)",
-    };
-    return {
-      background: "transparent",
-      color: "var(--text-muted)",
-      border: "1px solid var(--border)",
-    };
+  const priorityColor = (p: string) => {
+    if (p === "high") return "var(--status-warning)";
+    if (p === "medium") return "var(--accent)";
+    return "var(--text-muted)";
   };
 
-  const numBadgeStyle = (p: string): React.CSSProperties => ({
-    width: 22, height: 22, borderRadius: 5,
-    display: "flex", alignItems: "center", justifyContent: "center",
-    fontSize: 11, fontWeight: 700, fontFamily: "var(--font-mono)", flexShrink: 0, marginTop: 1,
-    ...priorityStyle(p),
-  });
+  const priorityBg = (p: string) => {
+    if (p === "high") return "color-mix(in srgb, var(--status-warning) 8%, transparent)";
+    if (p === "medium") return "color-mix(in srgb, var(--accent) 8%, transparent)";
+    return "transparent";
+  };
+
+  const priorityBorderColor = (p: string) => {
+    if (p === "high") return "color-mix(in srgb, var(--status-warning) 22%, transparent)";
+    if (p === "medium") return "color-mix(in srgb, var(--accent) 22%, transparent)";
+    return "var(--border)";
+  };
 
   const driftConflict = inv.driftConflicts?.[0];
 
@@ -96,7 +89,8 @@ export default function SignalDetailPanel({ signal, title }: Props) {
 
   return (
     <>
-    <CanvasPanelHost title={title}>
+    <CanvasPanelHost title={title} hideRootCrumb dismissible={false}>
+      <div className="v2-detail-view">
       <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
 
         {/* ── Header ── */}
@@ -132,7 +126,7 @@ export default function SignalDetailPanel({ signal, title }: Props) {
         </div>
 
         {/* ── Synth's Assessment ── */}
-        <div className="v6-section-label" style={{ marginBottom: 8 }}>Synth's Assessment</div>
+        <div className="section-label" style={{ marginBottom: 8 }}>Synth's Assessment</div>
         <div style={{
           padding: "16px 20px", borderRadius: 10, marginBottom: 24,
           background: "color-mix(in srgb, var(--accent) 8%, transparent)",
@@ -156,7 +150,7 @@ export default function SignalDetailPanel({ signal, title }: Props) {
         {/* ── Configuration Drift ── */}
         {inv.driftConflicts && inv.driftConflicts.length > 0 && (
           <>
-            <div className="v6-section-label" style={{ marginBottom: 12 }}>Configuration Drift</div>
+            <div className="section-label" style={{ marginBottom: 12 }}>Configuration Drift</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 24 }}>
               {inv.driftConflicts.map((conflict, i) => (
                 <div
@@ -225,7 +219,7 @@ export default function SignalDetailPanel({ signal, title }: Props) {
         {/* ── Evidence ── */}
         {inv.evidence.length > 0 && (
           <>
-            <div className="v6-section-label" style={{ marginBottom: 8 }}>Evidence</div>
+            <div className="section-label" style={{ marginBottom: 8 }}>Evidence</div>
             <div style={{
               borderRadius: 10, overflow: "hidden",
               border: "1px solid var(--border)", background: "var(--surface)", marginBottom: 24,
@@ -258,7 +252,7 @@ export default function SignalDetailPanel({ signal, title }: Props) {
         {/* ── Recommendations ── */}
         {inv.recommendations.length > 0 && (
           <>
-            <div className="v6-section-label" style={{ marginBottom: 8 }}>Recommendations</div>
+            <div className="section-label" style={{ marginBottom: 8 }}>Recommendations</div>
             <div style={{ marginBottom: 24 }}>
               {inv.recommendations.map((r, i) => (
                 <div
@@ -269,7 +263,14 @@ export default function SignalDetailPanel({ signal, title }: Props) {
                     display: "flex", alignItems: "flex-start", gap: 14,
                   }}
                 >
-                  <span style={numBadgeStyle(r.priority)}>{i + 1}</span>
+                  <span style={{
+                    width: 22, height: 22, borderRadius: 5,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontSize: 11, fontWeight: 700, fontFamily: "var(--font-mono)", flexShrink: 0, marginTop: 1,
+                    background: priorityBg(r.priority),
+                    color: priorityColor(r.priority),
+                    border: `1px solid ${priorityBorderColor(r.priority)}`,
+                  }}>{i + 1}</span>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)", marginBottom: 3 }}>{r.action}</div>
                     <div style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.5 }}>{r.detail}</div>
@@ -277,7 +278,10 @@ export default function SignalDetailPanel({ signal, title }: Props) {
                   <span style={{
                     padding: "2px 8px", borderRadius: 3, fontSize: 9, fontWeight: 700,
                     fontFamily: "var(--font-mono)", textTransform: "uppercase", alignSelf: "center",
-                    flexShrink: 0, ...priorityStyle(r.priority),
+                    flexShrink: 0,
+                    background: priorityBg(r.priority),
+                    color: priorityColor(r.priority),
+                    border: `1px solid ${priorityBorderColor(r.priority)}`,
                   }}>
                     {r.priority}
                   </span>
@@ -290,7 +294,7 @@ export default function SignalDetailPanel({ signal, title }: Props) {
         {/* ── Timeline ── */}
         {inv.timeline.length > 0 && (
           <>
-            <div className="v6-section-label" style={{ marginBottom: 8 }}>Timeline</div>
+            <div className="section-label" style={{ marginBottom: 8 }}>Timeline</div>
             <div style={{
               borderRadius: 10, border: "1px solid var(--border)", background: "var(--surface)",
               marginBottom: 24, padding: "4px 0",
@@ -323,7 +327,7 @@ export default function SignalDetailPanel({ signal, title }: Props) {
         {/* ── Related Deployments ── */}
         {inv.relatedDeployments.length > 0 && (
           <>
-            <div className="v6-section-label" style={{ marginBottom: 8 }}>Related Deployments</div>
+            <div className="section-label" style={{ marginBottom: 8 }}>Related Deployments</div>
             <div style={{
               borderRadius: 10, border: "1px solid var(--border)", background: "var(--surface)", marginBottom: 24,
             }}>
@@ -357,12 +361,7 @@ export default function SignalDetailPanel({ signal, title }: Props) {
         }}>
           {inv.entityType === "envoy" && signal.relatedEntity && (
             <button
-              style={{
-                padding: "9px 18px", borderRadius: 6, cursor: "pointer",
-                border: "1px solid color-mix(in srgb, var(--accent) 22%, transparent)",
-                background: "color-mix(in srgb, var(--accent) 8%, transparent)",
-                color: "var(--accent)", fontSize: 12, fontWeight: 600, fontFamily: "var(--font-mono)",
-              }}
+              className="btn-accent-outline"
               onClick={() => pushPanel({ type: "envoy-detail", title: signal.relatedEntity!.name, params: { id: signal.relatedEntity!.id } })}
             >
               View Envoy →
@@ -370,12 +369,8 @@ export default function SignalDetailPanel({ signal, title }: Props) {
           )}
           {inv.entityType === "artifact" && signal.relatedEntity?.type === "deployment" && (
             <button
-              style={{
-                padding: "9px 18px", borderRadius: 6, cursor: "pointer",
-                border: "1px solid color-mix(in srgb, var(--status-succeeded) 22%, transparent)",
-                background: "color-mix(in srgb, var(--status-succeeded) 8%, transparent)",
-                color: "var(--status-succeeded)", fontSize: 12, fontWeight: 600, fontFamily: "var(--font-mono)",
-              }}
+              className="btn-accent-outline"
+              style={{ color: "var(--status-succeeded)", borderColor: "color-mix(in srgb, var(--status-succeeded) 22%, transparent)" }}
               onClick={() => pushPanel({ type: "debrief", title: "Debriefs", params: { deploymentId: signal.relatedEntity!.id } })}
             >
               View Debrief →
@@ -384,23 +379,14 @@ export default function SignalDetailPanel({ signal, title }: Props) {
           {inv.entityType === "partition" && signal.relatedEntity && (
             <>
               <button
-                style={{
-                  padding: "9px 18px", borderRadius: 6, cursor: "pointer",
-                  border: "1px solid color-mix(in srgb, var(--accent) 22%, transparent)",
-                  background: "color-mix(in srgb, var(--accent) 8%, transparent)",
-                  color: "var(--accent)", fontSize: 12, fontWeight: 600, fontFamily: "var(--font-mono)",
-                }}
+                className="btn-accent-outline"
                 onClick={() => pushPanel({ type: "environment-detail", title: signal.relatedEntity!.name, params: { id: signal.relatedEntity!.id } })}
               >
                 View Environment →
               </button>
               <button
-                style={{
-                  padding: "9px 18px", borderRadius: 6, cursor: "pointer",
-                  border: `1px solid ${severityBorder}`,
-                  background: severityBg,
-                  color: severityColor, fontSize: 12, fontWeight: 600, fontFamily: "var(--font-mono)",
-                }}
+                className="btn-accent-outline"
+                style={{ color: severityColor, borderColor: severityBorder, background: severityBg }}
                 onClick={() => {
                   setShowResolveDrift(true);
                   setDriftResolution(null);
@@ -412,11 +398,8 @@ export default function SignalDetailPanel({ signal, title }: Props) {
             </>
           )}
           <button
-            style={{
-              padding: "9px 18px", borderRadius: 6, cursor: "pointer",
-              border: "1px solid var(--border)", background: "transparent",
-              color: "var(--text-muted)", fontSize: 12, fontFamily: "var(--font-mono)",
-            }}
+            className="btn-accent-outline"
+            style={{ color: "var(--text-muted)", borderColor: "var(--border)", background: "transparent" }}
             onClick={() => popPanel()}
           >
             Dismiss Signal
@@ -427,6 +410,7 @@ export default function SignalDetailPanel({ signal, title }: Props) {
           </span>
         </div>
 
+      </div>
       </div>
     </CanvasPanelHost>
 
@@ -483,13 +467,14 @@ export default function SignalDetailPanel({ signal, title }: Props) {
                 {driftResolution === "migrate" && `${driftConflict.variable} will update to the partition value immediately and the debrief will record the change.`}
               </div>
               <button
+                className="btn btn-primary"
                 onClick={() => { setShowResolveDrift(false); popPanel(); }}
-                style={{ marginTop: 14, padding: "9px 20px", borderRadius: 6, border: "none", cursor: "pointer", background: "var(--status-succeeded)", color: "#fff", fontSize: 13, fontWeight: 600, fontFamily: "var(--font-mono)" }}
+                style={{ marginTop: 14, background: "var(--status-succeeded)", color: "var(--canvas)", borderColor: "var(--status-succeeded)" }}
               >Done</button>
             </div>
           ) : (
             <>
-              <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.5, color: "var(--text-faint, var(--text-muted))", fontFamily: "var(--font-mono)", marginBottom: 10 }}>
+              <div className="section-label" style={{ marginBottom: 10 }}>
                 Choose Resolution
               </div>
 
@@ -545,25 +530,27 @@ export default function SignalDetailPanel({ signal, title }: Props) {
               {/* Actions */}
               <div style={{ display: "flex", gap: 8 }}>
                 <button
+                  className="btn btn-primary"
                   disabled={!driftResolution || driftResolving}
                   onClick={() => {
                     setDriftResolving(true);
                     setTimeout(() => { setDriftResolving(false); setDriftResolved(true); }, 1500);
                   }}
                   style={{
-                    flex: 1, padding: "12px 20px", borderRadius: 7, border: "none",
-                    cursor: driftResolution ? "pointer" : "not-allowed",
-                    background: driftResolution ? "var(--status-succeeded)" : "var(--surface-alt, var(--surface))",
-                    color: driftResolution ? "#fff" : "var(--text-muted)",
-                    fontSize: 14, fontWeight: 700, fontFamily: "var(--font-mono)",
+                    flex: 1, fontSize: 14, padding: "12px 20px",
+                    background: driftResolution ? "var(--status-succeeded)" : undefined,
+                    color: driftResolution ? "var(--canvas)" : undefined,
+                    borderColor: driftResolution ? "var(--status-succeeded)" : undefined,
                     opacity: driftResolving ? 0.7 : 1, transition: "all 0.2s",
+                    cursor: driftResolution ? "pointer" : "not-allowed",
                   }}
                 >
                   {driftResolving ? "Resolving…" : "Apply Resolution"}
                 </button>
                 <button
+                  className="btn-accent-outline"
+                  style={{ color: "var(--text-muted)", borderColor: "var(--border)", background: "var(--surface)", fontSize: 14, padding: "12px 20px" }}
                   onClick={() => setShowResolveDrift(false)}
-                  style={{ padding: "12px 20px", borderRadius: 7, border: "1px solid var(--border-strong, rgba(128,128,128,0.18))", background: "var(--surface)", color: "var(--text-muted)", fontSize: 14, fontFamily: "var(--font-mono)", cursor: "pointer" }}
                 >Cancel</button>
               </div>
             </>
