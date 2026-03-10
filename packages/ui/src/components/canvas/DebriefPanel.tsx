@@ -539,16 +539,23 @@ export default function DebriefPanel({ title, filterPartitionId, filterDecisionT
                   const duration = formatDuration(dep.createdAt, dep.completedAt);
                   const isFinished = FINISHED_STATUSES.has(dep.status);
                   const isAwaiting = dep.status === "awaiting_approval";
+                  function handleRowClick() {
+                    if (isAwaiting) {
+                      pushPanel({ type: "plan-review", title: "Review Plan", params: { id: dep.id } });
+                    } else {
+                      setSelectedDeploymentId(dep.id);
+                    }
+                  }
                   return (
                     <div
                       key={dep.id}
-                      onClick={() => isFinished && setSelectedDeploymentId(dep.id)}
+                      onClick={handleRowClick}
                       style={{
                         padding: "16px 20px",
                         borderRadius: 10,
                         background: "var(--surface)",
                         border: "1px solid var(--border)",
-                        cursor: isFinished ? "pointer" : "default",
+                        cursor: "pointer",
                         transition: "background 0.15s",
                       }}
                     >
@@ -570,12 +577,12 @@ export default function DebriefPanel({ title, filterPartitionId, filterDecisionT
                           <span style={{ color: "var(--accent)", fontWeight: 500 }}>View full debrief →</span>
                         )}
                         {isAwaiting && (
-                          <span
-                            style={{ color: "var(--status-warning)", fontWeight: 500, cursor: "pointer" }}
-                            onClick={(e) => { e.stopPropagation(); pushPanel({ type: "plan-review", title: "Review Plan", params: { id: dep.id } }); }}
-                          >
+                          <span style={{ color: "var(--status-warning)", fontWeight: 500 }}>
                             Review Plan →
                           </span>
+                        )}
+                        {!isFinished && !isAwaiting && (
+                          <span style={{ color: "var(--text-muted)", fontWeight: 500 }}>View debrief →</span>
                         )}
                       </div>
                     </div>

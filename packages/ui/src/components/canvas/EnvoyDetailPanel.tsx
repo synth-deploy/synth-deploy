@@ -480,8 +480,16 @@ export default function EnvoyDetailPanel({ envoyId, title }: Props) {
                 ? new Date(execEnd).getTime() - new Date(execStart).getTime()
                 : null;
               const delta = d.plan?.diffFromPreviousPlan;
+              const isAwaiting = d.status === "awaiting_approval";
+              function handlePlanClick() {
+                if (isAwaiting) {
+                  pushPanel({ type: "plan-review", title: "Review Plan", params: { id: d.id } });
+                } else {
+                  pushPanel({ type: "debrief", title: "Debriefs", params: { deploymentId: d.id } });
+                }
+              }
               return (
-                <div key={d.id} style={{ padding: "12px 16px", borderBottom: i < arr.length - 1 ? "1px solid var(--border)" : "none" }}>
+                <div key={d.id} onClick={handlePlanClick} style={{ padding: "12px 16px", borderBottom: i < arr.length - 1 ? "1px solid var(--border)" : "none", cursor: "pointer", transition: "background 0.15s" }}>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
                     <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
                       <span style={{ fontSize: 11, fontFamily: "var(--font-mono)", color: "var(--text-muted)" }}>

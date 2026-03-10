@@ -4,11 +4,12 @@ import {
   listPartitions,
   listEnvironments,
   listEnvoys,
+  listDeployments,
   createDeployment,
   recordPreFlightResponse,
   queryAgent,
 } from "../../api.js";
-import type { Artifact, Partition, Environment } from "../../types.js";
+import type { Artifact, Partition, Environment, Deployment } from "../../types.js";
 import type { EnvoyRegistryEntry, PreFlightContext } from "../../api.js";
 import { useSettings } from "../../context/SettingsContext.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
@@ -36,6 +37,7 @@ export default function DeploymentAuthoringPanel({ title, preselectedArtifactId,
   const { data: partitions, loading: l2 } = useQuery<Partition[]>("list:partitions", listPartitions);
   const { data: environments, loading: l3 } = useQuery<Environment[]>("list:environments", listEnvironments);
   const { data: envoys, loading: l4 } = useQuery<EnvoyRegistryEntry[]>("list:envoys", () => listEnvoys().catch(() => [] as EnvoyRegistryEntry[]));
+  const { data: recentDeployments } = useQuery<Deployment[]>("list:deployments", listDeployments);
   const loading = l1 || l2 || l3 || l4;
 
   const [submitting, setSubmitting] = useState(false);
@@ -170,6 +172,7 @@ export default function DeploymentAuthoringPanel({ title, preselectedArtifactId,
     .map((id) => artList.find((a) => a.id === id))
     .filter(Boolean) as Artifact[];
 
+  const lowConfidenceArtifacts = selectedArtifactObjects.filter((a) => a.analysis.confidence < 0.5);
   const canDeploy = selectedArtifactIds.length > 0 && hasTarget;
   const contextHint = getContextHint();
 
@@ -449,6 +452,31 @@ export default function DeploymentAuthoringPanel({ title, preselectedArtifactId,
           )}
         </div>
 
+        {/* Low-confidence artifact warning */}
+        {lowConfidenceArtifacts.length > 0 && (
+          <div style={{
+            marginTop: 16,
+            padding: "12px 16px",
+            borderRadius: 8,
+            background: "color-mix(in srgb, var(--status-warning) 8%, transparent)",
+            border: "1px solid color-mix(in srgb, var(--status-warning) 25%, transparent)",
+            display: "flex",
+            alignItems: "flex-start",
+            gap: 10,
+          }}>
+            <span style={{ color: "var(--status-warning)", fontWeight: 700, fontSize: 14, flexShrink: 0 }}>!</span>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "var(--status-warning)", marginBottom: 3 }}>
+                Low confidence {lowConfidenceArtifacts.length === 1 ? "artifact" : "artifacts"} selected
+              </div>
+              <div style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.5 }}>
+                {lowConfidenceArtifacts.map((a) => a.name).join(", ")}{" "}
+                {lowConfidenceArtifacts.length === 1 ? "has" : "have"} low analysis confidence. Synth may produce a less accurate plan. Consider annotating {lowConfidenceArtifacts.length === 1 ? "this artifact" : "these artifacts"} first to improve understanding.
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Pre-flight (auto-fetched when artifact + environment selected) */}
         {primaryArtifactId && (!environmentsEnabled || selectedEnvironmentId) && (
           <PreFlightDisplay
@@ -532,6 +560,72 @@ export default function DeploymentAuthoringPanel({ title, preselectedArtifactId,
                 ))}
               </div>
             )}
+          </div>
+        )}
+
+        {/* Recent deployments */}
+        {(recentDeployments ?? []).length > 0 && (
+          <div style={{ marginTop: 28 }}>
+            <div className="section-label">Recent Deployments</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {(recentDeployments ?? [])
+                .slice()
+                .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                .slice(0, 5)
+                .map((dep) => {
+                  const art = artList.find((a) => a.id === dep.artifactId);
+                  const env = (environments ?? []).find((e) => e.id === dep.environmentId);
+                  const isAwaiting = dep.status === "awaiting_approval";
+                  const statusColors: Record<string, string> = {
+                    succeeded: "var(--status-succeeded)",
+                    failed: "var(--status-failed)",
+                    rolled_back: "var(--status-warning)",
+                    awaiting_approval: "var(--status-warning)",
+                    running: "var(--accent)",
+                    pending: "var(--text-muted)",
+                  };
+                  const statusColor = statusColors[dep.status] ?? "var(--text-muted)";
+                  const ageMs = Date.now() - new Date(dep.createdAt).getTime();
+                  const ageLabel = ageMs < 60000 ? "just now"
+                    : ageMs < 3600000 ? `${Math.floor(ageMs / 60000)}m ago`
+                    : ageMs < 86400000 ? `${Math.floor(ageMs / 3600000)}h ago`
+                    : `${Math.floor(ageMs / 86400000)}d ago`;
+                  return (
+                    <div
+                      key={dep.id}
+                      onClick={() => {
+                        if (isAwaiting) {
+                          pushPanel({ type: "plan-review", title: "Review Plan", params: { id: dep.id } });
+                        } else {
+                          pushPanel({ type: "debrief", title: "Debriefs", params: { deploymentId: dep.id } });
+                        }
+                      }}
+                      style={{
+                        display: "flex", alignItems: "center", gap: 10,
+                        padding: "10px 14px", borderRadius: 8, cursor: "pointer",
+                        background: "var(--surface)", border: "1px solid var(--border)",
+                        transition: "background 0.15s",
+                      }}
+                    >
+                      <span style={{ width: 7, height: 7, borderRadius: "50%", background: statusColor, flexShrink: 0 }} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>
+                          {art?.name ?? dep.artifactId.slice(0, 8)}
+                        </span>
+                        {env && (
+                          <span style={{ fontSize: 12, color: "var(--text-muted)", marginLeft: 6 }}>
+                            → {env.name}
+                          </span>
+                        )}
+                      </div>
+                      <span style={{ fontSize: 11, color: statusColor, fontWeight: 500, flexShrink: 0 }}>
+                        {dep.status.replace(/_/g, " ")}
+                      </span>
+                      <span style={{ fontSize: 11, color: "var(--text-muted)", flexShrink: 0 }}>{ageLabel}</span>
+                    </div>
+                  );
+                })}
+            </div>
           </div>
         )}
 

@@ -6,6 +6,7 @@ import crypto from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import type { IArtifactStore } from "@synth-deploy/core";
 import { requirePermission } from "../middleware/permissions.js";
+import { detectArtifactType } from "../artifact-analyzer.js";
 import type { IntakeChannelStore, IntakeEventStore } from "../intake/intake-store.js";
 import type { IntakeProcessor } from "../intake/intake-processor.js";
 import type { RegistryPoller } from "../intake/registry-poller.js";
@@ -465,7 +466,7 @@ export function registerIntakeRoutes(
         artifactType = existing.type;
       } else {
         artifactName = extractNameFromFilename(originalFilename);
-        artifactType = "unknown";
+        artifactType = detectArtifactType({ name: originalFilename, source: "manual-upload", content: fileBuffer });
       }
 
       const version = extractVersionFromFilename(originalFilename) ?? "unknown";

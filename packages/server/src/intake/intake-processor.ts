@@ -5,6 +5,7 @@
 
 import type { IArtifactStore } from "@synth-deploy/core";
 import type { ArtifactAnalyzer } from "../artifact-analyzer.js";
+import { detectArtifactType } from "../artifact-analyzer.js";
 import type { WebhookPayload } from "./webhook-handlers.js";
 
 export class IntakeProcessor {
@@ -77,8 +78,18 @@ export class IntakeProcessor {
           metadata: stringMetadata,
         });
 
-        // Update the artifact with the new analysis
+        // Resolve the best type: prefer the detected type over "unknown"
+        const detectedType = detectArtifactType({
+          name: payload.artifactName,
+          type: payload.artifactType !== "unknown" ? payload.artifactType : undefined,
+          source: payload.source,
+          content: payload.content,
+          metadata: stringMetadata,
+        });
+
+        // Update the artifact with the new analysis (and corrected type)
         this.artifactStore.update(artifactId, {
+          type: detectedType !== "unknown" ? detectedType : payload.artifactType,
           analysis: result.analysis,
           learningHistory: [
             ...(existing?.learningHistory ?? []),

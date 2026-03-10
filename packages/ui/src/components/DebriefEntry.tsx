@@ -77,7 +77,7 @@ function humanizeValue(value: unknown): string {
 }
 
 function formatContext(ctx: Record<string, unknown>): string {
-  const entries = Object.entries(ctx).filter(([k]) => !k.startsWith("_"));
+  const entries = Object.entries(ctx).filter(([k]) => !k.startsWith("_") && k !== "prompt");
   if (entries.length === 0) return "";
 
   return entries
@@ -87,6 +87,8 @@ function formatContext(ctx: Record<string, unknown>): string {
 
 export default function DebriefEntryCard({ entry }: { entry: DebriefEntry }) {
   const [expanded, setExpanded] = useState(false);
+  const [showPrompt, setShowPrompt] = useState(false);
+  const prompt = typeof entry.context?.prompt === "string" ? entry.context.prompt : null;
   const dtClass = dtClassMap[entry.decisionType] ?? "";
   const dtLabel = dtLabels[entry.decisionType] ?? entry.decisionType;
 
@@ -130,6 +132,28 @@ export default function DebriefEntryCard({ entry }: { entry: DebriefEntry }) {
           {formatContext(entry.context) && (
             <div className="debrief-entry-context" style={{ whiteSpace: "pre-line", fontSize: 12, lineHeight: 1.5, color: "var(--text-secondary)", marginTop: 8, padding: "8px 12px", background: "var(--surface-alt)", borderRadius: 6 }}>
               {formatContext(entry.context)}
+            </div>
+          )}
+          {prompt && (
+            <div style={{ marginTop: 8 }}>
+              <button
+                className="btn btn-sm"
+                onClick={() => setShowPrompt(!showPrompt)}
+                style={{ fontSize: 11, color: "var(--text-muted)" }}
+              >
+                {showPrompt ? "Hide full prompt" : "View full prompt"}
+              </button>
+              {showPrompt && (
+                <pre style={{
+                  marginTop: 8, padding: "10px 14px", borderRadius: 6,
+                  background: "var(--surface-alt)", border: "1px solid var(--border)",
+                  fontSize: 11, fontFamily: "var(--font-mono)", color: "var(--text-muted)",
+                  whiteSpace: "pre-wrap", wordBreak: "break-word", lineHeight: 1.6,
+                  maxHeight: 400, overflowY: "auto",
+                }}>
+                  {prompt}
+                </pre>
+              )}
             </div>
           )}
         </>

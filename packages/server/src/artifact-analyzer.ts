@@ -269,8 +269,9 @@ function extractMakefile(content: string): ExtractedData {
 
 /**
  * Detect artifact type from name, metadata, and content.
+ * Exported for use in intake handlers before the full analyzer runs.
  */
-function detectArtifactType(artifact: ArtifactInput): string {
+export function detectArtifactType(artifact: ArtifactInput): string {
   if (artifact.type) return artifact.type;
 
   const name = artifact.name.toLowerCase();
@@ -756,8 +757,14 @@ Produce a JSON analysis that incorporates all user corrections. Raise confidence
         agent: "command",
         decisionType: "artifact-analysis",
         decision: `Re-analyzed "${artifact.name}" with ${artifact.annotations.length} user correction(s). Confidence: ${revised.confidence}.`,
-        reasoning: `User corrections prompted LLM re-analysis. Corrections: ${correctionsText}`,
-        context: { artifactName: artifact.name, corrections: artifact.annotations.length, confidence: revised.confidence },
+        // reasoning = actual LLM response text; context carries the prompt for full auditability
+        reasoning: result.text,
+        context: {
+          artifactName: artifact.name,
+          corrections: correctionsText,
+          confidence: revised.confidence,
+          prompt,
+        },
       });
 
       return revised;
