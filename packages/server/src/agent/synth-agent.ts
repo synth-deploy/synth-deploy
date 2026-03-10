@@ -414,11 +414,16 @@ export class SynthAgent {
 
       // --- Step 4: Execute deployment ----------------------------------------
 
-      await this.executeDeployment(deployment, partition, environment, artifact);
+      const delegated = await this.executeDeployment(deployment, partition, environment, artifact);
 
       // --- Step 5: Post-deploy verify ----------------------------------------
+      // Only run when Envoy did NOT handle execution — Envoy ingests its own
+      // verification debrief entries via delegateToEnvoy(), so calling this
+      // after delegation would produce a duplicate/false entry.
 
-      await this.postDeployVerify(deployment, partition, environment, artifact);
+      if (!delegated) {
+        await this.postDeployVerify(deployment, partition, environment, artifact);
+      }
 
       // --- Success ---------------------------------------------------------
 
@@ -1260,7 +1265,7 @@ export class SynthAgent {
     partition: Partition | undefined,
     environment: Environment,
     artifact: Artifact,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const envoyConfig = this.settingsReader?.get().envoy;
 
     // When a settingsReader is present (production), Command delegates all
@@ -1280,7 +1285,7 @@ export class SynthAgent {
       await this.delegateToEnvoy(
         deployment, partition, environment, artifact, envoyConfig,
       );
-      return;
+      return true;
     }
 
     // No settingsReader configured — execution skipped (test/offline environment)
@@ -1300,6 +1305,7 @@ export class SynthAgent {
       },
     });
     deployment.debriefEntryIds.push(execEntry.id);
+    return false;
   }
 
   /**
@@ -1466,13 +1472,13 @@ export class SynthAgent {
       deploymentId: deployment.id,
       agent: "command",
       decisionType: "deployment-verification",
-      decision: `Post-deploy verification passed for ${artifact.name} v${deployment.version}`,
+      decision: `Post-deploy verification skipped for ${artifact.name} v${deployment.version} — no Envoy configured`,
       reasoning:
-        `Verification accepted based on successful Envoy execution. ` +
-        `The deployment of "${artifact.name}" v${deployment.version} to "${environment.name}" ` +
-        `completed without reported errors. Artifact-specific health checks are performed by the Envoy.`,
+        `No Envoy is configured in this environment, so post-deploy verification was skipped. ` +
+        `Configure an Envoy to enable real verification of "${artifact.name}" v${deployment.version} on "${environment.name}".`,
       context: {
         step: "post-deploy-verify",
+        envoySkipped: true,
         variableCount: Object.keys(deployment.variables).length,
         artifactName: artifact.name,
         version: deployment.version,
