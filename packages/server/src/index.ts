@@ -116,6 +116,8 @@ if (!process.env.SYNTH_DATA_DIR) {
 const envoyRegistryStore = new PersistentEnvoyRegistryStore(entityDb);
 const envoyRegistry = new EnvoyRegistry(envoyRegistryStore);
 
+const envoyUrl = process.env.SYNTH_ENVOY_URL ?? "http://localhost:3001";
+
 const jwtSecret: Uint8Array = new TextEncoder().encode(resolvedJwtSecret);
 
 // --- Seed default roles ---
@@ -168,8 +170,8 @@ if (roleStore.list().length === 0) {
   });
   console.log("[Synth] Seeded default roles: Admin, Deployer, Viewer");
 }
-const envoyUrl = settings.get().envoy?.url;
-const healthChecker = envoyUrl ? new EnvoyHealthChecker(envoyUrl) : undefined;
+const healthCheckerUrl = settings.get().envoy?.url;
+const healthChecker = healthCheckerUrl ? new EnvoyHealthChecker(healthCheckerUrl) : undefined;
 const agent = new SynthAgent(debrief, deployments, artifactStore, environments, partitions, healthChecker, {}, settings);
 const llm = new LlmClient(debrief, "command");
 const artifactAnalyzer = new ArtifactAnalyzer({ llm, debrief });
