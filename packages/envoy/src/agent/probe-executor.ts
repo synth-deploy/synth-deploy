@@ -83,13 +83,46 @@ export interface ProbeResult {
 export class ProbeExecutor {
   private readonly _timeoutMs: number;
   private readonly _maxOutputBytes: number;
+  /** TTL-based cache: command → { result, expiresAt } */
+  private readonly _cache = new Map<string, { result: ProbeResult; expiresAt: number }>();
+  private readonly _cacheTtlMs: number;
 
-  constructor(opts: { timeoutMs?: number; maxOutputBytes?: number } = {}) {
+  constructor(opts: { timeoutMs?: number; maxOutputBytes?: number; cacheTtlMs?: number } = {}) {
     this._timeoutMs = opts.timeoutMs ?? 10_000;
     this._maxOutputBytes = opts.maxOutputBytes ?? 64 * 1024;
+    // Cache probe results for 2 minutes — machine state doesn't change between
+    // consecutive plan requests. This dramatically reduces API calls for the
+    // LLM probe loop, avoiding Anthropic rate limits on back-to-back plans.
+    this._cacheTtlMs = opts.cacheTtlMs ?? 120_000;
+  }
+
+  /** Clear all cached probe results (e.g. after executing a deployment). */
+  clearCache(): void {
+    this._cache.clear();
+  }
+
+  private _cacheResult(command: string, result: ProbeResult): ProbeResult {
+    this._cache.set(command, { result, expiresAt: Date.now() + this._cacheTtlMs });
+    return result;
   }
 
   async execute(command: string): Promise<ProbeResult> {
+    // -----------------------------------------------------------------------
+    // Layer 0: Cache lookup
+    // -----------------------------------------------------------------------
+    const cached = this._cache.get(command);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.result;
+    }
+    if (cached) this._cache.delete(command);
+
+    const result = await this._executeUncached(command);
+    // Cache all results (including blocked/failed) — the outcome won't change
+    // within the TTL window.
+    return this._cacheResult(command, result);
+  }
+
+  private async _executeUncached(command: string): Promise<ProbeResult> {
     // -----------------------------------------------------------------------
     // Layer 1: Pattern rejection
     // -----------------------------------------------------------------------

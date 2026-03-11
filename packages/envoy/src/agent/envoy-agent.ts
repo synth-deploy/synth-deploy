@@ -256,6 +256,8 @@ export class EnvoyAgent {
   private llmClient: LlmClient | null;
   private _lifecycleState: LifecycleState = "active";
   private executorReady: Promise<void>;
+  /** Shared across plan requests so probe results are cached between calls. */
+  private probeExecutor = new ProbeExecutor();
 
   constructor(
     private debrief: DebriefWriter,
@@ -1364,11 +1366,15 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
     let lastObservations: string | null = null;
     let previousObservationSummary = "";
 
-    // ProbeExecutor is shared across attempts — no per-attempt state
-    const probeExecutor = new ProbeExecutor();
+    // ProbeExecutor is shared at the agent level — probe results are cached
+    // across dry-run retries and consecutive plan requests (TTL-based).
+    const probeExecutor = this.probeExecutor;
 
     for (let attempt = 1; attempt <= MAX_DRY_RUN_ATTEMPTS; attempt++) {
-      // --- LLM planning call with probe tool — observations from prior dry-run injected as context ---
+      // --- LLM planning call ---
+      // Attempt 1: full probe loop to observe real machine state.
+      // Retry attempts: use reason() with dry-run observations injected as context
+      // (no re-probing — machine state hasn't changed, saves API calls).
       const promptSections = [...sections];
       if (lastObservations) {
         promptSections.push(
@@ -1384,43 +1390,61 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
         );
       }
 
-      const llmResult = await this.llmClient!.callWithProbeLoop({
-        prompt: promptSections.join("\n\n"),
-        systemPrompt,
-        promptSummary:
-          `Plan deployment of ${instruction.artifact.name} v${instruction.version} ` +
-          `to "${instruction.environment.name}"` +
-          (attempt > 1 ? ` (attempt ${attempt} — revising for dry-run observations)` : ""),
-        partitionId: instruction.partition?.id ?? null,
-        deploymentId: instruction.deploymentId,
-        maxTokens: 4096,
-        onProbe: async (command: string) => {
-          const result = await probeExecutor.execute(command);
-          recordEntry({
-            partitionId: instruction.partition?.id ?? null,
-            deploymentId: instruction.deploymentId,
-            agent: "envoy",
-            decisionType: "environment-probe",
-            decision: result.blocked
-              ? `Probe blocked: ${command}`
-              : `Probe executed: ${command}`,
-            reasoning: result.blocked
-              ? result.blockedReason ?? "Command blocked"
-              : `Exit ${result.exitCode ?? 0}`,
-            context: {
-              command,
-              blocked: result.blocked,
-              blockedReason: result.blockedReason,
-              exitCode: result.exitCode,
-              outputPreview: result.output ? result.output.slice(0, 500) : undefined,
-            },
-          });
-          if (result.blocked) {
-            return result.blockedReason ?? "Command blocked";
-          }
-          return result.output ?? "(no output)";
-        },
-      });
+      const promptSummary =
+        `Plan deployment of ${instruction.artifact.name} v${instruction.version} ` +
+        `to "${instruction.environment.name}"` +
+        (attempt > 1 ? ` (attempt ${attempt} — revising for dry-run observations)` : "");
+
+      let llmResult: import("@synth-deploy/core").LlmResult;
+
+      if (attempt === 1) {
+        // First attempt: agentic probe loop to observe real machine state
+        llmResult = await this.llmClient!.callWithProbeLoop({
+          prompt: promptSections.join("\n\n"),
+          systemPrompt,
+          promptSummary,
+          partitionId: instruction.partition?.id ?? null,
+          deploymentId: instruction.deploymentId,
+          maxTokens: 4096,
+          onProbe: async (command: string) => {
+            const result = await probeExecutor.execute(command);
+            recordEntry({
+              partitionId: instruction.partition?.id ?? null,
+              deploymentId: instruction.deploymentId,
+              agent: "envoy",
+              decisionType: "environment-probe",
+              decision: result.blocked
+                ? `Probe blocked: ${command}`
+                : `Probe executed: ${command}`,
+              reasoning: result.blocked
+                ? result.blockedReason ?? "Command blocked"
+                : `Exit ${result.exitCode ?? 0}`,
+              context: {
+                command,
+                blocked: result.blocked,
+                blockedReason: result.blockedReason,
+                exitCode: result.exitCode,
+                outputPreview: result.output ? result.output.slice(0, 500) : undefined,
+              },
+            });
+            if (result.blocked) {
+              return result.blockedReason ?? "Command blocked";
+            }
+            return result.output ?? "(no output)";
+          },
+        });
+      } else {
+        // Retry: machine state unchanged, skip re-probing. Use reason() with
+        // dry-run observations already injected into promptSections above.
+        llmResult = await this.llmClient!.reason({
+          prompt: promptSections.join("\n\n"),
+          systemPrompt,
+          promptSummary,
+          partitionId: instruction.partition?.id ?? null,
+          deploymentId: instruction.deploymentId,
+          maxTokens: 4096,
+        });
+      }
 
       if (!llmResult.ok) {
         recordEntry({
@@ -1982,6 +2006,8 @@ IMPORTANT: Every step's "action" field MUST contain at least one of the recogniz
     callbackToken?: string,
   ): Promise<DeploymentResult> {
     await this.executorReady;
+    // Probe cache is stale after real execution changes machine state
+    this.probeExecutor.clearCache();
 
     // --- Lifecycle guard ---
     if (this._lifecycleState !== "active") {

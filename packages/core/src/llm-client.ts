@@ -81,8 +81,8 @@ export interface LlmProviderAdapter {
 const DEFAULT_REASONING_MODEL = "claude-sonnet-4-6";
 const DEFAULT_CLASSIFICATION_MODEL = "claude-haiku-4-5-20251001";
 const DEFAULT_MAX_TOKENS = 1024;
-export const DEFAULT_TIMEOUT_MS = 30_000;
-export const DEFAULT_RATE_LIMIT_PER_MINUTE = 20;
+export const DEFAULT_TIMEOUT_MS = 60_000;
+export const DEFAULT_RATE_LIMIT_PER_MINUTE = 60;
 
 // ---------------------------------------------------------------------------
 // Provider-to-SDK mapping
@@ -749,6 +749,12 @@ export class LlmClient {
     const maxTokens = opts.maxTokens ?? 4096;
     const model = this._reasoningModel;
 
+    // Rate-limit the entire probe loop as a single logical call, not each turn.
+    if (!this._checkRateLimit()) {
+      return { ok: false, fallback: true, reason: `LLM rate limit exceeded (${this._rateLimitPerMinute} calls/min)` };
+    }
+    this._callTimestamps.push(Date.now());
+
     return this._provider === "openai-compatible"
       ? this._probeLoopOpenAI(opts, model, maxProbes, maxTokens)
       : this._probeLoopAnthropic(opts, model, maxProbes, maxTokens);
@@ -792,11 +798,6 @@ export class LlmClient {
     const startTime = Date.now();
 
     for (let turn = 0; turn <= maxProbes; turn++) {
-      if (!this._checkRateLimit()) {
-        return { ok: false, fallback: true, reason: `LLM rate limit exceeded (${this._rateLimitPerMinute} calls/min)` };
-      }
-      this._callTimestamps.push(Date.now());
-
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), this._timeoutMs);
 
@@ -928,11 +929,6 @@ export class LlmClient {
     const startTime = Date.now();
 
     for (let turn = 0; turn <= maxProbes; turn++) {
-      if (!this._checkRateLimit()) {
-        return { ok: false, fallback: true, reason: `LLM rate limit exceeded (${this._rateLimitPerMinute} calls/min)` };
-      }
-      this._callTimestamps.push(Date.now());
-
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), this._timeoutMs);
 
