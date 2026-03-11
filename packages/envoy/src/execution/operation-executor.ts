@@ -68,29 +68,22 @@ export interface PlanExecutionResult {
 
 /**
  * Aggregate result of dry-running an entire plan. Contains per-step results
- * and an overall confidence assessment.
+ * and an overall confidence assessment. The LLM assesses viability based on
+ * these observations — handlers only report facts, not decisions.
  */
 export interface DryRunPlanResult {
-  /** True if all steps passed their precondition checks */
-  allPassed: boolean;
   /** Per-step dry-run results, in plan order */
   stepResults: Array<{
     step: PlannedStep;
     stepIndex: number;
     result: DryRunResult;
   }>;
-  /** Steps that failed precondition checks */
-  failures: Array<{
-    step: PlannedStep;
-    stepIndex: number;
-    result: DryRunResult;
-  }>;
   /** Overall confidence: worst fidelity across all steps */
   overallFidelity: "deterministic" | "speculative" | "unknown";
-  /** Whether all failures are recoverable by the planner */
-  allRecoverable: boolean;
   /** All unknowns aggregated across steps */
   allUnknowns: string[];
+  /** True if any observation across any step has passed: false */
+  hasFailedObservations: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -127,11 +120,10 @@ export class DefaultOperationExecutor {
    */
   async executeDryRun(steps: PlannedStep[]): Promise<DryRunPlanResult> {
     const stepResults: DryRunPlanResult["stepResults"] = [];
-    const failures: DryRunPlanResult["failures"] = [];
     const predictedOutcomes = new Map<number, Record<string, unknown>>();
     const allUnknowns: string[] = [];
     let worstFidelity: DryRunPlanResult["overallFidelity"] = "deterministic";
-    let allRecoverable = true;
+    let hasFailedObservations = false;
 
     for (let i = 0; i < steps.length; i++) {
       const step = steps[i];
@@ -140,10 +132,9 @@ export class DefaultOperationExecutor {
       const handler = this.registry.resolve(step.action, this.platform);
       if (!handler) {
         const result: DryRunResult = {
-          canExecute: false,
-          preconditions: [
+          observations: [
             {
-              check: "handler-exists",
+              name: "handler-exists",
               passed: false,
               detail:
                 `No handler registered for action "${step.action}" on platform ` +
@@ -151,10 +142,9 @@ export class DefaultOperationExecutor {
             },
           ],
           fidelity: "deterministic",
-          recoverable: true,
         };
         stepResults.push({ step, stepIndex: i, result });
-        failures.push({ step, stepIndex: i, result });
+        hasFailedObservations = true;
         continue;
       }
 
@@ -163,11 +153,9 @@ export class DefaultOperationExecutor {
 
       stepResults.push({ step, stepIndex: i, result });
 
-      if (!result.canExecute) {
-        failures.push({ step, stepIndex: i, result });
-        if (!result.recoverable) {
-          allRecoverable = false;
-        }
+      // Check if any observation failed
+      if (result.observations.some((o) => !o.passed)) {
+        hasFailedObservations = true;
       }
 
       // Record predicted outcome for subsequent steps
@@ -189,12 +177,10 @@ export class DefaultOperationExecutor {
     }
 
     return {
-      allPassed: failures.length === 0,
       stepResults,
-      failures,
       overallFidelity: worstFidelity,
-      allRecoverable,
       allUnknowns,
+      hasFailedObservations,
     };
   }
 

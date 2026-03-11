@@ -79,7 +79,7 @@ export class ConfigHandler implements OperationHandler {
     step: PlannedStep,
     _predictedOutcomes: Map<number, Record<string, unknown>>,
   ): Promise<DryRunResult> {
-    const preconditions: DryRunResult["preconditions"] = [];
+    const observations: DryRunResult["observations"] = [];
     const target = step.target;
 
     try {
@@ -87,15 +87,15 @@ export class ConfigHandler implements OperationHandler {
       let templateContent: string | null = null;
       try {
         templateContent = await fs.readFile(target, "utf-8");
-        preconditions.push({
-          check: "template-readable",
+        observations.push({
+          name: "template-readable",
           passed: true,
           detail: `Template/config file "${target}" exists and is readable (${templateContent.length} bytes)`,
         });
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
-        preconditions.push({
-          check: "template-readable",
+        observations.push({
+          name: "template-readable",
           passed: false,
           detail: `Cannot read template/config file "${target}": ${message}`,
         });
@@ -130,23 +130,23 @@ export class ConfigHandler implements OperationHandler {
 
           const missing = [...required].filter((v) => !(v in allVars));
           if (missing.length > 0) {
-            preconditions.push({
-              check: "template-variables-present",
+            observations.push({
+              name: "template-variables-present",
               passed: false,
               detail:
                 `Template requires ${missing.length} variable(s) not provided in step params: ` +
                 `${missing.join(", ")}. Add these to the step's "params.variables" object.`,
             });
           } else {
-            preconditions.push({
-              check: "template-variables-present",
+            observations.push({
+              name: "template-variables-present",
               passed: true,
               detail: `All ${required.size} template variable(s) are provided: ${[...required].join(", ")}`,
             });
           }
         } else {
-          preconditions.push({
-            check: "template-variables-present",
+          observations.push({
+            name: "template-variables-present",
             passed: true,
             detail: `Template contains no {{variable}} patterns — no substitution needed`,
           });
@@ -157,41 +157,35 @@ export class ConfigHandler implements OperationHandler {
       const outputDir = path.dirname(target);
       try {
         await fs.access(outputDir, (await import("node:fs")).constants.W_OK);
-        preconditions.push({
-          check: "output-directory-writable",
+        observations.push({
+          name: "output-directory-writable",
           passed: true,
           detail: `Output directory "${outputDir}" is writable`,
         });
       } catch {
-        preconditions.push({
-          check: "output-directory-writable",
+        observations.push({
+          name: "output-directory-writable",
           passed: false,
           detail: `Output directory "${outputDir}" is not writable — config output will fail`,
         });
       }
 
-      const allPassed = preconditions.every((p) => p.passed);
-
       return {
-        canExecute: allPassed,
-        preconditions,
+        observations,
         predictedOutcome: { configWritten: target },
         fidelity: "deterministic",
-        recoverable: true,
       };
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       return {
-        canExecute: false,
-        preconditions: [
+        observations: [
           {
-            check: "dry-run-error",
+            name: "dry-run-error",
             passed: false,
             detail: `Dry-run check failed unexpectedly: ${message}`,
           },
         ],
         fidelity: "deterministic",
-        recoverable: true,
       };
     }
   }

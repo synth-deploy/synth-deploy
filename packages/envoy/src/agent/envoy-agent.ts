@@ -30,7 +30,7 @@ import {
   ContainerHandler,
   VerifyHandler,
 } from "../execution/index.js";
-import type { DryRunPlanResult } from "../execution/operation-executor.js";
+
 import { createCallbackReporter } from "../execution/progress-reporter.js";
 
 // ---------------------------------------------------------------------------
@@ -153,7 +153,7 @@ export interface PlanningResult {
   plan: DeploymentPlan;
   rollbackPlan: DeploymentPlan;
   delta?: string;
-  /** True when unrecoverable precondition failures prevent execution */
+  /** True when the LLM assessed the plan as blocked by issues that cannot be resolved by plan changes */
   blocked?: boolean;
   /** Human-readable explanation of what must be fixed before proceeding */
   blockReason?: string;
@@ -1265,11 +1265,13 @@ ${Object.entries(instruction.resolvedVariables).map(([k, v]) => `${k}=${v}`).joi
 
     sections.push(`## Local System State
 Hostname: ${scanResult.hostname}
+OS: ${scanResult.os}
 Deployments directory: ${scanResult.deploymentsDir}
 Writable: ${scanResult.deploymentsWritable}
 Existing deployments on disk: ${scanResult.disk.deploymentCount}
 Known deployments in state: ${scanResult.knownState.totalDeployments}
-Active environments: ${scanResult.knownState.activeEnvironments}`);
+Active environments: ${scanResult.knownState.activeEnvironments}
+Last deployment: ${scanResult.knownState.lastDeploymentAt?.toISOString() ?? "none"}`);
 
     // Include capability surface so the LLM only produces executable plans
     const capabilities = this.getCapabilities();
@@ -1326,7 +1328,7 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
       `      "target": "What the action operates on (source path, service name, URL, or command binary)",\n` +
       `      "params": {\n` +
       `        "destination": "Required for copy/move: the destination path",\n` +
-      `        "args": ["array", "of", "arguments for command/script actions"],\n` +
+      `        "args": ["full", "argument", "list"] — REQUIRED for docker/container steps AND service steps: for docker, provide complete arguments after 'docker' (e.g. ["load", "-i", "/path/to/image.tar"]); for service operations, provide the full OS command (e.g. ["systemctl", "restart", "nginx"] on Linux, ["launchctl", "kickstart", "-k", "gui/501/homebrew.mxcl.nginx"] on macOS). Also used for run/execute/script steps.,\n` +
       `        "cwd": "Working directory for command/script actions (if not current dir)",\n` +
       `        "templatePath": "For config actions: path to the template file (if different from target)",\n` +
       `        "outputPath": "For config actions: output path (if different from target)",\n` +
@@ -1342,96 +1344,100 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
       `  "delta": "If a previous successful plan exists, describe what changed and why. Omit if no previous plan."\n` +
       `}`;
 
-    const prompt = sections.join("\n\n");
-
-    const llmResult = await this.llmClient!.reason({
-      prompt,
-      systemPrompt,
-      promptSummary:
-        `Plan deployment of ${instruction.artifact.name} v${instruction.version} ` +
-        `to "${instruction.environment.name}"`,
-      partitionId: instruction.partition?.id ?? null,
-      deploymentId: instruction.deploymentId,
-      maxTokens: 4096,
-    });
-
-    if (!llmResult.ok) {
-      // LLM call failed — fall back to basic plan
-      recordEntry({
-        partitionId: instruction.partition?.id ?? null,
-        deploymentId: instruction.deploymentId,
-        agent: "envoy",
-        decisionType: "plan-generation",
-        decision:
-          `LLM reasoning failed — falling back to basic plan for ` +
-          `${instruction.artifact.name} v${instruction.version}`,
-        reasoning:
-          `LLM call failed: ${llmResult.reason}. Producing a basic deployment plan ` +
-          `based on artifact type "${instruction.artifact.type}" without intelligent ` +
-          `reasoning. The plan will use a simple copy + configure + restart pattern.`,
-        context: {
-          artifactType: instruction.artifact.type,
-          llmFailed: true,
-          llmReason: llmResult.reason,
-        },
-      });
-
-      return this.buildFallbackPlan(instruction);
-    }
-
-    // Parse LLM response
-    let parsed: {
-      reasoning: string;
-      steps: Array<{
-        description: string;
-        action: string;
-        target: string;
-        params?: Record<string, unknown>;
-        reversible: boolean;
-        rollbackAction?: string;
-        execPreview?: string;
-      }>;
-      delta?: string;
-    };
-
-    try {
-      let text = llmResult.text.trim();
-      if (text.startsWith("```")) {
-        text = text.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "");
-      }
-      const raw = JSON.parse(text);
-      // Validate required step fields — LLM may omit action/target
-      if (!Array.isArray(raw?.steps)) throw new Error("Plan missing steps array");
-      for (const s of raw.steps) {
-        if (typeof s.action !== "string" || !s.action) throw new Error(`Step "${s.description ?? "?"}" missing action`);
-        if (typeof s.target !== "string") throw new Error(`Step "${s.description ?? "?"}" missing target`);
-        if (typeof s.description !== "string") s.description = s.action;
-      }
-      parsed = raw;
-    } catch {
-      recordEntry({
-        partitionId: instruction.partition?.id ?? null,
-        deploymentId: instruction.deploymentId,
-        agent: "envoy",
-        decisionType: "plan-generation",
-        decision:
-          `LLM response could not be parsed — falling back to basic plan`,
-        reasoning:
-          `The LLM returned a response that could not be parsed as JSON. ` +
-          `Falling back to a basic deployment plan. Raw response length: ${llmResult.text.length} chars.`,
-        context: { parseError: true },
-      });
-
-      return this.buildFallbackPlan(instruction);
-    }
-
-    // Build plan and run dry-run validation loop (max 3 attempts)
+    // Planning + dry-run refinement loop. On each iteration the LLM generates
+    // a fresh plan. If dry-run finds failed observations, they are injected as
+    // an environmental context section so the LLM can revise the plan to
+    // address them. The LLM always creates the plan — observations are input,
+    // not a plan handed back for assessment.
     const MAX_DRY_RUN_ATTEMPTS = 3;
-    let currentParsed = parsed;
-    let lastDryRunResult: DryRunPlanResult | null = null;
-    let previousFailures: Array<{ stepDescription: string; failures: string[] }> = [];
+    let lastObservations: string | null = null;
+    let previousObservationSummary = "";
 
     for (let attempt = 1; attempt <= MAX_DRY_RUN_ATTEMPTS; attempt++) {
+      // --- LLM planning call — observations from prior dry-run injected as context ---
+      const promptSections = [...sections];
+      if (lastObservations) {
+        promptSections.push(
+          `## Environmental Observations (current system state at plan time)\n` +
+          `${lastObservations}\n\n` +
+          `These are snapshots of the real system state RIGHT NOW — before your plan runs. ` +
+          `A FAILED observation does not automatically mean the plan needs changing: if your ` +
+          `plan already includes a step that will resolve the issue (e.g. a step that starts ` +
+          `the Docker daemon, creates the directory, or installs the tool), the observation ` +
+          `will be satisfied at runtime and you should keep the plan as-is. ` +
+          `Only add new steps if the issue is genuinely not addressed by your current plan. ` +
+          `If an issue cannot be resolved by any plan change, explain it in your reasoning.`,
+        );
+      }
+
+      const llmResult = await this.llmClient!.reason({
+        prompt: promptSections.join("\n\n"),
+        systemPrompt,
+        promptSummary:
+          `Plan deployment of ${instruction.artifact.name} v${instruction.version} ` +
+          `to "${instruction.environment.name}"` +
+          (attempt > 1 ? ` (attempt ${attempt} — revising for environmental observations)` : ""),
+        partitionId: instruction.partition?.id ?? null,
+        deploymentId: instruction.deploymentId,
+        maxTokens: 4096,
+      });
+
+      if (!llmResult.ok) {
+        recordEntry({
+          partitionId: instruction.partition?.id ?? null,
+          deploymentId: instruction.deploymentId,
+          agent: "envoy",
+          decisionType: "plan-generation",
+          decision: `LLM planning failed on attempt ${attempt} — falling back to basic plan`,
+          reasoning: `LLM call failed: ${llmResult.reason}.`,
+          context: { llmFailed: true, llmReason: llmResult.reason, attempt },
+        });
+        return this.buildFallbackPlan(instruction);
+      }
+
+      // Parse LLM response
+      type ParsedPlan = {
+        reasoning: string;
+        steps: Array<{
+          description: string;
+          action: string;
+          target: string;
+          params?: Record<string, unknown>;
+          reversible: boolean;
+          rollbackAction?: string;
+          execPreview?: string;
+        }>;
+        delta?: string;
+      };
+
+      let currentParsed: ParsedPlan;
+      try {
+        let text = llmResult.text.trim();
+        if (text.startsWith("```")) {
+          text = text.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "");
+        }
+        const raw = JSON.parse(text);
+        if (!Array.isArray(raw?.steps)) throw new Error("Plan missing steps array");
+        for (const s of raw.steps as Array<Record<string, unknown>>) {
+          if (typeof s.action !== "string" || !s.action) throw new Error(`Step "${s.description ?? "?"}" missing action`);
+          if (typeof s.target !== "string") throw new Error(`Step "${s.description ?? "?"}" missing target`);
+          if (typeof s.description !== "string") s.description = s.action;
+        }
+        currentParsed = raw as ParsedPlan;
+      } catch {
+        recordEntry({
+          partitionId: instruction.partition?.id ?? null,
+          deploymentId: instruction.deploymentId,
+          agent: "envoy",
+          decisionType: "plan-generation",
+          decision: `LLM response could not be parsed on attempt ${attempt} — falling back to basic plan`,
+          reasoning: `The LLM returned a response that could not be parsed as JSON.`,
+          context: { parseError: true, attempt },
+        });
+        return this.buildFallbackPlan(instruction);
+      }
+
+      // Build plan object
       const plan: DeploymentPlan = {
         steps: currentParsed.steps.map((s) => ({
           description: s.description,
@@ -1443,16 +1449,13 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
           execPreview: s.execPreview,
         })),
         reasoning: currentParsed.reasoning,
-        diffFromPreviousPlan: latestPlan
-          ? currentParsed.delta
-          : undefined,
+        diffFromPreviousPlan: latestPlan ? currentParsed.delta : undefined,
       };
 
-      // --- Dry-run precondition checks against real system state ---
+      // --- Dry-run: collect environmental observations ---
       await this.executorReady;
 
       if (!this.operationExecutor) {
-        // Executor not available — skip dry-run, return plan as-is
         recordEntry({
           partitionId: instruction.partition?.id ?? null,
           deploymentId: instruction.deploymentId,
@@ -1464,7 +1467,6 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
           reasoning: currentParsed.reasoning,
           context: { dryRunSkipped: true },
         });
-
         return {
           plan,
           rollbackPlan: this.buildRollbackPlan(plan, instruction),
@@ -1472,18 +1474,16 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
         };
       }
 
-      lastDryRunResult = await this.operationExecutor.executeDryRun(plan.steps);
+      const dryRunResult = await this.operationExecutor.executeDryRun(plan.steps);
 
-      // --- All preconditions pass: return grounded plan ---
-      if (lastDryRunResult.allPassed) {
+      // --- No failed observations: plan is validated, return it ---
+      if (!dryRunResult.hasFailedObservations) {
         const rollbackPlan = this.buildRollbackPlan(plan, instruction);
-
-        // Augment reasoning with dry-run confidence
         plan.reasoning =
           currentParsed.reasoning +
-          ` [Dry-run validated: all ${lastDryRunResult.stepResults.length} step(s) passed ` +
-          `precondition checks. Confidence: ${lastDryRunResult.overallFidelity}.` +
-          `${lastDryRunResult.allUnknowns.length > 0 ? ` Unknowns: ${lastDryRunResult.allUnknowns.join("; ")}.` : ""}]`;
+          ` [Dry-run validated: all ${dryRunResult.stepResults.length} step(s) passed on attempt ${attempt}. ` +
+          `Confidence: ${dryRunResult.overallFidelity}.` +
+          `${dryRunResult.allUnknowns.length > 0 ? ` Unknowns: ${dryRunResult.allUnknowns.join("; ")}.` : ""}]`;
 
         recordEntry({
           partitionId: instruction.partition?.id ?? null,
@@ -1505,98 +1505,41 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
             previousFailedPlans: failedPlans.length,
             hasDelta: !!currentParsed.delta,
             dryRunAttempt: attempt,
-            dryRunFidelity: lastDryRunResult.overallFidelity,
-            dryRunUnknowns: lastDryRunResult.allUnknowns,
+            dryRunFidelity: dryRunResult.overallFidelity,
+            dryRunUnknowns: dryRunResult.allUnknowns,
           },
         });
 
-        return {
-          plan,
-          rollbackPlan,
-          delta: currentParsed.delta,
-        };
+        return { plan, rollbackPlan, delta: currentParsed.delta };
       }
 
-      // --- Unrecoverable failure: exit immediately ---
-      if (!lastDryRunResult.allRecoverable) {
-        const unrecoverableFailures = lastDryRunResult.failures
-          .filter((f) => !f.result.recoverable)
-          .map((f) => {
-            const failedChecks = f.result.preconditions
-              .filter((p) => !p.passed)
-              .map((p) => p.detail);
-            return `Step ${f.stepIndex + 1} "${f.step.description}": ${failedChecks.join("; ")}`;
-          });
+      // --- Failed observations: build observation text for next planning call ---
+      const currentObsSummary = dryRunResult.stepResults
+        .filter((sr) => sr.result.observations.some((o) => !o.passed))
+        .map((sr) => {
+          const failed = sr.result.observations.filter((o) => !o.passed).map((o) => `[${o.name}] ${o.detail}`);
+          return `Step ${sr.stepIndex + 1} "${sr.step.description}": ${failed.join("; ")}`;
+        })
+        .join(". ");
 
+      // Stuck detection: same failures after re-planning means LLM can't resolve them
+      if (attempt > 1 && currentObsSummary === previousObservationSummary) {
         recordEntry({
           partitionId: instruction.partition?.id ?? null,
           deploymentId: instruction.deploymentId,
           agent: "envoy",
           decisionType: "plan-generation",
-          decision:
-            `Plan rejected — unrecoverable precondition failure(s) found during dry-run`,
+          decision: `Plan generation stuck — same failed observations after ${attempt} attempts`,
           reasoning:
-            `Dry-run found ${unrecoverableFailures.length} unrecoverable failure(s) that ` +
-            `the planner cannot work around. Failures: ${unrecoverableFailures.join(". ")}. ` +
-            `These require manual intervention or infrastructure changes before deployment ` +
-            `can proceed.`,
-          context: {
-            dryRunAttempt: attempt,
-            unrecoverableFailures,
-            allFailures: lastDryRunResult.failures.length,
-          },
-        });
-
-        const blockReason =
-          `Unrecoverable precondition failures: ${unrecoverableFailures.join(". ")}. ` +
-          `These require manual intervention or infrastructure changes before deployment can proceed.`;
-
-        plan.reasoning = `PLAN BLOCKED — ${blockReason}`;
-
-        return {
-          plan,
-          rollbackPlan: this.buildRollbackPlan(plan, instruction),
-          delta: currentParsed.delta,
-          blocked: true,
-          blockReason,
-        };
-      }
-
-      // --- Recoverable failure: check for stuck loop ---
-      const currentFailureSummary = lastDryRunResult.failures.map((f) => ({
-        stepDescription: f.step.description,
-        failures: f.result.preconditions
-          .filter((p) => !p.passed)
-          .map((p) => p.detail),
-      }));
-
-      // Detect stuck: same failures repeating across iterations
-      const isStuck =
-        previousFailures.length > 0 &&
-        JSON.stringify(currentFailureSummary) === JSON.stringify(previousFailures);
-
-      if (isStuck) {
-        const stuckDetails = currentFailureSummary
-          .map((f) => `"${f.stepDescription}": ${f.failures.join("; ")}`)
-          .join(". ");
-
-        recordEntry({
-          partitionId: instruction.partition?.id ?? null,
-          deploymentId: instruction.deploymentId,
-          agent: "envoy",
-          decisionType: "plan-generation",
-          decision:
-            `Plan generation stuck — same precondition failures after ${attempt} attempts`,
-          reasoning:
-            `Re-planning produced the same failures as the previous attempt, indicating ` +
-            `the LLM cannot resolve these issues. Stuck on: ${stuckDetails}. ` +
-            `Returning the best available plan with failure annotations.`,
-          context: { dryRunAttempt: attempt, stuckOn: currentFailureSummary },
+            `Re-planning produced the same observation failures, indicating the LLM cannot resolve ` +
+            `these issues through plan changes. Stuck on: ${currentObsSummary}. ` +
+            `Returning plan with failure annotations.`,
+          context: { dryRunAttempt: attempt, stuckDetails: currentObsSummary },
         });
 
         plan.reasoning =
-          `Plan has unresolved precondition issues (stuck after ${attempt} re-planning attempts): ` +
-          `${stuckDetails}. Review these issues before approving.`;
+          `Plan has unresolved environmental issues (stuck after ${attempt} attempt(s)): ` +
+          `${currentObsSummary}. Review these issues before approving.`;
 
         return {
           plan,
@@ -1605,35 +1548,21 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
         };
       }
 
-      previousFailures = currentFailureSummary;
-
-      // --- Last attempt: return with unresolved failures listed ---
+      // Last attempt: block with unresolved issues
       if (attempt === MAX_DRY_RUN_ATTEMPTS) {
-        const failureDetails = currentFailureSummary
-          .map((f) => `"${f.stepDescription}": ${f.failures.join("; ")}`)
-          .join(". ");
-
         recordEntry({
           partitionId: instruction.partition?.id ?? null,
           deploymentId: instruction.deploymentId,
           agent: "envoy",
           decisionType: "plan-generation",
-          decision:
-            `Plan generated with unresolved precondition issues after ${MAX_DRY_RUN_ATTEMPTS} attempts`,
-          reasoning:
-            `Dry-run validation failed on all ${MAX_DRY_RUN_ATTEMPTS} attempts. ` +
-            `Unresolved: ${failureDetails}. Returning the last plan with annotations.`,
-          context: {
-            dryRunAttempt: attempt,
-            maxAttempts: MAX_DRY_RUN_ATTEMPTS,
-            unresolvedFailures: currentFailureSummary,
-          },
+          decision: `Plan blocked — unresolved environmental issues after ${MAX_DRY_RUN_ATTEMPTS} attempts`,
+          reasoning: `Unresolved: ${currentObsSummary}.`,
+          context: { dryRunAttempt: attempt, maxAttempts: MAX_DRY_RUN_ATTEMPTS, unresolvedDetails: currentObsSummary },
         });
 
         const blockReason =
-          `Plan has unresolved precondition issues (stuck after ${MAX_DRY_RUN_ATTEMPTS - 1} re-planning attempts): ` +
-          `${failureDetails}. Review these issues before approving.`;
-
+          `Plan has unresolved environmental issues after ${MAX_DRY_RUN_ATTEMPTS} attempt(s): ` +
+          `${currentObsSummary}. Review before approving.`;
         plan.reasoning = blockReason;
 
         return {
@@ -1645,92 +1574,36 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
         };
       }
 
-      // --- Recoverable failure, not stuck, not last attempt: re-invoke LLM ---
-      const failureFeedback = lastDryRunResult.failures.map((f) => {
-        const failedChecks = f.result.preconditions
-          .filter((p) => !p.passed)
-          .map((p) => `[${p.check}] ${p.detail}`);
-        return `Step ${f.stepIndex + 1} "${f.step.description}" (action: "${f.step.action}", target: "${f.step.target}"): FAILED — ${failedChecks.join("; ")}`;
-      });
+      previousObservationSummary = currentObsSummary;
+
+      // Build observations text for injection into next planning prompt
+      lastObservations = dryRunResult.stepResults
+        .filter((sr) => sr.result.observations.length > 0)
+        .map((sr) => {
+          const obs = sr.result.observations
+            .map((o) => `  - ${o.name}: ${o.detail} [${o.passed ? "PASSED" : "FAILED"}]`)
+            .join("\n");
+          return `Step ${sr.stepIndex + 1} "${sr.step.description}":\n${obs}`;
+        })
+        .join("\n");
+
+      if (dryRunResult.allUnknowns.length > 0) {
+        lastObservations += `\n\nUnknowns:\n${dryRunResult.allUnknowns.map((u) => `  - ${u}`).join("\n")}`;
+      }
 
       recordEntry({
         partitionId: instruction.partition?.id ?? null,
         deploymentId: instruction.deploymentId,
         agent: "envoy",
         decisionType: "plan-generation",
-        decision:
-          `Dry-run found ${lastDryRunResult.failures.length} recoverable issue(s) — re-invoking LLM (attempt ${attempt + 1}/${MAX_DRY_RUN_ATTEMPTS})`,
-        reasoning:
-          `Precondition failures: ${failureFeedback.join(". ")}. ` +
-          `All failures are recoverable. Re-invoking LLM with failure context to generate a corrected plan.`,
-        context: { dryRunAttempt: attempt, failures: failureFeedback },
+        decision: `Dry-run found failed observations — re-planning with environmental context (attempt ${attempt + 1}/${MAX_DRY_RUN_ATTEMPTS})`,
+        reasoning: `Failed observations: ${currentObsSummary}. Re-invoking planning with observations injected as context.`,
+        context: { dryRunAttempt: attempt, failedObsSummary: currentObsSummary },
       });
-
-      // Build re-planning prompt with failure context
-      const replanPrompt =
-        `Your previous deployment plan failed dry-run precondition checks against the real system state.\n\n` +
-        `## Original Plan\n` +
-        `${currentParsed.steps.map((s, i) => `${i + 1}. [${s.action}] ${s.description} → ${s.target}`).join("\n")}\n\n` +
-        `## Precondition Failures\n` +
-        `${failureFeedback.join("\n")}\n\n` +
-        `## System State Evidence\n` +
-        `${lastDryRunResult.failures.flatMap((f) => f.result.preconditions.map((p) => `- ${p.detail}`)).join("\n")}\n\n` +
-        `Generate a corrected plan that avoids these failures. All other constraints from the original prompt still apply.\n\n` +
-        `IMPORTANT: Respond with valid JSON only, same format as before.`;
-
-      const replanResult = await this.llmClient!.reason({
-        prompt: replanPrompt,
-        systemPrompt:
-          `You are the Envoy planning engine for Synth. A previous plan failed dry-run ` +
-          `validation. Generate a corrected plan that addresses the precondition failures. ` +
-          `Respond with valid JSON only, same format as before: ` +
-          `{ "reasoning": "...", "steps": [...], "delta": "..." }`,
-        promptSummary:
-          `Re-plan deployment of ${instruction.artifact.name} v${instruction.version} ` +
-          `(attempt ${attempt + 1} — addressing dry-run failures)`,
-        partitionId: instruction.partition?.id ?? null,
-        deploymentId: instruction.deploymentId,
-        maxTokens: 4096,
-      });
-
-      if (!replanResult.ok) {
-        // LLM re-planning failed — return current plan with annotations
-        plan.reasoning =
-          `Dry-run found issues but LLM re-planning failed (${replanResult.reason}). ` +
-          `Original plan returned with known issues: ` +
-          `${failureFeedback.join(". ")}`;
-
-        return {
-          plan,
-          rollbackPlan: this.buildRollbackPlan(plan, instruction),
-          delta: currentParsed.delta,
-        };
-      }
-
-      // Parse re-planning response
-      try {
-        let text = replanResult.text.trim();
-        if (text.startsWith("```")) {
-          text = text.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "");
-        }
-        currentParsed = JSON.parse(text);
-      } catch {
-        // Parse failed — return current plan with annotations
-        plan.reasoning =
-          `Dry-run found issues but LLM re-planning response could not be parsed. ` +
-          `Original plan returned with known issues: ` +
-          `${failureFeedback.join(". ")}`;
-
-        return {
-          plan,
-          rollbackPlan: this.buildRollbackPlan(plan, instruction),
-          delta: currentParsed.delta,
-        };
-      }
     }
 
-    // Should not reach here, but TypeScript needs it
-    throw new Error("Unreachable: dry-run loop exited without returning");
+    // Should not reach here
+    throw new Error("Unreachable: planning loop exited without returning");
   }
 
   /**

@@ -45,59 +45,34 @@ export class ContainerHandler implements OperationHandler {
 
   async execute(
     action: string,
-    target: string,
+    _target: string,
     params: Record<string, unknown>,
   ): Promise<HandlerResult> {
-    const lower = action.toLowerCase();
+    const args = (params.args as string[] | undefined) ?? [];
 
     try {
-      // Docker Compose operations
-      if (lower.includes("compose")) {
-        return await this.handleCompose(lower, target, params);
+      // Docker Compose gets its own binary path
+      if (action.toLowerCase().includes("compose")) {
+        return await this.handleCompose(action.toLowerCase(), _target, params);
       }
 
-      // Docker pull
-      if (lower.includes("pull") || lower.includes("image")) {
-        return await this.dockerCommand(["pull", target]);
+      // Everything else: run docker with exactly the args the LLM provided.
+      // The LLM knows the command — don't second-guess it.
+      if (args.length === 0) {
+        return {
+          success: false,
+          output: "",
+          error: `No docker arguments provided. Set params.args to the full docker command arguments (e.g. ["load", "-i", "/path/to/image.tar"]).`,
+        };
       }
 
-      // Docker start
-      if (lower.includes("start")) {
-        return await this.dockerCommand(["start", target]);
-      }
-
-      // Docker stop
-      if (lower.includes("stop")) {
-        return await this.dockerCommand(["stop", target]);
-      }
-
-      // Docker restart
-      if (lower.includes("restart")) {
-        return await this.dockerCommand(["restart", target]);
-      }
-
-      // Docker rm
-      if (lower.includes("remove") || lower.includes("rm")) {
-        return await this.dockerCommand(["rm", "-f", target]);
-      }
-
-      // Generic docker run
-      if (lower.includes("run")) {
-        const args = (params.args as string[]) ?? [];
-        return await this.dockerCommand(["run", "-d", ...args, target]);
-      }
-
-      return {
-        success: false,
-        output: "",
-        error: `Unrecognized container operation: "${action}"`,
-      };
+      return await this.dockerCommand(args);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       return {
         success: false,
         output: "",
-        error: `Container operation "${action}" on "${target}" failed: ${message}`,
+        error: `docker ${args.join(" ")} failed: ${message}`,
       };
     }
   }
@@ -151,21 +126,12 @@ export class ContainerHandler implements OperationHandler {
 
   async dryRun(
     step: PlannedStep,
-    predictedOutcomes: Map<number, Record<string, unknown>>,
+    _predictedOutcomes: Map<number, Record<string, unknown>>,
   ): Promise<DryRunResult> {
-    const preconditions: DryRunResult["preconditions"] = [];
+    const observations: DryRunResult["observations"] = [];
     const lower = step.action.toLowerCase();
     const target = step.target;
     const unknowns: string[] = [];
-
-    // Check if a prior step will start the Docker daemon (e.g. "systemctl start docker").
-    // If so, skip the live daemon check — it will be running when this step executes.
-    const priorStepStartsDocker = Array.from(predictedOutcomes.values()).some(
-      (outcome) =>
-        outcome.serviceState === "running" &&
-        typeof outcome.serviceName === "string" &&
-        (outcome.serviceName as string).toLowerCase().includes("docker"),
-    );
 
     try {
       // Check if docker CLI is installed (does not contact the daemon)
@@ -175,57 +141,31 @@ export class ContainerHandler implements OperationHandler {
         });
       });
 
-      if (!cliInstalled) {
-        preconditions.push({
-          check: "docker-cli-installed",
-          passed: false,
-          detail: `Docker CLI is not installed — install Docker before deploying container workloads`,
-        });
-        return {
-          canExecute: false,
-          preconditions,
-          fidelity: "deterministic",
-          recoverable: false,
-          unknowns: [],
-        };
-      }
-
-      preconditions.push({
-        check: "docker-cli-installed",
-        passed: true,
-        detail: `Docker CLI is installed`,
+      observations.push({
+        name: "docker-cli-installed",
+        passed: cliInstalled,
+        detail: cliInstalled
+          ? `Docker CLI is installed`
+          : `Docker CLI is not installed — install Docker before deploying container workloads`,
       });
 
-      // Check if the Docker daemon is running (requires daemon connection).
-      // Skip if a prior plan step will start the daemon.
-      if (priorStepStartsDocker) {
-        preconditions.push({
-          check: "docker-daemon-running",
-          passed: true,
-          detail: `Docker daemon will be started by a prior plan step`,
+      // Report current daemon state as a fact. The LLM reasons about whether
+      // the plan already includes a step to start the daemon — handlers don't
+      // attempt to enumerate every possible start command (Docker Desktop, colima,
+      // rancher-desktop, podman, systemctl, etc.).
+      const daemonRunning = await new Promise<boolean>((resolve) => {
+        execFile("docker", ["version", "--format", "{{.Server.Version}}"], { timeout: 5000 }, (error) => {
+          resolve(!error);
         });
-      } else {
-        const daemonRunning = await new Promise<boolean>((resolve) => {
-          execFile("docker", ["version", "--format", "{{.Server.Version}}"], { timeout: 5000 }, (error) => {
-            resolve(!error);
-          });
-        });
+      });
 
-        // Daemon not running is a warning, not a hard block. The daemon may be
-        // started by the user before execution (e.g. Docker Desktop on macOS),
-        // or the target system's daemon may differ from the planning environment.
-        preconditions.push({
-          check: "docker-daemon-running",
-          passed: true, // non-blocking — daemon may be started before execution
-          detail: daemonRunning
-            ? `Docker daemon is running and accessible`
-            : `Docker daemon is not currently running — ensure Docker is started before executing this deployment`,
-        });
-
-        if (!daemonRunning) {
-          unknowns.push(`Docker daemon is not running on this host — start Docker before executing the deployment`);
-        }
-      }
+      observations.push({
+        name: "docker-daemon-running",
+        passed: daemonRunning,
+        detail: daemonRunning
+          ? `Docker daemon is running and accessible`
+          : `Docker daemon is not currently running (checked at plan time)`,
+      });
 
       // For pull: check if image is already available locally
       if (lower.includes("pull") || lower.includes("image")) {
@@ -235,8 +175,8 @@ export class ContainerHandler implements OperationHandler {
           });
         });
 
-        preconditions.push({
-          check: "image-available",
+        observations.push({
+          name: "image-available",
           passed: true, // Pull will fetch it if not local
           detail: imageExists
             ? `Image "${target}" is already available locally — pull will update if newer`
@@ -257,8 +197,8 @@ export class ContainerHandler implements OperationHandler {
         });
 
         if (containerExists.exists) {
-          preconditions.push({
-            check: "container-name-collision",
+          observations.push({
+            name: "container-name-collision",
             passed: !containerExists.running || lower.includes("start"),
             detail: containerExists.running
               ? `Container "${target}" already exists and is running — name collision will cause failure`
@@ -271,32 +211,26 @@ export class ContainerHandler implements OperationHandler {
         `Container startup success depends on image configuration and runtime environment`,
       );
 
-      const allPassed = preconditions.every((p) => p.passed);
-
       return {
-        canExecute: allPassed,
-        preconditions,
+        observations,
         predictedOutcome: {
           containerAction: lower.includes("stop") ? "stopped" : lower.includes("pull") ? "pulled" : "running",
           containerName: target,
         },
         fidelity: "speculative",
-        recoverable: true,
         unknowns,
       };
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       return {
-        canExecute: false,
-        preconditions: [
+        observations: [
           {
-            check: "dry-run-error",
+            name: "dry-run-error",
             passed: false,
             detail: `Dry-run check failed unexpectedly: ${message}`,
           },
         ],
         fidelity: "speculative",
-        recoverable: true,
         unknowns: [`Could not verify container environment for "${target}"`],
       };
     }

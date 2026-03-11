@@ -78,6 +78,11 @@ export class VerifyHandler implements OperationHandler {
         return await this.portCheck(target, timeoutMs);
       }
 
+      // Bare word with no path separators → treat as command name, check via `which`/`where`
+      if (!target.includes("/") && !target.includes("\\") && !target.includes(".")) {
+        return await this.commandCheck(target);
+      }
+
       return await this.fileCheck(target);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
@@ -93,7 +98,7 @@ export class VerifyHandler implements OperationHandler {
     step: PlannedStep,
     _predictedOutcomes: Map<number, Record<string, unknown>>,
   ): Promise<DryRunResult> {
-    const preconditions: DryRunResult["preconditions"] = [];
+    const observations: DryRunResult["observations"] = [];
     const target = step.target;
     const unknowns: string[] = [];
 
@@ -105,15 +110,15 @@ export class VerifyHandler implements OperationHandler {
           // Check if hostname resolves — lightweight DNS check
           const dns = await import("node:dns/promises");
           await dns.lookup(url.hostname);
-          preconditions.push({
-            check: "target-resolvable",
+          observations.push({
+            name: "target-resolvable",
             passed: true,
             detail: `Hostname "${url.hostname}" resolves — target is reachable for verification`,
           });
         } catch (err: unknown) {
           const message = err instanceof Error ? err.message : String(err);
-          preconditions.push({
-            check: "target-resolvable",
+          observations.push({
+            name: "target-resolvable",
             passed: false,
             detail: `Cannot resolve hostname for "${target}": ${message} — verification will fail`,
           });
@@ -126,8 +131,8 @@ export class VerifyHandler implements OperationHandler {
         const port = parseInt(parts.pop() ?? "0", 10);
         const host = parts.join(":") || "localhost";
 
-        preconditions.push({
-          check: "port-format-valid",
+        observations.push({
+          name: "port-format-valid",
           passed: port > 0 && port <= 65535,
           detail: port > 0 && port <= 65535
             ? `Port ${port} on ${host} is a valid target for connectivity check`
@@ -135,10 +140,25 @@ export class VerifyHandler implements OperationHandler {
         });
       }
 
+      // Bare word with no path separators → treat as command name, check via `which`/`where`
+      else if (!target.includes("/") && !target.includes("\\") && !target.includes(".")) {
+        const whichCmd = process.platform === "win32" ? "where" : "which";
+        const found = await new Promise<boolean>((resolve) => {
+          execFile(whichCmd, [target], { timeout: 5000 }, (error) => resolve(!error));
+        });
+        observations.push({
+          name: "command-installed",
+          passed: found,
+          detail: found
+            ? `Command "${target}" is available on PATH`
+            : `Command "${target}" not found on PATH — install it before executing this deployment`,
+        });
+      }
+
       // For file targets
       else {
-        preconditions.push({
-          check: "verification-target-noted",
+        observations.push({
+          name: "verification-target-noted",
           passed: true,
           detail: `Will verify file existence at "${target}" post-deployment`,
         });
@@ -148,27 +168,22 @@ export class VerifyHandler implements OperationHandler {
         `Verification results cannot be predicted before deployment — this step runs post-deployment`,
       );
 
-      // Verification steps are always recoverable since they don't modify state
       return {
-        canExecute: true,
-        preconditions,
+        observations,
         fidelity: "unknown",
-        recoverable: true,
         unknowns,
       };
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       return {
-        canExecute: true, // Verification failure shouldn't block planning
-        preconditions: [
+        observations: [
           {
-            check: "dry-run-error",
+            name: "dry-run-error",
             passed: true,
             detail: `Dry-run connectivity check failed (${message}) — verification will still be attempted post-deployment`,
           },
         ],
         fidelity: "unknown",
-        recoverable: true,
         unknowns: [`Could not pre-validate verification target "${target}"`],
       };
     }
@@ -262,6 +277,26 @@ export class VerifyHandler implements OperationHandler {
       socket.on("error", (err) => done(false, `Port ${port} on ${host}: ${err.message}`));
 
       socket.connect(port, host);
+    });
+  }
+
+  private async commandCheck(target: string): Promise<HandlerResult> {
+    const whichCmd = process.platform === "win32" ? "where" : "which";
+    return new Promise((resolve) => {
+      execFile(whichCmd, [target], { timeout: 5000 }, (error, stdout) => {
+        if (error) {
+          resolve({
+            success: false,
+            output: "",
+            error: `Command "${target}" not found on PATH — install it before running this deployment`,
+          });
+        } else {
+          resolve({
+            success: true,
+            output: `Command "${target}" is available at ${stdout.trim()}`,
+          });
+        }
+      });
     });
   }
 

@@ -150,7 +150,7 @@ export class FileHandler implements OperationHandler {
     step: PlannedStep,
     predictedOutcomes: Map<number, Record<string, unknown>>,
   ): Promise<DryRunResult> {
-    const preconditions: DryRunResult["preconditions"] = [];
+    const observations: DryRunResult["observations"] = [];
     const lower = step.action.toLowerCase();
     const target = step.target;
 
@@ -160,50 +160,35 @@ export class FileHandler implements OperationHandler {
       // Check required params before any filesystem checks
       if (lower.includes("copy")) {
         const dest = (params.destination as string) ?? (params.dest as string) ?? "";
-        if (!dest) {
-          return {
-            canExecute: false,
-            preconditions: [{
-              check: "required-param-destination",
-              passed: false,
-              detail: `Copy action requires a "destination" parameter — the target path to copy to`,
-            }],
-            fidelity: "deterministic",
-            recoverable: true,
-          };
-        }
+        observations.push({
+          name: "required-param-destination",
+          passed: !!dest,
+          detail: dest
+            ? `Copy destination parameter is present: "${dest}"`
+            : `Copy action requires a "destination" parameter — the target path to copy to`,
+        });
       }
 
       if (lower.includes("move")) {
         const dest = (params.destination as string) ?? (params.dest as string) ?? "";
-        if (!dest) {
-          return {
-            canExecute: false,
-            preconditions: [{
-              check: "required-param-destination",
-              passed: false,
-              detail: `Move action requires a "destination" parameter — the target path to move to`,
-            }],
-            fidelity: "deterministic",
-            recoverable: true,
-          };
-        }
+        observations.push({
+          name: "required-param-destination",
+          passed: !!dest,
+          detail: dest
+            ? `Move destination parameter is present: "${dest}"`
+            : `Move action requires a "destination" parameter — the target path to move to`,
+        });
       }
 
       if (lower.includes("symlink")) {
         const linkTarget = (params.linkTarget as string) ?? (params.source as string) ?? "";
-        if (!linkTarget) {
-          return {
-            canExecute: false,
-            preconditions: [{
-              check: "required-param-linkTarget",
-              passed: false,
-              detail: `Symlink action requires a "linkTarget" parameter — the path the symlink should point to`,
-            }],
-            fidelity: "deterministic",
-            recoverable: true,
-          };
-        }
+        observations.push({
+          name: "required-param-linkTarget",
+          passed: !!linkTarget,
+          detail: linkTarget
+            ? `Symlink linkTarget parameter is present: "${linkTarget}"`
+            : `Symlink action requires a "linkTarget" parameter — the path the symlink should point to`,
+        });
       }
 
       // Check if parent directory exists (or was predicted to be created)
@@ -226,8 +211,8 @@ export class FileHandler implements OperationHandler {
         }
       }
 
-      preconditions.push({
-        check: "parent-directory-exists",
+      observations.push({
+        name: "parent-directory-exists",
         passed: parentExists,
         detail: parentExists
           ? `Parent directory "${parentDir}" exists and is a directory`
@@ -238,14 +223,14 @@ export class FileHandler implements OperationHandler {
       if (parentExists) {
         try {
           await fs.access(parentDir, (await import("node:fs")).constants.W_OK);
-          preconditions.push({
-            check: "parent-directory-writable",
+          observations.push({
+            name: "parent-directory-writable",
             passed: true,
             detail: `Parent directory "${parentDir}" is writable`,
           });
         } catch {
-          preconditions.push({
-            check: "parent-directory-writable",
+          observations.push({
+            name: "parent-directory-writable",
             passed: false,
             detail: `Parent directory "${parentDir}" is not writable — permission denied`,
           });
@@ -257,14 +242,14 @@ export class FileHandler implements OperationHandler {
         const linkTarget = target; // The symlink target path
         try {
           await fs.stat(linkTarget);
-          preconditions.push({
-            check: "symlink-target-exists",
+          observations.push({
+            name: "symlink-target-exists",
             passed: true,
             detail: `Symlink target "${linkTarget}" exists`,
           });
         } catch {
-          preconditions.push({
-            check: "symlink-target-exists",
+          observations.push({
+            name: "symlink-target-exists",
             passed: false,
             detail: `Symlink target "${linkTarget}" does not exist — symlink will be dangling`,
           });
@@ -275,14 +260,14 @@ export class FileHandler implements OperationHandler {
       if (lower.includes("delete")) {
         try {
           await fs.stat(target);
-          preconditions.push({
-            check: "delete-target-exists",
+          observations.push({
+            name: "delete-target-exists",
             passed: true,
             detail: `Delete target "${target}" exists`,
           });
         } catch {
-          preconditions.push({
-            check: "delete-target-exists",
+          observations.push({
+            name: "delete-target-exists",
             passed: true, // Deleting a non-existent file is not a failure
             detail: `Delete target "${target}" does not exist — operation is a no-op`,
           });
@@ -295,8 +280,8 @@ export class FileHandler implements OperationHandler {
         const freeBytes = stats.bfree * stats.bsize;
         const freeMB = Math.round(freeBytes / (1024 * 1024));
         const sufficient = freeBytes > 100 * 1024 * 1024; // 100MB minimum
-        preconditions.push({
-          check: "disk-space",
+        observations.push({
+          name: "disk-space",
           passed: sufficient,
           detail: sufficient
             ? `${freeMB}MB free on filesystem containing "${parentDir}"`
@@ -305,8 +290,6 @@ export class FileHandler implements OperationHandler {
       } catch {
         // statfs not available or path doesn't exist yet — not a hard failure
       }
-
-      const allPassed = preconditions.every((p) => p.passed);
 
       // Predict outcome
       const predictedOutcome: Record<string, unknown> = {};
@@ -319,25 +302,21 @@ export class FileHandler implements OperationHandler {
       }
 
       return {
-        canExecute: allPassed,
-        preconditions,
+        observations,
         predictedOutcome,
         fidelity: "deterministic",
-        recoverable: true,
       };
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       return {
-        canExecute: false,
-        preconditions: [
+        observations: [
           {
-            check: "dry-run-error",
+            name: "dry-run-error",
             passed: false,
             detail: `Dry-run check failed unexpectedly: ${message}`,
           },
         ],
         fidelity: "deterministic",
-        recoverable: true,
       };
     }
   }

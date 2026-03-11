@@ -15,18 +15,15 @@ export interface HandlerResult {
 }
 
 /**
- * Result of a handler's dry-run precondition check against real system state.
- * Used to validate plan steps before presenting them to the user.
+ * Result of a handler's dry-run observation against real system state.
+ * Handlers report facts — the LLM assesses viability and refines the plan.
  */
 export interface DryRunResult {
-  canExecute: boolean;
-  preconditions: Array<{ check: string; passed: boolean; detail: string }>;
+  observations: Array<{ name: string; passed: boolean; detail: string }>;
   /** State changes this step would produce — fed into subsequent steps' context */
   predictedOutcome?: Record<string, unknown>;
   /** How confident the dry-run is in its prediction */
   fidelity: "deterministic" | "speculative" | "unknown";
-  /** Whether the planner can work around this failure */
-  recoverable: boolean;
   /** What couldn't be verified */
   unknowns?: string[];
 }
@@ -83,13 +80,17 @@ export interface OperationHandler {
   verify?(action: string, target: string): Promise<boolean>;
 
   /**
-   * Dry-run precondition check: validates that a planned step can
-   * execute against the current system state without actually making
-   * changes. Used to ground plan confidence before presenting to users.
+   * Dry-run observation: collects facts about the current system state
+   * relevant to this planned step, without making any changes. Handlers
+   * report observations (passed/failed) — the LLM assesses whether the
+   * plan can proceed, needs refinement, or is genuinely blocked.
    *
    * The predictedOutcomes map contains predicted state changes from
    * preceding steps (e.g., directories that would be created), allowing
    * the handler to account for not-yet-executed earlier steps.
+   *
+   * Handlers must NOT make blocking decisions — collect ALL observations
+   * and return them all, even if some fail. No early exits on failure.
    */
   dryRun(
     step: PlannedStep,

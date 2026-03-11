@@ -91,7 +91,7 @@ export class ProcessHandler implements OperationHandler {
     step: PlannedStep,
     _predictedOutcomes: Map<number, Record<string, unknown>>,
   ): Promise<DryRunResult> {
-    const preconditions: DryRunResult["preconditions"] = [];
+    const observations: DryRunResult["observations"] = [];
     const target = step.target; // The command/binary to run
     const unknowns: string[] = [];
 
@@ -108,8 +108,8 @@ export class ProcessHandler implements OperationHandler {
         });
       });
 
-      preconditions.push({
-        check: "binary-exists",
+      observations.push({
+        name: "binary-exists",
         passed: binaryFound.found,
         detail: binaryFound.found
           ? `Binary "${target}" found at ${binaryFound.path}`
@@ -121,16 +121,16 @@ export class ProcessHandler implements OperationHandler {
       if (cwd) {
         try {
           const stat = await import("node:fs/promises").then((fs) => fs.stat(cwd));
-          preconditions.push({
-            check: "working-directory-exists",
+          observations.push({
+            name: "working-directory-exists",
             passed: stat.isDirectory(),
             detail: stat.isDirectory()
               ? `Working directory "${cwd}" exists`
               : `"${cwd}" exists but is not a directory`,
           });
         } catch {
-          preconditions.push({
-            check: "working-directory-exists",
+          observations.push({
+            name: "working-directory-exists",
             passed: false,
             detail: `Working directory "${cwd}" does not exist — command will fail`,
           });
@@ -141,29 +141,23 @@ export class ProcessHandler implements OperationHandler {
         `Command startup success depends on arguments, environment, and application state`,
       );
 
-      const allPassed = preconditions.every((p) => p.passed);
-
       return {
-        canExecute: allPassed,
-        preconditions,
+        observations,
         predictedOutcome: { commandExecuted: target },
         fidelity: "speculative",
-        recoverable: !allPassed, // Missing binary is recoverable by the planner
         unknowns,
       };
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       return {
-        canExecute: false,
-        preconditions: [
+        observations: [
           {
-            check: "dry-run-error",
+            name: "dry-run-error",
             passed: false,
             detail: `Dry-run check failed unexpectedly: ${message}`,
           },
         ],
         fidelity: "speculative",
-        recoverable: true,
         unknowns: [`Could not verify binary "${target}" availability`],
       };
     }
