@@ -248,7 +248,7 @@ export class EnvoyClient {
     };
     version: string;
     resolvedVariables: Record<string, string>;
-  }): Promise<{ plan: DeploymentPlan; rollbackPlan: DeploymentPlan; delta?: string }> {
+  }): Promise<{ plan: DeploymentPlan; rollbackPlan: DeploymentPlan; delta?: string; blocked?: boolean; blockReason?: string }> {
     // Forward the LLM API key so the Envoy can use it if it started without one.
     // Sent in the request body (not headers) over the trusted server↔envoy channel.
     const llmApiKey = process.env.SYNTH_LLM_API_KEY;
@@ -267,7 +267,7 @@ export class EnvoyClient {
       throw new Error(`Envoy planning failed (HTTP ${response.status}): ${body}`);
     }
 
-    return (await response.json()) as { plan: DeploymentPlan; rollbackPlan: DeploymentPlan; delta?: string };
+    return (await response.json()) as { plan: DeploymentPlan; rollbackPlan: DeploymentPlan; delta?: string; blocked?: boolean; blockReason?: string };
   }
 
   /**

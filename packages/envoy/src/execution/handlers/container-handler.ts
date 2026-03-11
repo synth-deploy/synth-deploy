@@ -159,28 +159,56 @@ export class ContainerHandler implements OperationHandler {
     const unknowns: string[] = [];
 
     try {
-      // Check if docker CLI is available
-      const dockerAvailable = await new Promise<boolean>((resolve) => {
+      // Check if docker CLI is installed (does not contact the daemon)
+      const cliInstalled = await new Promise<boolean>((resolve) => {
+        execFile("docker", ["--version"], { timeout: 5000 }, (error) => {
+          resolve(!error);
+        });
+      });
+
+      if (!cliInstalled) {
+        preconditions.push({
+          check: "docker-cli-installed",
+          passed: false,
+          detail: `Docker CLI is not installed — install Docker before deploying container workloads`,
+        });
+        return {
+          canExecute: false,
+          preconditions,
+          fidelity: "deterministic",
+          recoverable: false,
+          unknowns: [],
+        };
+      }
+
+      preconditions.push({
+        check: "docker-cli-installed",
+        passed: true,
+        detail: `Docker CLI is installed`,
+      });
+
+      // Check if the Docker daemon is running (requires daemon connection)
+      const daemonRunning = await new Promise<boolean>((resolve) => {
         execFile("docker", ["version", "--format", "{{.Server.Version}}"], { timeout: 5000 }, (error) => {
           resolve(!error);
         });
       });
 
       preconditions.push({
-        check: "docker-available",
-        passed: dockerAvailable,
-        detail: dockerAvailable
+        check: "docker-daemon-running",
+        passed: daemonRunning,
+        detail: daemonRunning
           ? `Docker daemon is running and accessible`
-          : `Docker daemon is not running or docker CLI is not installed — all container operations will fail`,
+          : `Docker daemon is not running — add a step to start the Docker daemon (e.g. "systemctl start docker") before container operations`,
       });
 
-      if (!dockerAvailable) {
+      if (!daemonRunning) {
         return {
           canExecute: false,
           preconditions,
-          fidelity: "speculative",
-          recoverable: false,
-          unknowns: ["Docker is required but not available"],
+          fidelity: "deterministic",
+          recoverable: true, // LLM can add a "start docker daemon" step
+          unknowns: [],
         };
       }
 

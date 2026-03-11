@@ -144,11 +144,19 @@ export interface PlanningInstruction {
  * What the Envoy returns after planning — includes the deployment plan,
  * a rollback plan, and an optional delta summary comparing to the last
  * successful plan for this artifact type + environment.
+ *
+ * When `blocked` is true the plan cannot be executed — the user must resolve
+ * the infrastructure issues listed in `blockReason` before proceeding.
+ * The server must not transition to awaiting_approval in this case.
  */
 export interface PlanningResult {
   plan: DeploymentPlan;
   rollbackPlan: DeploymentPlan;
   delta?: string;
+  /** True when unrecoverable precondition failures prevent execution */
+  blocked?: boolean;
+  /** Human-readable explanation of what must be fixed before proceeding */
+  blockReason?: string;
 }
 
 /**
@@ -1531,15 +1539,18 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
           },
         });
 
-        // Return the plan with failure information in reasoning so the user sees it
-        plan.reasoning =
-          `PLAN BLOCKED — unrecoverable precondition failures: ${unrecoverableFailures.join(". ")}. ` +
-          `These failures cannot be resolved by re-planning and require manual intervention.`;
+        const blockReason =
+          `Unrecoverable precondition failures: ${unrecoverableFailures.join(". ")}. ` +
+          `These require manual intervention or infrastructure changes before deployment can proceed.`;
+
+        plan.reasoning = `PLAN BLOCKED — ${blockReason}`;
 
         return {
           plan,
           rollbackPlan: this.buildRollbackPlan(plan, instruction),
           delta: currentParsed.delta,
+          blocked: true,
+          blockReason,
         };
       }
 

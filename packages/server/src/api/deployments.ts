@@ -123,26 +123,44 @@ export function registerDeploymentRoutes(
           version: deployment.version,
           resolvedVariables: resolved,
         }).then((result) => {
-          // Plan received — transition deployment to awaiting_approval
           const dep = deployments.get(deployment.id);
           if (!dep || dep.status !== "pending") return;
 
           dep.plan = result.plan;
           dep.rollbackPlan = result.rollbackPlan;
-          dep.status = "awaiting_approval" as typeof dep.status;
-          dep.recommendation = computeRecommendation(dep, deployments);
           dep.envoyId = planningEnvoy.id;
-          deployments.save(dep);
 
-          debrief.record({
-            partitionId: dep.partitionId ?? null,
-            deploymentId: dep.id,
-            agent: "envoy",
-            decisionType: "plan-generation" as Parameters<typeof debrief.record>[0]["decisionType"],
-            decision: `Deployment plan generated with ${result.plan.steps.length} steps`,
-            reasoning: result.plan.reasoning,
-            context: { stepCount: result.plan.steps.length, envoyId: planningEnvoy.id, delta: result.delta },
-          });
+          if (result.blocked) {
+            // Unrecoverable precondition failures — block execution, do not present for approval
+            dep.status = "failed" as typeof dep.status;
+            dep.failureReason = result.blockReason ?? "Plan blocked due to unrecoverable precondition failures";
+            deployments.save(dep);
+
+            debrief.record({
+              partitionId: dep.partitionId ?? null,
+              deploymentId: dep.id,
+              agent: "envoy",
+              decisionType: "plan-generation" as Parameters<typeof debrief.record>[0]["decisionType"],
+              decision: `Deployment plan blocked — infrastructure prerequisites not met`,
+              reasoning: result.blockReason ?? result.plan.reasoning,
+              context: { stepCount: result.plan.steps.length, envoyId: planningEnvoy.id, blocked: true },
+            });
+          } else {
+            // Plan is valid — transition to awaiting_approval
+            dep.status = "awaiting_approval" as typeof dep.status;
+            dep.recommendation = computeRecommendation(dep, deployments);
+            deployments.save(dep);
+
+            debrief.record({
+              partitionId: dep.partitionId ?? null,
+              deploymentId: dep.id,
+              agent: "envoy",
+              decisionType: "plan-generation" as Parameters<typeof debrief.record>[0]["decisionType"],
+              decision: `Deployment plan generated with ${result.plan.steps.length} steps`,
+              reasoning: result.plan.reasoning,
+              context: { stepCount: result.plan.steps.length, envoyId: planningEnvoy.id, delta: result.delta },
+            });
+          }
         }).catch((err) => {
           // Planning failed — mark deployment failed so UI doesn't wait forever
           const dep = deployments.get(deployment.id);
