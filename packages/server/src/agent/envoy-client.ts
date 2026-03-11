@@ -265,6 +265,55 @@ export class EnvoyClient {
   }
 
   /**
+   * Ask the Envoy to generate a rollback plan for a deployment that has
+   * already executed. Uses the execution record (what actually ran) rather
+   * than the forward plan, so the rollback is targeted to what actually changed.
+   */
+  async requestRollbackPlan(params: {
+    deploymentId: string;
+    artifact: {
+      name: string;
+      type: string;
+      analysis: {
+        summary: string;
+        dependencies: string[];
+        configurationExpectations: Record<string, string>;
+        deploymentIntent?: string;
+        confidence: number;
+      };
+    };
+    environment: { id: string; name: string };
+    completedSteps: Array<{
+      description: string;
+      action: string;
+      target: string;
+      status: "completed" | "failed" | "rolled_back";
+      output?: string;
+    }>;
+    deployedVariables: Record<string, string>;
+    version: string;
+    failureReason?: string;
+  }): Promise<DeploymentPlan> {
+    const response = await fetchWithRetry(
+      `${this.baseUrl}/rollback-plan`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(params),
+      },
+      this.timeoutMs * 6, // LLM reasoning may take time
+    );
+
+    if (!response.ok) {
+      const body = await response.text().catch(() => "");
+      throw new Error(`Envoy rollback planning failed (HTTP ${response.status}): ${body}`);
+    }
+
+    const data = (await response.json()) as { rollbackPlan: DeploymentPlan };
+    return data.rollbackPlan;
+  }
+
+  /**
    * Validate a modified plan against the Envoy's security boundaries.
    */
   async validatePlan(steps: PlannedStep[]): Promise<{ valid: boolean; violations: Array<{ step: string; reason: string }> }> {

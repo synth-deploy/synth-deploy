@@ -1,7 +1,7 @@
 import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import type { EnvoyAgent, DeploymentInstruction, PlanningInstruction, LifecycleState } from "./agent/envoy-agent.js";
+import type { EnvoyAgent, DeploymentInstruction, PlanningInstruction, LifecycleState, RollbackPlanningInstruction } from "./agent/envoy-agent.js";
 import type { EnvoyKnowledgeStore } from "./state/knowledge-store.js";
 import type { QueryEngine } from "./agent/query-engine.js";
 import type { EscalationPackager } from "./agent/escalation-packager.js";
@@ -202,6 +202,59 @@ export function createEnvoyServer(
     }, progressCallbackUrl);
 
     return reply.status(result.success ? 200 : 500).send(result);
+  });
+
+  // -- Rollback plan generation (post-hoc, based on what actually ran) --------
+
+  const RollbackPlanRequestSchema = z.object({
+    deploymentId: z.string(),
+    artifact: z.object({
+      name: z.string(),
+      type: z.string(),
+      analysis: z.object({
+        summary: z.string(),
+        dependencies: z.array(z.string()),
+        configurationExpectations: z.record(z.string()),
+        deploymentIntent: z.string().optional(),
+        confidence: z.number(),
+      }),
+    }),
+    environment: z.object({
+      id: z.string(),
+      name: z.string(),
+    }),
+    completedSteps: z.array(z.object({
+      description: z.string(),
+      action: z.string(),
+      target: z.string(),
+      status: z.enum(["completed", "failed", "rolled_back"]),
+      output: z.string().optional(),
+    })),
+    deployedVariables: z.record(z.string()),
+    version: z.string(),
+    failureReason: z.string().optional(),
+  });
+
+  app.post("/rollback-plan", async (request, reply) => {
+    const parsed = RollbackPlanRequestSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({
+        error: "Invalid rollback plan request",
+        details: parsed.error.format(),
+      });
+    }
+
+    const instruction: RollbackPlanningInstruction = parsed.data;
+
+    try {
+      const rollbackPlan = await agent.planRollback(instruction);
+      return reply.status(200).send({ rollbackPlan });
+    } catch (err) {
+      return reply.status(500).send({
+        error: "Rollback plan generation failed",
+        details: err instanceof Error ? err.message : String(err),
+      });
+    }
   });
 
   // -- Validate plan (boundary check only, no execution) ---------------------

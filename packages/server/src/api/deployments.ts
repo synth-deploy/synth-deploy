@@ -556,6 +556,229 @@ export function registerDeploymentRoutes(
     },
   );
 
+  // Request a post-hoc rollback plan — asks the envoy to reason about
+  // what actually ran and produce a targeted rollback plan
+  app.post<{ Params: { id: string } }>(
+    "/api/deployments/:id/request-rollback-plan",
+    { preHandler: [requirePermission("deployment.approve")] },
+    async (request, reply) => {
+      const deployment = deployments.get(request.params.id);
+      if (!deployment) {
+        return reply.status(404).send({ error: "Deployment not found" });
+      }
+
+      const finishedStatuses = new Set(["succeeded", "failed", "rolled_back"]);
+      if (!finishedStatuses.has(deployment.status as string)) {
+        return reply.status(409).send({
+          error: `Cannot request rollback plan for deployment in "${deployment.status}" status — deployment must be finished`,
+        });
+      }
+
+      const artifact = artifactStore.get(deployment.artifactId);
+      if (!artifact) {
+        return reply.status(404).send({ error: "Artifact not found" });
+      }
+
+      // Determine which envoy to ask
+      const targetEnvoy = deployment.envoyId
+        ? envoyRegistry?.get(deployment.envoyId)
+        : envoyRegistry?.list()[0];
+
+      if (!targetEnvoy) {
+        return reply.status(503).send({ error: "No envoy available to generate rollback plan" });
+      }
+
+      const environment = deployment.environmentId ? environments.get(deployment.environmentId) : undefined;
+
+      // Build the list of completed steps from execution record (or plan as fallback)
+      const completedSteps: Array<{
+        description: string;
+        action: string;
+        target: string;
+        status: "completed" | "failed" | "rolled_back";
+        output?: string;
+      }> = deployment.executionRecord?.steps.map((s) => ({
+        description: s.description,
+        action: deployment.plan?.steps.find((p) => p.description === s.description)?.action ?? "unknown",
+        target: deployment.plan?.steps.find((p) => p.description === s.description)?.target ?? "",
+        status: s.status,
+        output: s.output ?? s.error,
+      })) ?? deployment.plan?.steps.map((s) => ({
+        description: s.description,
+        action: s.action,
+        target: s.target,
+        status: "completed" as const,
+      })) ?? [];
+
+      const rollbackClient = new EnvoyClient(targetEnvoy.url);
+
+      try {
+        const rollbackPlan = await rollbackClient.requestRollbackPlan({
+          deploymentId: deployment.id,
+          artifact: {
+            name: artifact.name,
+            type: artifact.type,
+            analysis: {
+              summary: artifact.analysis.summary,
+              dependencies: artifact.analysis.dependencies,
+              configurationExpectations: artifact.analysis.configurationExpectations,
+              deploymentIntent: artifact.analysis.deploymentIntent,
+              confidence: artifact.analysis.confidence,
+            },
+          },
+          environment: {
+            id: deployment.environmentId ?? "",
+            name: environment?.name ?? deployment.environmentId ?? "unknown",
+          },
+          completedSteps,
+          deployedVariables: deployment.variables,
+          version: deployment.version,
+          failureReason: deployment.failureReason ?? undefined,
+        });
+
+        // Store the generated rollback plan on the deployment
+        deployment.rollbackPlan = rollbackPlan;
+        deployments.save(deployment);
+
+        const actor = (request.user?.email) ?? "anonymous";
+
+        debrief.record({
+          partitionId: deployment.partitionId ?? null,
+          deploymentId: deployment.id,
+          agent: "command",
+          decisionType: "plan-generation" as Parameters<typeof debrief.record>[0]["decisionType"],
+          decision: `Rollback plan requested and generated for ${artifact.name} v${deployment.version}`,
+          reasoning: rollbackPlan.reasoning,
+          context: {
+            requestedBy: actor,
+            stepCount: rollbackPlan.steps.length,
+            envoyId: targetEnvoy.id,
+            deploymentStatus: deployment.status,
+          },
+          actor: request.user?.email,
+        });
+        telemetry.record({
+          actor,
+          action: "deployment.rollback-plan-requested" as Parameters<typeof telemetry.record>[0]["action"],
+          target: { type: "deployment", id: deployment.id },
+          details: { stepCount: rollbackPlan.steps.length },
+        });
+
+        return reply.status(200).send({ deployment, rollbackPlan });
+      } catch (err) {
+        return reply.status(500).send({
+          error: "Failed to generate rollback plan",
+          details: err instanceof Error ? err.message : String(err),
+        });
+      }
+    },
+  );
+
+  // Execute rollback — runs the stored rollback plan against the envoy
+  app.post<{ Params: { id: string } }>(
+    "/api/deployments/:id/execute-rollback",
+    { preHandler: [requirePermission("deployment.approve")] },
+    async (request, reply) => {
+      const deployment = deployments.get(request.params.id);
+      if (!deployment) {
+        return reply.status(404).send({ error: "Deployment not found" });
+      }
+
+      if (!deployment.rollbackPlan) {
+        return reply.status(409).send({ error: "No rollback plan available — request one first" });
+      }
+
+      const finishedStatuses = new Set(["succeeded", "failed"]);
+      if (!finishedStatuses.has(deployment.status as string)) {
+        return reply.status(409).send({
+          error: `Cannot execute rollback for deployment in "${deployment.status}" status`,
+        });
+      }
+
+      const artifact = artifactStore.get(deployment.artifactId);
+      const targetEnvoy = deployment.envoyId
+        ? envoyRegistry?.get(deployment.envoyId)
+        : envoyRegistry?.list()[0];
+
+      if (!targetEnvoy) {
+        return reply.status(503).send({ error: "No envoy available to execute rollback" });
+      }
+
+      const actor = (request.user?.email) ?? "anonymous";
+      const serverUrl = settings.get().envoy?.url ?? "http://localhost:3000";
+      const progressCallbackUrl = `${serverUrl.replace(/:\d+$/, `:${3000}`)}/api/deployments/${deployment.id}/progress`;
+
+      deployment.status = "running" as typeof deployment.status;
+      deployments.save(deployment);
+
+      debrief.record({
+        partitionId: deployment.partitionId ?? null,
+        deploymentId: deployment.id,
+        agent: "command",
+        decisionType: "rollback-execution" as Parameters<typeof debrief.record>[0]["decisionType"],
+        decision: `Rollback execution initiated for ${artifact?.name ?? deployment.artifactId} v${deployment.version}`,
+        reasoning: `Rollback requested by ${actor}. Executing ${deployment.rollbackPlan.steps.length} rollback step(s).`,
+        context: { initiatedBy: actor, stepCount: deployment.rollbackPlan.steps.length },
+        actor: request.user?.email,
+      });
+      telemetry.record({
+        actor,
+        action: "deployment.rollback-executed" as Parameters<typeof telemetry.record>[0]["action"],
+        target: { type: "deployment", id: deployment.id },
+        details: { stepCount: deployment.rollbackPlan.steps.length },
+      });
+
+      const rollbackClient = new EnvoyClient(targetEnvoy.url);
+
+      // Execute the rollback plan as if it were a forward plan — it IS a forward plan
+      // (just in the reverse direction). Use an empty no-op plan as the "rollback of rollback".
+      const emptyPlan = { steps: [], reasoning: "No rollback of rollback." };
+
+      rollbackClient.executeApprovedPlan({
+        deploymentId: deployment.id,
+        plan: deployment.rollbackPlan,
+        rollbackPlan: emptyPlan,
+        artifactType: artifact?.type ?? "unknown",
+        artifactName: artifact?.name ?? "unknown",
+        environmentId: deployment.environmentId ?? "",
+        progressCallbackUrl,
+      }).then((result) => {
+        const dep = deployments.get(deployment.id);
+        if (!dep) return;
+
+        dep.status = result.success ? "rolled_back" as typeof dep.status : "failed" as typeof dep.status;
+        if (!result.success) {
+          dep.failureReason = result.failureReason ?? "Rollback execution failed";
+        }
+        dep.completedAt = new Date();
+        deployments.save(dep);
+
+        debrief.record({
+          partitionId: dep.partitionId ?? null,
+          deploymentId: dep.id,
+          agent: "command",
+          decisionType: "rollback-execution" as Parameters<typeof debrief.record>[0]["decisionType"],
+          decision: result.success
+            ? `Rollback completed successfully for ${artifact?.name ?? dep.artifactId} v${dep.version}`
+            : `Rollback failed for ${artifact?.name ?? dep.artifactId} v${dep.version}`,
+          reasoning: result.success
+            ? `All rollback steps executed successfully.`
+            : `Rollback failed: ${result.failureReason}`,
+          context: { success: result.success, failureReason: result.failureReason },
+        });
+      }).catch((err) => {
+        const dep = deployments.get(deployment.id);
+        if (!dep) return;
+
+        dep.status = "failed" as typeof dep.status;
+        dep.failureReason = err instanceof Error ? err.message : "Rollback execution dispatch failed";
+        deployments.save(dep);
+      });
+
+      return reply.status(202).send({ deployment, accepted: true });
+    },
+  );
+
   // Get deployment postmortem
   app.get<{ Params: { id: string } }>(
     "/api/deployments/:id/postmortem",

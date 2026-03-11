@@ -146,6 +146,39 @@ export interface PlanningResult {
 }
 
 /**
+ * Input for post-hoc rollback plan generation — used when the user requests
+ * a rollback plan from the Debrief, after a deployment has already run.
+ *
+ * Unlike PlanningInstruction (which is forward-planning before execution),
+ * this is backward-planning based on what actually happened.
+ */
+export interface RollbackPlanningInstruction {
+  deploymentId: string;
+  artifact: {
+    name: string;
+    type: string;
+    analysis: ArtifactAnalysis;
+  };
+  environment: {
+    id: string;
+    name: string;
+  };
+  /** Steps that actually executed during the deployment (from executionRecord). */
+  completedSteps: Array<{
+    description: string;
+    action: string;
+    target: string;
+    status: "completed" | "failed" | "rolled_back";
+    output?: string;
+  }>;
+  /** The variables that were active when the deployment ran. */
+  deployedVariables: Record<string, string>;
+  version: string;
+  /** If the deployment failed, the reason — informs what needs undoing. */
+  failureReason?: string;
+}
+
+/**
  * Verification result for workspace artifact checks.
  */
 interface VerificationResult {
@@ -1735,6 +1768,179 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
     };
 
     return { plan, rollbackPlan };
+  }
+
+  // -------------------------------------------------------------------------
+  // Post-hoc rollback planning — generate a rollback plan after execution
+  // -------------------------------------------------------------------------
+
+  /**
+   * Generate a rollback plan based on what actually ran during a deployment.
+   *
+   * Unlike buildRollbackPlan (which mechanically reverses forward plan steps
+   * before execution), this method reasons about what was actually executed
+   * and produces a targeted plan to undo it. Called when the user requests
+   * a rollback from the Debrief panel after a deployment has completed.
+   */
+  async planRollback(instruction: RollbackPlanningInstruction): Promise<DeploymentPlan> {
+    // Only consider steps that completed successfully — failed/rolled-back steps
+    // didn't fully execute, so they may not need undoing.
+    const executedSteps = instruction.completedSteps.filter((s) => s.status === "completed");
+
+    if (this.llmClient && this.llmClient.isAvailable()) {
+      return this.planRollbackWithLlm(instruction, executedSteps);
+    }
+
+    // Fallback: mechanically reverse the completed steps
+    return this.buildMechanicalRollbackPlan(instruction, executedSteps);
+  }
+
+  private async planRollbackWithLlm(
+    instruction: RollbackPlanningInstruction,
+    executedSteps: RollbackPlanningInstruction["completedSteps"],
+  ): Promise<DeploymentPlan> {
+    const scanResult = this.scanner.scan();
+    const capabilities = this.getCapabilities();
+    const availableTools = capabilities.installedTools
+      .filter((t) => t.available)
+      .map((t) => `${t.name} (${t.version ?? "version unknown"})`)
+      .join(", ");
+
+    const sections: string[] = [];
+
+    sections.push(`## Deployment Being Rolled Back
+Artifact: ${instruction.artifact.name}
+Type: ${instruction.artifact.type}
+Version: ${instruction.version}
+Environment: ${instruction.environment.name} (${instruction.environment.id})
+Analysis: ${instruction.artifact.analysis.summary}
+${instruction.failureReason ? `Failure reason: ${instruction.failureReason}` : "Deployment succeeded — manual rollback requested."}`);
+
+    sections.push(`## Steps That Actually Executed (${executedSteps.length} completed)
+${executedSteps.map((s, i) => `${i + 1}. [${s.status}] ${s.action} → ${s.target}: ${s.description}${s.output ? `\n   Output: ${s.output.slice(0, 200)}` : ""}`).join("\n")}`);
+
+    const skippedSteps = instruction.completedSteps.filter((s) => s.status !== "completed");
+    if (skippedSteps.length > 0) {
+      sections.push(`## Steps That Did NOT Complete (do not undo these)
+${skippedSteps.map((s, i) => `${i + 1}. [${s.status}] ${s.action} → ${s.target}: ${s.description}`).join("\n")}`);
+    }
+
+    sections.push(`## Active Variables at Deploy Time
+${Object.entries(instruction.deployedVariables).map(([k, v]) => `${k}=${v}`).join("\n") || "(none)"}`);
+
+    sections.push(`## Local System State
+Hostname: ${scanResult.hostname}
+Deployments directory: ${scanResult.deploymentsDir}
+Writable: ${scanResult.deploymentsWritable}`);
+
+    sections.push(`## Envoy Capabilities — ONLY use actions and tools listed here
+Action keywords the executor recognizes: ${capabilities.allActionKeywords.join(", ")}
+Handlers: ${capabilities.handlers.map((h) => `${h.name} [${h.actionKeywords.join(", ")}]`).join("; ")}
+Installed tools: ${availableTools || "none"}
+IMPORTANT: Every step's "action" field MUST contain at least one of the recognized action keywords above.`);
+
+    const systemPrompt =
+      `You are the Envoy rollback planning engine for Synth. Your job is to produce ` +
+      `a concrete rollback plan: the minimal set of steps to safely undo a deployment ` +
+      `and return the environment to its previous state.\n\n` +
+      `Only undo steps that actually completed. Work in reverse order. ` +
+      `Be specific about targets (paths, service names). ` +
+      `Do not include steps for operations that did not execute.\n\n` +
+      `IMPORTANT: You must respond with valid JSON only. No markdown, no commentary.\n\n` +
+      `Response format:\n` +
+      `{\n` +
+      `  "reasoning": "Why these rollback steps are needed and what state they restore",\n` +
+      `  "steps": [\n` +
+      `    {\n` +
+      `      "description": "Human-readable description of the rollback step",\n` +
+      `      "action": "The action type (must use a recognized action keyword)",\n` +
+      `      "target": "What the action operates on (path, service name)",\n` +
+      `      "reversible": false,\n` +
+      `      "execPreview": "The exact literal command string, if applicable"\n` +
+      `    }\n` +
+      `  ]\n` +
+      `}`;
+
+    const prompt = sections.join("\n\n");
+
+    const llmResult = await this.llmClient!.reason({
+      prompt,
+      systemPrompt,
+      promptSummary:
+        `Generate rollback plan for ${instruction.artifact.name} v${instruction.version} ` +
+        `in "${instruction.environment.name}"`,
+      partitionId: null,
+      deploymentId: instruction.deploymentId,
+      maxTokens: 2048,
+    });
+
+    if (!llmResult.ok) {
+      return this.buildMechanicalRollbackPlan(instruction, executedSteps);
+    }
+
+    try {
+      let text = llmResult.text.trim();
+      if (text.startsWith("```")) {
+        text = text.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "");
+      }
+      const parsed = JSON.parse(text) as {
+        reasoning: string;
+        steps: Array<{
+          description: string;
+          action: string;
+          target: string;
+          reversible?: boolean;
+          execPreview?: string;
+        }>;
+      };
+
+      this.debrief.record({
+        partitionId: null,
+        deploymentId: instruction.deploymentId,
+        agent: "envoy",
+        decisionType: "plan-generation",
+        decision: `Generated rollback plan for ${instruction.artifact.name} v${instruction.version}: ${parsed.steps.length} step(s)`,
+        reasoning: parsed.reasoning,
+        context: {
+          stepCount: parsed.steps.length,
+          executedStepsConsidered: executedSteps.length,
+          llmGenerated: true,
+        },
+      });
+
+      return {
+        steps: parsed.steps.map((s) => ({
+          description: s.description,
+          action: s.action,
+          target: s.target,
+          reversible: false,
+          execPreview: s.execPreview,
+        })),
+        reasoning: parsed.reasoning,
+      };
+    } catch {
+      return this.buildMechanicalRollbackPlan(instruction, executedSteps);
+    }
+  }
+
+  private buildMechanicalRollbackPlan(
+    instruction: RollbackPlanningInstruction,
+    executedSteps: RollbackPlanningInstruction["completedSteps"],
+  ): DeploymentPlan {
+    const steps = [...executedSteps].reverse().map((s) => ({
+      description: `Undo: ${s.description}`,
+      action: `undo-${s.action}`,
+      target: s.target,
+      reversible: false as const,
+    }));
+
+    return {
+      steps,
+      reasoning:
+        `Mechanical rollback for ${instruction.artifact.name} v${instruction.version}: ` +
+        `reverses ${executedSteps.length} completed step(s) in reverse order. ` +
+        `LLM was unavailable — review steps carefully before executing.`,
+    };
   }
 
   // -------------------------------------------------------------------------

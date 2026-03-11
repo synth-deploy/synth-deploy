@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { getRecentDebrief, getDeployment, listDeployments, listPartitions, listArtifacts, listEnvironments, getWhatsNew } from "../../api.js";
+import { getRecentDebrief, getDeployment, listDeployments, listPartitions, listArtifacts, listEnvironments, getWhatsNew, requestRollbackPlan, executeRollback } from "../../api.js";
 import type { WhatsNewResult } from "../../api.js";
 import type { DebriefEntry, Partition, Deployment, Artifact, Environment, DecisionType } from "../../types.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
@@ -64,6 +64,9 @@ function DeploymentDebriefDetail({ deploymentId, onBack }: { deploymentId: strin
   const [debrief, setDebrief] = useState<DebriefEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [whatsNew, setWhatsNew] = useState<WhatsNewResult | null>(null);
+  const [rollbackRequesting, setRollbackRequesting] = useState(false);
+  const [rollbackExecuting, setRollbackExecuting] = useState(false);
+  const [rollbackError, setRollbackError] = useState<string | null>(null);
   const { data: artifacts } = useQuery<Artifact[]>("list:artifacts", listArtifacts);
   const { data: environments } = useQuery<Environment[]>("list:environments", listEnvironments);
   const { data: partitions } = useQuery<Partition[]>("list:partitions", listPartitions);
@@ -76,6 +79,34 @@ function DeploymentDebriefDetail({ deploymentId, onBack }: { deploymentId: strin
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [deploymentId]);
+
+  async function handleRequestRollbackPlan() {
+    if (!deployment) return;
+    setRollbackRequesting(true);
+    setRollbackError(null);
+    try {
+      const { deployment: updated } = await requestRollbackPlan(deployment.id);
+      setDeployment(updated);
+    } catch (err) {
+      setRollbackError(err instanceof Error ? err.message : "Failed to generate rollback plan");
+    } finally {
+      setRollbackRequesting(false);
+    }
+  }
+
+  async function handleExecuteRollback() {
+    if (!deployment) return;
+    setRollbackExecuting(true);
+    setRollbackError(null);
+    try {
+      const { deployment: updated } = await executeRollback(deployment.id);
+      setDeployment(updated);
+    } catch (err) {
+      setRollbackError(err instanceof Error ? err.message : "Failed to execute rollback");
+    } finally {
+      setRollbackExecuting(false);
+    }
+  }
 
   useEffect(() => {
     getWhatsNew(deploymentId).then(setWhatsNew).catch(() => {});
@@ -407,33 +438,66 @@ function DeploymentDebriefDetail({ deploymentId, onBack }: { deploymentId: strin
         </div>
       )}
 
-      {/* Rollback Plan */}
-      {deployment.rollbackPlan && (
+      {/* Rollback */}
+      {(["succeeded", "failed", "rolled_back"] as string[]).includes(deployment.status) && (
         <div className="canvas-section">
-          <h3 className="canvas-section-title">Stored Rollback Plan</h3>
-          {deployment.rollbackPlan.reasoning && (
-            <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 10, lineHeight: 1.5 }}>
-              {deployment.rollbackPlan.reasoning}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: deployment.rollbackPlan ? 10 : 0 }}>
+            <h3 className="canvas-section-title" style={{ margin: 0 }}>
+              {deployment.rollbackPlan ? "Rollback Plan" : "Rollback"}
+            </h3>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              {rollbackError && (
+                <span style={{ fontSize: 12, color: "var(--status-failed)" }}>{rollbackError}</span>
+              )}
+              {deployment.status !== "rolled_back" && deployment.rollbackPlan && (
+                <button
+                  className="btn-secondary"
+                  style={{ fontSize: 12, padding: "4px 12px" }}
+                  disabled={rollbackExecuting}
+                  onClick={handleExecuteRollback}
+                >
+                  {rollbackExecuting ? "Executing…" : "Execute Rollback"}
+                </button>
+              )}
+              {deployment.status !== "rolled_back" && (
+                <button
+                  className="btn-secondary"
+                  style={{ fontSize: 12, padding: "4px 12px" }}
+                  disabled={rollbackRequesting}
+                  onClick={handleRequestRollbackPlan}
+                >
+                  {rollbackRequesting ? "Generating…" : deployment.rollbackPlan ? "Regenerate Plan" : "Request Rollback Plan"}
+                </button>
+              )}
             </div>
-          )}
-          <div style={{ borderRadius: 10, overflow: "hidden", border: "1px solid var(--border)", background: "var(--surface)" }}>
-            {deployment.rollbackPlan.steps.map((step, i) => {
-              const isLast = i === deployment.rollbackPlan!.steps.length - 1;
-              return (
-                <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "11px 16px", borderBottom: isLast ? "none" : "1px solid var(--border)" }}>
-                  <span style={{
-                    width: 20, height: 20, borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center",
-                    background: "var(--accent-soft, rgba(45,91,240,0.06))", color: "var(--accent)", fontSize: 10, fontWeight: 700, flexShrink: 0, marginTop: 1,
-                  }}>{i + 1}</span>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 13, color: "var(--text)" }}>{step.action}</div>
-                    {step.description && <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>{step.description}</div>}
-                  </div>
-                  {step.target && <span style={{ fontSize: 11, fontFamily: "var(--font-mono)", color: "var(--text-muted)", flexShrink: 0, marginTop: 3 }}>{step.target}</span>}
-                </div>
-              );
-            })}
           </div>
+          {deployment.rollbackPlan && (
+            <>
+              {deployment.rollbackPlan.reasoning && (
+                <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 10, lineHeight: 1.5 }}>
+                  {deployment.rollbackPlan.reasoning}
+                </div>
+              )}
+              <div style={{ borderRadius: 10, overflow: "hidden", border: "1px solid var(--border)", background: "var(--surface)" }}>
+                {deployment.rollbackPlan.steps.map((step, i) => {
+                  const isLast = i === deployment.rollbackPlan!.steps.length - 1;
+                  return (
+                    <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "11px 16px", borderBottom: isLast ? "none" : "1px solid var(--border)" }}>
+                      <span style={{
+                        width: 20, height: 20, borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center",
+                        background: "var(--accent-soft, rgba(45,91,240,0.06))", color: "var(--accent)", fontSize: 10, fontWeight: 700, flexShrink: 0, marginTop: 1,
+                      }}>{i + 1}</span>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 13, color: "var(--text)" }}>{step.action}</div>
+                        {step.description && <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>{step.description}</div>}
+                      </div>
+                      {step.target && <span style={{ fontSize: 11, fontFamily: "var(--font-mono)", color: "var(--text-muted)", flexShrink: 0, marginTop: 3 }}>{step.target}</span>}
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>

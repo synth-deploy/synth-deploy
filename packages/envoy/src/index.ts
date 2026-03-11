@@ -50,7 +50,8 @@ let reporter: import("./agent/server-reporter.js").ServerReporter | undefined;
 if (COMMAND_URL) {
   const { ServerReporter } = await import("./agent/server-reporter.js");
   const envoyId = `envoy-${HOST}:${PORT}`;
-  reporter = new ServerReporter(COMMAND_URL, envoyId);
+  const envoyToken = process.env.SYNTH_ENVOY_TOKEN;
+  reporter = new ServerReporter(COMMAND_URL, envoyId, 5_000, envoyToken);
 }
 
 // LLM client for diagnostic enhancement — gracefully degrades if no API key
@@ -233,6 +234,7 @@ export type {
   ExecutionResult,
   PlanningInstruction,
   PlanningResult,
+  RollbackPlanningInstruction,
 } from "./agent/envoy-agent.js";
 export { EnvironmentScanner } from "./agent/environment-scanner.js";
 export type { EnvironmentScanResult, ToolProbeResult } from "./agent/environment-scanner.js";

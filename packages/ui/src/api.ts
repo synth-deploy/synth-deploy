@@ -3,6 +3,7 @@ import type {
   Environment,
   Deployment,
   DeploymentEnrichment,
+  DeploymentPlan,
   DeploymentRecommendation,
   PlannedStep,
   DebriefEntry,
@@ -336,6 +337,18 @@ export async function getDeploymentEnrichment(
   id: string,
 ): Promise<{ enrichment: DeploymentEnrichment; recommendation?: DeploymentRecommendation }> {
   return fetchJson(`/api/deployments/${id}/context`);
+}
+
+export async function requestRollbackPlan(
+  id: string,
+): Promise<{ deployment: Deployment; rollbackPlan: DeploymentPlan }> {
+  return fetchJson(`/api/deployments/${id}/request-rollback-plan`, { method: "POST", body: JSON.stringify({}) });
+}
+
+export async function executeRollback(
+  id: string,
+): Promise<{ deployment: Deployment; accepted: boolean }> {
+  return fetchJson(`/api/deployments/${id}/execute-rollback`, { method: "POST", body: JSON.stringify({}) });
 }
 
 // --- Debrief / Reports ---
