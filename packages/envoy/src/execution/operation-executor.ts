@@ -249,6 +249,7 @@ export class DefaultOperationExecutor {
     // Execute
     try {
       const result = await handler.execute(step.action, step.target, {
+        ...step.params,
         description: step.description,
         rollbackAction: step.rollbackAction,
         reversible: step.reversible,

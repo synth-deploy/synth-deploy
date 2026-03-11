@@ -57,6 +57,8 @@ export interface PlannedStep {
   description: string;
   action: string;
   target: string;
+  /** Operation-specific parameters (e.g. destination for copy, args for commands) */
+  params?: Record<string, unknown>;
   reversible: boolean;
   rollbackAction?: string;
   execPreview?: string;

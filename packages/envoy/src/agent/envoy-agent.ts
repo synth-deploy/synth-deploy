@@ -1296,7 +1296,17 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
       `    {\n` +
       `      "description": "Human-readable description of the step",\n` +
       `      "action": "The action type (e.g. copy-artifact, write-config, restart-service, verify-health)",\n` +
-      `      "target": "What the action operates on (path, service name, URL)",\n` +
+      `      "target": "What the action operates on (source path, service name, URL, or command binary)",\n` +
+      `      "params": {\n` +
+      `        "destination": "Required for copy/move: the destination path",\n` +
+      `        "args": ["array", "of", "arguments for command/script actions"],\n` +
+      `        "cwd": "Working directory for command/script actions (if not current dir)",\n` +
+      `        "templatePath": "For config actions: path to the template file (if different from target)",\n` +
+      `        "outputPath": "For config actions: output path (if different from target)",\n` +
+      `        "variables": {"VAR": "value"},\n` +
+      `        "composeFile": "For compose actions: path to docker-compose file",\n` +
+      `        "linkTarget": "For symlink actions: the target the symlink should point to"\n` +
+      `      },\n` +
       `      "reversible": true,\n` +
       `      "rollbackAction": "How to undo this step",\n` +
       `      "execPreview": "The exact literal command string that will execute, e.g. 'docker pull myapp:1.2.3', 'systemctl restart nginx', 'npm install --production'. Omit if this step doesn't invoke a shell command."\n` +
@@ -1349,6 +1359,7 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
         description: string;
         action: string;
         target: string;
+        params?: Record<string, unknown>;
         reversible: boolean;
         rollbackAction?: string;
         execPreview?: string;
@@ -1391,6 +1402,7 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
           description: s.description,
           action: s.action,
           target: s.target,
+          params: s.params,
           reversible: s.reversible,
           rollbackAction: s.rollbackAction,
           execPreview: s.execPreview,
@@ -1854,7 +1866,8 @@ IMPORTANT: Every step's "action" field MUST contain at least one of the recogniz
       `    {\n` +
       `      "description": "Human-readable description of the rollback step",\n` +
       `      "action": "The action type (must use a recognized action keyword)",\n` +
-      `      "target": "What the action operates on (path, service name)",\n` +
+      `      "target": "What the action operates on (source path, service name, command binary)",\n` +
+      `      "params": {"destination": "required for copy/move", "args": [], "cwd": "optional"},\n` +
       `      "reversible": false,\n` +
       `      "execPreview": "The exact literal command string, if applicable"\n` +
       `    }\n` +
@@ -1889,6 +1902,7 @@ IMPORTANT: Every step's "action" field MUST contain at least one of the recogniz
           description: string;
           action: string;
           target: string;
+          params?: Record<string, unknown>;
           reversible?: boolean;
           execPreview?: string;
         }>;
@@ -1913,6 +1927,7 @@ IMPORTANT: Every step's "action" field MUST contain at least one of the recogniz
           description: s.description,
           action: s.action,
           target: s.target,
+          params: s.params,
           reversible: false,
           execPreview: s.execPreview,
         })),

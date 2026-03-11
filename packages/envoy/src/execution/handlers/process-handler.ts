@@ -116,6 +116,27 @@ export class ProcessHandler implements OperationHandler {
           : `Binary "${target}" not found on PATH — command will fail`,
       });
 
+      // Check cwd exists if specified
+      const cwd = (step.params?.cwd as string) ?? (step.params?.workingDirectory as string);
+      if (cwd) {
+        try {
+          const stat = await import("node:fs/promises").then((fs) => fs.stat(cwd));
+          preconditions.push({
+            check: "working-directory-exists",
+            passed: stat.isDirectory(),
+            detail: stat.isDirectory()
+              ? `Working directory "${cwd}" exists`
+              : `"${cwd}" exists but is not a directory`,
+          });
+        } catch {
+          preconditions.push({
+            check: "working-directory-exists",
+            passed: false,
+            detail: `Working directory "${cwd}" does not exist — command will fail`,
+          });
+        }
+      }
+
       unknowns.push(
         `Command startup success depends on arguments, environment, and application state`,
       );

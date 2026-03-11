@@ -101,7 +101,7 @@ export class ConfigHandler implements OperationHandler {
         });
       }
 
-      // If we could read the template, check for unresolved variables
+      // If we could read the template, check that all required variables are provided in params
       if (templateContent !== null) {
         const pattern = /\{\{(\w+)\}\}/g;
         const required = new Set<string>();
@@ -111,11 +111,39 @@ export class ConfigHandler implements OperationHandler {
         }
 
         if (required.size > 0) {
-          preconditions.push({
-            check: "template-variables-present",
-            passed: true,
-            detail: `Template contains ${required.size} variable(s) requiring substitution: ${[...required].join(", ")}`,
-          });
+          // Build the same variable set that processTemplate() will use at execution time
+          const params = step.params ?? {};
+          const variables = (params.variables as Record<string, string>) ?? {};
+          const allVars: Record<string, unknown> = { ...variables };
+          for (const [key, value] of Object.entries(params)) {
+            if (
+              key !== "templatePath" &&
+              key !== "outputPath" &&
+              key !== "variables" &&
+              key !== "description" &&
+              key !== "rollbackAction" &&
+              key !== "reversible"
+            ) {
+              allVars[key] = value;
+            }
+          }
+
+          const missing = [...required].filter((v) => !(v in allVars));
+          if (missing.length > 0) {
+            preconditions.push({
+              check: "template-variables-present",
+              passed: false,
+              detail:
+                `Template requires ${missing.length} variable(s) not provided in step params: ` +
+                `${missing.join(", ")}. Add these to the step's "params.variables" object.`,
+            });
+          } else {
+            preconditions.push({
+              check: "template-variables-present",
+              passed: true,
+              detail: `All ${required.size} template variable(s) are provided: ${[...required].join(", ")}`,
+            });
+          }
         } else {
           preconditions.push({
             check: "template-variables-present",

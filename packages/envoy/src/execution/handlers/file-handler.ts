@@ -155,6 +155,57 @@ export class FileHandler implements OperationHandler {
     const target = step.target;
 
     try {
+      const params = step.params ?? {};
+
+      // Check required params before any filesystem checks
+      if (lower.includes("copy")) {
+        const dest = (params.destination as string) ?? (params.dest as string) ?? "";
+        if (!dest) {
+          return {
+            canExecute: false,
+            preconditions: [{
+              check: "required-param-destination",
+              passed: false,
+              detail: `Copy action requires a "destination" parameter — the target path to copy to`,
+            }],
+            fidelity: "deterministic",
+            recoverable: true,
+          };
+        }
+      }
+
+      if (lower.includes("move")) {
+        const dest = (params.destination as string) ?? (params.dest as string) ?? "";
+        if (!dest) {
+          return {
+            canExecute: false,
+            preconditions: [{
+              check: "required-param-destination",
+              passed: false,
+              detail: `Move action requires a "destination" parameter — the target path to move to`,
+            }],
+            fidelity: "deterministic",
+            recoverable: true,
+          };
+        }
+      }
+
+      if (lower.includes("symlink")) {
+        const linkTarget = (params.linkTarget as string) ?? (params.source as string) ?? "";
+        if (!linkTarget) {
+          return {
+            canExecute: false,
+            preconditions: [{
+              check: "required-param-linkTarget",
+              passed: false,
+              detail: `Symlink action requires a "linkTarget" parameter — the path the symlink should point to`,
+            }],
+            fidelity: "deterministic",
+            recoverable: true,
+          };
+        }
+      }
+
       // Check if parent directory exists (or was predicted to be created)
       const parentDir = path.dirname(target);
       let parentExists = false;
