@@ -1731,35 +1731,61 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
           action: "mkdir",
           target: workspacePath,
           reversible: true,
-          rollbackAction: "delete-directory",
+          rollbackAction: "delete",
         },
         {
-          description: `Copy ${instruction.artifact.type} artifact to workspace`,
-          action: "copy-artifact",
-          target: `${workspacePath}/artifact`,
+          description: `Write artifact metadata to workspace`,
+          action: "write-config",
+          target: `${workspacePath}/artifact.json`,
+          params: {
+            content: JSON.stringify({
+              id: instruction.artifact.id,
+              name: instruction.artifact.name,
+              type: instruction.artifact.type,
+              version: instruction.version,
+              deploymentId: instruction.deploymentId,
+            }, null, 2),
+          },
           reversible: true,
-          rollbackAction: "remove-file",
+          rollbackAction: "delete",
         },
         {
           description: `Write deployment configuration with ${Object.keys(instruction.resolvedVariables).length} resolved variable(s)`,
           action: "write-config",
           target: `${workspacePath}/variables.env`,
+          params: {
+            content: Object.entries(instruction.resolvedVariables)
+              .map(([k, v]) => `${k}=${v}`)
+              .join("\n"),
+          },
           reversible: true,
-          rollbackAction: "remove-file",
+          rollbackAction: "delete",
         },
         {
           description: `Write deployment manifest`,
           action: "write-config",
           target: `${workspacePath}/manifest.json`,
+          params: {
+            content: JSON.stringify({
+              deploymentId: instruction.deploymentId,
+              artifact: instruction.artifact.name,
+              version: instruction.version,
+              environment: instruction.environment.name,
+              deployedAt: new Date().toISOString(),
+            }, null, 2),
+          },
           reversible: true,
-          rollbackAction: "remove-file",
+          rollbackAction: "delete",
         },
         {
           description: `Mark deployment as active`,
           action: "write-config",
           target: `${workspacePath}/STATUS`,
+          params: {
+            content: "active",
+          },
           reversible: true,
-          rollbackAction: "write-config",
+          rollbackAction: "delete",
         },
       ],
       reasoning:
