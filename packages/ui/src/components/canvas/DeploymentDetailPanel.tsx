@@ -116,6 +116,8 @@ function useDeploymentStream(deploymentId: string, isRunning: boolean) {
   return { events, stale, completed };
 }
 
+const TERMINAL_STATUSES = new Set(["succeeded", "failed", "rolled_back", "rejected"]);
+
 // ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
@@ -175,12 +177,34 @@ export default function DeploymentDetailPanel({ deploymentId, title }: Props) {
   const isRunning = deployment?.status === "running";
   const { events: progressEvents, stale, completed: streamCompleted } = useDeploymentStream(deploymentId, isRunning);
 
-  // Re-fetch deployment when stream completes (to get final state)
+
+  // Navigate to the full debrief once the deployment reaches a terminal state
+  const didTransitionRef = useRef(false);
+  useEffect(() => {
+    const status = deployment?.status;
+    if (!didTransitionRef.current && status && TERMINAL_STATUSES.has(status)) {
+      didTransitionRef.current = true;
+      replacePanel({
+        type: "debrief",
+        title: "Debriefs",
+        params: { deploymentId },
+      });
+    }
+  }, [deployment?.status, deploymentId, replacePanel]);
+
+  // Re-fetch when stream completes (success path — deployment-completed event)
   useEffect(() => {
     if (streamCompleted) {
       refreshDeployment();
     }
   }, [streamCompleted, refreshDeployment]);
+
+  // Poll when stream goes stale — failure/rollback don't emit deployment-completed
+  useEffect(() => {
+    if (!stale || !isRunning) return;
+    const interval = setInterval(() => { refreshDeployment(); }, 3_000);
+    return () => clearInterval(interval);
+  }, [stale, isRunning, refreshDeployment]);
 
   // Build step state map from progress events
   const stepMap = new Map<number, ProgressEvent>();
