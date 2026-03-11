@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import type { ISettingsStore, ITelemetryStore, AppSettings, LlmProviderConfig } from "@synth-deploy/core";
 import { UpdateSettingsSchema } from "./schemas.js";
 import { requirePermission } from "../middleware/permissions.js";
+import { invalidateLlmHealthCache } from "./health.js";
 
 /**
  * Strips API key from LLM settings before returning to the frontend.
@@ -73,6 +74,7 @@ export function registerSettingsRoutes(
       if (data.llm.apiKey && data.llm.apiKey.length > 0) {
         settings.setSecret("llm_api_key", data.llm.apiKey);
         process.env.SYNTH_LLM_API_KEY = data.llm.apiKey;
+        invalidateLlmHealthCache();
       }
       data.llm = stripApiKeyFromConfig(data.llm);
     }

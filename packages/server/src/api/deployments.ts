@@ -726,8 +726,9 @@ export function registerDeploymentRoutes(
       }
 
       const actor = (request.user?.email) ?? "anonymous";
-      const serverUrl = settings.get().envoy?.url ?? "http://localhost:3000";
-      const progressCallbackUrl = `${serverUrl.replace(/:\d+$/, `:${3000}`)}/api/deployments/${deployment.id}/progress`;
+      const serverPort = process.env.PORT ?? "3000";
+      const serverUrl = process.env.SYNTH_SERVER_URL ?? `http://localhost:${serverPort}`;
+      const progressCallbackUrl = `${serverUrl}/api/deployments/${deployment.id}/progress`;
 
       deployment.status = "running" as typeof deployment.status;
       deployments.save(deployment);

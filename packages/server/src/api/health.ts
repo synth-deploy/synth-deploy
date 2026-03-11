@@ -24,6 +24,11 @@ interface CheckResult {
 let llmHealthCache: { healthy: boolean; checkedAt: number } | null = null;
 const LLM_HEALTH_CACHE_TTL_MS = 30_000;
 
+/** Call when the API key changes so the next health check runs fresh. */
+export function invalidateLlmHealthCache(): void {
+  llmHealthCache = null;
+}
+
 export function registerHealthRoutes(
   app: FastifyInstance,
   options?: HealthCheckOptions,

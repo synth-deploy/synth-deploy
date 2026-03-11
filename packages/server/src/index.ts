@@ -9,7 +9,7 @@ import fastifyStatic from "@fastify/static";
 import fastifyFormBody from "@fastify/formbody";
 import fastifyMultipart from "@fastify/multipart";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { PersistentDecisionDebrief, openEntityDatabase, PersistentPartitionStore, PersistentEnvironmentStore, PersistentSettingsStore, PersistentDeploymentStore, PersistentArtifactStore, PersistentSecurityBoundaryStore, PersistentTelemetryStore, PersistentUserStore, PersistentRoleStore, PersistentUserRoleStore, PersistentSessionStore, PersistentIdpProviderStore, PersistentRoleMappingStore, PersistentApiKeyStore, PersistentEnvoyRegistryStore, PersistentRegistryPollerVersionStore, LlmClient } from "@synth-deploy/core";
+import { PersistentDecisionDebrief, openEntityDatabase, PersistentPartitionStore, PersistentEnvironmentStore, PersistentSettingsStore, PersistentDeploymentStore, PersistentArtifactStore, PersistentSecurityBoundaryStore, PersistentTelemetryStore, PersistentUserStore, PersistentRoleStore, PersistentUserRoleStore, PersistentSessionStore, PersistentIdpProviderStore, PersistentRoleMappingStore, PersistentApiKeyStore, PersistentEnvoyRegistryStore, PersistentRegistryPollerVersionStore, LlmClient, buildLlmConfigFromSettings } from "@synth-deploy/core";
 import type { Deployment, Artifact, ArtifactVersion, SecurityBoundary, Permission, RoleId } from "@synth-deploy/core";
 import { SynthAgent } from "./agent/synth-agent.js";
 import { EnvoyHealthChecker } from "./agent/health-checker.js";
@@ -173,7 +173,14 @@ if (roleStore.list().length === 0) {
 const healthCheckerUrl = settings.get().envoy?.url;
 const healthChecker = healthCheckerUrl ? new EnvoyHealthChecker(healthCheckerUrl) : undefined;
 const agent = new SynthAgent(debrief, deployments, artifactStore, environments, partitions, healthChecker, {}, settings);
-const llm = new LlmClient(debrief, "command");
+// Initialize server LLM client — picks up provider from env or settings
+const llmSettings = settings.get().llm;
+const llm = new LlmClient(debrief, "command", buildLlmConfigFromSettings(llmSettings));
+if (llm.isAvailable()) {
+  console.log(`[Synth] LLM available for artifact analysis (provider: ${llmSettings?.provider ?? "anthropic"})`);
+} else {
+  console.warn("[Synth] LLM not available for artifact analysis — set SYNTH_LLM_API_KEY or configure via Settings");
+}
 const artifactAnalyzer = new ArtifactAnalyzer({ llm, debrief });
 
 // --- Connect to external MCP servers (if configured) ---

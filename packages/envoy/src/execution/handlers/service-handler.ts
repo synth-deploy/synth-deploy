@@ -160,18 +160,39 @@ export class ServiceHandler implements OperationHandler {
       };
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
+
+      // Distinguish "service unit not installed" (unrecoverable — needs admin to install)
+      // from transient query failures (recoverable — LLM might be able to work around it).
+      const notInstalled =
+        message.includes("could not be found") ||
+        message.includes("not-found") ||
+        message.includes("no such") ||
+        message.includes("Unit ") ||
+        message.includes("not found");
+
       preconditions.push({
         check: "service-exists",
         passed: false,
-        detail: `Service "${target}" not found in service manager: ${message}`,
+        detail: notInstalled
+          ? `Service "${target}" is not installed on this system — add an install step (e.g. apt-get install) before this service operation: ${message}`
+          : `Service "${target}" could not be queried: ${message}`,
       });
+
+      // For "start" operations, still emit predictedOutcome so downstream steps
+      // (e.g. ContainerHandler daemon check) can see the INTENT even when the
+      // service isn't registered with the local service manager (e.g. Docker
+      // Desktop on macOS doesn't register with launchctl).
+      const isStart = !lower.includes("stop");
 
       return {
         canExecute: false,
         preconditions,
+        predictedOutcome: isStart ? { serviceState: "running", serviceName: target } : undefined,
         fidelity: "speculative",
-        recoverable: true,
-        unknowns: [`Service "${target}" could not be queried — it may not be installed`],
+        recoverable: !notInstalled,
+        unknowns: notInstalled
+          ? [`Service "${target}" is not installed — the deployment plan must include an installation step`]
+          : [`Service "${target}" could not be queried — it may not be installed or the service manager may be unavailable`],
       };
     }
   }

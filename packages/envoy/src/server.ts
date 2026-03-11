@@ -19,7 +19,7 @@ const DeployRequestSchema = z.object({
   variables: z.record(z.string()),
   environmentName: z.string(),
   partitionName: z.string(),
-  progressCallbackUrl: z.string().url().optional(),
+  progressCallbackUrl: z.string().optional(),
 });
 
 const QueryRequestSchema = z.object({
@@ -65,6 +65,23 @@ const PlanRequestSchema = z.object({
   llmApiKey: z.string().optional(),
 });
 
+const PlanStepSchema = z.object({
+  description: z.string(),
+  action: z.string(),
+  target: z.string(),
+  params: z.record(z.unknown()).optional(),
+  // Default false — LLM may omit this field and JSON.stringify drops undefined values
+  reversible: z.boolean().default(false),
+  rollbackAction: z.string().optional(),
+});
+
+const PlanSchema = z.object({
+  steps: z.array(PlanStepSchema),
+  reasoning: z.string(),
+  diffFromCurrent: z.array(z.object({ key: z.string(), from: z.string(), to: z.string() })).optional(),
+  diffFromPreviousPlan: z.string().optional(),
+});
+
 const ExecuteRequestSchema = z.object({
   deploymentId: z.string(),
   artifactType: z.string(),
@@ -72,32 +89,8 @@ const ExecuteRequestSchema = z.object({
   environmentId: z.string(),
   progressCallbackUrl: z.string().url().optional(),
   callbackToken: z.string().optional(),
-  plan: z.object({
-    steps: z.array(z.object({
-      description: z.string(),
-      action: z.string(),
-      target: z.string(),
-      params: z.record(z.unknown()).optional(),
-      reversible: z.boolean(),
-      rollbackAction: z.string().optional(),
-    })),
-    reasoning: z.string(),
-    diffFromCurrent: z.array(z.object({ key: z.string(), from: z.string(), to: z.string() })).optional(),
-    diffFromPreviousPlan: z.string().optional(),
-  }),
-  rollbackPlan: z.object({
-    steps: z.array(z.object({
-      description: z.string(),
-      action: z.string(),
-      target: z.string(),
-      params: z.record(z.unknown()).optional(),
-      reversible: z.boolean(),
-      rollbackAction: z.string().optional(),
-    })),
-    reasoning: z.string(),
-    diffFromCurrent: z.array(z.object({ key: z.string(), from: z.string(), to: z.string() })).optional(),
-    diffFromPreviousPlan: z.string().optional(),
-  }),
+  plan: PlanSchema,
+  rollbackPlan: PlanSchema,
 });
 
 // ---------------------------------------------------------------------------
@@ -193,6 +186,7 @@ export function createEnvoyServer(
   app.post("/execute", async (request, reply) => {
     const parsed = ExecuteRequestSchema.safeParse(request.body);
     if (!parsed.success) {
+      console.error("[envoy] /execute schema validation failed:", JSON.stringify(parsed.error.format(), null, 2));
       return reply.status(400).send({
         error: "Invalid execution request",
         details: parsed.error.format(),

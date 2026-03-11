@@ -441,7 +441,10 @@ Produce a JSON analysis that enhances or corrects the extracted data.`;
     promptSummary: `Artifact analysis for "${artifact.name}" (${artifactType})`,
   });
 
-  if (!result.ok) return null;
+  if (!result.ok) {
+    console.warn(`[artifact-analyzer] LLM enhancement failed for "${artifact.name}": ${result.reason}`);
+    return null;
+  }
 
   try {
     // Extract JSON from the response (may be wrapped in markdown code blocks)

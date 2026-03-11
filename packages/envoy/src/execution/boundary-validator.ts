@@ -162,7 +162,8 @@ export class BoundaryValidator {
    *
    * Returns undefined if the action doesn't match any known type.
    */
-  private classifyAction(action: string): SecurityBoundaryType | undefined {
+  private classifyAction(action: string | undefined): SecurityBoundaryType | undefined {
+    if (!action) return undefined;
     const lower = action.toLowerCase();
 
     // When registry is available, match against handler vocabularies

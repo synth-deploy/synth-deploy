@@ -151,12 +151,21 @@ export class ContainerHandler implements OperationHandler {
 
   async dryRun(
     step: PlannedStep,
-    _predictedOutcomes: Map<number, Record<string, unknown>>,
+    predictedOutcomes: Map<number, Record<string, unknown>>,
   ): Promise<DryRunResult> {
     const preconditions: DryRunResult["preconditions"] = [];
     const lower = step.action.toLowerCase();
     const target = step.target;
     const unknowns: string[] = [];
+
+    // Check if a prior step will start the Docker daemon (e.g. "systemctl start docker").
+    // If so, skip the live daemon check — it will be running when this step executes.
+    const priorStepStartsDocker = Array.from(predictedOutcomes.values()).some(
+      (outcome) =>
+        outcome.serviceState === "running" &&
+        typeof outcome.serviceName === "string" &&
+        (outcome.serviceName as string).toLowerCase().includes("docker"),
+    );
 
     try {
       // Check if docker CLI is installed (does not contact the daemon)
@@ -187,29 +196,35 @@ export class ContainerHandler implements OperationHandler {
         detail: `Docker CLI is installed`,
       });
 
-      // Check if the Docker daemon is running (requires daemon connection)
-      const daemonRunning = await new Promise<boolean>((resolve) => {
-        execFile("docker", ["version", "--format", "{{.Server.Version}}"], { timeout: 5000 }, (error) => {
-          resolve(!error);
+      // Check if the Docker daemon is running (requires daemon connection).
+      // Skip if a prior plan step will start the daemon.
+      if (priorStepStartsDocker) {
+        preconditions.push({
+          check: "docker-daemon-running",
+          passed: true,
+          detail: `Docker daemon will be started by a prior plan step`,
         });
-      });
+      } else {
+        const daemonRunning = await new Promise<boolean>((resolve) => {
+          execFile("docker", ["version", "--format", "{{.Server.Version}}"], { timeout: 5000 }, (error) => {
+            resolve(!error);
+          });
+        });
 
-      preconditions.push({
-        check: "docker-daemon-running",
-        passed: daemonRunning,
-        detail: daemonRunning
-          ? `Docker daemon is running and accessible`
-          : `Docker daemon is not running — add a step to start the Docker daemon (e.g. "systemctl start docker") before container operations`,
-      });
+        // Daemon not running is a warning, not a hard block. The daemon may be
+        // started by the user before execution (e.g. Docker Desktop on macOS),
+        // or the target system's daemon may differ from the planning environment.
+        preconditions.push({
+          check: "docker-daemon-running",
+          passed: true, // non-blocking — daemon may be started before execution
+          detail: daemonRunning
+            ? `Docker daemon is running and accessible`
+            : `Docker daemon is not currently running — ensure Docker is started before executing this deployment`,
+        });
 
-      if (!daemonRunning) {
-        return {
-          canExecute: false,
-          preconditions,
-          fidelity: "deterministic",
-          recoverable: true, // LLM can add a "start docker daemon" step
-          unknowns: [],
-        };
+        if (!daemonRunning) {
+          unknowns.push(`Docker daemon is not running on this host — start Docker before executing the deployment`);
+        }
       }
 
       // For pull: check if image is already available locally

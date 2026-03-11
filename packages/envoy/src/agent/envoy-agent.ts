@@ -1399,7 +1399,15 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
       if (text.startsWith("```")) {
         text = text.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "");
       }
-      parsed = JSON.parse(text);
+      const raw = JSON.parse(text);
+      // Validate required step fields — LLM may omit action/target
+      if (!Array.isArray(raw?.steps)) throw new Error("Plan missing steps array");
+      for (const s of raw.steps) {
+        if (typeof s.action !== "string" || !s.action) throw new Error(`Step "${s.description ?? "?"}" missing action`);
+        if (typeof s.target !== "string") throw new Error(`Step "${s.description ?? "?"}" missing target`);
+        if (typeof s.description !== "string") s.description = s.action;
+      }
+      parsed = raw;
     } catch {
       recordEntry({
         partitionId: instruction.partition?.id ?? null,
@@ -1430,7 +1438,7 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
           action: s.action,
           target: s.target,
           params: s.params,
-          reversible: s.reversible,
+          reversible: s.reversible ?? false,
           rollbackAction: s.rollbackAction,
           execPreview: s.execPreview,
         })),
@@ -1622,15 +1630,18 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
           },
         });
 
-        plan.reasoning =
-          `Plan has ${lastDryRunResult.failures.length} unresolved precondition issue(s) ` +
-          `after ${MAX_DRY_RUN_ATTEMPTS} re-planning attempts: ${failureDetails}. ` +
-          `Review these issues before approving.`;
+        const blockReason =
+          `Plan has unresolved precondition issues (stuck after ${MAX_DRY_RUN_ATTEMPTS - 1} re-planning attempts): ` +
+          `${failureDetails}. Review these issues before approving.`;
+
+        plan.reasoning = blockReason;
 
         return {
           plan,
           rollbackPlan: this.buildRollbackPlan(plan, instruction),
           delta: currentParsed.delta,
+          blocked: true,
+          blockReason,
         };
       }
 

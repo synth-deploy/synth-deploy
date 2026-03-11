@@ -144,8 +144,8 @@ export function defaultBaseUrlForProvider(
 export function buildLlmConfigFromSettings(
   providerConfig?: LlmProviderConfig,
 ): LlmConfig {
-  if (!providerConfig) {
-    // No settings configured — fall back to pure env var resolution
+  if (!providerConfig || !providerConfig.provider) {
+    // No settings configured (or only apiKeyConfigured flag was stored) — fall back to pure env var resolution
     return {};
   }
 

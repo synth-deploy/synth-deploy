@@ -124,7 +124,8 @@ export class DefaultOperationRegistry {
    * Find the handler that can execute the given action on the
    * given platform. Returns undefined if no handler matches.
    */
-  resolve(action: string, platform: Platform): OperationHandler | undefined {
+  resolve(action: string | undefined, platform: Platform): OperationHandler | undefined {
+    if (!action) return undefined;
     return this.handlers.find((h) => h.canHandle(action, platform));
   }
 
