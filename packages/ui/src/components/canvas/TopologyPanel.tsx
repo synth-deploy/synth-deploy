@@ -5,6 +5,8 @@ import type { Partition, Environment } from "../../types.js";
 import { useCanvas } from "../../context/CanvasContext.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
 import AddEnvoyModal from "../AddEnvoyModal.js";
+import AddEnvironmentModal from "../AddEnvironmentModal.js";
+import AddPartitionModal from "../AddPartitionModal.js";
 import { useQuery } from "../../hooks/useQuery.js";
 
 
@@ -22,6 +24,8 @@ function timeAgo(iso: string): string {
 export default function TopologyPanel({ title }: { title?: string }) {
   const [section, setSection] = useState<Section>("envoys");
   const [showAddEnvoy, setShowAddEnvoy] = useState(false);
+  const [showAddEnvironment, setShowAddEnvironment] = useState(false);
+  const [showAddPartition, setShowAddPartition] = useState(false);
   const { pushPanel } = useCanvas();
 
   const { data: envoys } = useQuery<EnvoyRegistryEntry[]>("list:envoys", listEnvoys);
@@ -46,6 +50,8 @@ export default function TopologyPanel({ title }: { title?: string }) {
           className="btn-accent-outline"
           onClick={() => {
             if (section === "envoys") setShowAddEnvoy(true);
+            else if (section === "environments") setShowAddEnvironment(true);
+            else if (section === "partitions") setShowAddPartition(true);
           }}
         >
           <svg className="icon-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
@@ -223,6 +229,8 @@ export default function TopologyPanel({ title }: { title?: string }) {
         </div>
       )}
       {showAddEnvoy && <AddEnvoyModal onClose={() => setShowAddEnvoy(false)} />}
+      {showAddEnvironment && <AddEnvironmentModal onClose={() => setShowAddEnvironment(false)} />}
+      {showAddPartition && <AddPartitionModal onClose={() => setShowAddPartition(false)} />}
     </CanvasPanelHost>
   );
 }
