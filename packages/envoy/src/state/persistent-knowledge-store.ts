@@ -663,10 +663,10 @@ export class PersistentEnvoyKnowledgeStore implements EnvoyKnowledgeStore {
       .get() as { count: number };
 
     return {
-      totalDeployments: countRow.total,
-      succeeded: countRow.succeeded,
-      failed: countRow.failed,
-      executing: countRow.executing,
+      totalDeployments: countRow.total ?? 0,
+      succeeded: countRow.succeeded ?? 0,
+      failed: countRow.failed ?? 0,
+      executing: countRow.executing ?? 0,
       environments: envCount.count,
     };
   }
