@@ -15,7 +15,7 @@ declare module "fastify" {
   }
 }
 
-const EXEMPT_ROUTES = ["/health", "/api/health", "/api/auth/login", "/api/auth/register", "/api/auth/refresh", "/api/auth/status", "/api/auth/providers"];
+const EXEMPT_ROUTES = ["/health", "/api/health", "/api/auth/login", "/api/auth/register", "/api/auth/refresh", "/api/auth/status", "/api/auth/providers", "/api/envoy/report"];
 const EXEMPT_PREFIXES = ["/api/auth/oidc/", "/api/auth/callback/oidc/", "/api/auth/saml/", "/api/auth/callback/saml/", "/api/auth/ldap/", "/api/intake/webhook/"];
 
 /**

@@ -410,8 +410,10 @@ describe("LlmClient — error scenarios", () => {
     const internal = client as unknown as {
       _initialized: boolean;
       _anthropicClient: unknown;
+      _lastInitializedApiKey: string | undefined;
     };
     internal._initialized = true;
+    internal._lastInitializedApiKey = "sk-test-key";
     internal._anthropicClient = mockClient;
     return client;
   }

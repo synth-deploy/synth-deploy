@@ -3,6 +3,7 @@ import { z } from "zod";
 import { DecisionTypeEnum } from "@synth-deploy/core";
 import type { DebriefWriter, DecisionType } from "@synth-deploy/core";
 import type { DeploymentStore } from "../agent/synth-agent.js";
+import type { EnvoyRegistry } from "../agent/envoy-registry.js";
 
 // ---------------------------------------------------------------------------
 // Schema — validates incoming Envoy reports
@@ -62,8 +63,15 @@ export function registerEnvoyReportRoutes(
   app: FastifyInstance,
   debrief: DebriefWriter,
   deployments: DeploymentStore,
+  registry: EnvoyRegistry,
 ): void {
   app.post("/api/envoy/report", async (request, reply) => {
+    const authHeader = (request.headers.authorization ?? "") as string;
+    const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
+    if (!token || !registry.validateToken(token)) {
+      return reply.status(401).send({ error: "Invalid or missing envoy token" });
+    }
+
     const parsed = EnvoyReportSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.status(400).send({

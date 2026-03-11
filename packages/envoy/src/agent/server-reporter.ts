@@ -65,6 +65,7 @@ export class ServerReporter {
     private serverUrl: string,
     private envoyId: string,
     private timeoutMs: number = 5_000,
+    private token?: string,
   ) {}
 
   /**
@@ -92,11 +93,14 @@ export class ServerReporter {
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
 
     try {
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (this.token) headers["Authorization"] = `Bearer ${this.token}`;
+
       const response = await fetch(
         `${this.serverUrl}/api/envoy/report`,
         {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers,
           body: JSON.stringify(report),
           signal: controller.signal,
         },

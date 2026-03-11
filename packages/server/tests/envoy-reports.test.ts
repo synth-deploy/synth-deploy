@@ -4,6 +4,14 @@ import type { FastifyInstance } from "fastify";
 import { DecisionDebrief } from "@synth-deploy/core";
 import { InMemoryDeploymentStore } from "../src/agent/synth-agent.js";
 import { registerEnvoyReportRoutes } from "../src/api/envoy-reports.js";
+import type { EnvoyRegistry } from "../src/agent/envoy-registry.js";
+
+const TEST_TOKEN = "test-envoy-token";
+
+// Minimal mock registry — validates TEST_TOKEN, rejects all others
+const mockRegistry = {
+  validateToken: (token: string) => token === TEST_TOKEN ? { id: "envoy-1" } : undefined,
+} as unknown as EnvoyRegistry;
 
 function makeReport(overrides: Record<string, unknown> = {}) {
   return {
@@ -46,7 +54,7 @@ describe("Envoy report ingestion", () => {
     app = Fastify();
     debrief = new DecisionDebrief();
     deployments = new InMemoryDeploymentStore();
-    registerEnvoyReportRoutes(app, debrief, deployments);
+    registerEnvoyReportRoutes(app, debrief, deployments, mockRegistry);
     await app.ready();
   });
 
@@ -71,6 +79,7 @@ describe("Envoy report ingestion", () => {
     const res = await app.inject({
       method: "POST",
       url: "/api/envoy/report",
+      headers: { Authorization: `Bearer ${TEST_TOKEN}` },
       payload: makeReport(),
     });
 
@@ -97,6 +106,7 @@ describe("Envoy report ingestion", () => {
     const res = await app.inject({
       method: "POST",
       url: "/api/envoy/report",
+      headers: { Authorization: `Bearer ${TEST_TOKEN}` },
       payload: makeReport(),
     });
 
@@ -109,6 +119,7 @@ describe("Envoy report ingestion", () => {
     const res = await app.inject({
       method: "POST",
       url: "/api/envoy/report",
+      headers: { Authorization: `Bearer ${TEST_TOKEN}` },
       payload: makeReport(),
     });
 
@@ -135,6 +146,7 @@ describe("Envoy report ingestion", () => {
     const res = await app.inject({
       method: "POST",
       url: "/api/envoy/report",
+      headers: { Authorization: `Bearer ${TEST_TOKEN}` },
       payload: report,
     });
 
