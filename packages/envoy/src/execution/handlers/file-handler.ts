@@ -194,9 +194,11 @@ export class FileHandler implements OperationHandler {
       // Check if parent directory exists (or was predicted to be created)
       const parentDir = path.dirname(target);
       let parentExists = false;
+      let parentExistsOnDisk = false;
       try {
         const stat = await fs.stat(parentDir);
         parentExists = stat.isDirectory();
+        parentExistsOnDisk = parentExists;
       } catch {
         // Check if a prior step predicts creating this directory
         for (const [, outcome] of predictedOutcomes) {
@@ -215,12 +217,16 @@ export class FileHandler implements OperationHandler {
         name: "parent-directory-exists",
         passed: parentExists,
         detail: parentExists
-          ? `Parent directory "${parentDir}" exists and is a directory`
+          ? (parentExistsOnDisk
+              ? `Parent directory "${parentDir}" exists and is a directory`
+              : `Parent directory "${parentDir}" will be created by a prior step`)
           : `Parent directory "${parentDir}" does not exist — file operations will fail`,
       });
 
-      // Check parent directory is writable (only if it exists on disk)
-      if (parentExists) {
+      // Check parent directory is writable — only when it exists on disk.
+      // When a prior step predicts creating it, the directory will be owned
+      // by the current user and writable by default, so skip the check.
+      if (parentExistsOnDisk) {
         try {
           await fs.access(parentDir, (await import("node:fs")).constants.W_OK);
           observations.push({
