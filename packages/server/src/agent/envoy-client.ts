@@ -249,12 +249,15 @@ export class EnvoyClient {
     version: string;
     resolvedVariables: Record<string, string>;
   }): Promise<{ plan: DeploymentPlan; rollbackPlan: DeploymentPlan; delta?: string }> {
+    // Forward the LLM API key so the Envoy can use it if it started without one.
+    // Sent in the request body (not headers) over the trusted server↔envoy channel.
+    const llmApiKey = process.env.SYNTH_LLM_API_KEY;
     const response = await fetchWithRetry(
       `${this.baseUrl}/plan`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(params),
+        body: JSON.stringify(llmApiKey ? { ...params, llmApiKey } : params),
       },
       this.timeoutMs * 8, // planning may take time (LLM reasoning)
     );
@@ -297,12 +300,13 @@ export class EnvoyClient {
     version: string;
     failureReason?: string;
   }): Promise<DeploymentPlan> {
+    const llmApiKey = process.env.SYNTH_LLM_API_KEY;
     const response = await fetchWithRetry(
       `${this.baseUrl}/rollback-plan`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(params),
+        body: JSON.stringify(llmApiKey ? { ...params, llmApiKey } : params),
       },
       this.timeoutMs * 6, // LLM reasoning may take time
     );

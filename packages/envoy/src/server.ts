@@ -61,6 +61,8 @@ const PlanRequestSchema = z.object({
   }).optional(),
   version: z.string(),
   resolvedVariables: z.record(z.string()),
+  /** Forwarded from Server runtime config — never logged or persisted */
+  llmApiKey: z.string().optional(),
 });
 
 const ExecuteRequestSchema = z.object({
@@ -75,6 +77,7 @@ const ExecuteRequestSchema = z.object({
       description: z.string(),
       action: z.string(),
       target: z.string(),
+      params: z.record(z.unknown()).optional(),
       reversible: z.boolean(),
       rollbackAction: z.string().optional(),
     })),
@@ -87,6 +90,7 @@ const ExecuteRequestSchema = z.object({
       description: z.string(),
       action: z.string(),
       target: z.string(),
+      params: z.record(z.unknown()).optional(),
       reversible: z.boolean(),
       rollbackAction: z.string().optional(),
     })),
@@ -234,6 +238,8 @@ export function createEnvoyServer(
     deployedVariables: z.record(z.string()),
     version: z.string(),
     failureReason: z.string().optional(),
+    /** Forwarded from Server runtime config — never logged or persisted */
+    llmApiKey: z.string().optional(),
   });
 
   app.post("/rollback-plan", async (request, reply) => {

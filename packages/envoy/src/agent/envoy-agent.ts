@@ -132,6 +132,12 @@ export interface PlanningInstruction {
   };
   version: string;
   resolvedVariables: Record<string, string>;
+  /**
+   * LLM API key forwarded from the Server's runtime configuration.
+   * Used when the Envoy process started without SYNTH_LLM_API_KEY set.
+   * Never recorded in debrief or persisted — used for this call only.
+   */
+  llmApiKey?: string;
 }
 
 /**
@@ -176,6 +182,12 @@ export interface RollbackPlanningInstruction {
   version: string;
   /** If the deployment failed, the reason — informs what needs undoing. */
   failureReason?: string;
+  /**
+   * LLM API key forwarded from the Server's runtime configuration.
+   * Used when the Envoy process started without SYNTH_LLM_API_KEY set.
+   * Never recorded in debrief or persisted — used for this call only.
+   */
+  llmApiKey?: string;
 }
 
 /**
@@ -1156,6 +1168,13 @@ export class EnvoyAgent {
 
     // --- 3. Reason with LLM --------------------------------------------------
 
+    // If the Envoy has no API key configured but the Server forwarded one,
+    // set it in process.env for this and future calls. The key is not persisted
+    // to disk — it lives only in the process environment.
+    if (instruction.llmApiKey && !this.llmClient?.isAvailable()) {
+      process.env.SYNTH_LLM_API_KEY = instruction.llmApiKey;
+    }
+
     if (this.llmClient && this.llmClient.isAvailable()) {
       return this.planWithLlm(
         instruction,
@@ -1824,6 +1843,10 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
     // Only consider steps that completed successfully — failed/rolled-back steps
     // didn't fully execute, so they may not need undoing.
     const executedSteps = instruction.completedSteps.filter((s) => s.status === "completed");
+
+    if (instruction.llmApiKey && !this.llmClient?.isAvailable()) {
+      process.env.SYNTH_LLM_API_KEY = instruction.llmApiKey;
+    }
 
     if (this.llmClient && this.llmClient.isAvailable()) {
       return this.planRollbackWithLlm(instruction, executedSteps);
