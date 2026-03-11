@@ -483,27 +483,30 @@ export default function PlanReviewPanel({ deploymentId }: Props) {
                     }}>
                       {risk}
                     </span>
-                    {step.execPreview && (
-                      <button
-                        onClick={() => toggleStep(i)}
-                        style={{
-                          background: "none",
-                          border: "none",
-                          cursor: "pointer",
-                          padding: "2px 4px",
-                          color: "var(--text-muted)",
-                          fontSize: 11,
-                          fontFamily: "var(--font-mono)",
-                          flexShrink: 0,
-                        }}
-                        title={expandedSteps.has(i) ? "Hide command" : "Show command"}
-                      >
-                        {expandedSteps.has(i) ? "▲" : "▼"}
-                      </button>
-                    )}
+                    <button
+                      onClick={() => toggleStep(i)}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        padding: "2px 4px",
+                        color: "var(--text-muted)",
+                        fontSize: 11,
+                        fontFamily: "var(--font-mono)",
+                        flexShrink: 0,
+                      }}
+                      title={expandedSteps.has(i) ? "Hide execution detail" : "Show execution detail"}
+                    >
+                      {expandedSteps.has(i) ? "▲" : "▼"}
+                    </button>
                   </div>
-                  {step.execPreview && expandedSteps.has(i) && (
-                    <div className="plan-step-exec-preview">{step.execPreview}</div>
+                  {expandedSteps.has(i) && (
+                    <div className="plan-step-exec-preview">
+                      {step.execPreview
+                        ? step.execPreview
+                        : `${step.action}${step.target ? ` ${step.target}` : ""}`
+                      }
+                    </div>
                   )}
                 </div>
               </div>
