@@ -702,6 +702,351 @@ export class LlmClient {
       },
     });
   }
+
+  // -------------------------------------------------------------------------
+  // Probe loop — agentic tool-use loop for pre-flight environment discovery
+  // -------------------------------------------------------------------------
+
+  /**
+   * Runs an agentic LLM loop that provides the model with a `probe(command)`
+   * tool during planning. The LLM calls the tool to discover real machine state
+   * before generating its final response.
+   *
+   * Supports both Anthropic native tool_use (Anthropic/Bedrock/Vertex providers)
+   * and OpenAI function-calling (openai-compatible provider).
+   *
+   * When probe() is called, `onProbe` is invoked with the command string. The
+   * caller is responsible for executing the probe safely and returning the
+   * output string (or a blocked/error message) to be fed back to the LLM.
+   *
+   * The loop continues until the model stops calling the tool (stop_reason
+   * "end_turn" for Anthropic, finish_reason "stop" for OpenAI-compatible) or
+   * `maxProbes` turns are exhausted.
+   */
+  async callWithProbeLoop(opts: {
+    systemPrompt: string;
+    prompt: string;
+    onProbe: (command: string) => Promise<string>;
+    maxProbes?: number;
+    maxTokens?: number;
+    promptSummary: string;
+    partitionId?: string | null;
+    deploymentId?: string | null;
+  }): Promise<LlmResult> {
+    if (!this.isAvailable()) {
+      const reason = this._notConfiguredReason();
+      return { ok: false, fallback: true, reason };
+    }
+
+    try {
+      await this._ensureInitialized();
+    } catch (error) {
+      const reason = `LLM call failed: ${error instanceof Error ? error.message : String(error)}`;
+      return { ok: false, fallback: true, reason };
+    }
+
+    const maxProbes = opts.maxProbes ?? 20;
+    const maxTokens = opts.maxTokens ?? 4096;
+    const model = this._reasoningModel;
+
+    return this._provider === "openai-compatible"
+      ? this._probeLoopOpenAI(opts, model, maxProbes, maxTokens)
+      : this._probeLoopAnthropic(opts, model, maxProbes, maxTokens);
+  }
+
+  private async _probeLoopAnthropic(
+    opts: Parameters<LlmClient["callWithProbeLoop"]>[0],
+    model: string,
+    maxProbes: number,
+    maxTokens: number,
+  ): Promise<LlmResult> {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const client = this._anthropicClient as any;
+
+    const probeTool = {
+      name: "probe",
+      description:
+        "Run a read-only shell command to discover real machine state. " +
+        "Use this to check tool availability (which), paths (ls, stat, find), " +
+        "running processes (ps, systemctl status), OS details (uname, cat /etc/os-release), " +
+        "disk space (df), user context (id, whoami), and any other observable facts " +
+        "your plan depends on. Only read-only commands are permitted.",
+      input_schema: {
+        type: "object",
+        properties: {
+          command: {
+            type: "string",
+            description: "The read-only shell command to run (e.g. 'which docker', 'ls /opt/app', 'cat /etc/os-release')",
+          },
+        },
+        required: ["command"],
+      },
+    };
+
+    // Multi-turn message history
+    const messages: Array<{ role: string; content: unknown }> = [
+      { role: "user", content: opts.prompt },
+    ];
+
+    let probeCount = 0;
+    const startTime = Date.now();
+
+    for (let turn = 0; turn <= maxProbes; turn++) {
+      if (!this._checkRateLimit()) {
+        return { ok: false, fallback: true, reason: `LLM rate limit exceeded (${this._rateLimitPerMinute} calls/min)` };
+      }
+      this._callTimestamps.push(Date.now());
+
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), this._timeoutMs);
+
+      let response: {
+        content: Array<{ type: string; text?: string; id?: string; name?: string; input?: Record<string, unknown> }>;
+        stop_reason: string;
+      };
+
+      try {
+        response = await client.messages.create(
+          {
+            model,
+            max_tokens: maxTokens,
+            system: opts.systemPrompt,
+            tools: [probeTool],
+            messages,
+          },
+          { signal: controller.signal },
+        );
+      } catch (error) {
+        const isTimeout = error instanceof Error && error.name === "AbortError";
+        const reason = isTimeout
+          ? `LLM request timed out after ${this._timeoutMs}ms`
+          : `LLM call failed: ${error instanceof Error ? error.message : String(error)}`;
+        return { ok: false, fallback: true, reason };
+      } finally {
+        clearTimeout(timer);
+      }
+
+      const toolUseBlocks = response.content.filter((b) => b.type === "tool_use");
+      const textBlocks = response.content.filter((b) => b.type === "text");
+
+      // No tool calls — LLM is done
+      if (response.stop_reason !== "tool_use" || toolUseBlocks.length === 0) {
+        const text = textBlocks.map((b) => b.text ?? "").join("").trim();
+        const responseTimeMs = Date.now() - startTime;
+        this._recordDebrief(
+          { ...opts, maxTokens },
+          model,
+          responseTimeMs,
+          null,
+          false,
+        );
+        return { ok: true, text, model, responseTimeMs };
+      }
+
+      if (probeCount >= maxProbes) {
+        // Safety limit hit — take whatever text the LLM has so far
+        const text = textBlocks.map((b) => b.text ?? "").join("").trim();
+        const responseTimeMs = Date.now() - startTime;
+        return {
+          ok: true,
+          text: text || "{}",
+          model,
+          responseTimeMs,
+          notice: `Probe limit (${maxProbes}) reached — plan generated from partial observations.`,
+        };
+      }
+
+      // Append the assistant turn (including tool_use blocks)
+      messages.push({ role: "assistant", content: response.content });
+
+      // Execute probes and collect tool_result blocks
+      const toolResults: Array<{
+        type: "tool_result";
+        tool_use_id: string;
+        content: string;
+      }> = [];
+
+      for (const toolUse of toolUseBlocks) {
+        const command = (toolUse.input as { command?: string })?.command ?? "";
+        const output = await opts.onProbe(command);
+        toolResults.push({
+          type: "tool_result",
+          tool_use_id: toolUse.id ?? "",
+          content: output,
+        });
+        probeCount++;
+      }
+
+      messages.push({ role: "user", content: toolResults });
+    }
+
+    return {
+      ok: false,
+      fallback: true,
+      reason: `Probe loop exceeded ${maxProbes} turns without producing a plan`,
+    };
+  }
+
+  private async _probeLoopOpenAI(
+    opts: Parameters<LlmClient["callWithProbeLoop"]>[0],
+    model: string,
+    maxProbes: number,
+    maxTokens: number,
+  ): Promise<LlmResult> {
+    const baseUrl = (this._baseUrl ?? "http://localhost:11434/v1").replace(/\/+$/, "");
+    const apiKey = this._apiKey;
+
+    const probeTool = {
+      type: "function" as const,
+      function: {
+        name: "probe",
+        description:
+          "Run a read-only shell command to discover real machine state. " +
+          "Use this to check tool availability (which), paths (ls, stat), " +
+          "running processes (ps), OS details (uname, cat /etc/os-release), " +
+          "disk space (df), and any facts your plan depends on.",
+        parameters: {
+          type: "object",
+          properties: {
+            command: {
+              type: "string",
+              description: "The read-only shell command to run",
+            },
+          },
+          required: ["command"],
+        },
+      },
+    };
+
+    type OaiMessage = { role: string; content: string | null; tool_calls?: unknown[]; tool_call_id?: string; name?: string };
+    const messages: OaiMessage[] = [
+      { role: "system", content: opts.systemPrompt },
+      { role: "user", content: opts.prompt },
+    ];
+
+    let probeCount = 0;
+    const startTime = Date.now();
+
+    for (let turn = 0; turn <= maxProbes; turn++) {
+      if (!this._checkRateLimit()) {
+        return { ok: false, fallback: true, reason: `LLM rate limit exceeded (${this._rateLimitPerMinute} calls/min)` };
+      }
+      this._callTimestamps.push(Date.now());
+
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), this._timeoutMs);
+
+      let json: {
+        choices?: Array<{
+          message?: {
+            content?: string | null;
+            tool_calls?: Array<{
+              id: string;
+              function: { name: string; arguments: string };
+            }>;
+          };
+          finish_reason?: string;
+        }>;
+      };
+
+      try {
+        const headers: Record<string, string> = { "Content-Type": "application/json" };
+        if (apiKey) headers["Authorization"] = `Bearer ${apiKey}`;
+
+        const resp = await fetch(`${baseUrl}/chat/completions`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            model,
+            max_tokens: maxTokens,
+            messages,
+            tools: [probeTool],
+            tool_choice: "auto",
+          }),
+          signal: controller.signal,
+        });
+
+        if (!resp.ok) {
+          const body = await resp.text().catch(() => "");
+          return { ok: false, fallback: true, reason: `OpenAI-compatible API returned ${resp.status}: ${body}` };
+        }
+
+        json = await resp.json() as typeof json;
+      } catch (error) {
+        const isTimeout = error instanceof Error && error.name === "AbortError";
+        const reason = isTimeout
+          ? `LLM request timed out after ${this._timeoutMs}ms`
+          : `LLM call failed: ${error instanceof Error ? error.message : String(error)}`;
+        return { ok: false, fallback: true, reason };
+      } finally {
+        clearTimeout(timer);
+      }
+
+      const choice = json.choices?.[0];
+      const message = choice?.message;
+      const toolCalls = message?.tool_calls ?? [];
+      const finishReason = choice?.finish_reason;
+
+      // No tool calls — LLM is done
+      if (finishReason !== "tool_calls" || toolCalls.length === 0) {
+        const text = (message?.content ?? "").trim();
+        const responseTimeMs = Date.now() - startTime;
+        this._recordDebrief(
+          { ...opts, maxTokens },
+          model,
+          responseTimeMs,
+          null,
+          false,
+        );
+        return { ok: true, text, model, responseTimeMs };
+      }
+
+      if (probeCount >= maxProbes) {
+        const text = (message?.content ?? "").trim();
+        const responseTimeMs = Date.now() - startTime;
+        return {
+          ok: true,
+          text: text || "{}",
+          model,
+          responseTimeMs,
+          notice: `Probe limit (${maxProbes}) reached — plan generated from partial observations.`,
+        };
+      }
+
+      // Append assistant message
+      messages.push({
+        role: "assistant",
+        content: message?.content ?? null,
+        tool_calls: toolCalls,
+      });
+
+      // Execute probes and append tool results
+      for (const toolCall of toolCalls) {
+        let command = "";
+        try {
+          const parsed = JSON.parse(toolCall.function.arguments) as { command?: string };
+          command = parsed.command ?? "";
+        } catch {
+          command = toolCall.function.arguments;
+        }
+
+        const output = await opts.onProbe(command);
+        messages.push({
+          role: "tool",
+          tool_call_id: toolCall.id,
+          content: output,
+          name: "probe",
+        });
+        probeCount++;
+      }
+    }
+
+    return {
+      ok: false,
+      fallback: true,
+      reason: `Probe loop exceeded ${maxProbes} turns without producing a plan`,
+    };
+  }
 }
 
 // ---------------------------------------------------------------------------

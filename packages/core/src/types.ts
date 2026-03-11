@@ -155,6 +155,7 @@ export const DecisionType = z.enum([
   "cross-system-context",
   "plan-modification",
   "pre-flight-llm-failure",
+  "environment-probe",
 ]);
 export type DecisionType = z.infer<typeof DecisionType>;
 

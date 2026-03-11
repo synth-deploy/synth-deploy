@@ -32,6 +32,7 @@ import {
 } from "../execution/index.js";
 
 import { createCallbackReporter } from "../execution/progress-reporter.js";
+import { ProbeExecutor } from "./probe-executor.js";
 
 // ---------------------------------------------------------------------------
 // Types — lifecycle state and deployment instruction/result
@@ -1312,12 +1313,24 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
 
     const systemPrompt =
       `You are the Envoy planning engine for Synth. Your job is to produce ` +
-      `a concrete deployment plan: what to do, in what order, where, and how. ` +
+      `a concrete deployment plan: what to do, in what order, where, and how.\n\n` +
+      `BEFORE generating any plan steps, you MUST use the probe() tool to verify ` +
+      `the real machine state. Do NOT assume paths, tool versions, running services, ` +
+      `or directory structure — observe them. Probe for:\n` +
+      `- Tool availability: which docker, which node, which systemctl, etc.\n` +
+      `- Directory structure: ls, stat, find on relevant paths\n` +
+      `- Running processes and services: ps aux, systemctl status <service>\n` +
+      `- OS and system info: uname -a, cat /etc/os-release\n` +
+      `- Disk space: df -h\n` +
+      `- User context: id, whoami\n` +
+      `- Any other observable fact your plan depends on\n\n` +
+      `Probe until you have enough real observations to generate a grounded plan. ` +
+      `Then output the plan as JSON.\n\n` +
       `Each step must have a clear action, target, description, and whether it is ` +
       `reversible (with rollback action if so). For steps that execute a shell command, ` +
       `include the exact literal command string in execPreview — this is what the user ` +
       `will see to verify what deterministically runs.\n\n` +
-      `IMPORTANT: You must respond with valid JSON only. No markdown, no commentary.\n\n` +
+      `IMPORTANT: You must respond with valid JSON only after probing. No markdown, no commentary.\n\n` +
       `Response format:\n` +
       `{\n` +
       `  "reasoning": "Your reasoning about why this plan is appropriate",\n` +
@@ -1345,22 +1358,24 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
       `}`;
 
     // Planning + dry-run refinement loop. On each iteration the LLM generates
-    // a fresh plan. If dry-run finds failed observations, they are injected as
-    // an environmental context section so the LLM can revise the plan to
-    // address them. The LLM always creates the plan — observations are input,
-    // not a plan handed back for assessment.
+    // a fresh plan using an agentic probe loop to observe real machine state
+    // before generating steps. If dry-run finds residual failed observations
+    // (rare after probing), they are injected as context for the next attempt.
     const MAX_DRY_RUN_ATTEMPTS = 3;
     let lastObservations: string | null = null;
     let previousObservationSummary = "";
 
+    // ProbeExecutor is shared across attempts — no per-attempt state
+    const probeExecutor = new ProbeExecutor();
+
     for (let attempt = 1; attempt <= MAX_DRY_RUN_ATTEMPTS; attempt++) {
-      // --- LLM planning call — observations from prior dry-run injected as context ---
+      // --- LLM planning call with probe tool — observations from prior dry-run injected as context ---
       const promptSections = [...sections];
       if (lastObservations) {
         promptSections.push(
-          `## Environmental Observations (current system state at plan time)\n` +
+          `## Dry-Run Observations (system state from previous plan attempt)\n` +
           `${lastObservations}\n\n` +
-          `These are snapshots of the real system state RIGHT NOW — before your plan runs. ` +
+          `These observations are from the dry-run of your previous plan. ` +
           `A FAILED observation does not automatically mean the plan needs changing: if your ` +
           `plan already includes a step that will resolve the issue (e.g. a step that starts ` +
           `the Docker daemon, creates the directory, or installs the tool), the observation ` +
@@ -1370,16 +1385,42 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
         );
       }
 
-      const llmResult = await this.llmClient!.reason({
+      const llmResult = await this.llmClient!.callWithProbeLoop({
         prompt: promptSections.join("\n\n"),
         systemPrompt,
         promptSummary:
           `Plan deployment of ${instruction.artifact.name} v${instruction.version} ` +
           `to "${instruction.environment.name}"` +
-          (attempt > 1 ? ` (attempt ${attempt} — revising for environmental observations)` : ""),
+          (attempt > 1 ? ` (attempt ${attempt} — revising for dry-run observations)` : ""),
         partitionId: instruction.partition?.id ?? null,
         deploymentId: instruction.deploymentId,
         maxTokens: 4096,
+        onProbe: async (command: string) => {
+          const result = await probeExecutor.execute(command);
+          recordEntry({
+            partitionId: instruction.partition?.id ?? null,
+            deploymentId: instruction.deploymentId,
+            agent: "envoy",
+            decisionType: "environment-probe",
+            decision: result.blocked
+              ? `Probe blocked: ${command}`
+              : `Probe executed: ${command}`,
+            reasoning: result.blocked
+              ? result.blockedReason ?? "Command blocked"
+              : `Exit ${result.exitCode ?? 0}`,
+            context: {
+              command,
+              blocked: result.blocked,
+              blockedReason: result.blockedReason,
+              exitCode: result.exitCode,
+              outputPreview: result.output ? result.output.slice(0, 500) : undefined,
+            },
+          });
+          if (result.blocked) {
+            return result.blockedReason ?? "Command blocked";
+          }
+          return result.output ?? "(no output)";
+        },
       });
 
       if (!llmResult.ok) {
