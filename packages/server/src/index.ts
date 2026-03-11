@@ -681,8 +681,8 @@ registerHealthRoutes(app, {
   entityDb,
   dataDir: DATA_DIR,
   envoyUrl,
-  llmApiKey: process.env.ANTHROPIC_API_KEY,
-  llmBaseUrl: process.env.ANTHROPIC_BASE_URL,
+  llmApiKey: process.env.SYNTH_LLM_API_KEY,
+  llmBaseUrl: process.env.SYNTH_LLM_BASE_URL,
   mcpServers: settings.get().mcpServers,
   llmClient: llm,
 });

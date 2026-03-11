@@ -1177,10 +1177,9 @@ export class EnvoyAgent {
 
     // --- 3. Reason with LLM --------------------------------------------------
 
-    // If the Envoy has no API key configured but the Server forwarded one,
-    // set it in process.env for this and future calls. The key is not persisted
-    // to disk — it lives only in the process environment.
-    if (instruction.llmApiKey && !this.llmClient?.isAvailable()) {
+    // Apply the Server-forwarded API key. Always update — the Server is the
+    // source of truth, and the key may have been rotated since the last request.
+    if (instruction.llmApiKey) {
       process.env.SYNTH_LLM_API_KEY = instruction.llmApiKey;
     }
 
@@ -1454,8 +1453,21 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
       let currentParsed: ParsedPlan;
       try {
         let text = llmResult.text.trim();
-        if (text.startsWith("```")) {
+        // The LLM may return commentary before/after the JSON block,
+        // especially after a probe loop. Extract JSON from fenced blocks
+        // or find the outermost { ... } object.
+        const fencedMatch = text.match(/```(?:json)?\s*\n([\s\S]*?)\n\s*```/);
+        if (fencedMatch) {
+          text = fencedMatch[1].trim();
+        } else if (text.startsWith("```")) {
           text = text.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "");
+        } else if (!text.startsWith("{")) {
+          // Find the first { and last } to extract the JSON object
+          const firstBrace = text.indexOf("{");
+          const lastBrace = text.lastIndexOf("}");
+          if (firstBrace !== -1 && lastBrace > firstBrace) {
+            text = text.substring(firstBrace, lastBrace + 1);
+          }
         }
         const raw = JSON.parse(text);
         if (!Array.isArray(raw?.steps)) throw new Error("Plan missing steps array");
@@ -1465,15 +1477,19 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
           if (typeof s.description !== "string") s.description = s.action;
         }
         currentParsed = raw as ParsedPlan;
-      } catch {
+      } catch (parseErr) {
+        const preview = llmResult.text?.substring(0, 500) ?? "(no text)";
         recordEntry({
           partitionId: instruction.partition?.id ?? null,
           deploymentId: instruction.deploymentId,
           agent: "envoy",
           decisionType: "plan-generation",
           decision: `LLM response could not be parsed on attempt ${attempt} — falling back to basic plan`,
-          reasoning: `The LLM returned a response that could not be parsed as JSON.`,
-          context: { parseError: true, attempt },
+          reasoning:
+            `The LLM returned a response that could not be parsed as valid plan JSON. ` +
+            `Parse error: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}. ` +
+            `Response preview: ${preview}`,
+          context: { parseError: true, attempt, responsePreview: preview },
         });
         return this.buildFallbackPlan(instruction);
       }
@@ -1780,7 +1796,7 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
     // didn't fully execute, so they may not need undoing.
     const executedSteps = instruction.completedSteps.filter((s) => s.status === "completed");
 
-    if (instruction.llmApiKey && !this.llmClient?.isAvailable()) {
+    if (instruction.llmApiKey) {
       process.env.SYNTH_LLM_API_KEY = instruction.llmApiKey;
     }
 
