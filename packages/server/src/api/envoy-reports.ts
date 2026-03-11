@@ -131,6 +131,24 @@ export function registerEnvoyReportRoutes(
       ingested++;
     }
 
+    // Update deployment status based on the result
+    const deployment = deployments.get(report.deploymentId);
+    if (deployment && deployment.status === "running") {
+      let finalStatus: typeof deployment.status;
+      if (report.success) {
+        finalStatus = "succeeded" as typeof deployment.status;
+      } else {
+        const hadRollback = report.debriefEntries.some((e) => e.decisionType === "rollback-execution");
+        finalStatus = (hadRollback ? "rolled_back" : "failed") as typeof deployment.status;
+      }
+      deployment.status = finalStatus;
+      if (!report.success && report.failureReason) {
+        deployment.failureReason = report.failureReason;
+      }
+      deployment.completedAt = new Date();
+      deployments.save(deployment);
+    }
+
     return reply.status(200).send({
       accepted: true,
       deploymentId: report.deploymentId,
