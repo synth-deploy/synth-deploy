@@ -9,6 +9,7 @@ import {
   listArtifacts,
   listPartitions,
 } from "../../api.js";
+import { invalidateExact } from "../../hooks/useQuery.js";
 import type {
   Deployment,
   DeploymentEnrichment,
@@ -294,6 +295,7 @@ export default function PlanReviewPanel({ deploymentId }: Props) {
     setError(null);
     try {
       const res = await approveDeployment(deploymentId, { approvedBy: "user" });
+      invalidateExact(`deployment:${deploymentId}`);
       replacePanel({
         type: "deployment-detail",
         title: `Deployment ${res.deployment.id.slice(0, 8)}`,

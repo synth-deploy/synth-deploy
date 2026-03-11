@@ -71,7 +71,7 @@ export class ServerReporter {
   /**
    * Push a deployment result (with full debrief entries) to Command.
    */
-  async reportDeploymentResult(result: DeploymentResult): Promise<void> {
+  async reportDeploymentResult(result: DeploymentResult, tokenOverride?: string): Promise<void> {
     const report: EnvoyReport = {
       type: "deployment-result",
       envoyId: this.envoyId,
@@ -94,7 +94,8 @@ export class ServerReporter {
 
     try {
       const headers: Record<string, string> = { "Content-Type": "application/json" };
-      if (this.token) headers["Authorization"] = `Bearer ${this.token}`;
+      const token = tokenOverride ?? this.token;
+      if (token) headers["Authorization"] = `Bearer ${token}`;
 
       const response = await fetch(
         `${this.serverUrl}/api/envoy/report`,

@@ -8,7 +8,7 @@ import type { ExecutionProgressEvent, ProgressCallback } from "./operation-execu
  * (capped at 30s). Failures are non-fatal — the synchronous result
  * delivery remains the guaranteed fallback.
  */
-export function createCallbackReporter(callbackUrl: string): ProgressCallback {
+export function createCallbackReporter(callbackUrl: string, token?: string): ProgressCallback {
   let pendingEvents: ExecutionProgressEvent[] = [];
   let flushTimer: ReturnType<typeof setTimeout> | null = null;
   let sending = false;
@@ -21,9 +21,12 @@ export function createCallbackReporter(callbackUrl: string): ProgressCallback {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 5_000);
 
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
       const response = await fetch(callbackUrl, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({
           ...event,
           timestamp: event.timestamp instanceof Date

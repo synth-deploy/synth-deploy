@@ -69,6 +69,7 @@ const ExecuteRequestSchema = z.object({
   artifactName: z.string(),
   environmentId: z.string(),
   progressCallbackUrl: z.string().url().optional(),
+  callbackToken: z.string().optional(),
   plan: z.object({
     steps: z.array(z.object({
       description: z.string(),
@@ -194,12 +195,12 @@ export function createEnvoyServer(
       });
     }
 
-    const { deploymentId, artifactType, artifactName, environmentId, plan, rollbackPlan, progressCallbackUrl } = parsed.data;
+    const { deploymentId, artifactType, artifactName, environmentId, plan, rollbackPlan, progressCallbackUrl, callbackToken } = parsed.data;
     const result = await agent.executeApprovedPlan(deploymentId, plan, rollbackPlan, {
       artifactType,
       artifactName,
       environmentId,
-    }, progressCallbackUrl);
+    }, progressCallbackUrl, callbackToken);
 
     return reply.status(result.success ? 200 : 500).send(result);
   });

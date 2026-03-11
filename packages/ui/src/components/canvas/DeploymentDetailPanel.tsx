@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { getDeployment, getPostmortem, listEnvironments, listArtifacts, listPartitions } from "../../api.js";
-import type { Deployment, DebriefEntry, Environment, Artifact, Partition, PostmortemReport } from "../../types.js";
+import { getDeployment, getPostmortem, listEnvironments, listArtifacts, listPartitions, getAuthToken } from "../../api.js";
+import type { PostmortemReport } from "../../types.js";
 import { useCanvas } from "../../context/CanvasContext.js";
 import { useQuery } from "../../hooks/useQuery.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
@@ -71,15 +71,16 @@ function useDeploymentStream(deploymentId: string, isRunning: boolean) {
   useEffect(() => {
     if (!isRunning) return;
 
-    const es = new EventSource(`/api/deployments/${deploymentId}/stream`);
+    const token = getAuthToken();
+    const url = token
+      ? `/api/deployments/${deploymentId}/stream?token=${encodeURIComponent(token)}`
+      : `/api/deployments/${deploymentId}/stream`;
+    const es = new EventSource(url);
     eventSourceRef.current = es;
     resetStaleTimer();
 
     es.onmessage = (msg) => {
       try {
-        // Deduplicate events on reconnect — server sends id: field,
-        // EventSource auto-sends Last-Event-ID on reconnect, but
-        // guard against duplicates in case of overlap
         if (msg.lastEventId && seenIdsRef.current.has(msg.lastEventId)) {
           return;
         }
@@ -101,8 +102,6 @@ function useDeploymentStream(deploymentId: string, isRunning: boolean) {
       }
     };
 
-    // EventSource auto-reconnects on error and sends Last-Event-ID header.
-    // Mark stale while disconnected so UI shows the warning.
     es.onerror = () => {
       setStale(true);
     };
@@ -118,175 +117,6 @@ function useDeploymentStream(deploymentId: string, isRunning: boolean) {
 }
 
 // ---------------------------------------------------------------------------
-// LiveProgressSection — renders real-time step progress
-// ---------------------------------------------------------------------------
-
-function LiveProgressSection({ events, stale }: { events: ProgressEvent[]; stale: boolean }) {
-  const logRef = useRef<HTMLDivElement>(null);
-
-  // Auto-scroll the log area
-  useEffect(() => {
-    if (logRef.current) {
-      logRef.current.scrollTop = logRef.current.scrollHeight;
-    }
-  }, [events]);
-
-  if (events.length === 0) return null;
-
-  // Derive step states from events
-  const latestEvent = events[events.length - 1];
-  const overallProgress = latestEvent.overallProgress;
-  const isRollback = events.some((e) => e.type === "rollback-started");
-
-  // Build a map of stepIndex -> latest event for that step
-  const stepMap = new Map<number, ProgressEvent>();
-  for (const event of events) {
-    if (event.type === "step-started" || event.type === "step-completed" || event.type === "step-failed") {
-      stepMap.set(event.stepIndex, event);
-    }
-  }
-
-  return (
-    <div className="canvas-section">
-      <h3 className="canvas-section-title">
-        {isRollback ? "Rollback Progress" : "Live Execution Progress"}
-      </h3>
-
-      {/* Progress bar */}
-      <div style={{
-        background: "var(--surface-alt)",
-        borderRadius: 4,
-        height: 8,
-        marginBottom: 12,
-        overflow: "hidden",
-      }}>
-        <div style={{
-          background: latestEvent.status === "failed" ? "var(--status-failed)" : "var(--accent)",
-          height: "100%",
-          width: `${overallProgress}%`,
-          transition: "width 0.3s ease-out",
-          borderRadius: 4,
-        }} />
-      </div>
-      <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 8, textAlign: "right" }}>
-        {overallProgress}%
-      </div>
-
-      {/* Stale indicator */}
-      {stale && (
-        <div style={{
-          background: "color-mix(in srgb, var(--status-warning) 13%, transparent)",
-          border: "1px solid color-mix(in srgb, var(--status-warning) 27%, transparent)",
-          borderRadius: 4,
-          padding: "6px 10px",
-          fontSize: 12,
-          color: "var(--status-warning)",
-          marginBottom: 10,
-        }}>
-          Connection to envoy lost — deployment may still be in progress
-        </div>
-      )}
-
-      {/* Step list */}
-      <div className="canvas-timeline">
-        {Array.from(stepMap.entries())
-          .sort(([a], [b]) => a - b)
-          .map(([idx, event]) => {
-            const isActive = event.type === "step-started";
-            const isFailed = event.type === "step-failed";
-            const isCompleted = event.type === "step-completed";
-
-            const dotColor = isCompleted
-              ? "var(--status-succeeded)"
-              : isFailed
-                ? "var(--status-failed)"
-                : "var(--accent)";
-
-            return (
-              <div key={idx} className="canvas-timeline-entry" style={{ cursor: "default" }}>
-                <div className="canvas-timeline-dot" style={{
-                  background: dotColor,
-                  animation: isActive ? "pulse 1.5s infinite" : undefined,
-                }} />
-                <div className="canvas-timeline-content">
-                  <div className="canvas-timeline-header">
-                    <span className="canvas-timeline-type">
-                      {isCompleted ? "completed" : isFailed ? "failed" : "running"}
-                    </span>
-                    <span className="canvas-timeline-time">
-                      Step {idx + 1}
-                    </span>
-                  </div>
-                  <div className="canvas-timeline-decision">{event.stepDescription}</div>
-                  {event.output && (
-                    <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>
-                      {event.output}
-                    </div>
-                  )}
-                  {event.error && (
-                    <div style={{ fontSize: 11, color: "var(--status-failed)", marginTop: 2 }}>
-                      {event.error}
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-      </div>
-
-      {/* Rollback events */}
-      {isRollback && (
-        <div style={{ marginTop: 8 }}>
-          {events
-            .filter((e) => e.type === "rollback-started" || e.type === "rollback-completed")
-            .map((event, i) => (
-              <div key={`rb-${i}`} className="canvas-timeline-entry" style={{ cursor: "default" }}>
-                <div className="canvas-timeline-dot" style={{
-                  background: event.type === "rollback-completed" ? "var(--status-warning)" : "var(--status-failed)",
-                }} />
-                <div className="canvas-timeline-content">
-                  <div className="canvas-timeline-header">
-                    <span className="canvas-timeline-type">{event.type}</span>
-                  </div>
-                  <div className="canvas-timeline-decision">{event.stepDescription}</div>
-                </div>
-              </div>
-            ))}
-        </div>
-      )}
-
-      {/* Live output log */}
-      {events.some((e) => e.output) && (
-        <div
-          ref={logRef}
-          style={{
-            marginTop: 10,
-            maxHeight: 200,
-            overflowY: "auto",
-            background: "var(--surface-alt)",
-            borderRadius: 4,
-            padding: "8px 10px",
-            fontSize: 11,
-            fontFamily: "var(--font-mono)",
-            color: "var(--text-muted)",
-            lineHeight: 1.6,
-          }}
-        >
-          {events
-            .filter((e) => e.output)
-            .map((e, i) => (
-              <div key={i}>
-                <span style={{ color: "var(--text-muted)" }}>[{new Date(e.timestamp).toLocaleTimeString()}]</span>{" "}
-                {e.output}
-              </div>
-            ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
 
@@ -296,7 +126,7 @@ interface Props {
 }
 
 export default function DeploymentDetailPanel({ deploymentId, title }: Props) {
-  const { pushPanel, minimizeDeployment } = useCanvas();
+  const { pushPanel, replacePanel, minimizeDeployment } = useCanvas();
 
   const { data: result, loading: l1, refresh: refreshDeployment } = useQuery(`deployment:${deploymentId}`, () => getDeployment(deploymentId));
   const { data: environments, loading: l2 } = useQuery("list:environments", () => listEnvironments());
@@ -310,6 +140,7 @@ export default function DeploymentDetailPanel({ deploymentId, title }: Props) {
   const [postmortem, setPostmortem] = useState<PostmortemReport | null>(null);
   const [expandedEntries, setExpandedEntries] = useState<Set<string>>(new Set());
   const [expandedPlanSteps, setExpandedPlanSteps] = useState<Set<number>>(new Set());
+
   function togglePlanStep(i: number) {
     setExpandedPlanSteps((prev) => {
       const next = new Set(prev);
@@ -326,6 +157,20 @@ export default function DeploymentDetailPanel({ deploymentId, title }: Props) {
     }
   }, [deployment?.status, deploymentId]);
 
+  // Auto-redirect pending/awaiting_approval to the plan review modal
+  const didRedirect = useRef(false);
+  useEffect(() => {
+    const status = deployment?.status;
+    if (!didRedirect.current && (status === "pending" || status === "awaiting_approval")) {
+      didRedirect.current = true;
+      replacePanel({
+        type: "plan-review",
+        title: "Review Plan",
+        params: { id: deploymentId },
+      });
+    }
+  }, [deployment?.status, deploymentId, replacePanel]);
+
   // Live streaming for running deployments
   const isRunning = deployment?.status === "running";
   const { events: progressEvents, stale, completed: streamCompleted } = useDeploymentStream(deploymentId, isRunning);
@@ -337,8 +182,33 @@ export default function DeploymentDetailPanel({ deploymentId, title }: Props) {
     }
   }, [streamCompleted, refreshDeployment]);
 
-  if (loading) return <CanvasPanelHost title={title} hideRootCrumb dismissible={false}><div className="loading">Loading...</div></CanvasPanelHost>;
-  if (!deployment) return <CanvasPanelHost title={title} hideRootCrumb dismissible={false}><div className="error-msg">Deployment not found</div></CanvasPanelHost>;
+  // Build step state map from progress events
+  const stepMap = new Map<number, ProgressEvent>();
+  for (const event of progressEvents) {
+    if (event.type === "step-started" || event.type === "step-completed" || event.type === "step-failed") {
+      stepMap.set(event.stepIndex, event);
+    }
+  }
+  const overallProgress = progressEvents.length > 0
+    ? progressEvents[progressEvents.length - 1].overallProgress
+    : 0;
+
+  // ── Loading / not found ───────────────────────────────────────────────────
+  if (loading || (!deployment && !loading)) {
+    // While loading or redirecting (awaiting_approval), show a brief modal
+    return (
+      <div className="modal-overlay">
+        <div className="modal-card" style={{ maxWidth: 500, textAlign: "center", padding: "40px 36px" }}>
+          <SynthMark size={36} active />
+          <p style={{ color: "var(--text-muted)", fontSize: 13, marginTop: 14 }}>
+            {loading ? "Loading…" : "Deployment not found"}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!deployment) return null;
 
   const envName = (environments ?? []).find((e) => e.id === deployment.environmentId)?.name ?? deployment.environmentId;
   const artName = (artifacts ?? []).find((a) => a.id === deployment.artifactId)?.name ?? deployment.artifactId.slice(0, 8);
@@ -355,200 +225,322 @@ export default function DeploymentDetailPanel({ deploymentId, title }: Props) {
     });
   }
 
-  // Build step state map from progress events (used in running view)
-  const stepMap = new Map<number, ProgressEvent>();
-  for (const event of progressEvents) {
-    if (event.type === "step-started" || event.type === "step-completed" || event.type === "step-failed") {
-      stepMap.set(event.stepIndex, event);
-    }
-  }
-  const overallProgress = progressEvents.length > 0
-    ? progressEvents[progressEvents.length - 1].overallProgress
-    : 0;
+  // ── Running — full-screen execution overlay ───────────────────────────────
+  if (isRunning) {
+    const planSteps = deployment.plan?.steps ?? [];
+    const isRollback = progressEvents.some((e) => e.type === "rollback-started");
+    const rollbackDone = progressEvents.some((e) => e.type === "rollback-completed");
+    const anyFailed = progressEvents.some((e) => e.type === "step-failed");
 
+    return (
+      <div className="modal-overlay">
+        <div className="modal-card" style={{ maxWidth: 500, padding: "32px 36px" }}>
+
+          {/* Header */}
+          <div className="exec-header">
+            <div className="exec-title-block">
+              <SynthMark size={22} active={isRunning && !isRollback} />
+              <div>
+                <div className="exec-title">
+                  {isRollback ? `Rolling back ${artName}` : `Deploying ${artName}`}{" "}
+                  {deployment.version}
+                </div>
+                <div className="exec-subtitle">→ {envName}{partName ? ` · ${partName}` : ""}</div>
+              </div>
+            </div>
+            <button
+              className="plan-btn plan-btn-reject"
+              onClick={() => minimizeDeployment({ deploymentId, artifactName: artName })}
+              style={{ fontSize: 11, padding: "5px 12px", whiteSpace: "nowrap" }}
+            >
+              Minimize ↓
+            </button>
+          </div>
+
+          {/* Progress bar */}
+          <div className="exec-progress-bar">
+            <div
+              className="exec-progress-fill"
+              style={{
+                width: `${overallProgress}%`,
+                background: isRollback
+                  ? "var(--status-warning)"
+                  : anyFailed
+                    ? "var(--status-failed)"
+                    : "var(--accent)",
+              }}
+            />
+          </div>
+
+          {/* Rollback banner */}
+          {isRollback && (
+            <div style={{
+              background: "color-mix(in srgb, var(--status-warning) 13%, transparent)",
+              border: "1px solid color-mix(in srgb, var(--status-warning) 30%, transparent)",
+              borderRadius: 6,
+              padding: "8px 12px",
+              fontSize: 12,
+              color: "var(--status-warning)",
+              marginBottom: 14,
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+            }}>
+              <span>↩</span>
+              {rollbackDone
+                ? "Rollback complete — environment restored to previous state"
+                : "Step failed — envoy is rolling back changes"}
+            </div>
+          )}
+
+          {/* Stale indicator */}
+          {stale && !isRollback && (
+            <div style={{
+              background: "color-mix(in srgb, var(--status-warning) 13%, transparent)",
+              border: "1px solid color-mix(in srgb, var(--status-warning) 27%, transparent)",
+              borderRadius: 6,
+              padding: "6px 10px",
+              fontSize: 12,
+              color: "var(--status-warning)",
+              marginBottom: 14,
+            }}>
+              Connection to envoy lost — deployment may still be in progress
+            </div>
+          )}
+
+          {/* Step list */}
+          {planSteps.length > 0 ? (
+            planSteps.map((step, i) => {
+              const evt = stepMap.get(i);
+              const isCompleted = evt?.type === "step-completed";
+              const isActive = evt?.type === "step-started";
+              const isFailed = evt?.type === "step-failed";
+              return (
+                <div
+                  key={i}
+                  className="exec-step-row"
+                  style={{ opacity: isCompleted || isActive || isFailed ? 1 : 0.3 }}
+                >
+                  <span className={`exec-step-badge ${isCompleted ? "exec-step-badge-done" : isActive ? "exec-step-badge-active" : isFailed ? "exec-step-badge-pending" : "exec-step-badge-pending"}`}
+                    style={isFailed ? { background: "var(--status-failed-bg)", color: "var(--status-failed)", border: "1px solid var(--status-failed-border)" } : undefined}
+                  >
+                    {isCompleted ? "✓" : isFailed ? "✗" : i + 1}
+                  </span>
+                  <span style={{
+                    fontSize: 13,
+                    color: isCompleted
+                      ? "var(--status-succeeded)"
+                      : isFailed
+                        ? "var(--status-failed)"
+                        : isActive
+                          ? "var(--text)"
+                          : "var(--text-muted)",
+                  }}>
+                    {step.description || step.action}
+                  </span>
+                </div>
+              );
+            })
+          ) : progressEvents.length > 0 ? (
+            Array.from(stepMap.entries())
+              .sort(([a], [b]) => a - b)
+              .map(([idx, event]) => {
+                const isActive = event.type === "step-started";
+                const isCompleted = event.type === "step-completed";
+                return (
+                  <div key={idx} className="exec-step-row">
+                    <span className={`exec-step-badge ${isCompleted ? "exec-step-badge-done" : isActive ? "exec-step-badge-active" : "exec-step-badge-pending"}`}>
+                      {isCompleted ? "✓" : idx + 1}
+                    </span>
+                    <span style={{ fontSize: 13, color: isCompleted ? "var(--status-succeeded)" : isActive ? "var(--text)" : "var(--text-muted)" }}>
+                      {event.stepDescription}
+                    </span>
+                  </div>
+                );
+              })
+          ) : (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 0", color: "var(--text-muted)", fontSize: 13 }}>
+              <SynthMark size={14} active />
+              Waiting for envoy to begin execution…
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // ── Pending / awaiting_approval — brief loading state before redirect fires
+  if (deployment.status === "pending" || deployment.status === "awaiting_approval") {
+    return (
+      <div className="modal-overlay">
+        <div className="modal-card" style={{ maxWidth: 500, textAlign: "center", padding: "40px 36px" }}>
+          <SynthMark size={36} active />
+          <p style={{ color: "var(--text-muted)", fontSize: 13, marginTop: 14 }}>Opening plan review…</p>
+        </div>
+      </div>
+    );
+  }
+
+  // ── All other states — full panel detail view ─────────────────────────────
   return (
     <CanvasPanelHost title={title} hideRootCrumb dismissible={false}>
       <div className="v2-detail-view">
 
-        {isRunning ? (
-          <>
-            {/* ── Execution header ── */}
-            <div className="exec-header">
-              <div className="exec-title-block">
-                <SynthMark size={22} active />
-                <div>
-                  <div className="exec-title">Deploying {artName} {deployment.version}</div>
-                  <div className="exec-subtitle">→ {envName}</div>
-                </div>
-              </div>
-              <button
-                className="btn btn-sm"
-                onClick={() => minimizeDeployment({ deploymentId, artifactName: artName })}
-                style={{ fontSize: 12, whiteSpace: "nowrap" }}
-              >
-                Minimize ↓
-              </button>
-            </div>
-
-            {/* Progress bar */}
-            <div className="exec-progress-bar">
-              <div className="exec-progress-fill" style={{ width: `${overallProgress}%` }} />
-            </div>
-
-            {/* Stale indicator */}
-            {stale && (
-              <div style={{
-                background: "color-mix(in srgb, var(--status-warning) 13%, transparent)",
-                border: "1px solid color-mix(in srgb, var(--status-warning) 27%, transparent)",
-                borderRadius: 4,
-                padding: "6px 10px",
-                fontSize: 12,
-                color: "var(--status-warning)",
-                marginBottom: 12,
-              }}>
-                Connection to envoy lost — deployment may still be in progress
-              </div>
+        {/* ── Header ── */}
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
+            <span className={`badge badge-${deployment.status}`}>{deployment.status}</span>
+            {deployment.version && (
+              <span style={{ fontSize: 12, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
+                {deployment.version}
+              </span>
             )}
+          </div>
+          <h2 style={{ fontSize: 20, fontWeight: 500, color: "var(--text)", margin: "0 0 4px", fontFamily: "var(--font-display)" }}>
+            {artName}
+          </h2>
+          <div style={{ fontSize: 13, color: "var(--text-secondary)" }}>
+            → {envName}{partName ? ` · ${partName}` : ""}
+          </div>
+        </div>
 
-            {/* Step list — prefer plan steps, fall back to events */}
-            {deployment.plan ? (
-              <div style={{ marginBottom: 24 }}>
-                {deployment.plan.steps.map((step, i) => {
-                  const evt = stepMap.get(i);
-                  const isCompleted = evt?.type === "step-completed";
-                  const isActive = evt?.type === "step-started";
-                  return (
-                    <div
-                      key={i}
-                      className="exec-step-row"
-                      style={{ opacity: isCompleted || isActive ? 1 : 0.3, flexDirection: "column", alignItems: "flex-start" }}
-                    >
-                      <div style={{ display: "flex", alignItems: "center", width: "100%", gap: 8 }}>
-                        <span className={`exec-step-badge ${isCompleted ? "exec-step-badge-done" : isActive ? "exec-step-badge-active" : "exec-step-badge-pending"}`}>
-                          {isCompleted ? "✓" : i + 1}
-                        </span>
-                        <span style={{
-                          fontSize: 13,
-                          flex: 1,
-                          color: isCompleted
-                            ? "var(--status-succeeded)"
-                            : isActive
-                              ? "var(--text)"
-                              : "var(--text-muted)",
-                        }}>
-                          {step.description || step.action}
-                        </span>
-                        {step.execPreview && (
-                          <button
-                            onClick={() => togglePlanStep(i)}
-                            style={{
-                              background: "none",
-                              border: "none",
-                              cursor: "pointer",
-                              padding: "2px 4px",
-                              color: "var(--text-muted)",
-                              fontSize: 11,
-                              fontFamily: "var(--font-mono)",
-                              flexShrink: 0,
-                            }}
-                            title={expandedPlanSteps.has(i) ? "Hide command" : "Show command"}
-                          >
-                            {expandedPlanSteps.has(i) ? "▲" : "▼"}
-                          </button>
-                        )}
-                      </div>
-                      {step.execPreview && expandedPlanSteps.has(i) && (
-                        <div className="plan-step-exec-preview" style={{ marginLeft: 30, marginTop: 4, width: "100%" }}>
-                          {step.execPreview}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            ) : progressEvents.length > 0 ? (
-              <LiveProgressSection events={progressEvents} stale={false} />
-            ) : null}
-          </>
-        ) : (
-          <>
-            {/* ── Non-running header ── */}
-            <div className="canvas-deploy-header">
-              <span className={`badge badge-${deployment.status}`}>{deployment.status}</span>
-              <span className="canvas-deploy-version">{deployment.version}</span>
+        {/* ── Meta row ── */}
+        <div style={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: "6px 16px",
+          marginBottom: 24,
+          padding: "12px 16px",
+          borderRadius: 8,
+          background: "var(--surface-alt)",
+          border: "1px solid var(--border)",
+          fontSize: 12,
+          color: "var(--text-muted)",
+        }}>
+          <span>Started {new Date(deployment.createdAt).toLocaleString()}</span>
+          {deployment.completedAt && (
+            <span>Completed {new Date(deployment.completedAt).toLocaleString()}</span>
+          )}
+          {deployment.approvedBy && (
+            <span>Approved by {deployment.approvedBy}</span>
+          )}
+          {partName && (
+            <button
+              className="canvas-meta-link"
+              onClick={() => pushPanel({ type: "partition-detail", title: partName, params: { id: deployment.partitionId! } })}
+            >
+              Partition: {partName}
+            </button>
+          )}
+          <button
+            className="canvas-meta-link"
+            onClick={() => pushPanel({ type: "environment-detail", title: envName, params: { id: deployment.environmentId } })}
+          >
+            Environment: {envName}
+          </button>
+        </div>
+
+        {/* ── Failure analysis ── */}
+        {postmortem?.failureAnalysis && (
+          <div className="canvas-section">
+            <h3 className="canvas-section-title">Failure Analysis</h3>
+            <div className="canvas-failure-card">
+              <div className="canvas-failure-row"><strong>Failed step:</strong> {postmortem.failureAnalysis.failedStep}</div>
+              <div className="canvas-failure-row"><strong>What happened:</strong> {postmortem.failureAnalysis.whatHappened}</div>
+              <div className="canvas-failure-row"><strong>Why:</strong> {postmortem.failureAnalysis.whyItFailed}</div>
+              <div className="canvas-failure-row"><strong>Suggested fix:</strong> {postmortem.failureAnalysis.suggestedFix}</div>
             </div>
-
-            {/* Review Plan action for awaiting_approval */}
-            {deployment.status === "awaiting_approval" && (
-              <div style={{ marginBottom: 12 }}>
-                <button
-                  className="btn btn-sm"
-                  onClick={() => pushPanel({
-                    type: "plan-review",
-                    title: "Review Plan",
-                    params: { id: deployment.id },
-                  })}
-                  style={{ fontSize: 13 }}
-                >
-                  Review Plan
-                </button>
-              </div>
-            )}
-
-            <div className="canvas-deploy-meta">
-              <span>Artifact: {artName}</span>
-              {partName && (
-                <button className="canvas-meta-link" onClick={() => pushPanel({
-                  type: "partition-detail", title: partName, params: { id: deployment.partitionId! },
-                })}>
-                  Partition: {partName}
-                </button>
-              )}
-              <button className="canvas-meta-link" onClick={() => pushPanel({
-                type: "environment-detail", title: envName, params: { id: deployment.environmentId },
-              })}>
-                Environment: {envName}
-              </button>
-              <span>Started: {new Date(deployment.createdAt).toLocaleString()}</span>
-              {deployment.completedAt && (
-                <span>Completed: {new Date(deployment.completedAt).toLocaleString()}</span>
-              )}
-              {deployment.approvedBy && (
-                <span>Approved by: {deployment.approvedBy}</span>
-              )}
-            </div>
-          </>
+          </div>
         )}
 
-        {/* Deployment Plan — only for non-running deployments */}
-        {!isRunning && deployment.plan && (
+        {/* ── Execution Record ── */}
+        {deployment.executionRecord && (
+          <div className="canvas-section">
+            <h3 className="canvas-section-title">Execution Record</h3>
+            <div style={{ marginBottom: 4 }}>
+              {deployment.executionRecord.steps.map((step, i) => {
+                const isCompleted = step.status === "completed";
+                const isFailed = step.status === "failed";
+                return (
+                  <div key={i} className="plan-step-row">
+                    <span
+                      className="plan-step-num"
+                      style={
+                        isCompleted
+                          ? { background: "var(--status-succeeded-bg)", color: "var(--status-succeeded)", border: "1px solid var(--status-succeeded-border)" }
+                          : isFailed
+                            ? { background: "color-mix(in srgb, var(--status-failed) 12%, transparent)", color: "var(--status-failed)", border: "1px solid color-mix(in srgb, var(--status-failed) 30%, transparent)" }
+                            : undefined
+                      }
+                    >
+                      {isCompleted ? "✓" : isFailed ? "✗" : i + 1}
+                    </span>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 13, color: isCompleted ? "var(--status-succeeded)" : isFailed ? "var(--status-failed)" : "var(--text)" }}>
+                        {step.description}
+                      </div>
+                      {step.output && (
+                        <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>{step.output}</div>
+                      )}
+                      {step.error && (
+                        <div style={{ fontSize: 11, color: "var(--status-failed)", marginTop: 2 }}>{step.error}</div>
+                      )}
+                    </div>
+                    <span style={{ fontSize: 10, color: "var(--text-muted)", fontFamily: "var(--font-mono)", flexShrink: 0, alignSelf: "center" }}>
+                      {new Date(step.startedAt).toLocaleTimeString()}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ── Deployment Plan (no execution record yet, or archived view) ── */}
+        {deployment.plan && !deployment.executionRecord && (
           <div className="canvas-section">
             <h3 className="canvas-section-title">Deployment Plan</h3>
-            <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 8 }}>
-              {deployment.plan.reasoning}
-            </div>
-            <div className="canvas-timeline">
+            {deployment.plan.reasoning && (
+              <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 12, lineHeight: 1.55 }}>
+                {deployment.plan.reasoning}
+              </div>
+            )}
+            <div>
               {deployment.plan.steps.map((step, i) => (
                 <div
                   key={i}
-                  className="canvas-timeline-entry"
+                  className="plan-step-row"
                   style={{ cursor: step.execPreview ? "pointer" : "default" }}
                   onClick={() => step.execPreview && togglePlanStep(i)}
                 >
-                  <div className="canvas-timeline-dot" style={{ background: step.reversible ? "var(--status-succeeded)" : "var(--status-warning)" }} />
-                  <div className="canvas-timeline-content">
-                    <div className="canvas-timeline-header">
-                      <span className="canvas-timeline-type">{step.action}</span>
-                      <span className="canvas-timeline-time">{step.target}</span>
+                  <span className="plan-step-num">{i + 1}</span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 13, color: "var(--text)" }}>{step.description || step.action}</div>
+                        {step.rollbackAction && (
+                          <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>↩ {step.rollbackAction}</div>
+                        )}
+                      </div>
+                      <span style={{
+                        fontSize: 10,
+                        fontFamily: "var(--font-mono)",
+                        fontWeight: 600,
+                        color: !step.reversible ? "var(--status-failed)" : step.rollbackAction ? "var(--status-succeeded)" : "var(--text-muted)",
+                        flexShrink: 0,
+                      }}>
+                        {!step.reversible ? "high" : step.rollbackAction ? "low" : "none"}
+                      </span>
+                      {step.execPreview && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); togglePlanStep(i); }}
+                          style={{ background: "none", border: "none", cursor: "pointer", padding: "2px 4px", color: "var(--text-muted)", fontSize: 11, fontFamily: "var(--font-mono)", flexShrink: 0 }}
+                        >
+                          {expandedPlanSteps.has(i) ? "▲" : "▼"}
+                        </button>
+                      )}
                     </div>
-                    <div className="canvas-timeline-decision">{step.description}</div>
-                    {!step.reversible && (
-                      <div style={{ fontSize: 11, color: "var(--status-warning)", marginTop: 2 }}>Non-reversible</div>
-                    )}
-                    {step.execPreview && !expandedPlanSteps.has(i) && (
-                      <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 3, fontFamily: "var(--font-mono)" }}>▼ show command</div>
-                    )}
-                    {step.execPreview && expandedPlanSteps.has(i) && (
+                    {expandedPlanSteps.has(i) && step.execPreview && (
                       <div className="plan-step-exec-preview">{step.execPreview}</div>
                     )}
                   </div>
@@ -558,60 +550,7 @@ export default function DeploymentDetailPanel({ deploymentId, title }: Props) {
           </div>
         )}
 
-        {/* Execution Record */}
-        {deployment.executionRecord && (
-          <div className="canvas-section">
-            <h3 className="canvas-section-title">Execution Record</h3>
-            <div className="canvas-timeline">
-              {deployment.executionRecord.steps.map((step, i) => {
-                const stepColor = step.status === "completed" ? "var(--status-succeeded)" : step.status === "failed" ? "var(--status-failed)" : "var(--status-warning)";
-                return (
-                  <div key={i} className="canvas-timeline-entry" style={{ cursor: "default" }}>
-                    <div className="canvas-timeline-dot" style={{ background: stepColor }} />
-                    <div className="canvas-timeline-content">
-                      <div className="canvas-timeline-header">
-                        <span className="canvas-timeline-type">{step.status}</span>
-                        <span className="canvas-timeline-time">
-                          {new Date(step.startedAt).toLocaleTimeString()}
-                        </span>
-                      </div>
-                      <div className="canvas-timeline-decision">{step.description}</div>
-                      {step.output && (
-                        <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>{step.output}</div>
-                      )}
-                      {step.error && (
-                        <div style={{ fontSize: 11, color: "var(--status-failed)", marginTop: 2 }}>{step.error}</div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* Failure analysis */}
-        {postmortem?.failureAnalysis && (
-          <div className="canvas-section">
-            <h3 className="canvas-section-title">Failure Analysis</h3>
-            <div className="canvas-failure-card">
-              <div className="canvas-failure-row">
-                <strong>Failed step:</strong> {postmortem.failureAnalysis.failedStep}
-              </div>
-              <div className="canvas-failure-row">
-                <strong>What happened:</strong> {postmortem.failureAnalysis.whatHappened}
-              </div>
-              <div className="canvas-failure-row">
-                <strong>Why:</strong> {postmortem.failureAnalysis.whyItFailed}
-              </div>
-              <div className="canvas-failure-row">
-                <strong>Suggested fix:</strong> {postmortem.failureAnalysis.suggestedFix}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Variables */}
+        {/* ── Variables ── */}
         {Object.keys(deployment.variables).length > 0 && (
           <div className="canvas-section">
             <h3 className="canvas-section-title">Variables</h3>
@@ -626,7 +565,7 @@ export default function DeploymentDetailPanel({ deploymentId, title }: Props) {
           </div>
         )}
 
-        {/* Decision diary timeline */}
+        {/* ── Decision Diary ── */}
         {debrief.length > 0 && (
           <div className="canvas-section">
             <h3 className="canvas-section-title">Decision Diary</h3>

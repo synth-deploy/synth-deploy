@@ -23,6 +23,10 @@ export function setAuthToken(token: string | null): void {
   authToken = token;
 }
 
+export function getAuthToken(): string | null {
+  return authToken;
+}
+
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",

@@ -146,6 +146,8 @@ export class EnvoyClient {
     private timeoutMs: number = 10_000,
   ) {}
 
+  get url(): string { return this.baseUrl; }
+
   /**
    * Check Envoy health — used as the ServiceHealthChecker for the
    * Command Agent's pre-flight health check step.
@@ -200,6 +202,7 @@ export class EnvoyClient {
     artifactName: string;
     environmentId: string;
     progressCallbackUrl?: string;
+    callbackToken?: string;
   }): Promise<EnvoyDeployResult> {
     const response = await fetchWithRetry(
       `${this.baseUrl}/execute`,

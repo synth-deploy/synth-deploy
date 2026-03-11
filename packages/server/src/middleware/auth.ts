@@ -17,6 +17,8 @@ declare module "fastify" {
 
 const EXEMPT_ROUTES = ["/health", "/api/health", "/api/auth/login", "/api/auth/register", "/api/auth/refresh", "/api/auth/status", "/api/auth/providers", "/api/envoy/report"];
 const EXEMPT_PREFIXES = ["/api/auth/oidc/", "/api/auth/callback/oidc/", "/api/auth/saml/", "/api/auth/callback/saml/", "/api/auth/ldap/", "/api/intake/webhook/"];
+// Envoy callback endpoints — validated by envoy token, not user JWT
+const EXEMPT_PATTERNS = [/^\/api\/deployments\/[^/]+\/progress$/];
 
 /**
  * Registers JWT-based authentication middleware on a Fastify instance.
@@ -37,16 +39,22 @@ export function registerAuthMiddleware(
     if (EXEMPT_ROUTES.some((r) => request.url.startsWith(r))) return;
     // Skip OIDC auth routes (dynamic paths)
     if (EXEMPT_PREFIXES.some((p) => request.url.startsWith(p))) return;
+    // Skip envoy callback endpoints (validated by envoy token in the route handler)
+    if (EXEMPT_PATTERNS.some((p) => p.test(request.url))) return;
     // Also skip static file serving (non-API routes), but NOT /mcp — it requires auth
     if (!request.url.startsWith("/api/") && !request.url.startsWith("/mcp")) return;
 
+    // Accept token from Authorization header or ?token= query param
+    // (EventSource API cannot send headers, so SSE endpoints use query param)
     const authHeader = request.headers.authorization;
-    if (!authHeader?.startsWith("Bearer ")) {
+    const queryToken = (request.query as Record<string, string>)?.token;
+    const rawToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : queryToken;
+    if (!rawToken) {
       reply.status(401).send({ error: "Authentication required" });
       return;
     }
 
-    const token = authHeader.slice(7);
+    const token = rawToken;
     try {
       const { payload } = await jwtVerify(token, jwtSecret);
       const userId = payload.sub as UserId;

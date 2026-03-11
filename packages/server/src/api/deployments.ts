@@ -312,8 +312,10 @@ export function registerDeploymentRoutes(
       // Dispatch approved plan to envoy for execution
       if (envoyClient && deployment.plan && deployment.rollbackPlan) {
         const artifact = artifactStore.get(deployment.artifactId);
-        const serverUrl = settings.get().envoy?.url ?? "http://localhost:3000";
-        const progressCallbackUrl = `${serverUrl.replace(/:\d+$/, `:${3000}`)}/api/deployments/${deployment.id}/progress`;
+        const serverPort = process.env.PORT ?? "3000";
+        const serverUrl = process.env.SYNTH_SERVER_URL ?? `http://localhost:${serverPort}`;
+        const progressCallbackUrl = `${serverUrl}/api/deployments/${deployment.id}/progress`;
+        const callbackToken = envoyRegistry?.list().find(r => r.url === envoyClient.url)?.token;
 
         deployment.status = "running" as typeof deployment.status;
         deployments.save(deployment);
@@ -327,6 +329,7 @@ export function registerDeploymentRoutes(
           artifactName: artifact?.name ?? "unknown",
           environmentId: deployment.environmentId ?? "",
           progressCallbackUrl,
+          callbackToken,
         }).catch((err) => {
           // Execution dispatch failed — record failure
           deployment.status = "failed" as typeof deployment.status;
@@ -742,6 +745,7 @@ export function registerDeploymentRoutes(
         artifactName: artifact?.name ?? "unknown",
         environmentId: deployment.environmentId ?? "",
         progressCallbackUrl,
+        callbackToken: targetEnvoy.token,
       }).then((result) => {
         const dep = deployments.get(deployment.id);
         if (!dep) return;
@@ -835,6 +839,15 @@ export function registerDeploymentRoutes(
         return reply.status(501).send({ error: "Progress streaming not configured" });
       }
 
+      // Validate envoy token — this route is exempt from JWT auth
+      if (envoyRegistry) {
+        const authHeader = (request.headers.authorization ?? "") as string;
+        const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
+        if (!token || !envoyRegistry.validateToken(token)) {
+          return reply.status(401).send({ error: "Invalid or missing envoy token" });
+        }
+      }
+
       const parsed = ProgressEventSchema.safeParse(request.body);
       if (!parsed.success) {
         return reply.status(400).send({ error: "Invalid progress event", details: parsed.error.format() });
@@ -853,12 +866,17 @@ export function registerDeploymentRoutes(
   );
 
   // GET /api/deployments/:id/stream — SSE endpoint for live progress
+  // Auth is via ?token= query param since EventSource cannot send headers
   app.get<{ Params: { id: string } }>(
     "/api/deployments/:id/stream",
-    async (request, reply) => {
+    (request, reply) => {
       if (!progressStore) {
-        return reply.status(501).send({ error: "Progress streaming not configured" });
+        reply.status(501).send({ error: "Progress streaming not configured" });
+        return;
       }
+
+      // Hijack the connection so Fastify does not finalize the response
+      reply.hijack();
 
       // Set SSE headers
       reply.raw.writeHead(200, {
@@ -910,9 +928,6 @@ export function registerDeploymentRoutes(
       request.raw.on("close", () => {
         progressStore!.removeListener(deploymentId, listener);
       });
-
-      // Keep the connection open — don't return a response (raw handling)
-      await reply;
     },
   );
 }

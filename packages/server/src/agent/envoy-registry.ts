@@ -159,6 +159,38 @@ export class EnvoyRegistry {
   }
 
   /**
+   * Ensure an envoy at `url` is registered with a specific `token`.
+   * If already registered, updates its token. If not, creates a new entry.
+   * Used to bootstrap the default envoy from environment variables (SYNTH_ENVOY_TOKEN).
+   */
+  ensureRegisteredWithToken(params: { name: string; url: string }, token: string): EnvoyRegistration {
+    const existing = this.list().find((r) => r.url === params.url);
+    if (existing) {
+      this.store?.updateToken(existing.id, token);
+      return { ...existing, token };
+    }
+
+    const id = crypto.randomUUID();
+    const registration: EnvoyRegistration = {
+      id,
+      name: params.name,
+      url: params.url,
+      token,
+      assignedEnvironments: [],
+      assignedPartitions: [],
+      registeredAt: new Date().toISOString(),
+      lastHealthCheck: null,
+      lastHealthStatus: null,
+      cachedHostname: null,
+      cachedOs: null,
+      cachedSummary: null,
+      cachedReadiness: null,
+    };
+    this.store?.insert(toPersisted(registration));
+    return registration;
+  }
+
+  /**
    * Rotate the token for an Envoy. Returns the new token.
    */
   rotateToken(id: string): string | undefined {

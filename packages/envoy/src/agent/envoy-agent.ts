@@ -1963,6 +1963,7 @@ IMPORTANT: Every step's "action" field MUST contain at least one of the recogniz
     rollbackPlan: DeploymentPlan,
     artifactContext?: { artifactType: string; artifactName: string; environmentId: string },
     progressCallbackUrl?: string,
+    callbackToken?: string,
   ): Promise<DeploymentResult> {
     await this.executorReady;
 
@@ -2027,7 +2028,7 @@ IMPORTANT: Every step's "action" field MUST contain at least one of the recogniz
     if (this.operationExecutor && plan.steps.length > 0) {
       // Set up progress callback to stream events to Command if URL provided
       const progressCallback = progressCallbackUrl
-        ? createCallbackReporter(progressCallbackUrl)
+        ? createCallbackReporter(progressCallbackUrl, callbackToken)
         : undefined;
 
       const planResult = await this.operationExecutor.executePlan(
@@ -2116,7 +2117,7 @@ IMPORTANT: Every step's "action" field MUST contain at least one of the recogniz
         debriefEntryIds,
         debriefEntries,
       };
-      this.reportToServer(failResult);
+      this.reportToServer(failResult, callbackToken);
 
       // Store the failed plan in knowledge store for future planning context
       this.storePlanOutcome(deploymentId, plan, rollbackPlan, false, failureError, execDurationMs, artifactContext);
@@ -2166,7 +2167,7 @@ IMPORTANT: Every step's "action" field MUST contain at least one of the recogniz
       debriefEntryIds,
       debriefEntries,
     };
-    this.reportToServer(successResult);
+    this.reportToServer(successResult, callbackToken);
 
     // Store the successful plan in knowledge store for future planning context
     this.storePlanOutcome(deploymentId, plan, rollbackPlan, true, undefined, execDurationMs, artifactContext);
@@ -2254,9 +2255,9 @@ IMPORTANT: Every step's "action" field MUST contain at least one of the recogniz
    * Fire-and-forget — the Envoy doesn't block on the Server receiving this.
    * The result was already returned to the caller; this is the proactive push.
    */
-  private reportToServer(result: DeploymentResult): void {
+  private reportToServer(result: DeploymentResult, tokenOverride?: string): void {
     if (!this.reporter) return;
-    this.reporter.reportDeploymentResult(result).catch((err) => {
+    this.reporter.reportDeploymentResult(result, tokenOverride).catch((err) => {
       // Log but don't fail — the synchronous response already went back.
       // Command can also pull this data via GET /deployments/:id.
       console.error(
