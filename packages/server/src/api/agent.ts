@@ -679,7 +679,7 @@ Be directional: say what you recommend, not "here are some data points." Use fir
         );
 
         const llmResult = await Promise.race([
-          llm.reason({
+          llm.classify({
             prompt: promptParts.join("\n"),
             systemPrompt,
             promptSummary: `Pre-flight recommendation for ${artifactName} → ${envName}`,

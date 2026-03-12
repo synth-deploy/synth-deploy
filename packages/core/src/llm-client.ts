@@ -535,7 +535,11 @@ export class LlmClient {
           {
             model,
             max_tokens: params.maxTokens ?? DEFAULT_MAX_TOKENS,
-            system: params.systemPrompt,
+            // Use structured system block with cache_control for Anthropic-native providers.
+            // openai-compatible adapters expect a plain string.
+            system: this._provider !== "openai-compatible"
+              ? [{ type: "text" as const, text: params.systemPrompt, cache_control: { type: "ephemeral" } as const }]
+              : params.systemPrompt,
             messages: [{ role: "user", content: params.prompt }],
           },
           { signal: controller.signal },
@@ -822,7 +826,7 @@ export class LlmClient {
           {
             model,
             max_tokens: maxTokens,
-            system: opts.systemPrompt,
+            system: [{ type: "text" as const, text: opts.systemPrompt, cache_control: { type: "ephemeral" } as const }],
             tools: [probeTool],
             messages,
           },

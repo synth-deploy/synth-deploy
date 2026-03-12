@@ -261,7 +261,7 @@ export class EnvoyAgent {
   private probeExecutor = new ProbeExecutor({
     cacheTtlMs: process.env.SYNTH_PROBE_CACHE_TTL_MS
       ? parseInt(process.env.SYNTH_PROBE_CACHE_TTL_MS, 10)
-      : 300_000, // 5 minutes — environment fundamentals don't change during active planning
+      : 600_000, // 10 minutes — environment fundamentals don't change during active planning
   });
   /** File-based structured logger for planning diagnostics. */
   private planLog: PlanLogger;

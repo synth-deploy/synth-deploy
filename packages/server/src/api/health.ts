@@ -20,9 +20,9 @@ interface CheckResult {
   responseTimeMs?: number;
 }
 
-// Cached LLM health result (30-second TTL)
+// Cached LLM health result (5-minute TTL)
 let llmHealthCache: { healthy: boolean; checkedAt: number } | null = null;
-const LLM_HEALTH_CACHE_TTL_MS = 30_000;
+const LLM_HEALTH_CACHE_TTL_MS = 300_000;
 
 /** Call when the API key changes so the next health check runs fresh. */
 export function invalidateLlmHealthCache(): void {
@@ -185,34 +185,15 @@ export function registerHealthRoutes(
       };
     }
 
-    // Lightweight ping to verify the provider is reachable
-    let healthy = false;
+    // For Anthropic/Bedrock/Vertex: trust configuration — real failures surface in the debrief.
+    // For openai-compatible: do a free GET /models to verify the endpoint is reachable.
+    let healthy = true;
     try {
       const apiKey = options?.llmApiKey ?? process.env.SYNTH_LLM_API_KEY;
       const baseUrl = options?.llmBaseUrl ?? process.env.SYNTH_LLM_BASE_URL ?? "https://api.anthropic.com";
       const provider = detectProvider();
 
-      if (provider === "anthropic" && apiKey) {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 5000);
-        const res = await fetch(`${baseUrl}/v1/messages`, {
-          method: "POST",
-          headers: {
-            "x-api-key": apiKey,
-            "anthropic-version": "2023-06-01",
-            "content-type": "application/json",
-          },
-          body: JSON.stringify({
-            model: "claude-haiku-4-5-20251001",
-            max_tokens: 1,
-            messages: [{ role: "user", content: "ping" }],
-          }),
-          signal: controller.signal,
-        });
-        clearTimeout(timeout);
-        healthy = res.status < 500;
-      } else if (provider === "openai-compatible") {
-        // For openai-compatible, just check the base URL is reachable
+      if (provider === "openai-compatible") {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 5000);
         const res = await fetch(baseUrl.replace(/\/+$/, "") + "/models", {
@@ -221,9 +202,6 @@ export function registerHealthRoutes(
         });
         clearTimeout(timeout);
         healthy = res.status < 500;
-      } else {
-        // For bedrock/vertex, assume healthy if configured (SDK handles auth)
-        healthy = true;
       }
     } catch (err) {
       app.log.error(err, "LLM health check failed");
