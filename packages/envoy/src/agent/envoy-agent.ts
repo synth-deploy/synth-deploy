@@ -258,7 +258,11 @@ export class EnvoyAgent {
   private _lifecycleState: LifecycleState = "active";
   private executorReady: Promise<void>;
   /** Shared across plan requests so probe results are cached between calls. */
-  private probeExecutor = new ProbeExecutor();
+  private probeExecutor = new ProbeExecutor({
+    cacheTtlMs: process.env.SYNTH_PROBE_CACHE_TTL_MS
+      ? parseInt(process.env.SYNTH_PROBE_CACHE_TTL_MS, 10)
+      : 300_000, // 5 minutes — environment fundamentals don't change during active planning
+  });
   /** File-based structured logger for planning diagnostics. */
   private planLog: PlanLogger;
 
@@ -1330,26 +1334,13 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.plan.steps.
 ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnalysis ?? "no analysis"}`).join("\n")}`);
     }
 
-    const systemPrompt =
-      `You are the Envoy planning engine for Synth. Your job is to produce ` +
-      `a concrete deployment plan: what to do, in what order, where, and how.\n\n` +
-      `BEFORE generating any plan steps, you MUST use the probe() tool to verify ` +
-      `the real machine state. Do NOT assume paths, tool versions, running services, ` +
-      `or directory structure — observe them. Probe for:\n` +
-      `- Tool availability: which docker, which node, which systemctl, etc.\n` +
-      `- Directory structure: ls, stat, find on relevant paths\n` +
-      `- Running processes and services: ps aux, systemctl status <service>\n` +
-      `- OS and system info: uname -a, cat /etc/os-release\n` +
-      `- Disk space: df -h\n` +
-      `- User context: id, whoami\n` +
-      `- Any other observable fact your plan depends on\n\n` +
-      `Probe until you have enough real observations to generate a grounded plan. ` +
-      `Then output the plan as JSON.\n\n` +
+    // Shared JSON output format tail used by both system prompts.
+    const planOutputFormat =
       `Each step must have a clear action, target, description, and whether it is ` +
       `reversible (with rollback action if so). For steps that execute a shell command, ` +
       `include the exact literal command string in execPreview — this is what the user ` +
       `will see to verify what deterministically runs.\n\n` +
-      `IMPORTANT: You must respond with valid JSON only after probing. No markdown, no commentary.\n\n` +
+      `IMPORTANT: Respond with valid JSON only. No markdown, no commentary.\n\n` +
       `Response format:\n` +
       `{\n` +
       `  "reasoning": "Your reasoning about why this plan is appropriate",\n` +
@@ -1376,6 +1367,34 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
       `  "delta": "If a previous successful plan exists, describe what changed and why. Omit if no previous plan."\n` +
       `}`;
 
+    // Attempt 1: probe loop — model uses the probe() tool to observe real machine state.
+    const probeSystemPrompt =
+      `You are the Envoy planning engine for Synth. Your job is to produce ` +
+      `a concrete deployment plan: what to do, in what order, where, and how.\n\n` +
+      `BEFORE generating any plan steps, you MUST use the probe() tool to verify ` +
+      `the real machine state. Do NOT assume paths, tool versions, running services, ` +
+      `or directory structure — observe them. Probe for:\n` +
+      `- Tool availability: which docker, which node, which systemctl, etc.\n` +
+      `- Directory structure: ls, stat, find on relevant paths\n` +
+      `- Running processes and services: ps aux, systemctl status <service>\n` +
+      `- OS and system info: uname -a, cat /etc/os-release\n` +
+      `- Disk space: df -h\n` +
+      `- User context: id, whoami\n` +
+      `- Any other observable fact your plan depends on\n\n` +
+      `Probe until you have enough real observations to generate a grounded plan. ` +
+      `Then output the plan as JSON.\n\n` +
+      planOutputFormat;
+
+    // Retry attempts: probe results are already injected into the prompt as context.
+    // No probe tool is available — output the plan JSON directly.
+    const retrySystemPrompt =
+      `You are the Envoy planning engine for Synth. Your job is to produce ` +
+      `a concrete deployment plan: what to do, in what order, where, and how.\n\n` +
+      `Environment observations have already been collected and are provided in the prompt. ` +
+      `Use those observations directly — do NOT attempt to call any tools. ` +
+      `Output the plan as JSON.\n\n` +
+      planOutputFormat;
+
     // Planning + dry-run refinement loop. On each iteration the LLM generates
     // a fresh plan using an agentic probe loop to observe real machine state
     // before generating steps. If dry-run finds residual failed observations
@@ -1383,6 +1402,8 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
     const MAX_DRY_RUN_ATTEMPTS = 3;
     let lastObservations: string | null = null;
     let previousObservationSummary = "";
+    // Probe results accumulated during attempt 1 — carried into retries as context.
+    const probeLog: Array<{ command: string; output: string }> = [];
 
     // ProbeExecutor is shared at the agent level — probe results are cached
     // across dry-run retries and consecutive plan requests (TTL-based).
@@ -1391,9 +1412,23 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
     for (let attempt = 1; attempt <= MAX_DRY_RUN_ATTEMPTS; attempt++) {
       // --- LLM planning call ---
       // Attempt 1: full probe loop to observe real machine state.
-      // Retry attempts: use reason() with dry-run observations injected as context
+      // Retry attempts: use reason() with probe + dry-run observations injected as context
       // (no re-probing — machine state hasn't changed, saves API calls).
       const promptSections = [...sections];
+
+      // Inject accumulated probe results on retries so the model has environment context.
+      if (attempt > 1 && probeLog.length > 0) {
+        const probeContext = probeLog
+          .map((e) => `$ ${e.command}\n${e.output}`)
+          .join("\n\n");
+        promptSections.push(
+          `## Environment Observations (probed before this session)\n` +
+          `${probeContext}\n\n` +
+          `These are real observations from the target machine collected during this planning session. ` +
+          `Use them as the basis for your plan — do not re-probe.`,
+        );
+      }
+
       if (lastObservations) {
         promptSections.push(
           `## Dry-Run Observations (system state from previous plan attempt)\n` +
@@ -1419,7 +1454,7 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
         // First attempt: agentic probe loop to observe real machine state
         llmResult = await this.llmClient!.callWithProbeLoop({
           prompt: promptSections.join("\n\n"),
-          systemPrompt,
+          systemPrompt: probeSystemPrompt,
           promptSummary,
           partitionId: instruction.partition?.id ?? null,
           deploymentId: instruction.deploymentId,
@@ -1445,18 +1480,20 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
                 outputPreview: result.output ? result.output.slice(0, 500) : undefined,
               },
             });
-            if (result.blocked) {
-              return result.blockedReason ?? "Command blocked";
-            }
-            return result.output ?? "(no output)";
+            const output = result.blocked
+              ? result.blockedReason ?? "Command blocked"
+              : result.output ?? "(no output)";
+            // Accumulate for retry context.
+            probeLog.push({ command, output });
+            return output;
           },
         });
       } else {
         // Retry: machine state unchanged, skip re-probing. Use reason() with
-        // dry-run observations already injected into promptSections above.
+        // probe + dry-run observations already injected into promptSections above.
         llmResult = await this.llmClient!.reason({
           prompt: promptSections.join("\n\n"),
-          systemPrompt,
+          systemPrompt: retrySystemPrompt,
           promptSummary,
           partitionId: instruction.partition?.id ?? null,
           deploymentId: instruction.deploymentId,
@@ -1471,10 +1508,19 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
           deploymentId: instruction.deploymentId,
           agent: "envoy",
           decisionType: "plan-generation",
-          decision: `LLM planning failed on attempt ${attempt} — falling back to basic plan`,
-          reasoning: `LLM call failed: ${llmResult.reason}.`,
-          context: { llmFailed: true, llmReason: llmResult.reason, attempt },
+          decision: `LLM planning failed on attempt ${attempt}` +
+            (attempt < MAX_DRY_RUN_ATTEMPTS ? ` — retrying with accumulated probe context` : ` — falling back to basic plan`),
+          reasoning: `LLM call failed: ${llmResult.reason}.` +
+            (probeLog.length > 0 ? ` ${probeLog.length} probe result(s) available for retry.` : ""),
+          context: { llmFailed: true, llmReason: llmResult.reason, attempt, probeCount: probeLog.length },
         });
+        // If we have probe context from this session, hand it to the next attempt
+        // via reason() rather than falling back to the canned plan immediately.
+        if (attempt < MAX_DRY_RUN_ATTEMPTS) {
+          lastObservations = `Previous planning attempt failed: ${llmResult.reason}. ` +
+            `Use the environment observations above to generate the best plan you can.`;
+          continue;
+        }
         return this.buildFallbackPlan(instruction);
       }
 
