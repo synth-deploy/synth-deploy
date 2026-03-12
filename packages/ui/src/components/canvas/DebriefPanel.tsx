@@ -141,7 +141,11 @@ function DeploymentDebriefDetail({ deploymentId, onBack, onNavigate }: { deploym
   const duration = deployment.completedAt
     ? Math.round((new Date(deployment.completedAt).getTime() - new Date(deployment.createdAt).getTime()) / 1000)
     : null;
-  const envoyEntries = debrief.filter((e) => e.agent === "envoy");
+  // Envoy log: only discovery/diagnostic entries, not execution steps (those are in Executed Plan)
+  const envoyLogEntries = debrief.filter(
+    (e) => e.agent === "envoy" &&
+      (e.decisionType === "environment-probe" || e.decisionType === "environment-scan" || e.decisionType === "diagnostic-investigation"),
+  );
   // Fallback assessment from debrief when recommendation isn't persisted
   const assessmentEntry = !deployment.recommendation
     ? debrief.find((e) => e.decisionType === "plan-generation" || e.decisionType === "pipeline-plan")
@@ -380,7 +384,7 @@ function DeploymentDebriefDetail({ deploymentId, onBack, onNavigate }: { deploym
         ))}
       </div>
 
-      {/* ── Deployment Summary ── narrative quick-read ──────────────── */}
+      {/* ── Synth's Assessment ── outcome + reasoning + recommendation ── */}
       {(() => {
         // Outcome line
         const outcomeStatus = deployment.status;
@@ -404,161 +408,65 @@ function DeploymentDebriefDetail({ deploymentId, onBack, onNavigate }: { deploym
         const rawReasoning = deployment.plan?.reasoning ?? "";
         const reasoning = rawReasoning.replace(/\s*\[Dry-run validated[^\]]*\]\s*$/i, "").trim();
 
-        // Environment probes from debrief
-        const probeEntries = debrief.filter(
-          (e) => e.decisionType === "environment-probe" || e.decisionType === "environment-scan",
-        );
+        // Failure detail when no failed step captured
+        const showFailureReason = deployment.status === "failed" && deployment.failureReason && !failedStep;
 
-        // Execution steps — prefer executionRecord, fall back to plan steps
-        const execSteps = deployment.executionRecord?.steps ?? null;
-        const planSteps = deployment.plan?.steps ?? null;
-        const stepCount = execSteps?.length ?? planSteps?.length ?? 0;
+        const rec = deployment.recommendation;
 
         return (
           <div className="canvas-section">
-            <h3 className="canvas-section-title">Summary</h3>
+            <h3 className="canvas-section-title">Synth&rsquo;s Assessment</h3>
             <div style={{
               padding: "14px 18px",
               borderRadius: 10,
-              background: "var(--surface)",
-              border: "1px solid var(--border)",
+              background: rec ? "var(--accent-soft, rgba(45,91,240,0.06))" : "var(--surface)",
+              border: `1px solid ${rec ? "var(--accent-border)" : "var(--border)"}`,
               fontSize: 13,
               lineHeight: 1.6,
               color: "var(--text)",
             }}>
               {/* Outcome */}
-              <div style={{
-                fontSize: 14,
-                fontWeight: 600,
-                color: statusColor,
-                marginBottom: probeEntries.length > 0 || reasoning || stepCount > 0 ? 12 : 0,
-              }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: statusColor, marginBottom: reasoning || rec || assessmentEntry ? 12 : 0 }}>
                 {outcomeLine}
               </div>
 
-              {/* Environment probes */}
-              {probeEntries.length > 0 && (
-                <div style={{ marginBottom: reasoning || stepCount > 0 ? 10 : 0 }}>
-                  <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
-                    Synth probed the target system{probeEntries.length > 1 ? ` (${probeEntries.length} checks)` : ""}
-                    {probeEntries.length <= 3
-                      ? `: ${probeEntries.map((p) => {
-                          const cmd = p.context.command as string | undefined;
-                          const preview = p.context.outputPreview as string | undefined;
-                          if (cmd) return cmd;
-                          if (preview) return preview.slice(0, 80);
-                          return p.decision;
-                        }).join(", ")}`
-                      : ` and observed: ${probeEntries.map((p) => p.decision).slice(0, 3).join("; ")}${probeEntries.length > 3 ? "..." : ""}`
-                    }
-                  </span>
+              {/* Failure detail */}
+              {showFailureReason && (
+                <div style={{ marginBottom: 8, fontSize: 12, color: "var(--status-failed)" }}>
+                  {deployment.failureReason}
                 </div>
               )}
 
-              {/* LLM reasoning */}
+              {/* LLM reasoning — the "why" behind this plan */}
               {reasoning && (
-                <div style={{
-                  fontSize: 13,
-                  color: "var(--text)",
-                  marginBottom: stepCount > 0 ? 12 : 0,
-                }}>
+                <div style={{ fontSize: 13, color: "var(--text)", marginBottom: rec ? 12 : 0 }}>
                   {reasoning}
                 </div>
               )}
 
-              {/* Execution steps — compact numbered list */}
-              {execSteps && execSteps.length > 0 && (
-                <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                  {execSteps.map((step, i) => {
-                    const icon = step.status === "completed" ? "\u2713" : step.status === "failed" ? "\u2717" : "\u2026";
-                    const iconColor = step.status === "completed"
-                      ? "var(--status-succeeded)"
-                      : step.status === "failed"
-                      ? "var(--status-failed)"
-                      : "var(--text-muted)";
-                    const stepMs = step.completedAt
-                      ? Math.round((new Date(step.completedAt).getTime() - new Date(step.startedAt).getTime()) / 1000)
-                      : null;
-                    const stepTime = stepMs != null ? (stepMs >= 60 ? `${Math.floor(stepMs / 60)}m ${stepMs % 60}s` : `${stepMs}s`) : null;
-                    return (
-                      <div key={i} style={{ display: "flex", alignItems: "baseline", gap: 6, fontSize: 12 }}>
-                        <span style={{ color: "var(--text-muted)", fontFamily: "var(--font-mono)", fontSize: 11, width: 18, textAlign: "right", flexShrink: 0 }}>{i + 1}.</span>
-                        <span style={{ color: iconColor, fontSize: 11, flexShrink: 0 }}>{icon}</span>
-                        <span style={{ color: step.status === "failed" ? "var(--status-failed)" : "var(--text)" }}>{step.description}</span>
-                        {stepTime && <span style={{ color: "var(--text-muted)", fontFamily: "var(--font-mono)", fontSize: 11 }}>{stepTime}</span>}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              {/* Plan steps fallback when no execution record */}
-              {!execSteps && planSteps && planSteps.length > 0 && (
-                <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                  <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 2 }}>
-                    {stepCount}-step plan:
+              {/* Recommendation verdict + factors */}
+              {rec ? (
+                <>
+                  <div style={{
+                    fontSize: 10, fontFamily: "var(--font-mono)", fontWeight: 700, textTransform: "uppercase",
+                    letterSpacing: "0.08em", color: "var(--accent)", marginBottom: 6,
+                  }}>
+                    {rec.verdict === "proceed" ? "Proceed" : rec.verdict === "caution" ? "Proceed with Caution" : "Hold"}
                   </div>
-                  {planSteps.map((step, i) => (
-                    <div key={i} style={{ display: "flex", alignItems: "baseline", gap: 6, fontSize: 12 }}>
-                      <span style={{ color: "var(--text-muted)", fontFamily: "var(--font-mono)", fontSize: 11, width: 18, textAlign: "right", flexShrink: 0 }}>{i + 1}.</span>
-                      <span style={{ color: "var(--text)" }}>
-                        {step.action}{step.description ? ` \u2014 ${step.description}` : ""}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Failure detail */}
-              {deployment.status === "failed" && deployment.failureReason && !failedStep && (
-                <div style={{ marginTop: 8, fontSize: 12, color: "var(--status-failed)" }}>
-                  {deployment.failureReason}
-                </div>
+                  <div style={{ color: "var(--text)" }}>{rec.summary}</div>
+                  {rec.factors.length > 0 && (
+                    <ul style={{ margin: "8px 0 0", paddingLeft: 18, fontSize: 12, color: "var(--text-muted)" }}>
+                      {rec.factors.map((f, i) => <li key={i}>{f}</li>)}
+                    </ul>
+                  )}
+                </>
+              ) : assessmentEntry && !reasoning && (
+                <div style={{ color: "var(--text)" }}>{assessmentEntry.reasoning || assessmentEntry.decision}</div>
               )}
             </div>
           </div>
         );
       })()}
-
-      {/* Synth's Assessment — from recommendation or debrief fallback */}
-      {(deployment.recommendation || assessmentEntry) && (
-        <div className="canvas-section">
-          <h3 className="canvas-section-title">Synth&rsquo;s Assessment</h3>
-          <div style={{
-            padding: "14px 18px", borderRadius: 10, fontSize: 13, color: "var(--text)", lineHeight: 1.6,
-            background: "var(--accent-soft, rgba(45,91,240,0.06))", border: "1px solid var(--accent-border)",
-          }}>
-            {deployment.recommendation ? (
-              <>
-                <div style={{
-                  fontSize: 10, fontFamily: "var(--font-mono)", fontWeight: 700, textTransform: "uppercase",
-                  letterSpacing: "0.08em", color: "var(--accent)", marginBottom: 8,
-                }}>
-                  Recommendation: {deployment.recommendation.verdict === "proceed" ? "Proceed" : deployment.recommendation.verdict === "caution" ? "Proceed with Caution" : "Hold"}
-                </div>
-                <div style={{ color: "var(--text)" }}>{deployment.recommendation.summary}</div>
-                {deployment.recommendation.factors.length > 0 && (
-                  <ul style={{ margin: "8px 0 0", paddingLeft: 18, fontSize: 12, color: "var(--text-muted)" }}>
-                    {deployment.recommendation.factors.map((f, i) => <li key={i}>{f}</li>)}
-                  </ul>
-                )}
-              </>
-            ) : assessmentEntry && (
-              <>
-                <div style={{
-                  fontSize: 10, fontFamily: "var(--font-mono)", fontWeight: 700, textTransform: "uppercase",
-                  letterSpacing: "0.08em", color: "var(--accent)", marginBottom: 8,
-                }}>
-                  {assessmentEntry.decision}
-                </div>
-                {assessmentEntry.reasoning && (
-                  <div style={{ color: "var(--text)" }}>{assessmentEntry.reasoning}</div>
-                )}
-              </>
-            )}
-          </div>
-        </div>
-      )}
 
       {/* Executed Plan steps — prefer executionRecord, fall back to plan.steps, then debrief entries */}
       {(deployment.executionRecord || deployment.plan || executionEntries.length > 0) && (
@@ -674,22 +582,29 @@ function DeploymentDebriefDetail({ deploymentId, onBack, onNavigate }: { deploym
         </div>
       )}
 
-      {/* Envoy Notes */}
-      {envoyEntries.length > 0 && (
+      {/* Envoy Log — target system observations: probes, scans, diagnostics */}
+      {envoyLogEntries.length > 0 && (
         <div className="canvas-section">
-          <h3 className="canvas-section-title">Envoy Notes</h3>
-          <div style={{ padding: "12px 16px", borderRadius: 10, background: "var(--surface-alt)", border: "1px solid var(--border)" }}>
-            {envoyEntries.map((entry) => (
-              <div key={entry.id} style={{ display: "flex", gap: 10, padding: "4px 0" }}>
-                <span style={{ color: "var(--text-muted)", fontSize: 11, marginTop: 2, flexShrink: 0 }}>•</span>
-                <span style={{ fontSize: 13, color: "var(--text)", lineHeight: 1.5 }}>
-                  {entry.decision}
-                  {entry.reasoning && (
-                    <span style={{ color: "var(--text-muted)", fontSize: 12 }}> — {entry.reasoning}</span>
-                  )}
-                </span>
-              </div>
-            ))}
+          <h3 className="canvas-section-title">Envoy Log</h3>
+          <div style={{ borderRadius: 10, border: "1px solid var(--border)", background: "var(--surface)", overflow: "hidden" }}>
+            {envoyLogEntries.map((entry, i) => {
+              const isLast = i === envoyLogEntries.length - 1;
+              const ts = new Date(entry.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+              const typeLabel = entry.decisionType === "diagnostic-investigation" ? "diagnostic" : "probe";
+              const typeColor = entry.decisionType === "diagnostic-investigation" ? "var(--status-warning)" : "var(--text-muted)";
+              return (
+                <div key={entry.id} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "9px 14px", borderBottom: isLast ? "none" : "1px solid var(--border)" }}>
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--text-muted)", flexShrink: 0, marginTop: 2, minWidth: 64 }}>{ts}</span>
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: typeColor, flexShrink: 0, marginTop: 2, minWidth: 72 }}>{typeLabel}</span>
+                  <span style={{ fontSize: 12, color: "var(--text)", lineHeight: 1.5 }}>
+                    {entry.decision}
+                    {entry.reasoning && (
+                      <span style={{ color: "var(--text-muted)" }}> — {entry.reasoning}</span>
+                    )}
+                  </span>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
