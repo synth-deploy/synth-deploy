@@ -2,6 +2,7 @@ import type { ArtifactAnalysis, Artifact } from "@synth-deploy/core";
 import type { LlmClient, LlmResult } from "@synth-deploy/core";
 import type { DebriefWriter } from "@synth-deploy/core";
 import type { PatternStore, PatternMatch, DerivedAnalysis } from "./pattern-store.js";
+import { archiveFormat, unpackArchive, formatExtractedFiles } from "./archive-unpacker.js";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -18,258 +19,18 @@ export interface ArtifactInput {
 export interface AnalysisResult {
   analysis: ArtifactAnalysis;
   /** How the analysis was produced */
-  method: "deterministic" | "llm-enhanced" | "pattern-auto" | "pattern-suggest" | "fallback";
+  method: "llm" | "pattern-auto" | "pattern-suggest" | "unavailable";
   /** Patterns that were matched, if any */
   matchedPatterns?: PatternMatch[];
 }
 
-/**
- * Confidence tier — determines the analysis strategy.
- *
- *   high:   Highly structured artifacts (Dockerfile, Helm chart, package.json).
- *           Deterministic extraction yields reliable results.
- *   medium: Composite packages (zip, tarball) with recognizable patterns.
- *           Partial deterministic extraction, LLM for interpretation.
- *   low:    Opaque artifacts. Best-effort type detection, LLM-heavy.
- */
-export type ConfidenceTier = "high" | "medium" | "low";
-
 // ---------------------------------------------------------------------------
-// Deterministic extractors
+// Type detection
 // ---------------------------------------------------------------------------
 
-interface ExtractedData {
-  summary: string;
-  dependencies: string[];
-  configurationExpectations: Record<string, string>;
-  deploymentIntent?: string;
-  confidence: number;
-  tier: ConfidenceTier;
-}
-
 /**
- * Parse Dockerfile content to extract base image, ports, env vars, entrypoint.
- */
-function extractDockerfile(content: string): ExtractedData {
-  const lines = content.split("\n");
-  const baseImages: string[] = [];
-  const ports: string[] = [];
-  const envVars: Record<string, string> = {};
-  let entrypoint = "";
-  let cmd = "";
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-    const fromMatch = trimmed.match(/^FROM\s+(\S+)/i);
-    if (fromMatch) baseImages.push(fromMatch[1]);
-
-    const exposeMatch = trimmed.match(/^EXPOSE\s+(.+)/i);
-    if (exposeMatch) ports.push(...exposeMatch[1].split(/\s+/));
-
-    const envMatch = trimmed.match(/^ENV\s+(\S+)\s+(.*)/i);
-    if (envMatch) envVars[envMatch[1]] = envMatch[2];
-
-    // ENV KEY=VALUE format
-    const envEqMatch = trimmed.match(/^ENV\s+(\S+)=(\S*)/i);
-    if (envEqMatch && !envMatch) envVars[envEqMatch[1]] = envEqMatch[2];
-
-    const entrypointMatch = trimmed.match(/^ENTRYPOINT\s+(.+)/i);
-    if (entrypointMatch) entrypoint = entrypointMatch[1];
-
-    const cmdMatch = trimmed.match(/^CMD\s+(.+)/i);
-    if (cmdMatch) cmd = cmdMatch[1];
-  }
-
-  const dependencies = baseImages.map((img) => `base-image:${img}`);
-  const configExpectations: Record<string, string> = {};
-  for (const [k, v] of Object.entries(envVars)) {
-    configExpectations[k] = v || "(required, no default)";
-  }
-  if (ports.length > 0) {
-    configExpectations["EXPOSED_PORTS"] = ports.join(", ");
-  }
-
-  const parts: string[] = [];
-  if (baseImages.length > 0) parts.push(`Base: ${baseImages[baseImages.length - 1]}`);
-  if (ports.length > 0) parts.push(`Ports: ${ports.join(", ")}`);
-  if (entrypoint) parts.push(`Entrypoint: ${entrypoint}`);
-  else if (cmd) parts.push(`CMD: ${cmd}`);
-
-  return {
-    summary: `Container image. ${parts.join(". ")}.`,
-    dependencies,
-    configurationExpectations: configExpectations,
-    deploymentIntent: "Container deployment",
-    confidence: 0.85,
-    tier: "high",
-  };
-}
-
-/**
- * Parse Helm Chart.yaml content.
- */
-function extractHelmChart(content: string): ExtractedData {
-  const lines = content.split("\n");
-  const fields: Record<string, string> = {};
-
-  for (const line of lines) {
-    const match = line.match(/^(\w[\w.-]*)\s*:\s*(.+)/);
-    if (match) fields[match[1].trim()] = match[2].trim();
-  }
-
-  const name = fields["name"] || "unknown";
-  const version = fields["version"] || "unknown";
-  const appVersion = fields["appVersion"] || "";
-  const description = fields["description"] || "";
-
-  // Extract dependencies from the YAML (simplified — top-level only)
-  const deps: string[] = [];
-  let inDeps = false;
-  for (const line of lines) {
-    if (/^dependencies\s*:/i.test(line)) {
-      inDeps = true;
-      continue;
-    }
-    if (inDeps) {
-      if (/^\S/.test(line) && !/^\s*-/.test(line)) {
-        inDeps = false;
-        continue;
-      }
-      const depName = line.match(/name\s*:\s*(\S+)/);
-      if (depName) deps.push(`helm:${depName[1]}`);
-    }
-  }
-
-  const configExpectations: Record<string, string> = {};
-  if (appVersion) configExpectations["appVersion"] = appVersion;
-
-  return {
-    summary: `Helm chart "${name}" v${version}. ${description}`.trim(),
-    dependencies: deps,
-    configurationExpectations: configExpectations,
-    deploymentIntent: "Kubernetes Helm deployment",
-    confidence: 0.85,
-    tier: "high",
-  };
-}
-
-/**
- * Parse Helm values.yaml for configuration expectations.
- */
-function extractHelmValues(content: string): Record<string, string> {
-  const expectations: Record<string, string> = {};
-  const lines = content.split("\n");
-
-  for (const line of lines) {
-    const match = line.match(/^(\w[\w.-]*)\s*:\s*(.+)/);
-    if (match) {
-      const key = match[1].trim();
-      const value = match[2].trim();
-      if (value && !value.startsWith("#")) {
-        expectations[key] = value;
-      }
-    }
-  }
-
-  return expectations;
-}
-
-/**
- * Parse package.json content.
- */
-function extractPackageJson(content: string): ExtractedData {
-  let pkg: Record<string, unknown>;
-  try {
-    pkg = JSON.parse(content);
-  } catch {
-    return {
-      summary: "Node.js package (invalid JSON)",
-      dependencies: [],
-      configurationExpectations: {},
-      confidence: 0.3,
-      tier: "low",
-    };
-  }
-
-  const name = (pkg.name as string) || "unknown";
-  const version = (pkg.version as string) || "";
-  const scripts = (pkg.scripts as Record<string, string>) || {};
-  const deps = Object.keys((pkg.dependencies as Record<string, string>) || {});
-  const devDeps = Object.keys((pkg.devDependencies as Record<string, string>) || {});
-  const engines = (pkg.engines as Record<string, string>) || {};
-
-  const configExpectations: Record<string, string> = {};
-  for (const [engine, constraint] of Object.entries(engines)) {
-    configExpectations[engine] = constraint;
-  }
-
-  const scriptNames = Object.keys(scripts);
-  const hasStart = scriptNames.includes("start");
-  const hasBuild = scriptNames.includes("build");
-  const hasDeploy = scriptNames.includes("deploy");
-
-  let intent: string | undefined;
-  if (hasDeploy) intent = "Node.js application with deploy script";
-  else if (hasStart) intent = "Node.js application (startable)";
-  else if (hasBuild) intent = "Node.js package (buildable)";
-
-  const allDeps = [
-    ...deps.map((d) => `npm:${d}`),
-    ...devDeps.map((d) => `npm-dev:${d}`),
-  ];
-
-  const parts: string[] = [`"${name}"`];
-  if (version) parts[0] += ` v${version}`;
-  if (deps.length > 0) parts.push(`${deps.length} deps`);
-  if (scriptNames.length > 0) parts.push(`scripts: ${scriptNames.join(", ")}`);
-
-  return {
-    summary: `Node.js package ${parts.join(". ")}.`,
-    dependencies: allDeps,
-    configurationExpectations: configExpectations,
-    deploymentIntent: intent,
-    confidence: 0.9,
-    tier: "high",
-  };
-}
-
-/**
- * Parse Makefile content for targets and patterns.
- */
-function extractMakefile(content: string): ExtractedData {
-  const lines = content.split("\n");
-  const targets: string[] = [];
-  const variables: Record<string, string> = {};
-
-  for (const line of lines) {
-    const targetMatch = line.match(/^([a-zA-Z_][\w-]*)\s*:/);
-    if (targetMatch && !line.startsWith("\t")) {
-      targets.push(targetMatch[1]);
-    }
-
-    const varMatch = line.match(/^([A-Z_]+)\s*[?:]?=\s*(.*)$/);
-    if (varMatch) {
-      variables[varMatch[1]] = varMatch[2].trim() || "(configurable)";
-    }
-  }
-
-  const hasDeploy = targets.some((t) =>
-    ["deploy", "install", "release", "publish"].includes(t),
-  );
-
-  return {
-    summary: `Makefile with targets: ${targets.slice(0, 10).join(", ")}${targets.length > 10 ? ` (+${targets.length - 10} more)` : ""}.`,
-    dependencies: [],
-    configurationExpectations: variables,
-    deploymentIntent: hasDeploy ? "Makefile-driven deployment" : undefined,
-    confidence: 0.7,
-    tier: "medium",
-  };
-}
-
-/**
- * Detect artifact type from name, metadata, and content.
- * Exported for use in intake handlers before the full analyzer runs.
+ * Detect artifact type from name and metadata.
+ * Used as a hint for the LLM and for intake routing — not for analysis.
  */
 export function detectArtifactType(artifact: ArtifactInput): string {
   if (artifact.type) return artifact.type;
@@ -285,9 +46,11 @@ export function detectArtifactType(artifact: ArtifactInput): string {
   if (name === "package.json") return "node-package";
   if (name === "makefile" || name.endsWith("/makefile")) return "makefile";
   if (name.endsWith(".tar.gz") || name.endsWith(".tgz")) return "tarball";
+  if (name.endsWith(".tar")) return "tarball";
   if (name.endsWith(".zip")) return "zip";
+  if (name.endsWith(".nupkg")) return "nupkg";
   if (name.endsWith(".jar") || name.endsWith(".war") || name.endsWith(".ear")) return "java-archive";
-  if (name.endsWith(".whl") || name.endsWith(".tar.gz") && meta["python-package"]) return "python-package";
+  if (name.endsWith(".whl")) return "python-package";
   if (name.endsWith(".deb")) return "debian-package";
   if (name.endsWith(".rpm")) return "rpm-package";
   if (name.endsWith(".yaml") || name.endsWith(".yml")) return "yaml";
@@ -297,103 +60,11 @@ export function detectArtifactType(artifact: ArtifactInput): string {
   return "unknown";
 }
 
-/**
- * Run deterministic extraction based on artifact type.
- */
-function extractDeterministic(artifact: ArtifactInput, artifactType: string): ExtractedData | null {
-  const text = artifact.content?.toString("utf-8");
-  if (!text) return null;
-
-  switch (artifactType) {
-    case "dockerfile":
-      return extractDockerfile(text);
-    case "helm-chart":
-      return extractHelmChart(text);
-    case "node-package":
-      return extractPackageJson(text);
-    case "makefile":
-      return extractMakefile(text);
-    case "helm-values": {
-      const expectations = extractHelmValues(text);
-      return {
-        summary: "Helm values configuration file.",
-        dependencies: [],
-        configurationExpectations: expectations,
-        deploymentIntent: "Kubernetes Helm deployment values",
-        confidence: 0.75,
-        tier: "high",
-      };
-    }
-    default:
-      return null;
-  }
-}
-
-/**
- * Analyze composite packages (zip, tarball) — list patterns.
- */
-function extractComposite(artifact: ArtifactInput, artifactType: string): ExtractedData | null {
-  if (artifactType !== "zip" && artifactType !== "tarball") return null;
-
-  // Without content we can only report metadata
-  const meta = artifact.metadata || {};
-  const entries = meta["entries"]
-    ? meta["entries"].split(",").map((e) => e.trim())
-    : [];
-  const size = meta["size"] || "unknown";
-
-  const hasDockerfile = entries.some((e) => e.toLowerCase().includes("dockerfile"));
-  const hasMakefile = entries.some((e) => e.toLowerCase().includes("makefile"));
-  const hasPackageJson = entries.some((e) => e.toLowerCase().includes("package.json"));
-  const hasScripts = entries.some((e) => e.endsWith(".sh") || e.endsWith(".bash"));
-
-  const patterns: string[] = [];
-  if (hasDockerfile) patterns.push("Dockerfile");
-  if (hasMakefile) patterns.push("Makefile");
-  if (hasPackageJson) patterns.push("package.json");
-  if (hasScripts) patterns.push("shell scripts");
-
-  const intent = hasDockerfile
-    ? "Container deployment (Dockerfile found)"
-    : hasMakefile
-      ? "Makefile-driven deployment"
-      : hasPackageJson
-        ? "Node.js deployment"
-        : undefined;
-
-  return {
-    summary: `${artifactType === "zip" ? "ZIP" : "Tarball"} archive (${size}). Contains: ${
-      patterns.length > 0 ? patterns.join(", ") : `${entries.length} entries`
-    }.`,
-    dependencies: [],
-    configurationExpectations: {},
-    deploymentIntent: intent,
-    confidence: patterns.length > 0 ? 0.6 : 0.4,
-    tier: "medium",
-  };
-}
-
-/**
- * Opaque artifact fallback — minimal type detection.
- */
-function extractOpaque(artifact: ArtifactInput, artifactType: string): ExtractedData {
-  const meta = artifact.metadata || {};
-  const size = meta["size"] || (artifact.content ? `${artifact.content.length} bytes` : "unknown");
-
-  return {
-    summary: `${artifactType !== "unknown" ? artifactType : "Unknown"} artifact "${artifact.name}" (${size}). Requires manual review for accurate analysis.`,
-    dependencies: [],
-    configurationExpectations: {},
-    confidence: 0.2,
-    tier: "low",
-  };
-}
-
 // ---------------------------------------------------------------------------
 // LLM reasoning
 // ---------------------------------------------------------------------------
 
-const ANALYSIS_SYSTEM_PROMPT = `You are a deployment artifact analyzer. Given extracted data about a deployment artifact, produce a structured analysis.
+const ANALYSIS_SYSTEM_PROMPT = `You are a deployment artifact analyzer. Given information about a deployment artifact, produce a structured analysis.
 
 Your response must be valid JSON with these fields:
 - "summary": A plain-language description (1-3 sentences) of what this artifact is and how it should be deployed.
@@ -404,15 +75,17 @@ Your response must be valid JSON with these fields:
 
 Focus on actionable deployment intelligence. Be specific about ports, environment variables, and deployment prerequisites.`;
 
-async function enhanceWithLlm(
+async function analyzeWithLlm(
   llm: LlmClient,
   artifact: ArtifactInput,
   artifactType: string,
-  extracted: ExtractedData | null,
-): Promise<Partial<ExtractedData> | null> {
-  const contentPreview = artifact.content
-    ? artifact.content.toString("utf-8").slice(0, 4000)
-    : "(no content available)";
+  extractedArchiveContent?: string,
+): Promise<ArtifactAnalysis | null> {
+  const contentSection = extractedArchiveContent
+    ? `Archive contents:\n\n${extractedArchiveContent}`
+    : artifact.content
+      ? `Content:\n\`\`\`\n${artifact.content.toString("utf-8").slice(0, 4000)}\n\`\`\``
+      : "(no content available)";
 
   const prompt = `Analyze this deployment artifact.
 
@@ -421,19 +94,9 @@ Type: ${artifactType}
 Source: ${artifact.source}
 Metadata: ${JSON.stringify(artifact.metadata || {})}
 
-${extracted ? `Deterministic extraction found:
-Summary: ${extracted.summary}
-Dependencies: ${JSON.stringify(extracted.dependencies)}
-Configuration: ${JSON.stringify(extracted.configurationExpectations)}
-Intent: ${extracted.deploymentIntent || "unknown"}
-` : "No deterministic extraction was possible."}
+${contentSection}
 
-Content preview:
-\`\`\`
-${contentPreview}
-\`\`\`
-
-Produce a JSON analysis that enhances or corrects the extracted data.`;
+Produce a JSON analysis of this artifact for deployment planning purposes.`;
 
   const result: LlmResult = await llm.reason({
     prompt,
@@ -442,12 +105,11 @@ Produce a JSON analysis that enhances or corrects the extracted data.`;
   });
 
   if (!result.ok) {
-    console.warn(`[artifact-analyzer] LLM enhancement failed for "${artifact.name}": ${result.reason}`);
+    console.warn(`[artifact-analyzer] LLM analysis failed for "${artifact.name}": ${result.reason}`);
     return null;
   }
 
   try {
-    // Extract JSON from the response (may be wrapped in markdown code blocks)
     const jsonMatch = result.text.match(/\{[\s\S]*\}/);
     if (!jsonMatch) return null;
 
@@ -460,11 +122,11 @@ Produce a JSON analysis that enhances or corrects the extracted data.`;
     };
 
     return {
-      summary: parsed.summary,
-      dependencies: parsed.dependencies,
-      configurationExpectations: parsed.configurationExpectations,
+      summary: parsed.summary ?? `Analysis of "${artifact.name}"`,
+      dependencies: parsed.dependencies ?? [],
+      configurationExpectations: parsed.configurationExpectations ?? {},
       deploymentIntent: parsed.deploymentIntent,
-      confidence: typeof parsed.confidence === "number" ? parsed.confidence : undefined,
+      confidence: typeof parsed.confidence === "number" ? parsed.confidence : 0.5,
     };
   } catch {
     return null;
@@ -472,31 +134,8 @@ Produce a JSON analysis that enhances or corrects the extracted data.`;
 }
 
 // ---------------------------------------------------------------------------
-// Merge helpers
+// Pattern overlay
 // ---------------------------------------------------------------------------
-
-function mergeAnalysis(
-  base: ExtractedData,
-  llmEnhancement: Partial<ExtractedData> | null,
-): ExtractedData {
-  if (!llmEnhancement) return base;
-
-  return {
-    summary: llmEnhancement.summary || base.summary,
-    dependencies: llmEnhancement.dependencies && llmEnhancement.dependencies.length > 0
-      ? deduplicateStrings([...base.dependencies, ...llmEnhancement.dependencies])
-      : base.dependencies,
-    configurationExpectations: {
-      ...base.configurationExpectations,
-      ...(llmEnhancement.configurationExpectations || {}),
-    },
-    deploymentIntent: llmEnhancement.deploymentIntent || base.deploymentIntent,
-    confidence: llmEnhancement.confidence !== undefined
-      ? Math.max(base.confidence, llmEnhancement.confidence)
-      : base.confidence,
-    tier: base.tier,
-  };
-}
 
 function applyPatternOverrides(
   analysis: ArtifactAnalysis,
@@ -515,10 +154,6 @@ function applyPatternOverrides(
   };
 }
 
-function deduplicateStrings(arr: string[]): string[] {
-  return [...new Set(arr)];
-}
-
 // ---------------------------------------------------------------------------
 // ArtifactAnalyzer
 // ---------------------------------------------------------------------------
@@ -534,15 +169,12 @@ export interface ArtifactAnalyzerDeps {
  *
  * Analysis pipeline:
  *   1. Check pattern store for matching corrections (if available)
- *      - Auto-apply if >= 2 corrections and confidence >= 0.7
- *      - Suggest if 1 correction or confidence < 0.7
- *   2. Run deterministic extraction based on artifact type
- *   3. Enhance with LLM reasoning (using extracted data as context)
- *   4. Record debrief entry with decision trail
- *
- * The deterministic extraction always runs first. The LLM sees extracted
- * data and can enhance, correct, or fill gaps. This ensures the analysis
- * is grounded in concrete artifact data, not hallucinated.
+ *      - Auto-apply if >= 2 corrections and confidence >= 0.7 (no LLM call)
+ *      - Suggest if 1 correction or confidence < 0.7 (apply as overlay after LLM)
+ *   2. If LLM is unavailable, return an "unavailable" result — no silent fallback
+ *   3. Run LLM analysis on the raw artifact content
+ *   4. Apply pattern-suggest overlay if applicable
+ *   5. Record debrief entry with decision trail
  */
 export class ArtifactAnalyzer {
   private readonly _llm: LlmClient;
@@ -578,41 +210,25 @@ export class ArtifactAnalyzer {
         const autoMatch = matchedPatterns.find((m) => m.mode === "auto");
         if (autoMatch) {
           reasoningTrail.push(
-            `Pattern match: "${autoMatch.pattern.namePattern}" (${autoMatch.pattern.corrections.length} corrections, confidence ${autoMatch.pattern.confidence}). Auto-applying.`,
+            `Pattern match: "${autoMatch.pattern.namePattern}" (${autoMatch.pattern.corrections.length} corrections, confidence ${autoMatch.pattern.confidence}). Auto-applying without LLM call.`,
           );
 
-          // Still run deterministic extraction as a base
-          const extracted =
-            extractDeterministic(artifact, artifactType) ||
-            extractComposite(artifact, artifactType) ||
-            extractOpaque(artifact, artifactType);
-
-          const baseAnalysis: ArtifactAnalysis = {
-            summary: extracted.summary,
-            dependencies: extracted.dependencies,
-            configurationExpectations: extracted.configurationExpectations,
-            deploymentIntent: extracted.deploymentIntent,
-            confidence: Math.max(extracted.confidence, autoMatch.pattern.confidence),
+          const analysis: ArtifactAnalysis = {
+            summary: autoMatch.pattern.derivedAnalysis.summary ?? `Pattern-matched artifact "${artifact.name}"`,
+            dependencies: autoMatch.pattern.derivedAnalysis.dependencies ?? [],
+            configurationExpectations: autoMatch.pattern.derivedAnalysis.configurationExpectations ?? {},
+            deploymentIntent: autoMatch.pattern.derivedAnalysis.deploymentIntent,
+            confidence: autoMatch.pattern.confidence,
           };
-
-          const finalAnalysis = applyPatternOverrides(
-            baseAnalysis,
-            autoMatch.pattern.derivedAnalysis,
-          );
 
           this._patternStore.recordApplication(autoMatch.pattern.id);
-          reasoningTrail.push("Pattern overrides applied to deterministic base.");
+          reasoningTrail.push("Pattern derived analysis applied directly.");
 
-          this._recordDebrief(artifact, artifactType, finalAnalysis, "pattern-auto", reasoningTrail);
+          this._recordDebrief(artifact, artifactType, analysis, "pattern-auto", reasoningTrail);
 
-          return {
-            analysis: finalAnalysis,
-            method: "pattern-auto",
-            matchedPatterns,
-          };
+          return { analysis, method: "pattern-auto", matchedPatterns };
         }
 
-        // Suggest mode — note the suggestion but continue with normal analysis
         reasoningTrail.push(
           `Pattern suggestion available: "${matchedPatterns[0].pattern.namePattern}" ` +
           `(${matchedPatterns[0].pattern.corrections.length} corrections, ` +
@@ -622,68 +238,63 @@ export class ArtifactAnalyzer {
       }
     }
 
-    // --- Step 2: Deterministic extraction ---
-    let extracted = extractDeterministic(artifact, artifactType);
-
-    if (extracted) {
-      reasoningTrail.push(
-        `Deterministic extraction succeeded (tier: ${extracted.tier}, confidence: ${extracted.confidence}).`,
-      );
-    } else {
-      // Try composite
-      extracted = extractComposite(artifact, artifactType);
-      if (extracted) {
+    // --- Step 2: Unpack archive if applicable ---
+    let extractedArchiveContent: string | undefined;
+    if (artifact.content) {
+      const format = archiveFormat(artifactType, artifact.name);
+      if (format) {
+        const unpacked = await unpackArchive(artifact.content, format);
+        extractedArchiveContent = formatExtractedFiles(unpacked);
         reasoningTrail.push(
-          `Composite pattern extraction (tier: ${extracted.tier}, confidence: ${extracted.confidence}).`,
-        );
-      } else {
-        // Opaque fallback
-        extracted = extractOpaque(artifact, artifactType);
-        reasoningTrail.push(
-          `Opaque artifact — minimal type detection only (confidence: ${extracted.confidence}).`,
+          `Archive unpacked (${format}): ${unpacked.files.length} text files extracted, ${unpacked.skipped} skipped.`,
         );
       }
     }
 
-    // --- Step 3: LLM enhancement ---
-    let method: AnalysisResult["method"] = "deterministic";
-    let finalExtracted = extracted;
+    // --- Step 3: Require LLM ---
 
-    if (this._llm.isAvailable()) {
-      reasoningTrail.push("LLM available — enhancing analysis.");
-      const enhancement = await enhanceWithLlm(this._llm, artifact, artifactType, extracted);
-      if (enhancement) {
-        finalExtracted = mergeAnalysis(extracted, enhancement);
-        method = "llm-enhanced";
-        reasoningTrail.push(
-          `LLM enhancement merged. Confidence: ${extracted.confidence} -> ${finalExtracted.confidence}.`,
-        );
-      } else {
-        reasoningTrail.push("LLM enhancement returned no usable result — using deterministic analysis.");
-      }
-    } else {
-      reasoningTrail.push("LLM not available — using deterministic analysis only.");
+    if (!this._llm.isAvailable()) {
+      const analysis: ArtifactAnalysis = {
+        summary: `Cannot analyze "${artifact.name}" — LLM is required for artifact analysis.`,
+        dependencies: [],
+        configurationExpectations: {},
+        confidence: 0,
+      };
+
+      reasoningTrail.push("LLM not available — analysis cannot proceed.");
+      this._recordDebrief(artifact, artifactType, analysis, "unavailable", reasoningTrail);
+
+      return { analysis, method: "unavailable" };
     }
 
-    let analysis: ArtifactAnalysis = {
-      summary: finalExtracted.summary,
-      dependencies: finalExtracted.dependencies,
-      configurationExpectations: finalExtracted.configurationExpectations,
-      deploymentIntent: finalExtracted.deploymentIntent,
-      confidence: finalExtracted.confidence,
-    };
+    // --- Step 4: LLM analysis ---
+    reasoningTrail.push("LLM available — analyzing artifact.");
+    const llmAnalysis = await analyzeWithLlm(this._llm, artifact, artifactType, extractedArchiveContent);
 
-    // Apply pattern suggestions as overlay if available
+    if (!llmAnalysis) {
+      const analysis: ArtifactAnalysis = {
+        summary: `Analysis of "${artifact.name}" failed — LLM returned no usable result.`,
+        dependencies: [],
+        configurationExpectations: {},
+        confidence: 0,
+      };
+
+      reasoningTrail.push("LLM returned no usable result.");
+      this._recordDebrief(artifact, artifactType, analysis, "unavailable", reasoningTrail);
+
+      return { analysis, method: "unavailable" };
+    }
+
+    reasoningTrail.push(`LLM analysis complete. Confidence: ${llmAnalysis.confidence}.`);
+
+    let analysis = llmAnalysis;
+    let method: AnalysisResult["method"] = "llm";
+
+    // --- Step 4: Apply pattern-suggest overlay ---
     if (matchedPatterns.length > 0) {
-      const suggestion = matchedPatterns[0];
-      analysis = applyPatternOverrides(analysis, suggestion.pattern.derivedAnalysis);
+      analysis = applyPatternOverrides(analysis, matchedPatterns[0].pattern.derivedAnalysis);
       method = "pattern-suggest";
-      reasoningTrail.push("Pattern suggestion applied as overlay on analysis.");
-    }
-
-    // If no extraction worked and LLM failed, mark as fallback
-    if (extracted.tier === "low" && method === "deterministic") {
-      method = "fallback";
+      reasoningTrail.push("Pattern suggestion applied as overlay on LLM analysis.");
     }
 
     this._recordDebrief(artifact, artifactType, analysis, method, reasoningTrail);
@@ -697,8 +308,7 @@ export class ArtifactAnalyzer {
 
   /**
    * Re-analyze an artifact using its stored annotations as correction context.
-   * Calls the LLM with the existing analysis + user corrections and returns
-   * a revised analysis. Returns null if LLM is unavailable.
+   * Returns null if LLM is unavailable.
    */
   async reanalyzeWithAnnotations(artifact: Artifact): Promise<ArtifactAnalysis | null> {
     if (!this._llm.isAvailable() || artifact.annotations.length === 0) return null;
@@ -760,7 +370,6 @@ Produce a JSON analysis that incorporates all user corrections. Raise confidence
         agent: "command",
         decisionType: "artifact-analysis",
         decision: `Re-analyzed "${artifact.name}" with ${artifact.annotations.length} user correction(s). Confidence: ${revised.confidence}.`,
-        // reasoning = actual LLM response text; context carries the prompt for full auditability
         reasoning: result.text,
         context: {
           artifactName: artifact.name,
@@ -823,9 +432,6 @@ Produce a JSON analysis that incorporates all user corrections. Raise confidence
 // Factory
 // ---------------------------------------------------------------------------
 
-/**
- * Create an ArtifactAnalyzer wired to the given dependencies.
- */
 export function createArtifactAnalyzer(deps: ArtifactAnalyzerDeps): ArtifactAnalyzer {
   return new ArtifactAnalyzer(deps);
 }
