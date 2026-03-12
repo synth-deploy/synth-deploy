@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { getRecentDebrief, getDeployment, listDeployments, listPartitions, listArtifacts, listEnvironments, getWhatsNew, requestRollbackPlan, executeRollback } from "../../api.js";
+import { getRecentDebrief, getDeployment, listDeployments, listPartitions, listArtifacts, listEnvironments, getWhatsNew, requestRollbackPlan, executeRollback, retryDeployment } from "../../api.js";
 import type { WhatsNewResult } from "../../api.js";
 import type { DebriefEntry, Partition, Deployment, Artifact, Environment, DecisionType } from "../../types.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
@@ -59,7 +59,7 @@ function statusLabel(status: string): string {
 // ---------------------------------------------------------------------------
 // Deployment detail sub-view for debrief drill-in
 // ---------------------------------------------------------------------------
-function DeploymentDebriefDetail({ deploymentId, onBack }: { deploymentId: string; onBack: () => void }) {
+function DeploymentDebriefDetail({ deploymentId, onBack, onNavigate }: { deploymentId: string; onBack: () => void; onNavigate: (id: string) => void }) {
   const [deployment, setDeployment] = useState<Deployment | null>(null);
   const [debrief, setDebrief] = useState<DebriefEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -67,9 +67,12 @@ function DeploymentDebriefDetail({ deploymentId, onBack }: { deploymentId: strin
   const [rollbackRequesting, setRollbackRequesting] = useState(false);
   const [rollbackExecuting, setRollbackExecuting] = useState(false);
   const [rollbackError, setRollbackError] = useState<string | null>(null);
+  const [retrying, setRetrying] = useState(false);
+  const [retryError, setRetryError] = useState<string | null>(null);
   const { data: artifacts } = useQuery<Artifact[]>("list:artifacts", listArtifacts);
   const { data: environments } = useQuery<Environment[]>("list:environments", listEnvironments);
   const { data: partitions } = useQuery<Partition[]>("list:partitions", listPartitions);
+  const { data: allDeployments } = useQuery<Deployment[]>("list:deployments", listDeployments);
   const { pushPanel } = useCanvas();
 
   useEffect(() => {
@@ -108,6 +111,20 @@ function DeploymentDebriefDetail({ deploymentId, onBack }: { deploymentId: strin
     }
   }
 
+  async function handleRetry() {
+    if (!deployment) return;
+    setRetrying(true);
+    setRetryError(null);
+    try {
+      const { deployment: newDep } = await retryDeployment(deployment.id);
+      onNavigate(newDep.id);
+    } catch (err) {
+      setRetryError(err instanceof Error ? err.message : "Failed to retry deployment");
+    } finally {
+      setRetrying(false);
+    }
+  }
+
   useEffect(() => {
     getWhatsNew(deploymentId).then(setWhatsNew).catch(() => {});
   }, [deploymentId]);
@@ -115,6 +132,7 @@ function DeploymentDebriefDetail({ deploymentId, onBack }: { deploymentId: strin
   if (loading) return <div className="loading">Loading deployment detail...</div>;
   if (!deployment) return <div className="error-msg">Deployment not found</div>;
 
+  const safeAllDeployments = allDeployments ?? [];
   const artName = (artifacts ?? []).find((a) => a.id === deployment.artifactId)?.name ?? deployment.artifactId.slice(0, 8);
   const envName = (environments ?? []).find((e) => e.id === deployment.environmentId)?.name ?? deployment.environmentId?.slice(0, 8) ?? "—";
   const partName = deployment.partitionId
@@ -149,8 +167,84 @@ function DeploymentDebriefDetail({ deploymentId, onBack }: { deploymentId: strin
     ? (duration >= 60 ? `${Math.floor(duration / 60)}m ${duration % 60}s` : `${duration}s`)
     : "—";
 
+  const isFinished = (["succeeded", "failed", "rolled_back"] as string[]).includes(deployment.status);
+
+  // Attempt chain: find previous (retryOf) and next (retriedBy) deployments
+  const previousAttempt = deployment.retryOf
+    ? safeAllDeployments.find((d) => d.id === deployment.retryOf) ?? null
+    : null;
+  const retriedByDep = safeAllDeployments.find((d) => d.retryOf === deployment.id) ?? null;
+
+  // Calculate attempt number by following retryOf chain backwards
+  let attemptNumber: number | null = null;
+  if (deployment.retryOf || retriedByDep) {
+    let count = 1;
+    let currentId: string | undefined = deployment.retryOf;
+    while (currentId) {
+      count++;
+      const prev = safeAllDeployments.find((d) => d.id === currentId);
+      currentId = prev?.retryOf;
+    }
+    attemptNumber = count;
+  }
+
+  // Helper to describe a deployment for attempt chain links
+  function attemptLabel(dep: Deployment): string {
+    const aName = (artifacts ?? []).find((a) => a.id === dep.artifactId)?.name ?? dep.artifactId.slice(0, 8);
+    const eName = (environments ?? []).find((e) => e.id === dep.environmentId)?.name ?? dep.environmentId?.slice(0, 8) ?? "—";
+    return `${aName} ${dep.version} → ${eName}`;
+  }
+
   return (
     <div>
+      {/* Attempt chain banner */}
+      {previousAttempt && (
+        <div style={{
+          marginBottom: 12,
+          padding: "10px 14px",
+          borderRadius: 8,
+          background: "var(--surface)",
+          border: "1px solid var(--border)",
+          fontSize: 12,
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+        }}>
+          <span style={{ color: "var(--text-muted)" }}>Retry of</span>
+          <span style={{ fontFamily: "var(--font-mono)", color: "var(--text)" }}>{attemptLabel(previousAttempt)}</span>
+          <span style={{ color: "var(--text-muted)" }}> — </span>
+          <span
+            style={{ color: "var(--accent)", cursor: "pointer", fontWeight: 500 }}
+            onClick={() => onNavigate(previousAttempt.id)}
+          >
+            View previous attempt
+          </span>
+        </div>
+      )}
+      {retriedByDep && (
+        <div style={{
+          marginBottom: 12,
+          padding: "10px 14px",
+          borderRadius: 8,
+          background: "var(--surface)",
+          border: "1px solid var(--border)",
+          fontSize: 12,
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+        }}>
+          <span style={{ color: "var(--text-muted)" }}>Retried as</span>
+          <span style={{ fontFamily: "var(--font-mono)", color: "var(--text)" }}>{attemptLabel(retriedByDep)}</span>
+          <span style={{ color: "var(--text-muted)" }}> — </span>
+          <span
+            style={{ color: "var(--accent)", cursor: "pointer", fontWeight: 500 }}
+            onClick={() => onNavigate(retriedByDep.id)}
+          >
+            View next attempt
+          </span>
+        </div>
+      )}
+
       {/* Breadcrumb */}
       <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 24, flexWrap: "wrap" }}>
         <span
@@ -194,13 +288,43 @@ function DeploymentDebriefDetail({ deploymentId, onBack }: { deploymentId: strin
             <span style={{ fontFamily: "var(--font-mono)", fontSize: 16, fontWeight: 400, color: "var(--text-muted)" }}>
               {deployment.version}
             </span>
+            {attemptNumber != null && (
+              <span style={{
+                marginLeft: 8,
+                padding: "2px 8px",
+                borderRadius: 4,
+                fontSize: 11,
+                background: "color-mix(in srgb, var(--text) 6%, transparent)",
+                color: "var(--text-muted)",
+                fontFamily: "monospace",
+                border: "1px solid var(--border)",
+                verticalAlign: "middle",
+              }}>
+                Attempt #{attemptNumber}
+              </span>
+            )}
           </h1>
           <div style={{ fontSize: 13, color: "var(--text-muted)" }}>
             → {envName}{partName ? ` · ${partName}` : ""}
           </div>
         </div>
-        <div className={`v2-deploy-status-pill v2-pill-${deployment.status}`}>
-          {statusLabel(deployment.status)}
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {retryError && (
+            <span style={{ fontSize: 12, color: "var(--status-failed)" }}>{retryError}</span>
+          )}
+          {isFinished && (
+            <button
+              className="btn-secondary"
+              style={{ fontSize: 12, padding: "4px 12px" }}
+              disabled={retrying}
+              onClick={handleRetry}
+            >
+              {retrying ? "Retrying…" : "Retry Deployment"}
+            </button>
+          )}
+          <div className={`v2-deploy-status-pill v2-pill-${deployment.status}`}>
+            {statusLabel(deployment.status)}
+          </div>
         </div>
       </div>
 
@@ -255,6 +379,146 @@ function DeploymentDebriefDetail({ deploymentId, onBack }: { deploymentId: strin
           </div>
         ))}
       </div>
+
+      {/* ── Deployment Summary ── narrative quick-read ──────────────── */}
+      {(() => {
+        // Outcome line
+        const outcomeStatus = deployment.status;
+        const failedStepIndex = deployment.executionRecord?.steps.findIndex((s) => s.status === "failed") ?? -1;
+        const failedStep = failedStepIndex >= 0 ? deployment.executionRecord!.steps[failedStepIndex] : null;
+        let outcomeLine: string;
+        if (outcomeStatus === "succeeded") {
+          outcomeLine = `Deployment succeeded${durationLabel !== "—" ? ` in ${durationLabel}` : ""}`;
+        } else if (outcomeStatus === "failed") {
+          const reason = failedStep
+            ? `at step ${failedStepIndex + 1}: ${failedStep.error || failedStep.description}`
+            : deployment.failureReason || "unknown error";
+          outcomeLine = `Deployment failed ${reason}`;
+        } else if (outcomeStatus === "rolled_back") {
+          outcomeLine = `Deployment rolled back${deployment.failureReason ? ` — ${deployment.failureReason}` : ""}`;
+        } else {
+          outcomeLine = `Deployment ${statusLabel(outcomeStatus).toLowerCase()}`;
+        }
+
+        // LLM reasoning (strip dry-run suffix)
+        const rawReasoning = deployment.plan?.reasoning ?? "";
+        const reasoning = rawReasoning.replace(/\s*\[Dry-run validated[^\]]*\]\s*$/i, "").trim();
+
+        // Environment probes from debrief
+        const probeEntries = debrief.filter(
+          (e) => e.decisionType === "environment-probe" || e.decisionType === "environment-scan",
+        );
+
+        // Execution steps — prefer executionRecord, fall back to plan steps
+        const execSteps = deployment.executionRecord?.steps ?? null;
+        const planSteps = deployment.plan?.steps ?? null;
+        const stepCount = execSteps?.length ?? planSteps?.length ?? 0;
+
+        return (
+          <div className="canvas-section">
+            <h3 className="canvas-section-title">Summary</h3>
+            <div style={{
+              padding: "14px 18px",
+              borderRadius: 10,
+              background: "var(--surface)",
+              border: "1px solid var(--border)",
+              fontSize: 13,
+              lineHeight: 1.6,
+              color: "var(--text)",
+            }}>
+              {/* Outcome */}
+              <div style={{
+                fontSize: 14,
+                fontWeight: 600,
+                color: statusColor,
+                marginBottom: probeEntries.length > 0 || reasoning || stepCount > 0 ? 12 : 0,
+              }}>
+                {outcomeLine}
+              </div>
+
+              {/* Environment probes */}
+              {probeEntries.length > 0 && (
+                <div style={{ marginBottom: reasoning || stepCount > 0 ? 10 : 0 }}>
+                  <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                    Synth probed the target system{probeEntries.length > 1 ? ` (${probeEntries.length} checks)` : ""}
+                    {probeEntries.length <= 3
+                      ? `: ${probeEntries.map((p) => {
+                          const cmd = p.context.command as string | undefined;
+                          const preview = p.context.outputPreview as string | undefined;
+                          if (cmd) return cmd;
+                          if (preview) return preview.slice(0, 80);
+                          return p.decision;
+                        }).join(", ")}`
+                      : ` and observed: ${probeEntries.map((p) => p.decision).slice(0, 3).join("; ")}${probeEntries.length > 3 ? "..." : ""}`
+                    }
+                  </span>
+                </div>
+              )}
+
+              {/* LLM reasoning */}
+              {reasoning && (
+                <div style={{
+                  fontSize: 13,
+                  color: "var(--text)",
+                  marginBottom: stepCount > 0 ? 12 : 0,
+                }}>
+                  {reasoning}
+                </div>
+              )}
+
+              {/* Execution steps — compact numbered list */}
+              {execSteps && execSteps.length > 0 && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                  {execSteps.map((step, i) => {
+                    const icon = step.status === "completed" ? "\u2713" : step.status === "failed" ? "\u2717" : "\u2026";
+                    const iconColor = step.status === "completed"
+                      ? "var(--status-succeeded)"
+                      : step.status === "failed"
+                      ? "var(--status-failed)"
+                      : "var(--text-muted)";
+                    const stepMs = step.completedAt
+                      ? Math.round((new Date(step.completedAt).getTime() - new Date(step.startedAt).getTime()) / 1000)
+                      : null;
+                    const stepTime = stepMs != null ? (stepMs >= 60 ? `${Math.floor(stepMs / 60)}m ${stepMs % 60}s` : `${stepMs}s`) : null;
+                    return (
+                      <div key={i} style={{ display: "flex", alignItems: "baseline", gap: 6, fontSize: 12 }}>
+                        <span style={{ color: "var(--text-muted)", fontFamily: "var(--font-mono)", fontSize: 11, width: 18, textAlign: "right", flexShrink: 0 }}>{i + 1}.</span>
+                        <span style={{ color: iconColor, fontSize: 11, flexShrink: 0 }}>{icon}</span>
+                        <span style={{ color: step.status === "failed" ? "var(--status-failed)" : "var(--text)" }}>{step.description}</span>
+                        {stepTime && <span style={{ color: "var(--text-muted)", fontFamily: "var(--font-mono)", fontSize: 11 }}>{stepTime}</span>}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Plan steps fallback when no execution record */}
+              {!execSteps && planSteps && planSteps.length > 0 && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                  <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 2 }}>
+                    {stepCount}-step plan:
+                  </div>
+                  {planSteps.map((step, i) => (
+                    <div key={i} style={{ display: "flex", alignItems: "baseline", gap: 6, fontSize: 12 }}>
+                      <span style={{ color: "var(--text-muted)", fontFamily: "var(--font-mono)", fontSize: 11, width: 18, textAlign: "right", flexShrink: 0 }}>{i + 1}.</span>
+                      <span style={{ color: "var(--text)" }}>
+                        {step.action}{step.description ? ` \u2014 ${step.description}` : ""}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Failure detail */}
+              {deployment.status === "failed" && deployment.failureReason && !failedStep && (
+                <div style={{ marginTop: 8, fontSize: 12, color: "var(--status-failed)" }}>
+                  {deployment.failureReason}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Synth's Assessment — from recommendation or debrief fallback */}
       {(deployment.recommendation || assessmentEntry) && (
@@ -708,6 +972,7 @@ export default function DebriefPanel({ title, filterPartitionId, filterDecisionT
             <DeploymentDebriefDetail
               deploymentId={selectedDeploymentId}
               onBack={() => setSelectedDeploymentId(null)}
+              onNavigate={(id) => setSelectedDeploymentId(id)}
             />
           </div>
         )}

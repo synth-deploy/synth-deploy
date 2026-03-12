@@ -21,3 +21,4 @@ coverage/
 
 # Envoy runtime data
 .envoy/deployments/
+.envoy/logs/

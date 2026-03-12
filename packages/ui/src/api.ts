@@ -355,6 +355,12 @@ export async function executeRollback(
   return fetchJson(`/api/deployments/${id}/execute-rollback`, { method: "POST", body: JSON.stringify({}) });
 }
 
+export async function retryDeployment(
+  id: string,
+): Promise<{ deployment: Deployment; sourceDeploymentId: string; attemptNumber: number }> {
+  return fetchJson(`/api/deployments/${id}/retry`, { method: "POST", body: JSON.stringify({}) });
+}
+
 // --- Debrief / Reports ---
 
 export async function getRecentDebrief(filters?: {

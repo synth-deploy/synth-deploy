@@ -802,6 +802,179 @@ export function registerDeploymentRoutes(
     },
   );
 
+  // Retry (redeploy) — create a new deployment with the same parameters as the source
+  app.post<{ Params: { id: string } }>(
+    "/api/deployments/:id/retry",
+    { preHandler: [requirePermission("deployment.create")] },
+    async (request, reply) => {
+      const source = deployments.get(request.params.id);
+      if (!source) {
+        return reply.status(404).send({ error: "Deployment not found" });
+      }
+
+      // Calculate attempt number by following the retryOf chain
+      let attemptNumber = 1;
+      let cursor: typeof source | undefined = source;
+      while (cursor?.retryOf) {
+        attemptNumber++;
+        cursor = deployments.get(cursor.retryOf);
+      }
+      attemptNumber++; // this new deployment is one more
+
+      // Validate artifact still exists
+      const artifact = artifactStore.get(source.artifactId);
+      if (!artifact) {
+        return reply.status(404).send({ error: `Artifact not found: ${source.artifactId}` });
+      }
+
+      // Validate environment still exists (if present on source)
+      const environment = source.environmentId ? environments.get(source.environmentId) : undefined;
+      if (source.environmentId && !environment) {
+        return reply.status(404).send({ error: `Environment not found: ${source.environmentId}` });
+      }
+
+      // Validate partition still exists (if present on source)
+      const partition = source.partitionId ? partitions.get(source.partitionId) : undefined;
+      if (source.partitionId && !partition) {
+        return reply.status(404).send({ error: `Partition not found: ${source.partitionId}` });
+      }
+
+      // Validate envoy still exists (if present on source)
+      const targetEnvoy = source.envoyId ? envoyRegistry?.get(source.envoyId) : undefined;
+      if (source.envoyId && !targetEnvoy) {
+        return reply.status(404).send({ error: `Envoy not found: ${source.envoyId}` });
+      }
+
+      // Resolve variables — same logic as POST /api/deployments
+      const envVars = environment ? environment.variables : {};
+      const partitionVars = partition?.variables ?? {};
+      const resolved: Record<string, string> = { ...partitionVars, ...envVars };
+
+      const deployment = {
+        id: crypto.randomUUID(),
+        artifactId: source.artifactId,
+        environmentId: source.environmentId,
+        partitionId: source.partitionId,
+        envoyId: targetEnvoy?.id,
+        version: source.version ?? "",
+        status: "pending" as const,
+        variables: resolved,
+        retryOf: source.id,
+        debriefEntryIds: [] as string[],
+        createdAt: new Date(),
+      };
+
+      deployments.save(deployment);
+
+      const actor = (request.user?.email) ?? "anonymous";
+      telemetry.record({ actor, action: "deployment.created", target: { type: "deployment", id: deployment.id }, details: { artifactId: source.artifactId, environmentId: source.environmentId, partitionId: source.partitionId, envoyId: source.envoyId, retryOf: source.id } });
+
+      // Record retry debrief entry
+      debrief.record({
+        partitionId: deployment.partitionId ?? null,
+        deploymentId: deployment.id,
+        agent: "command",
+        decisionType: "system",
+        decision: `Retry of deployment ${source.id} (attempt #${attemptNumber})`,
+        reasoning: `User initiated retry of deployment ${source.id}. Same artifact, version, environment, and partition.`,
+        context: { retryOf: source.id, attemptNumber, actor },
+        actor: request.user?.email,
+      });
+
+      // Dispatch planning — same logic as POST /api/deployments
+      if (envoyRegistry) {
+        const planningEnvoy = targetEnvoy
+          ?? (environment ? envoyRegistry.findForEnvironment(environment.name) : undefined)
+          ?? envoyRegistry.list()[0];
+
+        if (planningEnvoy) {
+          const planningClient = new EnvoyClient(planningEnvoy.url);
+          const environmentForPlanning = environment
+            ? { id: environment.id, name: environment.name, variables: environment.variables }
+            : { id: `direct:${planningEnvoy.id}`, name: planningEnvoy.name, variables: {} };
+
+          planningClient.requestPlan({
+            deploymentId: deployment.id,
+            artifact: {
+              id: artifact.id,
+              name: artifact.name,
+              type: artifact.type,
+              analysis: {
+                summary: artifact.analysis.summary,
+                dependencies: artifact.analysis.dependencies,
+                configurationExpectations: artifact.analysis.configurationExpectations,
+                deploymentIntent: artifact.analysis.deploymentIntent,
+                confidence: artifact.analysis.confidence,
+              },
+            },
+            environment: environmentForPlanning,
+            partition: partition
+              ? { id: partition.id, name: partition.name, variables: partition.variables }
+              : undefined,
+            version: deployment.version,
+            resolvedVariables: resolved,
+          }).then((result) => {
+            const dep = deployments.get(deployment.id);
+            if (!dep || dep.status !== "pending") return;
+
+            dep.plan = result.plan;
+            dep.rollbackPlan = result.rollbackPlan;
+            dep.envoyId = planningEnvoy.id;
+
+            if (result.blocked) {
+              dep.status = "failed" as typeof dep.status;
+              dep.failureReason = result.blockReason ?? "Plan blocked due to unrecoverable precondition failures";
+              deployments.save(dep);
+
+              debrief.record({
+                partitionId: dep.partitionId ?? null,
+                deploymentId: dep.id,
+                agent: "envoy",
+                decisionType: "plan-generation" as Parameters<typeof debrief.record>[0]["decisionType"],
+                decision: `Deployment plan blocked — infrastructure prerequisites not met`,
+                reasoning: result.blockReason ?? result.plan.reasoning,
+                context: { stepCount: result.plan.steps.length, envoyId: planningEnvoy.id, blocked: true },
+              });
+            } else {
+              dep.status = "awaiting_approval" as typeof dep.status;
+              dep.recommendation = computeRecommendation(dep, deployments);
+              deployments.save(dep);
+
+              debrief.record({
+                partitionId: dep.partitionId ?? null,
+                deploymentId: dep.id,
+                agent: "envoy",
+                decisionType: "plan-generation" as Parameters<typeof debrief.record>[0]["decisionType"],
+                decision: `Deployment plan generated with ${result.plan.steps.length} steps`,
+                reasoning: result.plan.reasoning,
+                context: { stepCount: result.plan.steps.length, envoyId: planningEnvoy.id, delta: result.delta },
+              });
+            }
+          }).catch((err) => {
+            const dep = deployments.get(deployment.id);
+            if (!dep || dep.status !== "pending") return;
+
+            dep.status = "failed" as typeof dep.status;
+            dep.failureReason = err instanceof Error ? err.message : "Planning failed";
+            deployments.save(dep);
+
+            debrief.record({
+              partitionId: dep.partitionId ?? null,
+              deploymentId: dep.id,
+              agent: "command",
+              decisionType: "deployment-failure" as Parameters<typeof debrief.record>[0]["decisionType"],
+              decision: "Envoy planning failed",
+              reasoning: dep.failureReason!,
+              context: { error: dep.failureReason, envoyId: planningEnvoy.id },
+            });
+          });
+        }
+      }
+
+      return reply.status(201).send({ deployment, sourceDeploymentId: source.id, attemptNumber });
+    },
+  );
+
   // Get deployment postmortem
   app.get<{ Params: { id: string } }>(
     "/api/deployments/:id/postmortem",

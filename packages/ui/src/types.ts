@@ -279,6 +279,7 @@ export interface Deployment {
   rejectionReason?: string;
   enrichment?: DeploymentEnrichment;
   recommendation?: DeploymentRecommendation;
+  retryOf?: string;
   debriefEntryIds: string[];
   createdAt: string;
   completedAt: string | null;
@@ -314,7 +315,9 @@ export type DecisionType =
   | "plan-rejection"
   | "rollback-execution"
   | "cross-system-context"
-  | "plan-modification";
+  | "plan-modification"
+  | "environment-probe"
+  | "pre-flight-llm-failure";
 
 export type AgentType = "command" | "envoy";
 

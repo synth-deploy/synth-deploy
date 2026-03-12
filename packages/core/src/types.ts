@@ -123,6 +123,7 @@ export interface Deployment {
   rejectionReason?: string;
   enrichment?: DeploymentEnrichment;
   recommendation?: DeploymentRecommendation;
+  retryOf?: DeploymentId;
   debriefEntryIds: DebriefEntryId[];
   createdAt: Date;
   completedAt?: Date;
