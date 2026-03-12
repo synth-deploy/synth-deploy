@@ -535,9 +535,10 @@ export class LlmClient {
           {
             model,
             max_tokens: params.maxTokens ?? DEFAULT_MAX_TOKENS,
-            // Use structured system block with cache_control for Anthropic-native providers.
-            // openai-compatible adapters expect a plain string.
-            system: this._provider !== "openai-compatible"
+            // Anthropic and Bedrock support ephemeral prompt caching via cache_control.
+            // Vertex uses a different context-cache API (not yet implemented).
+            // openai-compatible adapters expect a plain string (OpenAI auto-caches >1024 token prompts).
+            system: (this._provider === "anthropic" || this._provider === "bedrock")
               ? [{ type: "text" as const, text: params.systemPrompt, cache_control: { type: "ephemeral" } as const }]
               : params.systemPrompt,
             messages: [{ role: "user", content: params.prompt }],
@@ -826,7 +827,10 @@ export class LlmClient {
           {
             model,
             max_tokens: maxTokens,
-            system: [{ type: "text" as const, text: opts.systemPrompt, cache_control: { type: "ephemeral" } as const }],
+            // Bedrock supports cache_control; Vertex does not (different caching API).
+            system: (this._provider === "anthropic" || this._provider === "bedrock")
+              ? [{ type: "text" as const, text: opts.systemPrompt, cache_control: { type: "ephemeral" } as const }]
+              : opts.systemPrompt,
             tools: [probeTool],
             messages,
           },
