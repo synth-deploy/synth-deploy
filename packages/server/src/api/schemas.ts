@@ -193,8 +193,8 @@ export const UpdateSettingsSchema = z.object({
     taskModels: TaskModelConfigSchema.optional(),
   }).optional(),
   envoy: z.object({
-    url: z.string().refine(isValidLlmBaseUrl, {
-      message: "Must be a valid http or https URL",
+    url: z.string().refine(isSsrfSafeUrl, {
+      message: "URL must not point to private/internal IP ranges (SSRF prevention)",
     }).optional(),
     timeoutMs: z.number().int().positive().optional(),
   }).optional(),

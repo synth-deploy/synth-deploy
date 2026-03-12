@@ -276,12 +276,12 @@ describe("LlmClient — timeout and rate limiting", () => {
     expect((client as unknown as { _rateLimitPerMinute: number })._rateLimitPerMinute).toBe(15);
   });
 
-  it("DEFAULT_TIMEOUT_MS constant is 30000", () => {
-    expect(DEFAULT_TIMEOUT_MS).toBe(30_000);
+  it("DEFAULT_TIMEOUT_MS constant is 120000", () => {
+    expect(DEFAULT_TIMEOUT_MS).toBe(120_000);
   });
 
-  it("DEFAULT_RATE_LIMIT_PER_MINUTE constant is 20", () => {
-    expect(DEFAULT_RATE_LIMIT_PER_MINUTE).toBe(20);
+  it("DEFAULT_RATE_LIMIT_PER_MINUTE constant is 60", () => {
+    expect(DEFAULT_RATE_LIMIT_PER_MINUTE).toBe(60);
   });
 });
 
