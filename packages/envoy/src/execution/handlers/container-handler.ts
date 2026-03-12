@@ -197,13 +197,33 @@ export class ContainerHandler implements OperationHandler {
         });
 
         if (containerExists.exists) {
-          observations.push({
-            name: "container-name-collision",
-            passed: !containerExists.running || lower.includes("start"),
-            detail: containerExists.running
-              ? `Container "${target}" already exists and is running — name collision will cause failure`
-              : `Container "${target}" exists but is stopped — start will succeed`,
-          });
+          // Check if a prior step already stops/removes this container
+          let priorStepResolvesCollision = false;
+          for (const [, outcome] of _predictedOutcomes) {
+            if (
+              outcome.containerName === target &&
+              (outcome.containerAction === "stopped" || outcome.containerAction === "removed")
+            ) {
+              priorStepResolvesCollision = true;
+              break;
+            }
+          }
+
+          if (priorStepResolvesCollision) {
+            observations.push({
+              name: "container-name-collision",
+              passed: true,
+              detail: `Container "${target}" exists but a prior step stops/removes it — no collision`,
+            });
+          } else {
+            observations.push({
+              name: "container-name-collision",
+              passed: !containerExists.running || lower.includes("start"),
+              detail: containerExists.running
+                ? `Container "${target}" already exists and is running — add a "docker stop"/"docker rm" step before this step to resolve the collision`
+                : `Container "${target}" exists but is stopped — start will succeed`,
+            });
+          }
         }
       }
 
@@ -214,7 +234,13 @@ export class ContainerHandler implements OperationHandler {
       return {
         observations,
         predictedOutcome: {
-          containerAction: lower.includes("stop") ? "stopped" : lower.includes("pull") ? "pulled" : "running",
+          containerAction: (lower.includes("remove") || lower.includes("rm"))
+            ? "removed"
+            : lower.includes("stop")
+              ? "stopped"
+              : lower.includes("pull")
+                ? "pulled"
+                : "running",
           containerName: target,
         },
         fidelity: "speculative",

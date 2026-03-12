@@ -125,6 +125,24 @@ export class DefaultOperationExecutor {
     let worstFidelity: DryRunPlanResult["overallFidelity"] = "deterministic";
     let hasFailedObservations = false;
 
+    // Pre-scan: infer planned outcomes from step actions so subsequent steps
+    // can see prior intent even if the handler doesn't produce a prediction.
+    // This fixes container-name-collision false positives when a prior stop/rm
+    // step resolves to a different handler or produces no predictedOutcome.
+    for (let i = 0; i < steps.length; i++) {
+      const lower = (steps[i].action ?? "").toLowerCase();
+      const target = steps[i].target;
+      if (
+        (lower.includes("stop") || lower.includes("remove") || lower.includes("rm") || lower.includes("kill")) &&
+        (lower.includes("docker") || lower.includes("container"))
+      ) {
+        const action = (lower.includes("remove") || lower.includes("rm"))
+          ? "removed"
+          : lower.includes("kill") ? "stopped" : "stopped";
+        predictedOutcomes.set(i, { containerAction: action, containerName: target });
+      }
+    }
+
     for (let i = 0; i < steps.length; i++) {
       const step = steps[i];
 

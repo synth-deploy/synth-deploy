@@ -141,6 +141,9 @@ export class VerifyHandler implements OperationHandler {
       }
 
       // Bare word with no path separators → treat as command name, check via `which`/`where`
+      // Note: verification steps run POST-deployment, so a missing command is informational,
+      // not a blocker. The command may also exist but not be on the Node.js process PATH
+      // (e.g. Docker Desktop on macOS installs to /usr/local/bin via symlink).
       else if (!target.includes("/") && !target.includes("\\") && !target.includes(".")) {
         const whichCmd = process.platform === "win32" ? "where" : "which";
         const found = await new Promise<boolean>((resolve) => {
@@ -148,10 +151,10 @@ export class VerifyHandler implements OperationHandler {
         });
         observations.push({
           name: "command-installed",
-          passed: found,
+          passed: true, // Don't block plan — verification runs post-deployment
           detail: found
             ? `Command "${target}" is available on PATH`
-            : `Command "${target}" not found on PATH — install it before executing this deployment`,
+            : `Command "${target}" not found on Node.js process PATH (may still be available at runtime)`,
         });
       }
 

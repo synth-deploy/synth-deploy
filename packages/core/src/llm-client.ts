@@ -81,7 +81,7 @@ export interface LlmProviderAdapter {
 const DEFAULT_REASONING_MODEL = "claude-sonnet-4-6";
 const DEFAULT_CLASSIFICATION_MODEL = "claude-haiku-4-5-20251001";
 const DEFAULT_MAX_TOKENS = 1024;
-export const DEFAULT_TIMEOUT_MS = 60_000;
+export const DEFAULT_TIMEOUT_MS = 120_000;
 export const DEFAULT_RATE_LIMIT_PER_MINUTE = 60;
 
 // ---------------------------------------------------------------------------
@@ -501,6 +501,7 @@ export class LlmClient {
   ): Promise<LlmResult> {
     if (!this.isAvailable()) {
       const reason = this._notConfiguredReason();
+      console.log(`[LlmClient._call] NOT AVAILABLE: ${reason}`);
       this._recordDebrief(params, model, null, reason, true);
       return { ok: false, fallback: true, reason };
     }
@@ -509,12 +510,14 @@ export class LlmClient {
       await this._ensureInitialized();
     } catch (error) {
       const reason = `LLM call failed: ${error instanceof Error ? error.message : String(error)}`;
+      console.log(`[LlmClient._call] INIT FAILED: ${reason}`);
       this._recordDebrief(params, model, null, reason, true);
       return { ok: false, fallback: true, reason };
     }
 
     if (!this._checkRateLimit()) {
-      const reason = `LLM rate limit exceeded (${this._rateLimitPerMinute} calls/min)`;
+      const reason = `LLM rate limit exceeded (${this._rateLimitPerMinute} calls/min). Timestamps in window: ${this._callTimestamps.length}`;
+      console.log(`[LlmClient._call] RATE LIMITED: ${reason}`);
       this._recordDebrief(params, model, null, reason, true);
       return { ok: false, fallback: true, reason };
     }
@@ -556,10 +559,14 @@ export class LlmClient {
       }
     } catch (error) {
       const responseTimeMs = Date.now() - startTime;
-      const isTimeout = error instanceof Error && error.name === "AbortError";
+      const msg = error instanceof Error ? error.message : String(error);
+      const isTimeout =
+        (error instanceof Error && error.name === "AbortError") ||
+        msg.includes("aborted") ||
+        msg.includes("abort");
       const reason = isTimeout
         ? `LLM request timed out after ${this._timeoutMs}ms`
-        : `LLM call failed: ${error instanceof Error ? error.message : String(error)}`;
+        : `LLM call failed: ${msg}`;
       this._recordDebrief(params, model, responseTimeMs, reason, true);
       return { ok: false, fallback: true, reason };
     }
@@ -733,8 +740,10 @@ export class LlmClient {
     partitionId?: string | null;
     deploymentId?: string | null;
   }): Promise<LlmResult> {
+    console.log(`[LlmClient.callWithProbeLoop] Entry — available: ${this.isAvailable()}, timestamps: ${this._callTimestamps.length}`);
     if (!this.isAvailable()) {
       const reason = this._notConfiguredReason();
+      console.log(`[LlmClient.callWithProbeLoop] NOT AVAILABLE: ${reason}`);
       return { ok: false, fallback: true, reason };
     }
 
@@ -742,6 +751,7 @@ export class LlmClient {
       await this._ensureInitialized();
     } catch (error) {
       const reason = `LLM call failed: ${error instanceof Error ? error.message : String(error)}`;
+      console.log(`[LlmClient.callWithProbeLoop] INIT FAILED: ${reason}`);
       return { ok: false, fallback: true, reason };
     }
 
@@ -751,6 +761,7 @@ export class LlmClient {
 
     // Rate-limit the entire probe loop as a single logical call, not each turn.
     if (!this._checkRateLimit()) {
+      console.log(`[LlmClient.callWithProbeLoop] RATE LIMITED: timestamps=${this._callTimestamps.length}, limit=${this._rateLimitPerMinute}`);
       return { ok: false, fallback: true, reason: `LLM rate limit exceeded (${this._rateLimitPerMinute} calls/min)` };
     }
     this._callTimestamps.push(Date.now());
@@ -818,10 +829,18 @@ export class LlmClient {
           { signal: controller.signal },
         );
       } catch (error) {
-        const isTimeout = error instanceof Error && error.name === "AbortError";
+        clearTimeout(timer);
+        const msg = error instanceof Error ? error.message : String(error);
+        // The Anthropic SDK throws APIUserAbortError (name="Error", message="Request was aborted.")
+        // when AbortController fires. Check both the native AbortError and the SDK wrapper.
+        const isTimeout =
+          (error instanceof Error && error.name === "AbortError") ||
+          msg.includes("aborted") ||
+          msg.includes("abort");
         const reason = isTimeout
-          ? `LLM request timed out after ${this._timeoutMs}ms`
-          : `LLM call failed: ${error instanceof Error ? error.message : String(error)}`;
+          ? `LLM request timed out after ${this._timeoutMs}ms (turn ${turn + 1})`
+          : `LLM call failed: ${msg}`;
+        console.log(`[LlmClient.probeLoop] Error on turn ${turn + 1}: ${reason}`);
         return { ok: false, fallback: true, reason };
       } finally {
         clearTimeout(timer);
@@ -969,10 +988,16 @@ export class LlmClient {
 
         json = await resp.json() as typeof json;
       } catch (error) {
-        const isTimeout = error instanceof Error && error.name === "AbortError";
+        clearTimeout(timer);
+        const msg = error instanceof Error ? error.message : String(error);
+        const isTimeout =
+          (error instanceof Error && error.name === "AbortError") ||
+          msg.includes("aborted") ||
+          msg.includes("abort");
         const reason = isTimeout
-          ? `LLM request timed out after ${this._timeoutMs}ms`
-          : `LLM call failed: ${error instanceof Error ? error.message : String(error)}`;
+          ? `LLM request timed out after ${this._timeoutMs}ms (turn ${turn + 1})`
+          : `LLM call failed: ${msg}`;
+        console.log(`[LlmClient.probeLoop] Error on turn ${turn + 1}: ${reason}`);
         return { ok: false, fallback: true, reason };
       } finally {
         clearTimeout(timer);

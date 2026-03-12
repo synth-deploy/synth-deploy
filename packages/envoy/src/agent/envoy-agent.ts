@@ -33,6 +33,7 @@ import {
 
 import { createCallbackReporter } from "../execution/progress-reporter.js";
 import { ProbeExecutor } from "./probe-executor.js";
+import { PlanLogger } from "./plan-logger.js";
 
 // ---------------------------------------------------------------------------
 // Types — lifecycle state and deployment instruction/result
@@ -258,6 +259,8 @@ export class EnvoyAgent {
   private executorReady: Promise<void>;
   /** Shared across plan requests so probe results are cached between calls. */
   private probeExecutor = new ProbeExecutor();
+  /** File-based structured logger for planning diagnostics. */
+  private planLog: PlanLogger;
 
   constructor(
     private debrief: DebriefWriter,
@@ -270,6 +273,7 @@ export class EnvoyAgent {
     this.investigator = new DiagnosticInvestigator(state, llm);
     this.reporter = reporter ?? null;
     this.llmClient = llm ?? null;
+    this.planLog = new PlanLogger(baseDir);
 
     // Initialize the operation executor asynchronously — platform detection
     // requires dynamic imports
@@ -280,11 +284,14 @@ export class EnvoyAgent {
     const adapter = await createPlatformAdapter();
     const registry = new DefaultOperationRegistry();
 
-    // Register all handlers in order of specificity
+    // Register handlers — most specific first. ContainerHandler before
+    // ServiceHandler/FileHandler because "docker stop" contains "stop"
+    // (ServiceHandler keyword) and "docker remove" contains "move"
+    // (FileHandler substring match). Domain-specific handlers must win.
+    registry.register(new ContainerHandler());
     registry.register(new ServiceHandler(adapter));
     registry.register(new FileHandler(adapter));
     registry.register(new ConfigHandler());
-    registry.register(new ContainerHandler());
     registry.register(new ProcessHandler());
     registry.register(new VerifyHandler());
 
@@ -1185,7 +1192,10 @@ export class EnvoyAgent {
       process.env.SYNTH_LLM_API_KEY = instruction.llmApiKey;
     }
 
-    if (this.llmClient && this.llmClient.isAvailable()) {
+    const llmAvail = this.llmClient?.isAvailable() ?? false;
+    this.planLog.log("LLM-CHECK", `available=${llmAvail} hasClient=${!!this.llmClient} envKey=${process.env.SYNTH_LLM_API_KEY ? "set" : "NOT SET"} instructionKey=${instruction.llmApiKey ? "forwarded" : "not forwarded"}`);
+
+    if (this.llmClient && llmAvail) {
       return this.planWithLlm(
         instruction,
         scanResult,
@@ -1237,6 +1247,14 @@ export class EnvoyAgent {
     latestPlan: ReturnType<EnvoyKnowledgeStore["getLatestPlan"]>,
     recordEntry: (params: Parameters<DebriefWriter["record"]>[0]) => DebriefEntry,
   ): Promise<PlanningResult> {
+    const reqId = instruction.deploymentId ?? crypto.randomUUID().slice(0, 8);
+    this.planLog.startRequest(
+      reqId,
+      instruction.artifact.name,
+      instruction.version,
+      instruction.environment.name,
+    );
+
     // Build prompt sections
     const sections: string[] = [];
 
@@ -1447,6 +1465,7 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
       }
 
       if (!llmResult.ok) {
+        this.planLog.log(`LLM-FAIL attempt=${attempt}`, llmResult.reason);
         recordEntry({
           partitionId: instruction.partition?.id ?? null,
           deploymentId: instruction.deploymentId,
@@ -1477,6 +1496,7 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
       let currentParsed: ParsedPlan;
       try {
         let text = llmResult.text.trim();
+        this.planLog.log(`LLM-RESPONSE attempt=${attempt}`, `length=${text.length} starts=${text.substring(0, 200)}`);
         // The LLM may return commentary before/after the JSON block,
         // especially after a probe loop. Extract JSON from fenced blocks
         // or find the outermost { ... } object.
@@ -1503,20 +1523,36 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
         currentParsed = raw as ParsedPlan;
       } catch (parseErr) {
         const preview = llmResult.text?.substring(0, 500) ?? "(no text)";
+        this.planLog.log(`PARSE-FAIL attempt=${attempt}`, `error=${parseErr instanceof Error ? parseErr.message : String(parseErr)} preview=${preview}`);
         recordEntry({
           partitionId: instruction.partition?.id ?? null,
           deploymentId: instruction.deploymentId,
           agent: "envoy",
           decisionType: "plan-generation",
-          decision: `LLM response could not be parsed on attempt ${attempt} — falling back to basic plan`,
+          decision: `LLM response could not be parsed on attempt ${attempt}`,
           reasoning:
             `The LLM returned a response that could not be parsed as valid plan JSON. ` +
             `Parse error: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}. ` +
             `Response preview: ${preview}`,
           context: { parseError: true, attempt, responsePreview: preview },
         });
+
+        // Retry on parse failure if we have attempts left — the LLM sometimes
+        // returns empty or malformed JSON on the first try. Use reason() on
+        // retry since probe results are cached.
+        if (attempt < MAX_DRY_RUN_ATTEMPTS) {
+          this.planLog.log(`PARSE-RETRY`, `will retry as attempt ${attempt + 1}`);
+          lastObservations = `Previous LLM response could not be parsed: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}. ` +
+            `You MUST respond with a valid JSON object containing "reasoning" (string) and "steps" (array). ` +
+            `Do not return an empty object.`;
+          continue;
+        }
+
         return this.buildFallbackPlan(instruction);
       }
+
+      this.planLog.log(`PARSED-OK attempt=${attempt}`, `${currentParsed.steps.length} steps, reasoning=${currentParsed.reasoning?.length ?? 0} chars`);
+      this.planLog.logPlanSteps(`PLAN attempt=${attempt}`, currentParsed.steps);
 
       // Build plan object
       const plan: DeploymentPlan = {
@@ -1557,8 +1593,21 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
 
       const dryRunResult = await this.operationExecutor.executeDryRun(plan.steps);
 
+      // Log full dry-run results to file for debugging
+      this.planLog.logDryRun(
+        attempt,
+        dryRunResult.stepResults.map((sr) => ({
+          stepIndex: sr.stepIndex,
+          stepDesc: sr.step.description,
+          handler: this.operationRegistry?.resolve(sr.step.action, "linux")?.name ?? null,
+          observations: sr.result.observations,
+          predictedOutcome: sr.result.predictedOutcome as Record<string, unknown> | undefined,
+        })),
+      );
+
       // --- No failed observations: plan is validated, return it ---
       if (!dryRunResult.hasFailedObservations) {
+        this.planLog.log(`DRY-RUN-PASSED attempt=${attempt}`, `fidelity=${dryRunResult.overallFidelity}`);
         const rollbackPlan = this.buildRollbackPlan(plan, instruction);
         plan.reasoning =
           currentParsed.reasoning +
@@ -1595,6 +1644,8 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
       }
 
       // --- Failed observations: build observation text for next planning call ---
+      this.planLog.log(`DRY-RUN-FAILED attempt=${attempt}`, `failedObservations=true`);
+
       const currentObsSummary = dryRunResult.stepResults
         .filter((sr) => sr.result.observations.some((o) => !o.passed))
         .map((sr) => {
@@ -1605,6 +1656,7 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
 
       // Stuck detection: same failures after re-planning means LLM can't resolve them
       if (attempt > 1 && currentObsSummary === previousObservationSummary) {
+        this.planLog.log("STUCK", `same failures after ${attempt} attempts: ${currentObsSummary}`);
         recordEntry({
           partitionId: instruction.partition?.id ?? null,
           deploymentId: instruction.deploymentId,
@@ -1631,6 +1683,7 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
 
       // Last attempt: block with unresolved issues
       if (attempt === MAX_DRY_RUN_ATTEMPTS) {
+        this.planLog.log("BLOCKED", `max attempts reached: ${currentObsSummary}`);
         recordEntry({
           partitionId: instruction.partition?.id ?? null,
           deploymentId: instruction.deploymentId,

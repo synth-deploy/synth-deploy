@@ -26,7 +26,8 @@ export class FileHandler implements OperationHandler {
     const lower = action.toLowerCase();
     return (
       lower.includes("copy") ||
-      lower.includes("move") ||
+      // Word-boundary match for "move" to avoid matching "remove"
+      /\bmove\b/.test(lower) ||
       lower.includes("backup") ||
       lower.includes("permission") ||
       lower.includes("symlink") ||

@@ -259,7 +259,7 @@ export class EnvoyClient {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(llmApiKey ? { ...params, llmApiKey } : params),
       },
-      this.timeoutMs * 8, // planning may take time (LLM reasoning)
+      this.timeoutMs * 18, // planning may take time (probe loop + LLM reasoning)
     );
 
     if (!response.ok) {
@@ -308,7 +308,7 @@ export class EnvoyClient {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(llmApiKey ? { ...params, llmApiKey } : params),
       },
-      this.timeoutMs * 6, // LLM reasoning may take time
+      this.timeoutMs * 18, // LLM reasoning may take time
     );
 
     if (!response.ok) {
