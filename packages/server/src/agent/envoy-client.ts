@@ -2,7 +2,7 @@ import type {
   ServiceHealthChecker,
   HealthCheckResult,
 } from "./health-checker.js";
-import { serverLog, serverWarn } from "../logger.js";
+import { serverLog, serverWarn, serverError } from "../logger.js";
 import type { DecisionType, DeploymentPlan, PlannedStep, SecurityBoundary } from "@synth-deploy/core";
 
 // ---------------------------------------------------------------------------
