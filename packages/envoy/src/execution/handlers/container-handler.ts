@@ -184,10 +184,18 @@ export class ContainerHandler implements OperationHandler {
         });
       }
 
-      // For run/start: check for container name collision
+      // For run/start: check for container name collision.
+      // `target` is the image name for `docker run` — extract the actual container
+      // name from --name in args, falling back to target if not present.
       if (lower.includes("run") || lower.includes("start")) {
+        const args = (step.params?.args as string[] | undefined) ?? [];
+        const nameIdx = args.indexOf("--name");
+        const containerName = nameIdx !== -1 && nameIdx + 1 < args.length
+          ? args[nameIdx + 1]
+          : target;
+
         const containerExists = await new Promise<{ exists: boolean; running: boolean }>((resolve) => {
-          execFile("docker", ["inspect", "--format", "{{.State.Running}}", target], { timeout: 5000 }, (error, stdout) => {
+          execFile("docker", ["inspect", "--format", "{{.State.Running}}", containerName], { timeout: 5000 }, (error, stdout) => {
             if (error) {
               resolve({ exists: false, running: false });
             } else {
@@ -201,7 +209,7 @@ export class ContainerHandler implements OperationHandler {
           let priorStepResolvesCollision = false;
           for (const [, outcome] of _predictedOutcomes) {
             if (
-              outcome.containerName === target &&
+              outcome.containerName === containerName &&
               (outcome.containerAction === "stopped" || outcome.containerAction === "removed")
             ) {
               priorStepResolvesCollision = true;
@@ -213,19 +221,27 @@ export class ContainerHandler implements OperationHandler {
             observations.push({
               name: "container-name-collision",
               passed: true,
-              detail: `Container "${target}" exists but a prior step stops/removes it — no collision`,
+              detail: `Container "${containerName}" exists but a prior step stops/removes it — no collision`,
             });
           } else {
             observations.push({
               name: "container-name-collision",
               passed: !containerExists.running || lower.includes("start"),
               detail: containerExists.running
-                ? `Container "${target}" already exists and is running — add a "docker stop"/"docker rm" step before this step to resolve the collision`
-                : `Container "${target}" exists but is stopped — start will succeed`,
+                ? `Container "${containerName}" already exists and is running — add a "docker stop"/"docker rm" step before this step to resolve the collision`
+                : `Container "${containerName}" exists but is stopped — start will succeed`,
             });
           }
         }
       }
+
+      // Resolve the effective container name for predictedOutcome — for `docker run`
+      // the target is the image, so extract from --name arg if present.
+      const allArgs = (step.params?.args as string[] | undefined) ?? [];
+      const allNameIdx = allArgs.indexOf("--name");
+      const effectiveContainerName = allNameIdx !== -1 && allNameIdx + 1 < allArgs.length
+        ? allArgs[allNameIdx + 1]
+        : target;
 
       unknowns.push(
         `Container startup success depends on image configuration and runtime environment`,
@@ -241,7 +257,7 @@ export class ContainerHandler implements OperationHandler {
               : lower.includes("pull")
                 ? "pulled"
                 : "running",
-          containerName: target,
+          containerName: effectiveContainerName,
         },
         fidelity: "speculative",
         unknowns,

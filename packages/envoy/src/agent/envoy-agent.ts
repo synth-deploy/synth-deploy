@@ -1608,7 +1608,7 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
           target: s.target,
           params: s.params,
           reversible: s.reversible ?? false,
-          rollbackAction: s.rollbackAction,
+          rollbackAction: s.rollbackAction ?? undefined,
           execPreview: s.execPreview,
         })),
         reasoning: currentParsed.reasoning,
