@@ -44,6 +44,7 @@ import { registerIntakeRoutes } from "./api/intake.js";
 import { ArtifactAnalyzer } from "./artifact-analyzer.js";
 import { DeploymentGraphStore, GraphInferenceEngine } from "./graph/index.js";
 import { registerGraphRoutes } from "./api/graph.js";
+import { initServerLogger } from "./logger.js";
 
 // --- Bootstrap shared state ---
 
@@ -55,6 +56,7 @@ const DATA_DIR = process.env.SYNTH_DATA_DIR
   : path.resolve(__serverDir, "../../../data");
 mkdirSync(DATA_DIR, { recursive: true });
 chmodSync(DATA_DIR, 0o700);
+initServerLogger(DATA_DIR);
 
 // --- JWT secret — auto-generated on first run, persisted to disk ---
 // SYNTH_JWT_SECRET env var takes precedence (for CI, multi-instance, key rotation).

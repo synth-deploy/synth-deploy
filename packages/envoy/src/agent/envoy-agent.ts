@@ -34,6 +34,7 @@ import {
 import { createCallbackReporter } from "../execution/progress-reporter.js";
 import { ProbeExecutor } from "./probe-executor.js";
 import { PlanLogger } from "./plan-logger.js";
+import { envoyLog, envoyWarn, envoyError } from "../logger.js";
 
 // ---------------------------------------------------------------------------
 // Types — lifecycle state and deployment instruction/result
@@ -606,6 +607,7 @@ export class EnvoyAgent {
       },
     });
 
+    envoyLog("EXECUTE-START", { deploymentId: instruction.deploymentId, steps: steps.length });
     const execStart = Date.now();
     const planResult = await this.operationExecutor!.executePlan(
       steps,
@@ -618,6 +620,7 @@ export class EnvoyAgent {
     if (!planResult.success) {
       const failedResult = planResult.results.find((r) => r.status === "failed");
       const errorMsg = failedResult?.error ?? "Unknown execution error";
+      envoyError("EXECUTE-FAILED", { deploymentId: instruction.deploymentId, reason: errorMsg });
 
       this.state.completeDeployment(instruction.deploymentId, "failed", errorMsg);
 
@@ -722,6 +725,7 @@ export class EnvoyAgent {
       },
     });
 
+    envoyLog("EXECUTE-COMPLETE", { deploymentId: instruction.deploymentId, success: true });
     const successResult: DeploymentResult = {
       deploymentId: instruction.deploymentId,
       success: true,
@@ -1198,6 +1202,7 @@ export class EnvoyAgent {
 
     const llmAvail = this.llmClient?.isAvailable() ?? false;
     this.planLog.log("LLM-CHECK", `available=${llmAvail} hasClient=${!!this.llmClient} envKey=${process.env.SYNTH_LLM_API_KEY ? "set" : "NOT SET"} instructionKey=${instruction.llmApiKey ? "forwarded" : "not forwarded"}`);
+    envoyLog("LLM-CHECK", { available: llmAvail, hasClient: !!this.llmClient, envKeySet: !!process.env.SYNTH_LLM_API_KEY, instructionKeyForwarded: !!instruction.llmApiKey });
 
     if (this.llmClient && llmAvail) {
       return this.planWithLlm(
@@ -1410,6 +1415,7 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
     const probeExecutor = this.probeExecutor;
 
     for (let attempt = 1; attempt <= MAX_DRY_RUN_ATTEMPTS; attempt++) {
+      envoyLog("PLAN-ATTEMPT", { attempt, maxAttempts: MAX_DRY_RUN_ATTEMPTS, method: attempt === 1 ? "probeLoop" : "reason" });
       // --- LLM planning call ---
       // Attempt 1: full probe loop to observe real machine state.
       // Retry attempts: use reason() with probe + dry-run observations injected as context
@@ -1654,6 +1660,7 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
       // --- No failed observations: plan is validated, return it ---
       if (!dryRunResult.hasFailedObservations) {
         this.planLog.log(`DRY-RUN-PASSED attempt=${attempt}`, `fidelity=${dryRunResult.overallFidelity}`);
+        envoyLog("PLAN-DRY-RUN", { attempt, passed: true, failures: 0 });
         const rollbackPlan = this.buildRollbackPlan(plan, instruction);
         plan.reasoning =
           currentParsed.reasoning +
@@ -1686,11 +1693,14 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
           },
         });
 
+        envoyLog("PLAN-COMPLETE", { steps: plan.steps.length });
         return { plan, rollbackPlan, delta: currentParsed.delta };
       }
 
       // --- Failed observations: build observation text for next planning call ---
       this.planLog.log(`DRY-RUN-FAILED attempt=${attempt}`, `failedObservations=true`);
+      const _failedObsCount = dryRunResult.stepResults.reduce((n, sr) => n + sr.result.observations.filter((o) => !o.passed).length, 0);
+      envoyLog("PLAN-DRY-RUN", { attempt, passed: false, failures: _failedObsCount });
 
       const currentObsSummary = dryRunResult.stepResults
         .filter((sr) => sr.result.observations.some((o) => !o.passed))
@@ -1703,6 +1713,7 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
       // Stuck detection: same failures after re-planning means LLM can't resolve them
       if (attempt > 1 && currentObsSummary === previousObservationSummary) {
         this.planLog.log("STUCK", `same failures after ${attempt} attempts: ${currentObsSummary}`);
+        envoyWarn("PLAN-STUCK", `same failures after ${attempt} attempts, falling back to reason()`);
         recordEntry({
           partitionId: instruction.partition?.id ?? null,
           deploymentId: instruction.deploymentId,

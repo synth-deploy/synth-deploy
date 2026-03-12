@@ -10,6 +10,7 @@ import { PersistentEnvoyKnowledgeStore } from "./state/persistent-knowledge-stor
 import { LocalStateStore } from "./state/local-state.js";
 import type { EnvoyKnowledgeStore } from "./state/knowledge-store.js";
 import { createEnvoyServer } from "./server.js";
+import { initEnvoyLogger } from "./logger.js";
 
 // --- Configuration ---
 
@@ -25,6 +26,7 @@ const BASE_DIR = process.env.ENVOY_BASE_DIR
 // Ensure base directory exists
 fs.mkdirSync(BASE_DIR, { recursive: true });
 fs.mkdirSync(path.join(BASE_DIR, "deployments"), { recursive: true });
+initEnvoyLogger(BASE_DIR);
 
 const COMMAND_URL = process.env.SYNTH_SERVER_URL ?? "";
 

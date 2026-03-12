@@ -180,3 +180,4 @@ export type {
   EnvironmentNote,
   LlmPostmortem,
 } from "./debrief-reader.js";
+export { SynthLogger } from "./synth-logger.js";

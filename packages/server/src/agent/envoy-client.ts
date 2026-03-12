@@ -2,6 +2,7 @@ import type {
   ServiceHealthChecker,
   HealthCheckResult,
 } from "./health-checker.js";
+import { serverLog, serverWarn } from "../logger.js";
 import type { DecisionType, DeploymentPlan, PlannedStep, SecurityBoundary } from "@synth-deploy/core";
 
 // ---------------------------------------------------------------------------
@@ -104,6 +105,7 @@ async function fetchWithRetry(
       if (opts.retryableStatuses.has(response.status) && attempt < opts.maxRetries) {
         const delay = opts.baseDelayMs * Math.pow(2, attempt);
         console.log(`[envoy-client] Retryable HTTP ${response.status} on attempt ${attempt + 1}/${opts.maxRetries + 1}, retrying in ${delay}ms`);
+        serverWarn(`HTTP-RETRY`, { url, status: response.status, attempt: attempt + 1, maxAttempts: opts.maxRetries + 1, delayMs: delay });
         await sleep(delay);
         continue;
       }
@@ -115,6 +117,7 @@ async function fetchWithRetry(
       if (isTransientError(err) && attempt < opts.maxRetries) {
         const delay = opts.baseDelayMs * Math.pow(2, attempt);
         console.log(`[envoy-client] Transient error on attempt ${attempt + 1}/${opts.maxRetries + 1}: ${lastError.message}, retrying in ${delay}ms`);
+        serverWarn(`TRANSIENT-RETRY`, { url, error: lastError.message, attempt: attempt + 1, maxAttempts: opts.maxRetries + 1, delayMs: delay });
         await sleep(delay);
         continue;
       }
@@ -153,6 +156,8 @@ export class EnvoyClient {
    * Command Agent's pre-flight health check step.
    */
   async checkHealth(): Promise<EnvoyHealthResponse> {
+    serverLog("ENVOY-HEALTH-CHECK", { url: this.baseUrl });
+    const start = Date.now();
     const response = await fetchWithRetry(
       `${this.baseUrl}/health`,
       {},
@@ -161,7 +166,9 @@ export class EnvoyClient {
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }
-    return (await response.json()) as EnvoyHealthResponse;
+    const result = (await response.json()) as EnvoyHealthResponse;
+    serverLog("ENVOY-HEALTH-OK", { url: this.baseUrl, status: result.status, ready: result.readiness.ready, durationMs: Date.now() - start });
+    return result;
   }
 
   /**
@@ -204,6 +211,8 @@ export class EnvoyClient {
     progressCallbackUrl?: string;
     callbackToken?: string;
   }): Promise<EnvoyDeployResult> {
+    serverLog("ENVOY-EXECUTE", { deploymentId: params.deploymentId, envoyUrl: this.baseUrl, artifact: params.artifactName, steps: params.plan?.steps?.length ?? 0 });
+    const execStart = Date.now();
     const response = await fetchWithRetry(
       `${this.baseUrl}/execute`,
       {
@@ -214,7 +223,13 @@ export class EnvoyClient {
       this.timeoutMs * 6, // execution may take longer
     );
 
-    return (await response.json()) as EnvoyDeployResult;
+    const execResult = (await response.json()) as EnvoyDeployResult;
+    if (execResult.success) {
+      serverLog("ENVOY-EXECUTE-COMPLETE", { deploymentId: params.deploymentId, durationMs: Date.now() - execStart });
+    } else {
+      serverLog("ENVOY-EXECUTE-FAILED", { deploymentId: params.deploymentId, failureReason: execResult.failureReason, durationMs: Date.now() - execStart });
+    }
+    return execResult;
   }
 
   /**
@@ -251,7 +266,9 @@ export class EnvoyClient {
   }): Promise<{ plan: DeploymentPlan; rollbackPlan: DeploymentPlan; delta?: string; blocked?: boolean; blockReason?: string }> {
     // Forward the LLM API key so the Envoy can use it if it started without one.
     // Sent in the request body (not headers) over the trusted server↔envoy channel.
+    serverLog("ENVOY-PLAN-REQUEST", { deploymentId: params.deploymentId, envoyUrl: this.baseUrl, artifact: params.artifact.name, version: params.version, environment: params.environment.name });
     const llmApiKey = process.env.SYNTH_LLM_API_KEY;
+    const planStart = Date.now();
     const response = await fetchWithRetry(
       `${this.baseUrl}/plan`,
       {
@@ -264,10 +281,13 @@ export class EnvoyClient {
 
     if (!response.ok) {
       const body = await response.text().catch(() => "");
+      serverLog("ENVOY-PLAN-FAILED", { deploymentId: params.deploymentId, status: response.status, durationMs: Date.now() - planStart });
       throw new Error(`Envoy planning failed (HTTP ${response.status}): ${body}`);
     }
 
-    return (await response.json()) as { plan: DeploymentPlan; rollbackPlan: DeploymentPlan; delta?: string; blocked?: boolean; blockReason?: string };
+    const planResult = (await response.json()) as { plan: DeploymentPlan; rollbackPlan: DeploymentPlan; delta?: string; blocked?: boolean; blockReason?: string };
+    serverLog("ENVOY-PLAN-RECEIVED", { deploymentId: params.deploymentId, steps: planResult.plan?.steps?.length ?? 0, blocked: planResult.blocked ?? false, durationMs: Date.now() - planStart });
+    return planResult;
   }
 
   /**
@@ -373,6 +393,7 @@ export class EnvoyHealthChecker implements ServiceHealthChecker {
       return { reachable: true, responseTimeMs: 0, error: null };
     }
 
+    serverLog("HEALTH-CHECK", { serviceId, url: client.url });
     const start = Date.now();
 
     try {
@@ -380,9 +401,11 @@ export class EnvoyHealthChecker implements ServiceHealthChecker {
       const responseTimeMs = Date.now() - start;
 
       if (health.status === "healthy" && health.readiness.ready) {
+        serverLog("HEALTH-OK", { serviceId, responseTimeMs });
         return { reachable: true, responseTimeMs, error: null };
       }
 
+      serverWarn("HEALTH-DEGRADED", { serviceId, responseTimeMs, status: health.status, reason: health.readiness.reason });
       return {
         reachable: false,
         responseTimeMs,
@@ -395,6 +418,7 @@ export class EnvoyHealthChecker implements ServiceHealthChecker {
 
       // Map fetch errors to recognizable categories for the Command Agent
       if (message.includes("abort")) {
+        serverError("HEALTH-TIMEOUT", { serviceId, responseTimeMs });
         return {
           reachable: false,
           responseTimeMs,
@@ -406,6 +430,7 @@ export class EnvoyHealthChecker implements ServiceHealthChecker {
         message.includes("ECONNREFUSED") ||
         message.includes("fetch failed")
       ) {
+        serverError("HEALTH-REFUSED", { serviceId, responseTimeMs, url: client.url });
         return {
           reachable: false,
           responseTimeMs,
@@ -413,6 +438,7 @@ export class EnvoyHealthChecker implements ServiceHealthChecker {
         };
       }
 
+      serverError("HEALTH-ERROR", { serviceId, responseTimeMs, error: message });
       return {
         reachable: false,
         responseTimeMs,

@@ -1,3 +1,5 @@
+import { serverLog, serverWarn, serverError } from "../logger.js";
+
 /**
  * Service health check abstraction.
  *
@@ -40,6 +42,7 @@ export class EnvoyHealthChecker implements ServiceHealthChecker {
   constructor(private readonly envoyUrl: string, private readonly timeoutMs = 5000) {}
 
   async check(): Promise<HealthCheckResult> {
+    serverLog("HEALTH-CHECK", { url: this.envoyUrl });
     const start = Date.now();
     try {
       const controller = new AbortController();
@@ -49,14 +52,18 @@ export class EnvoyHealthChecker implements ServiceHealthChecker {
       const responseTimeMs = Date.now() - start;
 
       if (res.ok) {
+        serverLog("HEALTH-OK", { url: this.envoyUrl, responseTimeMs });
         return { reachable: true, responseTimeMs, error: null };
       }
+      serverWarn("HEALTH-FAILED", { url: this.envoyUrl, status: res.status, responseTimeMs });
       return { reachable: false, responseTimeMs, error: `HTTP ${res.status}` };
     } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      serverError("HEALTH-ERROR", { url: this.envoyUrl, error: message });
       return {
         reachable: false,
         responseTimeMs: null,
-        error: err instanceof Error ? err.message : String(err),
+        error: message,
       };
     }
   }

@@ -19,6 +19,7 @@ import { DefaultHealthChecker } from "./health-checker.js";
 import type { McpClientManager, McpToolResult } from "./mcp-client-manager.js";
 import { EnvoyClient } from "./envoy-client.js";
 import type { EnvoyDeployResult } from "./envoy-client.js";
+import { serverLog, serverError } from "../logger.js";
 
 // ---------------------------------------------------------------------------
 // Public interfaces
@@ -223,6 +224,8 @@ export class SynthAgent {
 
     // --- Look up entities from stores -----------------------------------------------
 
+    serverLog("DEPLOY-TRIGGER", { deploymentId, artifactId: trigger.artifactId, environmentId: trigger.environmentId, partitionId: trigger.partitionId ?? null, triggeredBy: trigger.triggeredBy });
+
     const environment = this.environmentStore.get(trigger.environmentId);
     if (!environment) {
       throw new OrchestrationError(
@@ -396,6 +399,7 @@ export class SynthAgent {
     try {
       // --- Step 2: Resolve configuration -----------------------------------
 
+      serverLog("DEPLOY-CONFIG-RESOLVE", { deploymentId: deployment.id });
       const { variables, hasConflicts } = this.resolveConfiguration(
         deployment,
         trigger.variables,
@@ -409,11 +413,13 @@ export class SynthAgent {
 
       deployment.status = "running";
       this.deployments.save(deployment);
+      serverLog("DEPLOY-HEALTH-CHECK", { deploymentId: deployment.id, environment: environment.name });
 
       await this.preflightHealthCheck(deployment, partition, environment, artifact);
 
       // --- Step 4: Execute deployment ----------------------------------------
 
+      serverLog("DEPLOY-EXECUTE", { deploymentId: deployment.id, artifact: artifact.name, version: deployment.version, environment: environment.name });
       const delegated = await this.executeDeployment(deployment, partition, environment, artifact);
 
       // --- Step 5: Post-deploy verify ----------------------------------------
@@ -429,6 +435,7 @@ export class SynthAgent {
 
       deployment.status = "succeeded";
       deployment.completedAt = new Date();
+      serverLog("DEPLOY-SUCCEEDED", { deploymentId: deployment.id, artifact: artifact.name, version: deployment.version, environment: environment.name, durationMs: deployment.completedAt.getTime() - deployment.createdAt.getTime() });
 
       const completionEntry = this.debrief.record({
         partitionId: deployment.partitionId ?? null,
@@ -460,6 +467,7 @@ export class SynthAgent {
         error instanceof OrchestrationError
           ? error.message
           : `Unexpected error: ${error instanceof Error ? error.message : String(error)}`;
+      serverError("DEPLOY-FAILED", { deploymentId: deployment.id, reason: deployment.failureReason, durationMs: deployment.completedAt.getTime() - deployment.createdAt.getTime() });
 
       const failEntry = this.debrief.record({
         partitionId: deployment.partitionId ?? null,

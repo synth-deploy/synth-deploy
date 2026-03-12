@@ -3,6 +3,7 @@ import type {
   SecurityBoundary,
   DebriefWriter,
 } from "@synth-deploy/core";
+import { envoyLog, envoyWarn, envoyError } from "../logger.js";
 import type { DefaultOperationRegistry, DryRunResult } from "./operation-registry.js";
 import type { BoundaryValidator } from "./boundary-validator.js";
 import type { Platform } from "./platform.js";
@@ -161,6 +162,8 @@ export class DefaultOperationExecutor {
           ],
           fidelity: "deterministic",
         };
+        console.warn(`[Handler] dry-run step ${i + 1}: no handler for action "${step.action}"`);
+        envoyWarn(`DRY-RUN step ${i + 1}: no handler for action "${step.action}"`);
         stepResults.push({ step, stepIndex: i, result });
         hasFailedObservations = true;
         continue;
@@ -168,6 +171,15 @@ export class DefaultOperationExecutor {
 
       // Run the handler's dry-run check with predicted outcomes from prior steps
       const result = await handler.dryRun(step, predictedOutcomes);
+
+      const failedObs = result.observations.filter((o) => !o.passed);
+      if (failedObs.length > 0) {
+        console.warn(`[Handler] dry-run step ${i + 1}: ${failedObs.length} failed observation(s) — ${failedObs.map((o) => o.name).join(", ")}`);
+        envoyWarn(`DRY-RUN step ${i + 1}: ${failedObs.length} failed observation(s)`, failedObs.map((o) => o.name));
+      } else {
+        console.log(`[Handler] dry-run step ${i + 1}: passed`);
+        envoyLog(`DRY-RUN step ${i + 1}: passed`);
+      }
 
       stepResults.push({ step, stepIndex: i, result });
 
@@ -345,6 +357,9 @@ export class DefaultOperationExecutor {
     for (let i = 0; i < steps.length; i++) {
       const step = steps[i];
 
+      console.log(`[Handler] step ${i + 1}/${steps.length} — ${step.action} ${step.target}`);
+      envoyLog(`EXEC step ${i + 1}/${steps.length}`, { action: step.action, target: step.target });
+
       // Emit step-started
       onProgress?.({
         deploymentId: depId,
@@ -359,7 +374,14 @@ export class DefaultOperationExecutor {
       const result = await this.executeStep(step, boundaries);
       results.push(result);
 
+      if (result.status === "completed") {
+        console.log(`[Handler] executed step ${i + 1}: success in ${result.durationMs}ms`);
+        envoyLog(`EXEC step ${i + 1}: success`, { durationMs: result.durationMs });
+      }
+
       if (result.status === "failed") {
+        console.error(`[Handler] executed step ${i + 1}: failure in ${result.durationMs}ms — ${result.error}`);
+        envoyError(`EXEC step ${i + 1}: failure`, { durationMs: result.durationMs, error: result.error });
         failedIndex = i;
 
         // Emit step-failed
@@ -381,6 +403,8 @@ export class DefaultOperationExecutor {
 
         let rollbackResults: OperationResult[] | undefined;
         if (completedSteps.length > 0) {
+          console.log(`[Rollback] rolling back — ${completedSteps.length} steps to undo`);
+          envoyLog(`ROLLBACK rolling back`, { stepsToUndo: completedSteps.length });
           rollbackResults = await this.rollback(
             completedSteps,
             boundaries,
@@ -458,6 +482,9 @@ export class DefaultOperationExecutor {
 
     for (let i = 0; i < reversed.length; i++) {
       const step = reversed[i];
+
+      console.log(`[Rollback] undoing step ${i + 1}: ${step.action} ${step.target}`);
+      envoyLog(`ROLLBACK undoing step ${i + 1}`, { action: step.action, target: step.target });
 
       if (!step.rollbackAction) {
         // No rollback action defined — skip but record
