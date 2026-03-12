@@ -491,9 +491,11 @@ function createMockLlmClient(
   });
   const internal = client as unknown as {
     _initialized: boolean;
+    _lastInitializedApiKey: string | undefined;
     _anthropicClient: unknown;
   };
   internal._initialized = true;
+  internal._lastInitializedApiKey = "sk-test-mock-key";
   internal._anthropicClient = {
     messages: { create: mockCreate },
   };
