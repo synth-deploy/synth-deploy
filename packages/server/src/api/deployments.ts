@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { generatePostmortemAsync } from "@synth-deploy/core";
+import { generatePostmortem, generatePostmortemAsync } from "@synth-deploy/core";
 import type { LlmClient, IPartitionStore, IEnvironmentStore, IArtifactStore, ISettingsStore, IDeploymentStore, ITelemetryStore, DebriefWriter, DebriefReader, DeploymentEnrichment, RecommendationVerdict } from "@synth-deploy/core";
 import { requirePermission } from "../middleware/permissions.js";
 import {
@@ -1111,7 +1111,12 @@ export function registerDeploymentRoutes(
       }
 
       const entries = debrief.getByDeployment(deployment.id);
-      return generatePostmortemAsync(entries, deployment, llm);
+      const postmortem = generatePostmortem(entries, deployment);
+      const llmResult = await generatePostmortemAsync(entries, deployment, llm);
+      return {
+        postmortem,
+        ...(llmResult.heuristicFallback ? {} : { llmPostmortem: llmResult.llmPostmortem }),
+      };
     },
   );
 
