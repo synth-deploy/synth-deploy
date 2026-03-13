@@ -141,6 +141,11 @@ export interface PlanningInstruction {
    * Never recorded in debrief or persisted — used for this call only.
    */
   llmApiKey?: string;
+  /**
+   * User-provided feedback from reviewing the previous plan.
+   * When set, the LLM incorporates this feedback into the new plan.
+   */
+  refinementFeedback?: string;
 }
 
 /**
@@ -156,6 +161,8 @@ export interface PlanningResult {
   plan: DeploymentPlan;
   rollbackPlan: DeploymentPlan;
   delta?: string;
+  /** LLM-generated 1-2 sentence assessment specific to this deployment */
+  assessmentSummary?: string;
   /** True when the LLM assessed the plan as blocked by issues that cannot be resolved by plan changes */
   blocked?: boolean;
   /** Human-readable explanation of what must be fixed before proceeding */
@@ -1152,6 +1159,93 @@ export class EnvoyAgent {
   // -------------------------------------------------------------------------
 
   /**
+   * Validate whether user feedback on a deployment plan warrants triggering
+   * a full replan. This is a cheap LLM call (no probe loop, no environment
+   * scanning) used as a pre-flight check before the expensive planDeployment.
+   *
+   * Always returns { mode: "replan" } if the LLM is unavailable or fails — the
+   * user must never be blocked due to infrastructure issues.
+   */
+  async validateRefinementFeedback(params: {
+    feedback: string;
+    currentPlanSteps: Array<{ description: string; action: string; target: string }>;
+    artifactName: string;
+    environmentName: string;
+    llmApiKey?: string;
+  }): Promise<{ mode: "replan" | "rejection" | "response"; message: string }> {
+    if (params.llmApiKey) {
+      process.env.SYNTH_LLM_API_KEY = params.llmApiKey;
+    }
+
+    if (!this.llmClient?.isAvailable()) {
+      // No LLM — allow all feedback through so the user is never blocked
+      return { mode: "replan", message: "LLM unavailable — proceeding with replan" };
+    }
+
+    const stepsSummary = params.currentPlanSteps
+      .map((s, i) => `${i + 1}. [${s.action}] ${s.target} — ${s.description}`)
+      .join("\n");
+
+    const prompt =
+      `You are evaluating user input on a deployment plan. The user may be requesting a change, asking a question, or providing unclear feedback.\n\n` +
+      `## Current plan for ${params.artifactName} → ${params.environmentName}\n` +
+      `${stepsSummary}\n\n` +
+      `## User input\n` +
+      `"${params.feedback}"\n\n` +
+      `Classify this input into exactly one of three modes:\n\n` +
+      `"replan" — The user has identified a specific change the plan needs:\n` +
+      `  - A missing step (something the plan should do but doesn't)\n` +
+      `  - A wrong step (specific path, command, config value that needs fixing)\n` +
+      `  - A missing prerequisite or dependency\n` +
+      `  - A specific sequence or ordering issue\n\n` +
+      `"rejection" — The feedback cannot meaningfully improve this plan:\n` +
+      `  - Too vague to act on ("make it better", "fix it")\n` +
+      `  - Already fully addressed by the current steps\n` +
+      `  - Unrelated to deployment (UI, features, business logic, etc.)\n` +
+      `  - Contradictory or technically impossible\n\n` +
+      `"response" — The user is asking a question about the plan:\n` +
+      `  - "Why are you doing X?"\n` +
+      `  - "What does step N do?"\n` +
+      `  - "Is this safe?"\n` +
+      `  - Any interrogative about the plan's reasoning or approach\n\n` +
+      `For "replan": message = one sentence describing what change to incorporate.\n` +
+      `For "rejection": message = one sentence explaining why this won't improve the plan.\n` +
+      `For "response": message = a direct, specific answer to their question based on the plan steps shown.\n\n` +
+      `Respond with JSON only:\n` +
+      `{ "mode": "replan" | "rejection" | "response", "message": "..." }`;
+
+    const result = await this.llmClient.reason({
+      prompt,
+      systemPrompt: "You are a deployment plan reviewer. Respond with JSON only.",
+      promptSummary: "Validate refinement feedback",
+      partitionId: null,
+      deploymentId: null,
+      maxTokens: 256,
+    });
+
+    if (!result.ok) {
+      // LLM failed — allow feedback through rather than blocking the user
+      return { mode: "replan", message: "Validation failed — proceeding with replan" };
+    }
+
+    try {
+      let text = result.text.trim();
+      const fenced = text.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+      if (fenced) text = fenced[1].trim();
+      else if (!text.startsWith("{")) {
+        const first = text.indexOf("{");
+        const last = text.lastIndexOf("}");
+        if (first !== -1 && last > first) text = text.substring(first, last + 1);
+      }
+      const parsed = JSON.parse(text) as { mode: string; message: string };
+      return { mode: parsed.mode as "replan" | "rejection" | "response", message: parsed.message ?? "No message" };
+    } catch {
+      // Parse failure — allow through
+      return { mode: "replan", message: "Could not parse validation response — proceeding with replan" };
+    }
+  }
+
+  /**
    * Plan a deployment: reason about how to deploy an artifact to a target
    * environment. This phase is entirely read-only — nothing is touched on
    * the system. The returned plan must be approved by the user before
@@ -1339,6 +1433,10 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.plan.steps.
 ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnalysis ?? "no analysis"}`).join("\n")}`);
     }
 
+    if (instruction.refinementFeedback) {
+      sections.push(`## User Refinement Request\n${instruction.refinementFeedback}\n\nThe user reviewed the previous plan and has requested this change. Incorporate this feedback into the new plan.`);
+    }
+
     // Shared JSON output format tail used by both system prompts.
     const planOutputFormat =
       `Each step must have a clear action, target, description, and whether it is ` +
@@ -1369,7 +1467,8 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
       `      "execPreview": "The exact literal command string that will execute, e.g. 'docker pull myapp:1.2.3', 'systemctl restart nginx', 'npm install --production'. Omit if this step doesn't invoke a shell command."\n` +
       `    }\n` +
       `  ],\n` +
-      `  "delta": "If a previous successful plan exists, describe what changed and why. Omit if no previous plan."\n` +
+      `  "delta": "If a previous successful plan exists, describe what changed and why. Omit if no previous plan.",\n` +
+      `  "assessmentSummary": "1-2 sentences specific to THIS deployment: what makes it risky or safe, what to watch for. Be specific to the artifact name, version, target environment, and plan steps — not generic boilerplate."\n` +
       `}`;
 
     // Attempt 1: probe loop — model uses the probe() tool to observe real machine state.
@@ -1543,6 +1642,7 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
           execPreview?: string;
         }>;
         delta?: string;
+        assessmentSummary?: string;
       };
 
       let currentParsed: ParsedPlan;
@@ -1640,6 +1740,7 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
           plan,
           rollbackPlan: this.buildRollbackPlan(plan, instruction),
           delta: currentParsed.delta,
+          assessmentSummary: currentParsed.assessmentSummary,
         };
       }
 
@@ -1694,7 +1795,7 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
         });
 
         envoyLog("PLAN-COMPLETE", { steps: plan.steps.length });
-        return { plan, rollbackPlan, delta: currentParsed.delta };
+        return { plan, rollbackPlan, delta: currentParsed.delta, assessmentSummary: currentParsed.assessmentSummary };
       }
 
       // --- Failed observations: build observation text for next planning call ---
@@ -1735,6 +1836,7 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
           plan,
           rollbackPlan: this.buildRollbackPlan(plan, instruction),
           delta: currentParsed.delta,
+          assessmentSummary: currentParsed.assessmentSummary,
         };
       }
 
@@ -1760,6 +1862,7 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
           plan,
           rollbackPlan: this.buildRollbackPlan(plan, instruction),
           delta: currentParsed.delta,
+          assessmentSummary: currentParsed.assessmentSummary,
           blocked: true,
           blockReason,
         };

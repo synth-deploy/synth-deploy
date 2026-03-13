@@ -361,6 +361,13 @@ export async function retryDeployment(
   return fetchJson(`/api/deployments/${id}/retry`, { method: "POST", body: JSON.stringify({}) });
 }
 
+export async function replanDeployment(deploymentId: string, feedback: string): Promise<{ deployment: Deployment } | { mode: "response"; message: string }> {
+  return fetchJson(`/api/deployments/${deploymentId}/replan`, {
+    method: "POST",
+    body: JSON.stringify({ feedback }),
+  });
+}
+
 // --- Debrief / Reports ---
 
 export async function getRecentDebrief(filters?: {

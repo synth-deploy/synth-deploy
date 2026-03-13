@@ -283,6 +283,10 @@ export const DeploymentListQuerySchema = z.object({
   envoyId: z.string().optional(),
 });
 
+export const ReplanDeploymentSchema = z.object({
+  feedback: z.string().min(1),
+});
+
 export const DebriefQuerySchema = z.object({
   limit: z.coerce.number().int().positive().optional(),
   partitionId: z.string().optional(),

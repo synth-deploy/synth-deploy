@@ -63,6 +63,7 @@ const PlanRequestSchema = z.object({
   resolvedVariables: z.record(z.string()),
   /** Forwarded from Server runtime config — never logged or persisted */
   llmApiKey: z.string().optional(),
+  refinementFeedback: z.string().optional(),
 });
 
 const PlanStepSchema = z.object({
@@ -255,6 +256,33 @@ export function createEnvoyServer(
         error: "Rollback plan generation failed",
         details: err instanceof Error ? err.message : String(err),
       });
+    }
+  });
+
+  // -- Validate refinement feedback (cheap LLM call, no probe loop) ----------
+
+  const ValidateRefinementSchema = z.object({
+    feedback: z.string().min(1),
+    currentPlanSteps: z.array(z.object({
+      description: z.string(),
+      action: z.string(),
+      target: z.string(),
+    })),
+    artifactName: z.string(),
+    environmentName: z.string(),
+    llmApiKey: z.string().optional(),
+  });
+
+  app.post("/validate-refinement", async (request, reply) => {
+    const parsed = ValidateRefinementSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: "Invalid request", details: parsed.error.format() });
+    }
+    try {
+      const result = await agent.validateRefinementFeedback(parsed.data);
+      return reply.status(200).send(result);
+    } catch (err) {
+      return reply.status(500).send({ error: "Validation failed", details: err instanceof Error ? err.message : String(err) });
     }
   });
 

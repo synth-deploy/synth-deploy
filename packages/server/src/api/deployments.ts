@@ -11,6 +11,7 @@ import {
   DeploymentListQuerySchema,
   DebriefQuerySchema,
   ProgressEventSchema,
+  ReplanDeploymentSchema,
 } from "./schemas.js";
 import type { ProgressEventStore } from "./progress-event-store.js";
 import { EnvoyClient } from "../agent/envoy-client.js";
@@ -148,7 +149,7 @@ export function registerDeploymentRoutes(
           } else {
             // Plan is valid — transition to awaiting_approval
             dep.status = "awaiting_approval" as typeof dep.status;
-            dep.recommendation = computeRecommendation(dep, deployments);
+            dep.recommendation = computeRecommendation(dep, deployments, result.assessmentSummary);
             deployments.save(dep);
 
             debrief.record({
@@ -508,6 +509,129 @@ export function registerDeploymentRoutes(
       });
 
       return { deployment, modified: true };
+    },
+  );
+
+  // Replan a deployment with user feedback — triggers a new LLM planning pass
+  app.post<{ Params: { id: string } }>(
+    "/api/deployments/:id/replan",
+    { preHandler: [requirePermission("deployment.approve")] },
+    async (request, reply) => {
+      const deploymentId = request.params.id;
+      const deployment = deployments.get(deploymentId);
+      if (!deployment) {
+        return reply.status(404).send({ error: "Deployment not found" });
+      }
+
+      if ((deployment.status as string) !== "awaiting_approval") {
+        return reply.status(409).send({ error: `Cannot replan deployment in "${deployment.status}" status — must be "awaiting_approval"` });
+      }
+
+      const parsed = ReplanDeploymentSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.status(400).send({ error: parsed.error.message });
+      }
+
+      const artifact = artifactStore.get(deployment.artifactId);
+      if (!artifact) {
+        return reply.status(404).send({ error: `Artifact not found: ${deployment.artifactId}` });
+      }
+
+      const environment = deployment.environmentId ? environments.get(deployment.environmentId) : undefined;
+      const partition = deployment.partitionId ? partitions.get(deployment.partitionId) : undefined;
+
+      const planningEnvoy = deployment.envoyId ? envoyRegistry?.get(deployment.envoyId) : envoyRegistry?.list()[0];
+      if (!planningEnvoy) {
+        return reply.status(422).send({ error: "No envoy available for replanning" });
+      }
+
+      // Validate feedback with LLM before triggering expensive replan
+      const planningClientForValidation = new EnvoyClient(planningEnvoy.url);
+      try {
+        const validation = await planningClientForValidation.validateRefinementFeedback({
+          feedback: parsed.data.feedback,
+          currentPlanSteps: (deployment.plan?.steps ?? []).map((s) => ({
+            description: s.description,
+            action: s.action,
+            target: s.target,
+          })),
+          artifactName: artifact?.name ?? "unknown",
+          environmentName: environment?.name ?? "unknown",
+        });
+        if (validation.mode === "rejection") {
+          return reply.status(422).send({ error: validation.message, mode: "rejection" });
+        }
+        if (validation.mode === "response") {
+          return reply.status(200).send({ mode: "response", message: validation.message });
+        }
+        // mode === "replan" — fall through to full replan
+      } catch {
+        // Validation call failed — proceed with replan rather than blocking the user
+      }
+
+      deployment.status = "planning" as typeof deployment.status;
+      deployments.save(deployment);
+
+      const planningClient = new EnvoyClient(planningEnvoy.url);
+      const environmentForPlanning = environment
+        ? { id: environment.id, name: environment.name, variables: environment.variables }
+        : { id: `direct:${planningEnvoy.id}`, name: planningEnvoy.name, variables: {} };
+
+      let result: Awaited<ReturnType<typeof planningClient.requestPlan>>;
+      try {
+        result = await planningClient.requestPlan({
+          deploymentId,
+          artifact: {
+            id: artifact.id,
+            name: artifact.name,
+            type: artifact.type,
+            analysis: {
+              summary: artifact.analysis.summary,
+              dependencies: artifact.analysis.dependencies,
+              configurationExpectations: artifact.analysis.configurationExpectations,
+              deploymentIntent: artifact.analysis.deploymentIntent,
+              confidence: artifact.analysis.confidence,
+            },
+          },
+          environment: environmentForPlanning,
+          partition: partition
+            ? { id: partition.id, name: partition.name, variables: partition.variables }
+            : undefined,
+          version: deployment.version,
+          resolvedVariables: deployment.variables,
+          refinementFeedback: parsed.data.feedback,
+        });
+      } catch (err) {
+        const dep = deployments.get(deploymentId);
+        if (dep) {
+          dep.status = "awaiting_approval" as typeof dep.status;
+          deployments.save(dep);
+        }
+        return reply.status(500).send({ error: err instanceof Error ? err.message : "Replanning failed" });
+      }
+
+      const dep = deployments.get(deploymentId);
+      if (!dep) {
+        return reply.status(404).send({ error: "Deployment not found after replanning" });
+      }
+
+      dep.plan = result.plan;
+      dep.rollbackPlan = result.rollbackPlan;
+      dep.recommendation = computeRecommendation(dep, deployments, result.assessmentSummary);
+      dep.status = "awaiting_approval" as typeof dep.status;
+      deployments.save(dep);
+
+      debrief.record({
+        partitionId: dep.partitionId ?? null,
+        deploymentId: dep.id,
+        agent: "envoy",
+        decisionType: "plan-generation" as Parameters<typeof debrief.record>[0]["decisionType"],
+        decision: `Plan regenerated with user feedback (${result.plan.steps.length} steps)`,
+        reasoning: result.plan.reasoning,
+        context: { stepCount: result.plan.steps.length, envoyId: planningEnvoy.id, refinementFeedback: parsed.data.feedback },
+      });
+
+      return { deployment: dep, replanned: true };
     },
   );
 
@@ -937,7 +1061,7 @@ export function registerDeploymentRoutes(
               });
             } else {
               dep.status = "awaiting_approval" as typeof dep.status;
-              dep.recommendation = computeRecommendation(dep, deployments);
+              dep.recommendation = computeRecommendation(dep, deployments, result.assessmentSummary);
               deployments.save(dep);
 
               debrief.record({
@@ -1131,6 +1255,7 @@ export function registerDeploymentRoutes(
 function computeRecommendation(
   deployment: import("@synth-deploy/core").Deployment,
   store: IDeploymentStore,
+  llmSummary?: string,
 ): import("@synth-deploy/core").DeploymentRecommendation {
   const factors: string[] = [];
   let verdict: RecommendationVerdict = "proceed";
@@ -1197,5 +1322,5 @@ function computeRecommendation(
     hold: "Hold — resolve conflicting deployments before proceeding",
   };
 
-  return { verdict, summary: summaryMap[verdict], factors };
+  return { verdict, summary: llmSummary ?? summaryMap[verdict], factors };
 }

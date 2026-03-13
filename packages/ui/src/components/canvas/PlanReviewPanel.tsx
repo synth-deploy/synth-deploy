@@ -5,6 +5,7 @@ import {
   approveDeployment,
   rejectDeployment,
   modifyDeploymentPlan,
+  replanDeployment,
   listEnvironments,
   listArtifacts,
   listPartitions,
@@ -227,6 +228,7 @@ export default function PlanReviewPanel({ deploymentId }: Props) {
   const [refineFeedback, setRefineFeedback] = useState("");
   const [refining, setRefining] = useState(false);
   const [revised, setRevised] = useState(false);
+  const [refineAnswer, setRefineAnswer] = useState<string | null>(null);
 
   useEffect(() => {
     if (result?.deployment) {
@@ -359,11 +361,16 @@ export default function PlanReviewPanel({ deploymentId }: Props) {
     }
     setRefining(true);
     setError(null);
+    setRefineAnswer(null);
     try {
-      const res = await modifyDeploymentPlan(deploymentId, {
-        steps: deployment!.plan!.steps,
-        reason: `Refine request: ${refineFeedback.trim()}`,
-      });
+      const res = await replanDeployment(deploymentId, refineFeedback.trim());
+      if (!("deployment" in res)) {
+        // mode === "response" — answer the question inline, no replan
+        setRefineAnswer(res.message);
+        setRefining(false);
+        return;
+      }
+      // mode === "replan" completed — update deployment
       setDeployment(res.deployment);
       setMode("review");
       setRefineFeedback("");
@@ -651,13 +658,42 @@ export default function PlanReviewPanel({ deploymentId }: Props) {
           </p>
           <textarea
             value={refineFeedback}
-            onChange={(e) => setRefineFeedback(e.target.value)}
+            onChange={(e) => { setRefineFeedback(e.target.value); setRefineAnswer(null); }}
             placeholder="e.g. CACHE_TTL also changed in this version — make sure that's applied. Also verify the /v2 endpoint responds after deploy, not just /health."
             className="v2-input"
             rows={3}
             style={{ resize: "vertical" }}
             autoFocus
           />
+          {refineAnswer && (
+            <div style={{
+              marginTop: 10,
+              padding: "10px 14px",
+              borderRadius: 8,
+              background: "var(--accent-dim)",
+              border: "1px solid var(--accent-border)",
+            }}>
+              <div style={{
+                fontSize: 11,
+                fontWeight: 600,
+                color: "var(--accent)",
+                marginBottom: 4,
+                fontFamily: "var(--font-mono)",
+                textTransform: "uppercase",
+                letterSpacing: "0.05em",
+              }}>
+                Synth
+              </div>
+              <p style={{ fontSize: 13, color: "var(--text)", margin: "0 0 8px 0", lineHeight: 1.6 }}>{refineAnswer}</p>
+              <button
+                className="plan-btn plan-btn-reject"
+                onClick={() => setRefineAnswer(null)}
+                style={{ fontSize: 11, padding: "3px 10px" }}
+              >
+                Dismiss
+              </button>
+            </div>
+          )}
           {refining && (
             <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 8, fontSize: 12, color: "var(--accent)" }}>
               <SynthMark size={14} active />

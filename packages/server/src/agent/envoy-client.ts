@@ -263,7 +263,8 @@ export class EnvoyClient {
     };
     version: string;
     resolvedVariables: Record<string, string>;
-  }): Promise<{ plan: DeploymentPlan; rollbackPlan: DeploymentPlan; delta?: string; blocked?: boolean; blockReason?: string }> {
+    refinementFeedback?: string;
+  }): Promise<{ plan: DeploymentPlan; rollbackPlan: DeploymentPlan; delta?: string; assessmentSummary?: string; blocked?: boolean; blockReason?: string }> {
     // Forward the LLM API key so the Envoy can use it if it started without one.
     // Sent in the request body (not headers) over the trusted server↔envoy channel.
     serverLog("ENVOY-PLAN-REQUEST", { deploymentId: params.deploymentId, envoyUrl: this.baseUrl, artifact: params.artifact.name, version: params.version, environment: params.environment.name });
@@ -285,7 +286,7 @@ export class EnvoyClient {
       throw new Error(`Envoy planning failed (HTTP ${response.status}): ${body}`);
     }
 
-    const planResult = (await response.json()) as { plan: DeploymentPlan; rollbackPlan: DeploymentPlan; delta?: string; blocked?: boolean; blockReason?: string };
+    const planResult = (await response.json()) as { plan: DeploymentPlan; rollbackPlan: DeploymentPlan; delta?: string; assessmentSummary?: string; blocked?: boolean; blockReason?: string };
     serverLog("ENVOY-PLAN-RECEIVED", { deploymentId: params.deploymentId, steps: planResult.plan?.steps?.length ?? 0, blocked: planResult.blocked ?? false, durationMs: Date.now() - planStart });
     return planResult;
   }
@@ -355,6 +356,30 @@ export class EnvoyClient {
     );
 
     return (await response.json()) as { valid: boolean; violations: Array<{ step: string; reason: string }> };
+  }
+
+  /**
+   * Ask the Envoy to validate whether user refinement feedback warrants a
+   * full replan. Cheap LLM call — no probe loop, no environment scanning.
+   * Always falls through to allow the replan if the call fails.
+   */
+  async validateRefinementFeedback(params: {
+    feedback: string;
+    currentPlanSteps: Array<{ description: string; action: string; target: string }>;
+    artifactName: string;
+    environmentName: string;
+  }): Promise<{ mode: "replan" | "rejection" | "response"; message: string }> {
+    const llmApiKey = process.env.SYNTH_LLM_API_KEY;
+    const response = await fetchWithRetry(
+      `${this.baseUrl}/validate-refinement`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(llmApiKey ? { ...params, llmApiKey } : params),
+      },
+      this.timeoutMs * 3,
+    );
+    return (await response.json()) as { mode: "replan" | "rejection" | "response"; message: string };
   }
 }
 
