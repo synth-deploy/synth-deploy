@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
-import { generatePostmortem } from "@synth-deploy/core";
-import type { IPartitionStore, IEnvironmentStore, IArtifactStore, ISettingsStore, IDeploymentStore, ITelemetryStore, DebriefWriter, DebriefReader, DeploymentEnrichment, RecommendationVerdict } from "@synth-deploy/core";
+import { generatePostmortemAsync } from "@synth-deploy/core";
+import type { LlmClient, IPartitionStore, IEnvironmentStore, IArtifactStore, ISettingsStore, IDeploymentStore, ITelemetryStore, DebriefWriter, DebriefReader, DeploymentEnrichment, RecommendationVerdict } from "@synth-deploy/core";
 import { requirePermission } from "../middleware/permissions.js";
 import {
   CreateDeploymentSchema,
@@ -33,6 +33,7 @@ export function registerDeploymentRoutes(
   progressStore?: ProgressEventStore,
   envoyClient?: EnvoyClient,
   envoyRegistry?: EnvoyRegistry,
+  llm?: LlmClient,
 ): void {
   // Create a deployment (plan phase)
   app.post("/api/deployments", { preHandler: [requirePermission("deployment.create")] }, async (request, reply) => {
@@ -174,7 +175,7 @@ export function registerDeploymentRoutes(
           debrief.record({
             partitionId: dep.partitionId ?? null,
             deploymentId: dep.id,
-            agent: "command",
+            agent: "server",
             decisionType: "deployment-failure" as Parameters<typeof debrief.record>[0]["decisionType"],
             decision: "Envoy planning failed",
             reasoning: dep.failureReason!,
@@ -317,7 +318,7 @@ export function registerDeploymentRoutes(
       debrief.record({
         partitionId: deployment.partitionId ?? null,
         deploymentId: deployment.id,
-        agent: "command",
+        agent: "server",
         decisionType: "system",
         decision: `Deployment approved by ${actor}`,
         reasoning: parsed.data.modifications
@@ -358,7 +359,7 @@ export function registerDeploymentRoutes(
           debrief.record({
             partitionId: deployment.partitionId ?? null,
             deploymentId: deployment.id,
-            agent: "command",
+            agent: "server",
             decisionType: "deployment-failure" as Parameters<typeof debrief.record>[0]["decisionType"],
             decision: "Failed to dispatch approved plan to envoy",
             reasoning: deployment.failureReason!,
@@ -401,7 +402,7 @@ export function registerDeploymentRoutes(
       debrief.record({
         partitionId: deployment.partitionId ?? null,
         deploymentId: deployment.id,
-        agent: "command",
+        agent: "server",
         decisionType: "system",
         decision: "Deployment plan rejected",
         reasoning: parsed.data.reason,
@@ -490,7 +491,7 @@ export function registerDeploymentRoutes(
       debrief.record({
         partitionId: deployment.partitionId ?? null,
         deploymentId: deployment.id,
-        agent: "command",
+        agent: "server",
         decisionType: "plan-modification" as Parameters<typeof debrief.record>[0]["decisionType"],
         decision: `Deployment plan modified by ${actor}`,
         reasoning: parsed.data.reason,
@@ -790,7 +791,7 @@ export function registerDeploymentRoutes(
         debrief.record({
           partitionId: deployment.partitionId ?? null,
           deploymentId: deployment.id,
-          agent: "command",
+          agent: "server",
           decisionType: "plan-generation" as Parameters<typeof debrief.record>[0]["decisionType"],
           decision: `Rollback plan requested and generated for ${artifact.name} v${deployment.version}`,
           reasoning: rollbackPlan.reasoning,
@@ -860,7 +861,7 @@ export function registerDeploymentRoutes(
       debrief.record({
         partitionId: deployment.partitionId ?? null,
         deploymentId: deployment.id,
-        agent: "command",
+        agent: "server",
         decisionType: "rollback-execution" as Parameters<typeof debrief.record>[0]["decisionType"],
         decision: `Rollback execution initiated for ${artifact?.name ?? deployment.artifactId} v${deployment.version}`,
         reasoning: `Rollback requested by ${actor}. Executing ${deployment.rollbackPlan.steps.length} rollback step(s).`,
@@ -903,7 +904,7 @@ export function registerDeploymentRoutes(
         debrief.record({
           partitionId: dep.partitionId ?? null,
           deploymentId: dep.id,
-          agent: "command",
+          agent: "server",
           decisionType: "rollback-execution" as Parameters<typeof debrief.record>[0]["decisionType"],
           decision: result.success
             ? `Rollback completed successfully for ${artifact?.name ?? dep.artifactId} v${dep.version}`
@@ -997,7 +998,7 @@ export function registerDeploymentRoutes(
       debrief.record({
         partitionId: deployment.partitionId ?? null,
         deploymentId: deployment.id,
-        agent: "command",
+        agent: "server",
         decisionType: "system",
         decision: `Retry of deployment ${source.id} (attempt #${attemptNumber})`,
         reasoning: `User initiated retry of deployment ${source.id}. Same artifact, version, environment, and partition.`,
@@ -1085,7 +1086,7 @@ export function registerDeploymentRoutes(
             debrief.record({
               partitionId: dep.partitionId ?? null,
               deploymentId: dep.id,
-              agent: "command",
+              agent: "server",
               decisionType: "deployment-failure" as Parameters<typeof debrief.record>[0]["decisionType"],
               decision: "Envoy planning failed",
               reasoning: dep.failureReason!,
@@ -1110,8 +1111,7 @@ export function registerDeploymentRoutes(
       }
 
       const entries = debrief.getByDeployment(deployment.id);
-      const postmortem = generatePostmortem(entries, deployment);
-      return { postmortem };
+      return generatePostmortemAsync(entries, deployment, llm);
     },
   );
 

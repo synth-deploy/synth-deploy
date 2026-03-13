@@ -6,33 +6,7 @@ import type {
   DeploymentGraphEdge,
 } from "@synth-deploy/core";
 import type { LlmClient, LlmResult, IArtifactStore } from "@synth-deploy/core";
-
-// ---------------------------------------------------------------------------
-// Prompt injection sanitization
-// ---------------------------------------------------------------------------
-
-/**
- * Sanitize user-controlled strings before inclusion in LLM prompts.
- * Strips characters and patterns commonly used in prompt injection attacks:
- * - Control characters (except newline/tab)
- * - Markdown/prompt delimiters that could reframe the prompt context
- * - System/assistant role injection attempts
- */
-function sanitizeForPrompt(input: string): string {
-  // Strip control characters except \n and \t
-  let sanitized = input.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "");
-
-  // Neutralize prompt injection patterns:
-  // - "System:", "Assistant:", "Human:" role injection
-  // - Triple backtick blocks that could reframe context
-  // - XML-style tags used to inject system instructions
-  sanitized = sanitized
-    .replace(/\b(system|assistant|human)\s*:/gi, (match) => match.replace(":", "\uFF1A"))
-    .replace(/```/g, "'''")
-    .replace(/<\/?(?:system|prompt|instruction|context|message)[^>]*>/gi, "");
-
-  return sanitized;
-}
+import { sanitizeForPrompt } from "@synth-deploy/core";
 
 // ---------------------------------------------------------------------------
 // Zod schema for LLM graph inference response validation

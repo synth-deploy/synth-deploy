@@ -38,7 +38,7 @@ export function markStaleDeployments(
     debrief.record({
       partitionId: deployment.partitionId ?? null,
       deploymentId: deployment.id,
-      agent: "command",
+      agent: "server",
       decisionType: "deployment-failure",
       decision: `Marked deployment as failed: exceeded ${Math.round(thresholdMs / 60_000)} minute stale threshold`,
       reasoning:

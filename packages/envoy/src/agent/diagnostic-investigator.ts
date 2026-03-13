@@ -465,7 +465,7 @@ export class DiagnosticInvestigator {
         `Failure type: ${failureType}\n` +
         `Service: ${instruction.operationId} v${instruction.version}\n` +
         `Environment: ${instruction.environmentName} (partition: ${instruction.partitionName})\n` +
-        `${execResult?.error ? `Execution error: ${execResult.error}\n` : ""}` +
+        `${execResult?.error ? `Execution error: ${execResult.error.slice(0, 2000)}\n` : ""}` +
         `\nEvidence:\n${evidenceSummary}\n` +
         `\nLog findings:\n${logFindingSummary}\n` +
         `\nHistory: ${historyContext.previousDeployCount} previous deployments, ` +

@@ -166,6 +166,7 @@ export {
   POSTMORTEM_SYSTEM_PROMPT,
 } from "./debrief-reader.js";
 export { LlmClient, createOpenAICompatibleAdapter, resolveProviderToSdk, defaultBaseUrlForProvider, buildLlmConfigFromSettings, verifyModelCapability } from "./llm-client.js";
+export { sanitizeForPrompt, maskIfSecret } from "./prompt-utils.js";
 export type { LlmSdkProvider, LlmProvider as LlmSdkProviderLegacy, LlmConfig, LlmCallParams, LlmResult, LlmProviderAdapter, CapabilityVerificationResult } from "./llm-client.js";
 export type {
   PostmortemReport,

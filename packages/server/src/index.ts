@@ -177,7 +177,7 @@ const healthChecker = healthCheckerUrl ? new EnvoyHealthChecker(healthCheckerUrl
 const agent = new SynthAgent(debrief, deployments, artifactStore, environments, partitions, healthChecker, {}, settings);
 // Initialize server LLM client — picks up provider from env or settings
 const llmSettings = settings.get().llm;
-const llm = new LlmClient(debrief, "command", buildLlmConfigFromSettings(llmSettings));
+const llm = new LlmClient(debrief, "server", buildLlmConfigFromSettings(llmSettings));
 if (llm.isAvailable()) {
   console.log(`[Synth] LLM available for artifact analysis (provider: ${llmSettings?.provider ?? "anthropic"})`);
 } else {
@@ -425,7 +425,7 @@ if (process.env.SYNTH_SEED_DEMO !== 'false' && partitions.list().length === 0) {
   // --- Debrief entries (rich decision diary) ---
 
   debrief.record({
-    partitionId: null, deploymentId: null, agent: "command", decisionType: "system",
+    partitionId: null, deploymentId: null, agent: "server", decisionType: "system",
     decision: "Command initialized with demo data",
     reasoning: "Seeded 3 partitions, 3 environments, 3 artifacts, 10 deployments, and 2 envoy security boundary sets.",
     context: { partitions: 3, environments: 3, deployments: 10, artifacts: 3, securityBoundaries: 2 },
@@ -433,13 +433,13 @@ if (process.env.SYNTH_SEED_DEMO !== 'false' && partitions.list().length === 0) {
 
   // dep1 — web-app 2.3.0 succeeded
   debrief.record({
-    partitionId: acmePartition.id, deploymentId: dep1.id, agent: "command", decisionType: "pipeline-plan",
+    partitionId: acmePartition.id, deploymentId: dep1.id, agent: "server", decisionType: "pipeline-plan",
     decision: "Planned deployment pipeline for web-app v2.3.0 to Acme Corp production",
     reasoning: "Standard 3-step pipeline: install deps, run migrations, health check. No variable conflicts.",
     context: { version: "2.3.0", steps: 3 },
   });
   debrief.record({
-    partitionId: acmePartition.id, deploymentId: dep1.id, agent: "command", decisionType: "configuration-resolved",
+    partitionId: acmePartition.id, deploymentId: dep1.id, agent: "server", decisionType: "configuration-resolved",
     decision: "Resolved 4 variables for Acme Corp production (partition + environment merged)",
     reasoning: "Merged partition variables (APP_ENV, DB_HOST, REGION) with environment variables (APP_ENV, LOG_LEVEL). APP_ENV conflict resolved: environment value takes precedence.",
     context: { resolvedCount: 4, conflicts: 1, policy: "environment-wins" },
@@ -457,7 +457,7 @@ if (process.env.SYNTH_SEED_DEMO !== 'false' && partitions.list().length === 0) {
     context: { attempts: 1, responseTime: 45 },
   });
   debrief.record({
-    partitionId: acmePartition.id, deploymentId: dep1.id, agent: "command", decisionType: "deployment-completion",
+    partitionId: acmePartition.id, deploymentId: dep1.id, agent: "server", decisionType: "deployment-completion",
     decision: "Deployment web-app v2.3.0 completed successfully",
     reasoning: "All pipeline steps passed. Health check confirmed. Marked as succeeded.",
     context: { status: "succeeded" },
@@ -465,7 +465,7 @@ if (process.env.SYNTH_SEED_DEMO !== 'false' && partitions.list().length === 0) {
 
   // dep4 — api-service 1.11.0 failed
   debrief.record({
-    partitionId: acmePartition.id, deploymentId: dep4.id, agent: "command", decisionType: "pipeline-plan",
+    partitionId: acmePartition.id, deploymentId: dep4.id, agent: "server", decisionType: "pipeline-plan",
     decision: "Planned deployment pipeline for api-service v1.11.0 to Acme Corp production",
     reasoning: "2-step pipeline: pull image, verify endpoint.",
     context: { version: "1.11.0", steps: 2 },
@@ -489,7 +489,7 @@ if (process.env.SYNTH_SEED_DEMO !== 'false' && partitions.list().length === 0) {
     context: { rootCause: "port-conflict", stalePid: 14823 },
   });
   debrief.record({
-    partitionId: acmePartition.id, deploymentId: dep4.id, agent: "command", decisionType: "deployment-failure",
+    partitionId: acmePartition.id, deploymentId: dep4.id, agent: "server", decisionType: "deployment-failure",
     decision: "Deployment api-service v1.11.0 failed — health check could not connect",
     reasoning: "Envoy diagnostic identified port conflict from stale process. Recommend adding a pre-deploy cleanup step.",
     context: { status: "failed", recommendation: "Add cleanup step" },
@@ -497,7 +497,7 @@ if (process.env.SYNTH_SEED_DEMO !== 'false' && partitions.list().length === 0) {
 
   // dep7 — worker-service 2.9.0 failed
   debrief.record({
-    partitionId: initechPartition.id, deploymentId: dep7.id, agent: "command", decisionType: "pipeline-plan",
+    partitionId: initechPartition.id, deploymentId: dep7.id, agent: "server", decisionType: "pipeline-plan",
     decision: "Planned deployment pipeline for worker-service v2.9.0 to Initech production",
     reasoning: "4-step pipeline with full verification strategy.",
     context: { version: "2.9.0", steps: 4, verificationStrategy: "full" },
@@ -515,7 +515,7 @@ if (process.env.SYNTH_SEED_DEMO !== 'false' && partitions.list().length === 0) {
     context: { queueDepth: 342, threshold: 100, processingRate: "0.3/s vs expected 3/s" },
   });
   debrief.record({
-    partitionId: initechPartition.id, deploymentId: dep7.id, agent: "command", decisionType: "deployment-failure",
+    partitionId: initechPartition.id, deploymentId: dep7.id, agent: "server", decisionType: "deployment-failure",
     decision: "Deployment worker-service v2.9.0 failed — queue depth exceeded threshold",
     reasoning: "Queue depth check returned 342 (max 100). Processing regression in v2.9.0.",
     context: { status: "failed" },
@@ -523,7 +523,7 @@ if (process.env.SYNTH_SEED_DEMO !== 'false' && partitions.list().length === 0) {
 
   // dep10 — web-app 2.4.1 rolled back
   debrief.record({
-    partitionId: initechPartition.id, deploymentId: dep10.id, agent: "command", decisionType: "pipeline-plan",
+    partitionId: initechPartition.id, deploymentId: dep10.id, agent: "server", decisionType: "pipeline-plan",
     decision: "Planned deployment pipeline for web-app v2.4.1 to Initech production",
     reasoning: "Standard 3-step pipeline.",
     context: { version: "2.4.1", steps: 3 },
@@ -541,7 +541,7 @@ if (process.env.SYNTH_SEED_DEMO !== 'false' && partitions.list().length === 0) {
     context: { passed: 10, failed: 2, failedEndpoints: ["/api/v2/users"] },
   });
   debrief.record({
-    partitionId: initechPartition.id, deploymentId: dep10.id, agent: "command", decisionType: "deployment-failure",
+    partitionId: initechPartition.id, deploymentId: dep10.id, agent: "server", decisionType: "deployment-failure",
     decision: "Initiated rollback of web-app v2.4.1 on Initech production",
     reasoning: "502 errors on critical user endpoints. Rolling back to previous known-good version.",
     context: { status: "rolled_back", rolledBackFrom: "2.4.1" },
@@ -549,19 +549,19 @@ if (process.env.SYNTH_SEED_DEMO !== 'false' && partitions.list().length === 0) {
 
   // dep6 — web-app 2.5.0-rc.1 with variable conflict
   debrief.record({
-    partitionId: globexPartition.id, deploymentId: dep6.id, agent: "command", decisionType: "pipeline-plan",
+    partitionId: globexPartition.id, deploymentId: dep6.id, agent: "server", decisionType: "pipeline-plan",
     decision: "Planned deployment for web-app v2.5.0-rc.1 to Globex staging",
     reasoning: "Standard 3-step pipeline. Release candidate — permissive conflict policy.",
     context: { version: "2.5.0-rc.1", steps: 3 },
   });
   debrief.record({
-    partitionId: globexPartition.id, deploymentId: dep6.id, agent: "command", decisionType: "variable-conflict",
+    partitionId: globexPartition.id, deploymentId: dep6.id, agent: "server", decisionType: "variable-conflict",
     decision: "Variable conflict: APP_ENV defined in both partition and environment",
     reasoning: "Partition sets APP_ENV=production, environment sets APP_ENV=staging. Permissive policy — using environment value.",
     context: { variable: "APP_ENV", partitionValue: "production", environmentValue: "staging", resolution: "environment-wins" },
   });
   debrief.record({
-    partitionId: globexPartition.id, deploymentId: dep6.id, agent: "command", decisionType: "deployment-completion",
+    partitionId: globexPartition.id, deploymentId: dep6.id, agent: "server", decisionType: "deployment-completion",
     decision: "Deployment web-app v2.5.0-rc.1 completed on Globex staging",
     reasoning: "All steps passed despite variable conflict. RC verified in staging.",
     context: { status: "succeeded" },
@@ -569,7 +569,7 @@ if (process.env.SYNTH_SEED_DEMO !== 'false' && partitions.list().length === 0) {
 
   // dep9 — in-progress
   debrief.record({
-    partitionId: globexPartition.id, deploymentId: dep9.id, agent: "command", decisionType: "pipeline-plan",
+    partitionId: globexPartition.id, deploymentId: dep9.id, agent: "server", decisionType: "pipeline-plan",
     decision: "Planned deployment for api-service v1.13.0-beta.2 to Globex staging",
     reasoning: "2-step pipeline for staging. Beta version — monitoring closely.",
     context: { version: "1.13.0-beta.2", steps: 2 },
@@ -690,7 +690,7 @@ registerHealthRoutes(app, {
 });
 const progressStore = new ProgressEventStore();
 const defaultEnvoyClient = new EnvoyClient(settings.get().envoy.url, settings.get().envoy.timeoutMs);
-registerDeploymentRoutes(app, deployments, debrief, partitions, environments, artifactStore, settings, telemetryStore, progressStore, defaultEnvoyClient, envoyRegistry);
+registerDeploymentRoutes(app, deployments, debrief, partitions, environments, artifactStore, settings, telemetryStore, progressStore, defaultEnvoyClient, envoyRegistry, llm);
 registerEnvoyReportRoutes(app, debrief, deployments, envoyRegistry);
 registerArtifactRoutes(app, artifactStore, telemetryStore, artifactAnalyzer);
 registerSecurityBoundaryRoutes(app, securityBoundaryStore, telemetryStore);

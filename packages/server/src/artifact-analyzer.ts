@@ -1,6 +1,7 @@
 import type { ArtifactAnalysis, Artifact } from "@synth-deploy/core";
 import type { LlmClient, LlmResult } from "@synth-deploy/core";
 import type { DebriefWriter } from "@synth-deploy/core";
+import { sanitizeForPrompt } from "@synth-deploy/core";
 import type { PatternStore, PatternMatch, DerivedAnalysis } from "./pattern-store.js";
 import { archiveFormat, unpackArchive, formatExtractedFiles } from "./archive-unpacker.js";
 
@@ -82,17 +83,17 @@ async function analyzeWithLlm(
   extractedArchiveContent?: string,
 ): Promise<ArtifactAnalysis | null> {
   const contentSection = extractedArchiveContent
-    ? `Archive contents:\n\n${extractedArchiveContent}`
+    ? `Archive contents:\n\n${sanitizeForPrompt(extractedArchiveContent)}`
     : artifact.content
-      ? `Content:\n\`\`\`\n${artifact.content.toString("utf-8").slice(0, 4000)}\n\`\`\``
+      ? `Content:\n'''\n${sanitizeForPrompt(artifact.content.toString("utf-8").slice(0, 4000))}\n'''`
       : "(no content available)";
 
   const prompt = `Analyze this deployment artifact.
 
-Name: ${artifact.name}
-Type: ${artifactType}
-Source: ${artifact.source}
-Metadata: ${JSON.stringify(artifact.metadata || {})}
+Name: ${sanitizeForPrompt(artifact.name)}
+Type: ${sanitizeForPrompt(artifactType)}
+Source: ${sanitizeForPrompt(artifact.source)}
+Metadata: ${sanitizeForPrompt(JSON.stringify(artifact.metadata || {}))}
 
 ${contentSection}
 
@@ -319,18 +320,18 @@ export class ArtifactAnalyzer {
 
     const prompt = `An artifact's analysis has user corrections. Revise the analysis to incorporate them.
 
-Artifact Name: ${artifact.name}
-Type: ${artifact.type}
+Artifact Name: ${sanitizeForPrompt(artifact.name)}
+Type: ${sanitizeForPrompt(artifact.type)}
 
 Current Analysis:
-Summary: ${artifact.analysis.summary}
-Dependencies: ${JSON.stringify(artifact.analysis.dependencies)}
-Configuration Expectations: ${JSON.stringify(artifact.analysis.configurationExpectations)}
-Deployment Intent: ${artifact.analysis.deploymentIntent ?? "unknown"}
+Summary: ${sanitizeForPrompt(artifact.analysis.summary)}
+Dependencies: ${sanitizeForPrompt(JSON.stringify(artifact.analysis.dependencies))}
+Configuration Expectations: ${sanitizeForPrompt(JSON.stringify(artifact.analysis.configurationExpectations))}
+Deployment Intent: ${sanitizeForPrompt(artifact.analysis.deploymentIntent ?? "unknown")}
 Confidence: ${artifact.analysis.confidence}
 
 User Corrections:
-${correctionsText}
+${sanitizeForPrompt(correctionsText)}
 
 Produce a JSON analysis that incorporates all user corrections. Raise confidence proportional to how much the corrections clarify the artifact's purpose.`;
 
@@ -367,7 +368,7 @@ Produce a JSON analysis that incorporates all user corrections. Raise confidence
       this._debrief.record({
         partitionId: null,
         deploymentId: null,
-        agent: "command",
+        agent: "server",
         decisionType: "artifact-analysis",
         decision: `Re-analyzed "${artifact.name}" with ${artifact.annotations.length} user correction(s). Confidence: ${revised.confidence}.`,
         reasoning: result.text,
@@ -406,7 +407,7 @@ Produce a JSON analysis that incorporates all user corrections. Raise confidence
     this._debrief.record({
       partitionId: null,
       deploymentId: null,
-      agent: "command",
+      agent: "server",
       decisionType: "artifact-analysis",
       decision: `Analyzed artifact "${artifact.name}" (${artifactType}) via ${method}. ` +
         `Confidence: ${analysis.confidence} (${confidenceLabel}). ` +

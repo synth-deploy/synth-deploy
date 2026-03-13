@@ -12,7 +12,7 @@ import type {
   ArtifactAnalysis,
   DeploymentPlan,
 } from "@synth-deploy/core";
-import { LlmClient } from "@synth-deploy/core";
+import { LlmClient, sanitizeForPrompt, maskIfSecret } from "@synth-deploy/core";
 import type { EnvoyKnowledgeStore, LocalDeploymentRecord } from "../state/knowledge-store.js";
 import { EnvironmentScanner } from "./environment-scanner.js";
 import type { ServerReporter } from "./server-reporter.js";
@@ -1188,10 +1188,10 @@ export class EnvoyAgent {
 
     const prompt =
       `You are evaluating user input on a deployment plan. The user may be requesting a change, asking a question, or providing unclear feedback.\n\n` +
-      `## Current plan for ${params.artifactName} → ${params.environmentName}\n` +
+      `## Current plan for ${sanitizeForPrompt(params.artifactName)} → ${sanitizeForPrompt(params.environmentName)}\n` +
       `${stepsSummary}\n\n` +
       `## User input\n` +
-      `"${params.feedback}"\n\n` +
+      `"${sanitizeForPrompt(params.feedback)}"\n\n` +
       `Classify this input into exactly one of three modes:\n\n` +
       `"replan" — The user has identified a specific change the plan needs:\n` +
       `  - A missing step (something the plan should do but doesn't)\n` +
@@ -1362,29 +1362,29 @@ export class EnvoyAgent {
     const sections: string[] = [];
 
     sections.push(`## Artifact
-Name: ${instruction.artifact.name}
-Type: ${instruction.artifact.type}
+Name: ${sanitizeForPrompt(instruction.artifact.name)}
+Type: ${sanitizeForPrompt(instruction.artifact.type)}
 Version: ${instruction.version}
-Analysis summary: ${instruction.artifact.analysis.summary}
-Dependencies: ${instruction.artifact.analysis.dependencies.join(", ") || "none"}
-Configuration expectations: ${JSON.stringify(instruction.artifact.analysis.configurationExpectations)}
-Deployment intent: ${instruction.artifact.analysis.deploymentIntent ?? "not specified"}
+Analysis summary: ${sanitizeForPrompt(instruction.artifact.analysis.summary)}
+Dependencies: ${sanitizeForPrompt(instruction.artifact.analysis.dependencies.join(", ") || "none")}
+Configuration expectations: ${sanitizeForPrompt(JSON.stringify(instruction.artifact.analysis.configurationExpectations))}
+Deployment intent: ${sanitizeForPrompt(instruction.artifact.analysis.deploymentIntent ?? "not specified")}
 Confidence: ${instruction.artifact.analysis.confidence}`);
 
     sections.push(`## Target Environment
-Name: ${instruction.environment.name}
+Name: ${sanitizeForPrompt(instruction.environment.name)}
 ID: ${instruction.environment.id}
 Variables: ${Object.keys(instruction.environment.variables).length} defined`);
 
     if (instruction.partition) {
       sections.push(`## Partition
-Name: ${instruction.partition.name}
+Name: ${sanitizeForPrompt(instruction.partition.name)}
 ID: ${instruction.partition.id}
 Variables: ${Object.keys(instruction.partition.variables).length} defined`);
     }
 
     sections.push(`## Resolved Variables
-${Object.entries(instruction.resolvedVariables).map(([k, v]) => `${k}=${v}`).join("\n")}`);
+${Object.entries(instruction.resolvedVariables).map(([k, v]) => `${k}=${maskIfSecret(k, v)}`).join("\n")}`);
 
     sections.push(`## Local System State
 Hostname: ${scanResult.hostname}

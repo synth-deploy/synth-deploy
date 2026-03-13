@@ -26,7 +26,7 @@ export interface EnvoyDeployResult {
     timestamp: string;
     partitionId: string | null;
     deploymentId: string | null;
-    agent: "command" | "envoy";
+    agent: "server" | "envoy";
     decisionType: DecisionType;
     decision: string;
     reasoning: string;
