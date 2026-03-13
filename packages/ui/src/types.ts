@@ -218,10 +218,16 @@ export interface SecurityBoundary {
 
 export type DeploymentStatus = "pending" | "planning" | "awaiting_approval" | "approved" | "rejected" | "running" | "succeeded" | "failed" | "rolled_back";
 
+export interface ConfigChange {
+  key: string;
+  from: string;
+  to: string;
+}
+
 export interface DeploymentPlan {
   steps: PlannedStep[];
   reasoning: string;
-  diffFromCurrent?: string;
+  diffFromCurrent?: ConfigChange[];
   diffFromPreviousPlan?: string;
 }
 

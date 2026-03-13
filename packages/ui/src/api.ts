@@ -368,6 +368,17 @@ export async function replanDeployment(deploymentId: string, feedback: string): 
   });
 }
 
+// --- Postmortem types ---
+
+export interface LlmPostmortem {
+  executiveSummary: string;
+  timeline: Array<{ timestamp: string; event: string; significance: string }>;
+  rootCause: string;
+  contributingFactors: string[];
+  remediationSteps: string[];
+  lessonsLearned: string[];
+}
+
 // --- Debrief / Reports ---
 
 export async function getRecentDebrief(filters?: {
@@ -385,9 +396,8 @@ export async function getRecentDebrief(filters?: {
   return data.entries;
 }
 
-export async function getPostmortem(deploymentId: string): Promise<PostmortemReport> {
-  const data = await fetchJson<{ postmortem: PostmortemReport }>(`/api/deployments/${deploymentId}/postmortem`);
-  return data.postmortem;
+export async function getPostmortem(deploymentId: string): Promise<{ postmortem: PostmortemReport; llmPostmortem?: LlmPostmortem }> {
+  return fetchJson(`/api/deployments/${deploymentId}/postmortem`);
 }
 
 // --- Health ---

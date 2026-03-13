@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { getRecentDebrief, getDeployment, listDeployments, listPartitions, listArtifacts, listEnvironments, getWhatsNew, requestRollbackPlan, executeRollback, retryDeployment } from "../../api.js";
-import type { WhatsNewResult } from "../../api.js";
+import { getRecentDebrief, getDeployment, listDeployments, listPartitions, listArtifacts, listEnvironments, getWhatsNew, requestRollbackPlan, executeRollback, retryDeployment, getPostmortem } from "../../api.js";
+import type { WhatsNewResult, LlmPostmortem } from "../../api.js";
 import type { DebriefEntry, Partition, Deployment, Artifact, Environment, DecisionType } from "../../types.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
 import DebriefTimeline from "../DebriefTimeline.js";
@@ -69,6 +69,7 @@ function DeploymentDebriefDetail({ deploymentId, onBack, onNavigate }: { deploym
   const [rollbackError, setRollbackError] = useState<string | null>(null);
   const [retrying, setRetrying] = useState(false);
   const [retryError, setRetryError] = useState<string | null>(null);
+  const [llmPostmortem, setLlmPostmortem] = useState<LlmPostmortem | null>(null);
   const { data: artifacts } = useQuery<Artifact[]>("list:artifacts", listArtifacts);
   const { data: environments } = useQuery<Environment[]>("list:environments", listEnvironments);
   const { data: partitions } = useQuery<Partition[]>("list:partitions", listPartitions);
@@ -128,6 +129,14 @@ function DeploymentDebriefDetail({ deploymentId, onBack, onNavigate }: { deploym
   useEffect(() => {
     getWhatsNew(deploymentId).then(setWhatsNew).catch(() => {});
   }, [deploymentId]);
+
+  useEffect(() => {
+    if (deployment?.status === "failed" || deployment?.status === "rolled_back") {
+      getPostmortem(deploymentId)
+        .then(({ llmPostmortem: llm }) => { if (llm) setLlmPostmortem(llm); })
+        .catch(() => {});
+    }
+  }, [deployment?.status, deploymentId]);
 
   if (loading) return <div className="loading">Loading deployment detail...</div>;
   if (!deployment) return <div className="error-msg">Deployment not found</div>;
@@ -467,6 +476,79 @@ function DeploymentDebriefDetail({ deploymentId, onBack, onNavigate }: { deploym
           </div>
         );
       })()}
+
+      {/* ── LLM Incident Analysis ── shown for failed/rolled_back when LLM postmortem available ── */}
+      {llmPostmortem && (
+        <div className="canvas-section">
+          <h3 className="canvas-section-title">Incident Analysis</h3>
+          <div style={{
+            borderRadius: 10,
+            border: "1px solid color-mix(in srgb, var(--status-failed) 25%, transparent)",
+            background: "color-mix(in srgb, var(--status-failed) 4%, transparent)",
+            padding: "16px 18px",
+            display: "flex",
+            flexDirection: "column",
+            gap: 16,
+          }}>
+            {/* Executive summary */}
+            <div style={{ fontSize: 13, color: "var(--text)", lineHeight: 1.65 }}>
+              {llmPostmortem.executiveSummary}
+            </div>
+
+            {/* Root cause */}
+            <div>
+              <div style={{ fontSize: 10, fontFamily: "var(--font-mono)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--status-failed)", marginBottom: 5 }}>
+                Root Cause
+              </div>
+              <div style={{ fontSize: 13, color: "var(--text)", lineHeight: 1.6 }}>
+                {llmPostmortem.rootCause}
+              </div>
+            </div>
+
+            {/* Contributing factors */}
+            {llmPostmortem.contributingFactors.length > 0 && (
+              <div>
+                <div style={{ fontSize: 10, fontFamily: "var(--font-mono)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-muted)", marginBottom: 5 }}>
+                  Contributing Factors
+                </div>
+                <ul style={{ margin: 0, paddingLeft: 18, display: "flex", flexDirection: "column", gap: 4 }}>
+                  {llmPostmortem.contributingFactors.map((f, i) => (
+                    <li key={i} style={{ fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.5 }}>{f}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Remediation steps */}
+            {llmPostmortem.remediationSteps.length > 0 && (
+              <div>
+                <div style={{ fontSize: 10, fontFamily: "var(--font-mono)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-muted)", marginBottom: 5 }}>
+                  Remediation Steps
+                </div>
+                <ol style={{ margin: 0, paddingLeft: 18, display: "flex", flexDirection: "column", gap: 4 }}>
+                  {llmPostmortem.remediationSteps.map((s, i) => (
+                    <li key={i} style={{ fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.5 }}>{s}</li>
+                  ))}
+                </ol>
+              </div>
+            )}
+
+            {/* Lessons learned */}
+            {llmPostmortem.lessonsLearned.length > 0 && (
+              <div>
+                <div style={{ fontSize: 10, fontFamily: "var(--font-mono)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text-muted)", marginBottom: 5 }}>
+                  Lessons Learned
+                </div>
+                <ul style={{ margin: 0, paddingLeft: 18, display: "flex", flexDirection: "column", gap: 4 }}>
+                  {llmPostmortem.lessonsLearned.map((l, i) => (
+                    <li key={i} style={{ fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.5 }}>{l}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Executed Plan steps — prefer executionRecord, fall back to plan.steps, then debrief entries */}
       {(deployment.executionRecord || deployment.plan || executionEntries.length > 0) && (
