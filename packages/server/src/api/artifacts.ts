@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import type { IArtifactStore, ITelemetryStore } from "@synth-deploy/core";
-import { requirePermission } from "../middleware/permissions.js";
+import { requirePermission, requireEdition } from "../middleware/permissions.js";
 import {
   CreateArtifactSchema,
   UpdateArtifactSchema,
@@ -95,7 +95,7 @@ export function registerArtifactRoutes(
   // Add user annotation/correction
   app.post<{ Params: { id: string } }>(
     "/api/artifacts/:id/annotations",
-    { preHandler: [requirePermission("artifact.annotate")] },
+    { preHandler: [requireEdition("artifact-annotations"), requirePermission("artifact.annotate")] },
     async (request, reply) => {
       const artifact = artifactStore.get(request.params.id);
       if (!artifact) {

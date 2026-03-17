@@ -1,5 +1,6 @@
 import type { FastifyRequest, FastifyReply } from "fastify";
-import type { Permission } from "@synth-deploy/core";
+import type { Permission, EnterpriseFeature } from "@synth-deploy/core";
+import { requireEnterprise, ENTERPRISE_FEATURES } from "@synth-deploy/core";
 
 /**
  * Returns a Fastify preHandler that checks whether the authenticated user
@@ -20,5 +21,15 @@ export function requirePermission(...permissions: Permission[]) {
         message: `This action requires: ${missing.join(", ")}`,
       });
     }
+  };
+}
+
+/**
+ * Returns a Fastify preHandler that gates an enterprise-only feature.
+ * Throws EditionError (caught by global error handler → 402) on Community edition.
+ */
+export function requireEdition(feature: EnterpriseFeature) {
+  return async (_request: FastifyRequest, _reply: FastifyReply) => {
+    requireEnterprise(feature);
   };
 }

@@ -5,7 +5,7 @@ import type { EnvoyRegistry } from "../agent/envoy-registry.js";
 import type { FleetDeploymentStore } from "../fleet/fleet-store.js";
 import type { FleetExecutor, FleetProgressEvent } from "../fleet/fleet-executor.js";
 import { selectRepresentatives } from "../fleet/representative-selector.js";
-import { requirePermission } from "../middleware/permissions.js";
+import { requirePermission, requireEdition } from "../middleware/permissions.js";
 
 /**
  * REST API routes for fleet (large-scale) deployments.
@@ -24,7 +24,7 @@ export function registerFleetRoutes(
   // -----------------------------------------------------------------------
   app.post(
     "/api/fleet-deployments",
-    { preHandler: [requirePermission("deployment.create")] },
+    { preHandler: [requireEdition("fleet-deployments"), requirePermission("deployment.create")] },
     async (request, reply) => {
       const body = request.body as {
         artifactId?: string;
@@ -119,7 +119,7 @@ export function registerFleetRoutes(
   // -----------------------------------------------------------------------
   app.post<{ Params: { id: string } }>(
     "/api/fleet-deployments/:id/plan",
-    { preHandler: [requirePermission("deployment.create")] },
+    { preHandler: [requireEdition("fleet-deployments"), requirePermission("deployment.create")] },
     async (request, reply) => {
       const fleet = fleetStore.getById(request.params.id);
       if (!fleet) {
@@ -179,7 +179,7 @@ export function registerFleetRoutes(
   // -----------------------------------------------------------------------
   app.get(
     "/api/fleet-deployments",
-    { preHandler: [requirePermission("deployment.view")] },
+    { preHandler: [requireEdition("fleet-deployments"), requirePermission("deployment.view")] },
     async () => {
       return { fleetDeployments: fleetStore.list() };
     },
@@ -190,7 +190,7 @@ export function registerFleetRoutes(
   // -----------------------------------------------------------------------
   app.get<{ Params: { id: string } }>(
     "/api/fleet-deployments/:id",
-    { preHandler: [requirePermission("deployment.view")] },
+    { preHandler: [requireEdition("fleet-deployments"), requirePermission("deployment.view")] },
     async (request, reply) => {
       const fleet = fleetStore.getById(request.params.id);
       if (!fleet) {
@@ -205,7 +205,7 @@ export function registerFleetRoutes(
   // -----------------------------------------------------------------------
   app.post<{ Params: { id: string } }>(
     "/api/fleet-deployments/:id/approve",
-    { preHandler: [requirePermission("deployment.approve")] },
+    { preHandler: [requireEdition("fleet-deployments"), requirePermission("deployment.approve")] },
     async (request, reply) => {
       const fleet = fleetStore.getById(request.params.id);
       if (!fleet) {
@@ -296,7 +296,7 @@ export function registerFleetRoutes(
   // -----------------------------------------------------------------------
   app.post<{ Params: { id: string } }>(
     "/api/fleet-deployments/:id/execute",
-    { preHandler: [requirePermission("deployment.approve")] },
+    { preHandler: [requireEdition("fleet-deployments"), requirePermission("deployment.approve")] },
     async (request, reply) => {
       const fleet = fleetStore.getById(request.params.id);
       if (!fleet) {
@@ -436,7 +436,7 @@ export function registerFleetRoutes(
   // -----------------------------------------------------------------------
   app.post<{ Params: { id: string } }>(
     "/api/fleet-deployments/:id/pause",
-    { preHandler: [requirePermission("deployment.approve")] },
+    { preHandler: [requireEdition("fleet-deployments"), requirePermission("deployment.approve")] },
     async (request, reply) => {
       const fleet = fleetStore.getById(request.params.id);
       if (!fleet) {
@@ -474,7 +474,7 @@ export function registerFleetRoutes(
   // -----------------------------------------------------------------------
   app.post<{ Params: { id: string } }>(
     "/api/fleet-deployments/:id/resume",
-    { preHandler: [requirePermission("deployment.approve")] },
+    { preHandler: [requireEdition("fleet-deployments"), requirePermission("deployment.approve")] },
     async (request, reply) => {
       const fleet = fleetStore.getById(request.params.id);
       if (!fleet) {

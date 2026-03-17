@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import type { ISettingsStore, ITelemetryStore, AppSettings, LlmProviderConfig } from "@synth-deploy/core";
 import { UpdateSettingsSchema } from "./schemas.js";
 import { requirePermission } from "../middleware/permissions.js";
+import { requireEnterprise, getEdition, getLicenseInfo, getMaxEnvoys, isPartnership, ENTERPRISE_FEATURES } from "@synth-deploy/core";
 import { invalidateLlmHealthCache } from "./health.js";
 
 /**
@@ -68,8 +69,12 @@ export function registerSettingsRoutes(
       return reply.status(400).send({ error: msg || "Invalid input" });
     }
 
-    // Persist API key encrypted in DB and apply to process env, then strip before storing settings
+    // Gate enterprise-only settings
     const data = parsed.data as Partial<AppSettings> & { llm?: LlmProviderConfig & { apiKey?: string } };
+    if (data.coBranding) requireEnterprise("co-branding");
+    if (data.mcpServers && data.mcpServers.length > 0) requireEnterprise("mcp-servers");
+
+    // Persist API key encrypted in DB and apply to process env, then strip before storing settings
     if (data.llm) {
       if (data.llm.apiKey && data.llm.apiKey.length > 0) {
         settings.setSecret("llm_api_key", data.llm.apiKey);
@@ -82,6 +87,19 @@ export function registerSettingsRoutes(
     const updated = settings.update(data as Partial<AppSettings>);
     telemetry.record({ actor: (request.user?.email) ?? "anonymous", action: "settings.updated", target: { type: "settings", id: "app" }, details: { fields: Object.keys(parsed.data) } });
     return { settings: sanitizeLlmSettings(updated) };
+  });
+
+  // Edition info — public (no auth required), used by UI to render edition badge and gate features
+  app.get("/api/edition", async () => {
+    const edition = getEdition();
+    const license = getLicenseInfo();
+    return {
+      edition,
+      maxEnvoys: getMaxEnvoys(),
+      partnership: isPartnership(),
+      license,
+      features: ENTERPRISE_FEATURES,
+    };
   });
 
   // Read-only command info
