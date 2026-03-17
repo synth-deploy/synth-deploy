@@ -75,7 +75,7 @@ let cachedLicense: LicensePayload | null = null;
 
 function verifySignature(payload: LicensePayload): boolean {
   const signingKey = process.env.SYNTH_LICENSE_SIGNING_KEY;
-  if (!signingKey) return true; // no signing key = skip verification (dev mode)
+  if (!signingKey) return true;
 
   const { signature, ...rest } = payload;
   const data = JSON.stringify(rest);

@@ -2,17 +2,20 @@ Business Source License 1.1
 
 Parameters
 
-Licensor:             James Fullerton
+Licensor:             Joseph Fullerton
 Licensed Work:        Synth 1.0
-                      The Licensed Work is (c) 2026 James Fullerton.
+                      The Licensed Work is (c) 2026 Joseph Fullerton.
 Additional Use Grant: You may make production use of the Licensed Work,
-                      provided your use does not include running the
-                      Licensed Work with more than ten (10) registered
-                      Envoy agents. For purposes of this grant, an
-                      "Envoy agent" means a separately registered
-                      deployment execution agent as defined by the
-                      Licensed Work. For commercial licensing beyond
-                      this limit, visit synthdeploy.com.
+                      provided your use does not include (a) running
+                      the Licensed Work with more than ten (10)
+                      registered Envoy agents, or (b) offering the
+                      Licensed Work to third parties as a managed
+                      service or as a component of a competing
+                      deployment-intelligence product. For purposes of
+                      this grant, an "Envoy agent" means a separately
+                      registered deployment execution agent as defined
+                      by the Licensed Work. For commercial licensing
+                      beyond these limits, visit synthdeploy.com.
 Change Date:          2030-03-16
 Change License:       Apache License, Version 2.0
 

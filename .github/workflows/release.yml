@@ -10,9 +10,29 @@ permissions:
   packages: write
 
 jobs:
+  # ─── License Version Gate ───────────────────────────────────
+  license-check:
+    name: Verify LICENSE matches release major version
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check LICENSE version matches tag
+        run: |
+          TAG_VERSION="${GITHUB_REF#refs/tags/v}"
+          TAG_MAJOR="${TAG_VERSION%%.*}"
+          LICENSE_VERSION=$(grep '^Licensed Work:' LICENSE | grep -oP 'Synth \K[0-9]+')
+          if [ "$TAG_MAJOR" != "$LICENSE_VERSION" ]; then
+            echo "::error::LICENSE says Synth ${LICENSE_VERSION}.0 but releasing v${TAG_VERSION} (major ${TAG_MAJOR}). Update the Licensed Work and Change Date in LICENSE."
+            exit 1
+          fi
+          echo "LICENSE version (Synth ${LICENSE_VERSION}.0) matches tag major (${TAG_MAJOR})"
+
   # ─── Build & Test Gate ─────────────────────────────────────
   ci:
     name: Build & Test
+    needs: license-check
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -130,7 +150,7 @@ jobs:
             org.opencontainers.image.title=Synth
             org.opencontainers.image.description=Synth orchestration server with embedded UI
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
-            org.opencontainers.image.licenses=MIT
+            org.opencontainers.image.licenses=BUSL-1.1
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -193,7 +213,7 @@ jobs:
             org.opencontainers.image.title=Synth Envoy
             org.opencontainers.image.description=Synth local deployment agent
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
-            org.opencontainers.image.licenses=MIT
+            org.opencontainers.image.licenses=BUSL-1.1
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

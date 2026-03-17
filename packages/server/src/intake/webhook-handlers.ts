@@ -258,7 +258,7 @@ export function verifyWebhookSignature(
   headers: Record<string, string | string[] | undefined>,
   rawBody: string,
 ): WebhookVerificationResult {
-  // If no secret is configured, skip verification
+  // Unauthenticated webhooks allowed when no secret is configured
   if (!secretToken) {
     return { verified: true };
   }
@@ -301,7 +301,7 @@ export function verifyWebhookSignature(
     }
 
     default:
-      // For other sources, no standard signature mechanism — skip verification
+      // No standard signature mechanism for this source type
       return { verified: true };
   }
 }

@@ -1786,7 +1786,7 @@ function encryptValue(plaintext: string, key: Buffer): string {
 function decryptValue(ciphertext: string, key: Buffer): string {
   const parts = ciphertext.split(":");
   if (parts.length !== 3) {
-    // Not encrypted (legacy plaintext value) — return as-is
+    // Not in encrypted format — return as-is
     return ciphertext;
   }
   const iv = Buffer.from(parts[0], "base64");
@@ -1888,7 +1888,7 @@ export class PersistentIdpProviderStore {
     if (!row) return undefined;
     const provider = rowToIdpProvider(row, this.encryptionKey);
 
-    // Re-encrypt legacy plaintext secrets on read
+    // Ensure secrets are encrypted at rest
     if (this.encryptionKey) {
       const rawConfig = JSON.parse(row.config);
       let needsReEncrypt = false;
@@ -1899,7 +1899,6 @@ export class PersistentIdpProviderStore {
         needsReEncrypt = true;
       }
       if (needsReEncrypt) {
-        // Re-encrypt by updating in place
         const encrypted = encryptConfigSecrets(rawConfig, this.encryptionKey);
         this.stmts.update.run({
           id,
@@ -1917,7 +1916,7 @@ export class PersistentIdpProviderStore {
   list(): IdpProvider[] {
     const rows = this.stmts.list.all() as IdpProviderRow[];
 
-    // Re-encrypt legacy plaintext secrets if encryption key is now available
+    // Ensure secrets are encrypted at rest
     if (this.encryptionKey) {
       for (const row of rows) {
         const rawConfig = JSON.parse(row.config);

@@ -22,3 +22,23 @@ coverage/
 # Envoy runtime data
 .envoy/deployments/
 .envoy/logs/
+
+# Internal strategy & planning docs (kept locally, never published)
+docs/internal/
+
+# Agent config (behavioral contracts, hooks, memory)
+.claude/
+
+# Certificates & key material
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cert
+*.jks
+*.keystore
+
+# Secret directories
+secrets/
+.secrets/
