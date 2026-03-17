@@ -7,13 +7,13 @@ import Layout from "../layouts/Layout.astro";
   <section class="relative overflow-hidden">
     <div class="absolute inset-0 pointer-events-none">
       <div class="absolute top-1/4 left-1/4 w-96 h-96 bg-ds-accent/5 rounded-full blur-[120px]"></div>
-      <div class="absolute bottom-1/3 right-1/4 w-80 h-80 bg-indigo-500/5 rounded-full blur-[100px]"></div>
+      <div class="absolute bottom-1/3 right-1/4 w-80 h-80 bg-ds-partition/5 rounded-full blur-[100px]"></div>
     </div>
     <div class="relative mx-auto max-w-6xl px-6 pt-24 pb-20 text-center">
       <div class="animate-fade-in-up">
-        <span class="inline-block text-xs font-mono border border-ds-accent/30 rounded px-2 py-0.5 text-ds-accent mb-4">v1.0 Public Beta</span>
+        <span class="inline-block text-xs font-mono border border-ds-accent-border rounded px-2 py-0.5 text-ds-accent mb-4">v1.0 Public Beta</span>
         <p class="section-heading">Deployment Platform</p>
-        <h1 class="text-5xl md:text-6xl font-bold leading-tight mb-6">
+        <h1 class="text-5xl md:text-6xl font-display font-bold leading-tight mb-6">
           Stop writing runbooks.<br />
           <span class="text-ds-accent">Start deploying intelligently.</span>
         </h1>
@@ -27,17 +27,17 @@ import Layout from "../layouts/Layout.astro";
             href="https://github.com/jmfullerton96/synth-deploy"
             target="_blank"
             rel="noopener"
-            class="rounded-lg bg-ds-accent px-6 py-3 text-ds-bg font-semibold hover:bg-ds-accent/90 transition-colors"
+            class="rounded-md bg-ds-accent px-6 py-3 text-ds-bg font-semibold hover:bg-ds-accent/90 transition-colors"
           >
             Get Started
           </a>
           <a
             href="/docs"
-            class="rounded-lg border border-ds-border px-6 py-3 text-ds-text hover:border-ds-accent/30 hover:bg-ds-surface transition-colors"
+            class="rounded-md border border-ds-border px-6 py-3 text-ds-text hover:border-ds-accent-border hover:bg-ds-surface transition-colors"
           >
             Read the Docs
           </a>
-          <a href="/roadmap" class="rounded-lg border border-ds-border px-6 py-3 text-ds-text-secondary hover:border-ds-accent/30 hover:bg-ds-surface transition-colors">
+          <a href="/roadmap" class="rounded-md border border-ds-border px-6 py-3 text-ds-text-secondary hover:border-ds-accent-border hover:bg-ds-surface transition-colors">
             Roadmap
           </a>
         </div>
@@ -47,19 +47,19 @@ import Layout from "../layouts/Layout.astro";
       <div class="mt-16 animate-fade-in-up animate-delay-2">
         <div class="glass-card accent-glow max-w-3xl mx-auto overflow-hidden">
           <div class="flex items-center gap-2 px-4 py-3 border-b border-ds-border">
-            <div class="w-3 h-3 rounded-full bg-red-500/60"></div>
-            <div class="w-3 h-3 rounded-full bg-yellow-500/60"></div>
-            <div class="w-3 h-3 rounded-full bg-green-500/60"></div>
+            <div class="w-3 h-3 rounded-full bg-ds-failed/60"></div>
+            <div class="w-3 h-3 rounded-full bg-ds-warning/60"></div>
+            <div class="w-3 h-3 rounded-full bg-ds-succeeded/60"></div>
             <span class="ml-2 text-xs text-ds-text-muted font-mono">synth</span>
           </div>
           <div class="p-6 font-mono text-sm leading-relaxed text-left">
             <p class="text-ds-text-muted">$ synth deploy web-app v2.4.1 --partition acme-corp</p>
             <p class="mt-3 text-ds-accent">Agent: Planned 3-step pipeline for web-app v2.4.1</p>
-            <p class="text-ds-text-secondary">  1. Install dependencies <span class="text-ds-accent">&#10003;</span> 14.2s</p>
-            <p class="text-ds-text-secondary">  2. Run migrations <span class="text-ds-accent">&#10003;</span> 3.1s</p>
-            <p class="text-ds-text-secondary">  3. Health check <span class="text-ds-accent">&#10003;</span> 0.2s</p>
+            <p class="text-ds-text-secondary">  1. Install dependencies <span class="text-ds-succeeded">&#10003;</span> 14.2s</p>
+            <p class="text-ds-text-secondary">  2. Run migrations <span class="text-ds-succeeded">&#10003;</span> 3.1s</p>
+            <p class="text-ds-text-secondary">  3. Health check <span class="text-ds-succeeded">&#10003;</span> 0.2s</p>
             <p class="mt-3 text-ds-accent">Decision: Resolved 4 variables (1 conflict: APP_ENV — environment wins)</p>
-            <p class="text-green-400 mt-1">Deployment succeeded in 17.5s</p>
+            <p class="text-ds-succeeded mt-1">Deployment succeeded in 17.5s</p>
           </div>
         </div>
       </div>
@@ -71,7 +71,7 @@ import Layout from "../layouts/Layout.astro";
     <div class="mx-auto max-w-6xl px-6">
       <div class="text-center mb-16 scroll-reveal">
         <p class="section-heading">Simple to Set Up</p>
-        <h2 class="text-3xl md:text-4xl font-bold mb-4">Two components. One command.</h2>
+        <h2 class="text-3xl md:text-4xl font-display font-bold mb-4">Two components. One command.</h2>
         <p class="text-ds-text-secondary text-lg max-w-2xl mx-auto">
           Synth runs as two lightweight services — the Synth server and Envoy — that communicate
           over HTTP. No complex infrastructure. No vendor lock-in. Self-hosted by design.
@@ -91,7 +91,7 @@ import Layout from "../layouts/Layout.astro";
             Central server that manages operations, partitions, and environments.
             Runs the intelligent agent, exposes the REST API, and hosts the MCP server.
           </p>
-          <div class="mt-4 font-mono text-xs text-ds-text-muted bg-ds-bg/50 rounded-lg px-4 py-3">
+          <div class="mt-4 font-mono text-xs text-ds-text-muted bg-ds-bg/50 rounded-md px-4 py-3">
             docker run synth-deploy/server
           </div>
         </div>
@@ -108,7 +108,7 @@ import Layout from "../layouts/Layout.astro";
             Lightweight agents deployed on target machines. Execute deployment steps,
             run health checks, and report results back to Synth.
           </p>
-          <div class="mt-4 font-mono text-xs text-ds-text-muted bg-ds-bg/50 rounded-lg px-4 py-3">
+          <div class="mt-4 font-mono text-xs text-ds-text-muted bg-ds-bg/50 rounded-md px-4 py-3">
             docker run synth-deploy/envoy
           </div>
         </div>
@@ -126,7 +126,7 @@ import Layout from "../layouts/Layout.astro";
     <div class="relative mx-auto max-w-6xl px-6">
       <div class="text-center mb-16 scroll-reveal">
         <p class="section-heading">Intelligent Decisions</p>
-        <h2 class="text-3xl md:text-4xl font-bold mb-4">Every action explained. Every decision logged.</h2>
+        <h2 class="text-3xl md:text-4xl font-display font-bold mb-4">Every action explained. Every decision logged.</h2>
         <p class="text-ds-text-secondary text-lg max-w-2xl mx-auto">
           The agent resolves variables, plans pipelines, handles conflicts, and diagnoses
           failures — then explains all of it in plain language. When something goes wrong
@@ -249,7 +249,7 @@ import Layout from "../layouts/Layout.astro";
     <div class="mx-auto max-w-6xl px-6">
       <div class="text-center mb-16 scroll-reveal">
         <p class="section-heading">Capabilities</p>
-        <h2 class="text-3xl md:text-4xl font-bold">Intelligence where friction used to be</h2>
+        <h2 class="text-3xl md:text-4xl font-display font-bold">Intelligence where friction used to be</h2>
       </div>
 
       <div class="grid md:grid-cols-3 gap-6">
@@ -311,7 +311,7 @@ import Layout from "../layouts/Layout.astro";
 
         <div class="glass-card p-8 scroll-reveal scroll-reveal-delay-1">
           <div class="flex items-center gap-2 mb-4">
-            <div class="entity-badge border-indigo-400/30 bg-indigo-400/10 text-indigo-300 text-[10px] py-0.5">LLM</div>
+            <div class="entity-badge border-ds-dt-plan/30 bg-ds-dt-plan/10 text-ds-dt-plan text-[10px] py-0.5">LLM</div>
           </div>
           <h3 class="text-lg font-semibold mb-2">Any Model, Any Provider</h3>
           <p class="text-ds-text-secondary leading-relaxed text-sm">
@@ -322,7 +322,7 @@ import Layout from "../layouts/Layout.astro";
 
         <div class="glass-card p-8 scroll-reveal scroll-reveal-delay-2">
           <div class="flex items-center gap-2 mb-4">
-            <div class="entity-badge border-red-400/30 bg-red-400/10 text-red-300 text-[10px] py-0.5">Security</div>
+            <div class="entity-badge border-ds-failed/30 bg-ds-failed/10 text-ds-failed text-[10px] py-0.5">Security</div>
           </div>
           <h3 class="text-lg font-semibold mb-2">Hardened by Default</h3>
           <p class="text-ds-text-secondary leading-relaxed text-sm">
@@ -343,7 +343,7 @@ import Layout from "../layouts/Layout.astro";
     <div class="relative mx-auto max-w-6xl px-6">
       <div class="text-center mb-16 scroll-reveal">
         <p class="section-heading">Architecture</p>
-        <h2 class="text-3xl md:text-4xl font-bold mb-4">How it all connects</h2>
+        <h2 class="text-3xl md:text-4xl font-display font-bold mb-4">How it all connects</h2>
         <p class="text-ds-text-secondary text-lg max-w-2xl mx-auto">
           The deployment flow moves from intent to execution to explanation.
           Every step is visible. Every decision is recorded.
@@ -379,7 +379,7 @@ import Layout from "../layouts/Layout.astro";
               Envoy
             </span>
             <span class="text-ds-text-muted">&rarr;</span>
-            <span class="entity-badge border-amber-400/30 bg-amber-400/10 text-amber-300">
+            <span class="entity-badge border-ds-warning/30 bg-ds-warning/10 text-ds-warning">
               Target Machine
             </span>
           </div>
@@ -423,7 +423,7 @@ import Layout from "../layouts/Layout.astro";
     <div class="mx-auto max-w-6xl px-6">
       <div class="text-center mb-16 scroll-reveal">
         <p class="section-heading">Operational Depth</p>
-        <h2 class="text-3xl md:text-4xl font-bold mb-4">Built for engineers who get paged</h2>
+        <h2 class="text-3xl md:text-4xl font-display font-bold mb-4">Built for engineers who get paged</h2>
         <p class="text-ds-text-secondary text-lg max-w-2xl mx-auto">
           Synth is designed for the worst moments — when a deploy fails at 2am
           and you need to understand what happened immediately, not after reading logs
@@ -477,7 +477,7 @@ import Layout from "../layouts/Layout.astro";
       <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-ds-accent/5 rounded-full blur-[120px]"></div>
     </div>
     <div class="relative mx-auto max-w-6xl px-6 text-center scroll-reveal">
-      <h2 class="text-3xl md:text-4xl font-bold mb-4">Ready to deploy smarter?</h2>
+      <h2 class="text-3xl md:text-4xl font-display font-bold mb-4">Ready to deploy smarter?</h2>
       <p class="text-ds-text-secondary text-lg mb-8 max-w-xl mx-auto">
         Synth is open source and self-hosted. Get started in minutes.
       </p>
@@ -486,17 +486,17 @@ import Layout from "../layouts/Layout.astro";
           href="https://github.com/jmfullerton96/synth-deploy"
           target="_blank"
           rel="noopener"
-          class="inline-block rounded-lg bg-ds-accent px-8 py-3 text-ds-bg font-semibold hover:bg-ds-accent/90 transition-colors"
+          class="inline-block rounded-md bg-ds-accent px-8 py-3 text-ds-bg font-semibold hover:bg-ds-accent/90 transition-colors"
         >
           View on GitHub
         </a>
         <a
           href="/docs/installation"
-          class="rounded-lg border border-ds-border px-6 py-3 text-ds-text hover:border-ds-accent/30 hover:bg-ds-surface transition-colors"
+          class="rounded-md border border-ds-border px-6 py-3 text-ds-text hover:border-ds-accent-border hover:bg-ds-surface transition-colors"
         >
           Installation Guide
         </a>
-        <a href="/roadmap" class="rounded-lg border border-ds-border px-6 py-3 text-ds-text hover:border-ds-accent/30 hover:bg-ds-surface transition-colors">
+        <a href="/roadmap" class="rounded-md border border-ds-border px-6 py-3 text-ds-text hover:border-ds-accent-border hover:bg-ds-surface transition-colors">
           View Roadmap
         </a>
       </div>
