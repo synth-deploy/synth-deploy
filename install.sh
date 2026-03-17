@@ -10,8 +10,8 @@ INSTALL_DIR="/opt/synth"
 DATA_DIR="/var/lib/synth"
 REPO_URL="https://github.com/jmfullerton96/synth-deploy.git"
 USE_LOCAL=false
-SERVER_PORT=3000
-ENVOY_PORT=3001
+SERVER_PORT=9410
+ENVOY_PORT=9411
 SERVER_URL="http://localhost:${SERVER_PORT}"
 
 # --- Helpers ---
@@ -32,7 +32,7 @@ Options:
   --install-dir <path> Installation directory (default: /opt/synth)
   --data-dir <path>    Data directory for SQLite and artifacts (default: /var/lib/synth)
   --local              Use current directory as source instead of cloning
-  --server-url <url>  Synth server URL for Envoy to connect to (default: http://localhost:3000)
+  --server-url <url>  Synth server URL for Envoy to connect to (default: http://localhost:9410)
   --help               Show this help message
 
 Examples:

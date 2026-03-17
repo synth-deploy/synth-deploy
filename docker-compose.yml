@@ -4,7 +4,7 @@ services:
       context: .
       dockerfile: Dockerfile.server
     ports:
-      - "3000:3000"
+      - "9410:9410"
     volumes:
       - synth-data:/data
     environment:
@@ -15,7 +15,7 @@ services:
       - SYNTH_LLM_PROVIDER=${SYNTH_LLM_PROVIDER:-anthropic}
       - SYNTH_SEED_DEMO=${SYNTH_SEED_DEMO:-true}
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:9410/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -27,12 +27,12 @@ services:
       context: .
       dockerfile: Dockerfile.envoy
     ports:
-      - "3001:3001"
+      - "9411:9411"
     volumes:
       - envoy-workspace:/workspace
     environment:
       - NODE_ENV=production
-      - SYNTH_SERVER_URL=http://synth-server:3000
+      - SYNTH_SERVER_URL=http://synth-server:9410
     depends_on:
       synth-server:
         condition: service_healthy

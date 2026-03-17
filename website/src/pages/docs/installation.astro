@@ -16,7 +16,7 @@ Options:
   --install-dir <path> Installation directory (default: /opt/synth)
   --data-dir <path>    Data/SQLite directory (default: /var/lib/synth)
   --local              Use current directory as source instead of cloning
-  --server-url <url>  Synth server URL for Envoy (default: http://localhost:3000)`;
+  --server-url <url>  Synth server URL for Envoy (default: http://localhost:9410)`;
 
 const dockerStart = `# Clone the repository
 git clone https://github.com/jmfullerton96/synth-deploy.git
@@ -26,8 +26,8 @@ cd synth-deploy
 docker compose up -d
 
 # Verify
-curl http://localhost:3000/health
-curl http://localhost:3001/health`;
+curl http://localhost:9410/health
+curl http://localhost:9411/health`;
 
 const dockerCustom = `services:
   synth-server:
@@ -35,7 +35,7 @@ const dockerCustom = `services:
       context: .
       dockerfile: Dockerfile.server
     ports:
-      - "3000:3000"
+      - "9410:9410"
     volumes:
       - synth-data:/data
     environment:
@@ -53,12 +53,12 @@ const dockerCustom = `services:
       context: .
       dockerfile: Dockerfile.envoy
     ports:
-      - "3001:3001"
+      - "9411:9411"
     volumes:
       - envoy-workspace:/workspace
     environment:
       - NODE_ENV=production
-      - SYNTH_SERVER_URL=http://synth-server:3000
+      - SYNTH_SERVER_URL=http://synth-server:9410
     depends_on:
       synth-server:
         condition: service_healthy
@@ -92,14 +92,14 @@ tail -f /var/lib/synth/envoy.log`;
 const multiEnvoyDocker = `# On target machine: run Envoy pointed at your Synth server
 docker run -d \\
   --name synth-envoy \\
-  -p 3001:3001 \\
+  -p 9411:9411 \\
   -v envoy-workspace:/workspace \\
-  -e SYNTH_SERVER_URL=http://server-host:3000 \\
-  -e ENVOY_PORT=3001 \\
+  -e SYNTH_SERVER_URL=http://server-host:9410 \\
+  -e ENVOY_PORT=9411 \\
   synth-deploy/envoy`;
 
 const multiEnvoyInstall = `# On target machine: install Envoy only
-./install.sh --component envoy --server-url http://server-host:3000`;
+./install.sh --component envoy --server-url http://server-host:9410`;
 ---
 
 <DocsLayout title="Installation & Configuration">
@@ -165,7 +165,7 @@ const multiEnvoyInstall = `# On target machine: install Envoy only
   <pre><code>{dockerStart}</code></pre>
 
   <p>
-    The Synth server listens on port <strong>3000</strong> and Envoy on port <strong>3001</strong>.
+    The Synth server listens on port <strong>9410</strong> and Envoy on port <strong>9411</strong>.
     The Envoy container waits for the Synth server's health check to pass before starting.
   </p>
 
@@ -204,7 +204,7 @@ const multiEnvoyInstall = `# On target machine: install Envoy only
       <tr><th>Variable</th><th>Default</th><th>Description</th></tr>
     </thead>
     <tbody>
-      <tr><td><code>PORT</code></td><td><code>3000</code></td><td>HTTP port for the Synth server</td></tr>
+      <tr><td><code>PORT</code></td><td><code>9410</code></td><td>HTTP port for the Synth server</td></tr>
       <tr><td><code>HOST</code></td><td><code>0.0.0.0</code></td><td>Bind address</td></tr>
       <tr><td><code>NODE_ENV</code></td><td><code>development</code></td><td>Set to <code>production</code> for deployed environments</td></tr>
       <tr><td><code>SYNTH_DATA_DIR</code></td><td><code>data</code></td><td>Directory for SQLite databases (synth.db, debrief.db)</td></tr>
@@ -228,10 +228,10 @@ const multiEnvoyInstall = `# On target machine: install Envoy only
       <tr><th>Variable</th><th>Default</th><th>Description</th></tr>
     </thead>
     <tbody>
-      <tr><td><code>ENVOY_PORT</code></td><td><code>3001</code></td><td>HTTP port for the Envoy agent</td></tr>
+      <tr><td><code>ENVOY_PORT</code></td><td><code>9411</code></td><td>HTTP port for the Envoy agent</td></tr>
       <tr><td><code>ENVOY_HOST</code></td><td><code>0.0.0.0</code></td><td>Bind address</td></tr>
       <tr><td><code>ENVOY_BASE_DIR</code></td><td><code>.envoy</code> (cwd)</td><td>Base directory for deployment workspaces and local state</td></tr>
-      <tr><td><code>SYNTH_SERVER_URL</code></td><td><em>empty</em></td><td>URL of the Synth server (e.g., <code>http://synth-server:3000</code>). Required for Envoy to report results back.</td></tr>
+      <tr><td><code>SYNTH_SERVER_URL</code></td><td><em>empty</em></td><td>URL of the Synth server (e.g., <code>http://synth-server:9410</code>). Required for Envoy to report results back.</td></tr>
       <tr><td><code>SYNTH_LLM_API_KEY</code></td><td><em>unset</em></td><td>Enables LLM-powered diagnostic investigation on the Envoy. Supports same providers as the server.</td></tr>
     </tbody>
   </table>
@@ -255,7 +255,7 @@ const multiEnvoyInstall = `# On target machine: install Envoy only
       <tr><td><code>agent.defaultTimeoutMs</code></td><td><code>30000</code></td><td>Default step execution timeout</td></tr>
       <tr><td><code>agent.defaultVerificationStrategy</code></td><td><code>basic</code></td><td>Default verification strategy (<code>basic</code>, <code>full</code>, or <code>none</code>)</td></tr>
       <tr><td><code>agent.llmEntityExposure</code></td><td><code>names</code></td><td>What entity data is sent to the LLM (<code>names</code> or <code>none</code>)</td></tr>
-      <tr><td><code>envoy.url</code></td><td><code>http://localhost:3001</code></td><td>URL of the Envoy agent for Synth to dispatch deployments</td></tr>
+      <tr><td><code>envoy.url</code></td><td><code>http://localhost:9411</code></td><td>URL of the Envoy agent for Synth to dispatch deployments</td></tr>
       <tr><td><code>envoy.timeoutMs</code></td><td><code>10000</code></td><td>Timeout for Synth-to-Envoy HTTP requests</td></tr>
       <tr><td><code>coBranding</code></td><td><em>unset</em></td><td>Optional operator branding: <code>operatorName</code>, <code>logoUrl</code>, <code>accentColor</code></td></tr>
       <tr><td><code>mcpServers</code></td><td><code>[]</code></td><td>External MCP servers for data enrichment (array of <code>{`{name, url, description?}`}</code>)</td></tr>
@@ -266,7 +266,7 @@ const multiEnvoyInstall = `# On target machine: install Envoy only
 
   <pre><code>{`┌─────────────┐          ┌─────────────┐
 │    Synth    │◄────────►│    Envoy    │
-│  (port 3000)│          │  (port 3001)│
+│  (port 9410)│          │  (port 9411)│
 ├─────────────┤          ├─────────────┤
 │ REST API    │ dispatch │ Executor    │
 │ MCP Server  │─────────►│ Health      │
@@ -318,14 +318,14 @@ const multiEnvoyInstall = `# On target machine: install Envoy only
     After starting an Envoy, configure Synth to dispatch to it by updating the
     Envoy endpoint in settings:
   </p>
-  <pre><code>{`curl -X PUT http://localhost:3000/api/settings \\
+  <pre><code>{`curl -X PUT http://localhost:9410/api/settings \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer your-api-key" \\
-  -d '{"envoy": {"url": "http://envoy-host:3001", "timeoutMs": 10000}}'`}</code></pre>
+  -d '{"envoy": {"url": "http://envoy-host:9411", "timeoutMs": 10000}}'`}</code></pre>
 
   <p>
     Each Envoy identifies itself to Synth using a generated ID based on its
-    host and port (e.g., <code>envoy-0.0.0.0:3001</code>). Envoys report
+    host and port (e.g., <code>envoy-0.0.0.0:9411</code>). Envoys report
     deployment results and debrief entries back to Synth automatically when
     <code>SYNTH_SERVER_URL</code> is set.
   </p>
@@ -342,11 +342,11 @@ const multiEnvoyInstall = `# On target machine: install Envoy only
   <h3>Envoy cannot reach Synth</h3>
   <p>
     Verify <code>SYNTH_SERVER_URL</code> is set and reachable from the Envoy
-    host. In Docker Compose, use the service name (<code>http://synth-server:3000</code>).
-    For remote setups, ensure firewalls allow traffic on port 3000.
+    host. In Docker Compose, use the service name (<code>http://synth-server:9410</code>).
+    For remote setups, ensure firewalls allow traffic on port 9410.
   </p>
   <pre><code>{`# From the Envoy host
-curl -f http://server-host:3000/health`}</code></pre>
+curl -f http://server-host:9410/health`}</code></pre>
 
   <h3>CORS errors in the browser</h3>
   <p>
@@ -378,7 +378,7 @@ curl -f http://server-host:3000/health`}</code></pre>
     intent resolution and diagnostic investigation are disabled. Check the health
     endpoint for LLM connectivity status:
   </p>
-  <pre><code>{`curl http://localhost:3000/health | jq .checks.llm`}</code></pre>
+  <pre><code>{`curl http://localhost:9410/health | jq .checks.llm`}</code></pre>
 
   <h3>High memory usage</h3>
   <p>

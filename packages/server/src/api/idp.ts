@@ -252,7 +252,7 @@ export function registerIdpRoutes(
 
     // Build redirect URI based on the current request
     const proto = (request.headers["x-forwarded-proto"] as string) ?? "http";
-    const host = request.headers["x-forwarded-host"] ?? request.headers.host ?? "localhost:3000";
+    const host = request.headers["x-forwarded-host"] ?? request.headers.host ?? "localhost:9410";
     const redirectUri = `${proto}://${host}/api/auth/callback/oidc/${provider.id}`;
 
     const authUrl = await oidcAdapter.getAuthorizationUrl(config, redirectUri, state);
@@ -292,7 +292,7 @@ export function registerIdpRoutes(
 
       const config = provider.config as unknown as OidcConfig;
       const proto = (request.headers["x-forwarded-proto"] as string) ?? "http";
-      const host = request.headers["x-forwarded-host"] ?? request.headers.host ?? "localhost:3000";
+      const host = request.headers["x-forwarded-host"] ?? request.headers.host ?? "localhost:9410";
       const redirectUri = `${proto}://${host}/api/auth/callback/oidc/${provider.id}`;
 
       // Exchange code for user info
@@ -394,7 +394,7 @@ export function registerIdpRoutes(
 
     // Build the ACS callback URL based on the current request
     const proto = (request.headers["x-forwarded-proto"] as string) ?? "http";
-    const host = request.headers["x-forwarded-host"] ?? request.headers.host ?? "localhost:3000";
+    const host = request.headers["x-forwarded-host"] ?? request.headers.host ?? "localhost:9410";
     const callbackUrl = `${proto}://${host}/api/auth/callback/saml/${provider.id}`;
 
     // Ensure config has the correct callbackUrl for this request
@@ -450,7 +450,7 @@ export function registerIdpRoutes(
 
       const config = provider.config as unknown as SamlConfig;
       const proto = (request.headers["x-forwarded-proto"] as string) ?? "http";
-      const host = request.headers["x-forwarded-host"] ?? request.headers.host ?? "localhost:3000";
+      const host = request.headers["x-forwarded-host"] ?? request.headers.host ?? "localhost:9410";
       const callbackUrl = `${proto}://${host}/api/auth/callback/saml/${provider.id}`;
 
       const effectiveConfig: SamlConfig = {
@@ -554,7 +554,7 @@ export function registerIdpRoutes(
 
     const config = provider.config as unknown as SamlConfig;
     const proto = (request.headers["x-forwarded-proto"] as string) ?? "http";
-    const host = request.headers["x-forwarded-host"] ?? request.headers.host ?? "localhost:3000";
+    const host = request.headers["x-forwarded-host"] ?? request.headers.host ?? "localhost:9410";
     const callbackUrl = `${proto}://${host}/api/auth/callback/saml/${provider.id}`;
 
     const effectiveConfig: SamlConfig = {

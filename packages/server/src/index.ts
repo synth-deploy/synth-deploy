@@ -121,7 +121,7 @@ initEdition();
 const envoyRegistryStore = new PersistentEnvoyRegistryStore(entityDb);
 const envoyRegistry = new EnvoyRegistry(envoyRegistryStore);
 
-const envoyUrl = process.env.SYNTH_ENVOY_URL ?? "http://localhost:3001";
+const envoyUrl = process.env.SYNTH_ENVOY_URL ?? "http://localhost:9411";
 
 const jwtSecret: Uint8Array = new TextEncoder().encode(resolvedJwtSecret);
 
@@ -873,7 +873,7 @@ app.addHook("onClose", async () => {
 
 // --- Start ---
 
-const PORT = parseInt(process.env.PORT ?? "3000", 10);
+const PORT = parseInt(process.env.PORT ?? "9410", 10);
 const HOST = process.env.HOST ?? "0.0.0.0";
 
 app.listen({ port: PORT, host: HOST }, (err) => {

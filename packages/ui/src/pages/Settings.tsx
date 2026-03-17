@@ -954,7 +954,7 @@ export default function Settings() {
                   envoy: { ...settings.envoy, url: e.target.value },
                 })
               }
-              placeholder="http://localhost:3001"
+              placeholder="http://localhost:9411"
               style={{ maxWidth: 400 }}
             />
           </div>

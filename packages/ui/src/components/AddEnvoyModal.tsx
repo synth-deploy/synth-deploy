@@ -188,7 +188,7 @@ export default function AddEnvoyModal({ onClose }: AddEnvoyModalProps) {
               <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 5, fontFamily: "var(--font-mono)" }}>URL</div>
               <input
                 type="text"
-                placeholder="http://localhost:3001"
+                placeholder="http://localhost:9411"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
                 style={{

@@ -1,7 +1,7 @@
 ---
 import DocsLayout from "../../layouts/DocsLayout.astro";
 
-const loginExample = `curl -X POST http://localhost:3000/api/auth/login \\
+const loginExample = `curl -X POST http://localhost:9410/api/auth/login \\
   -H "Content-Type: application/json" \\
   -d '{
     "username": "admin",
@@ -15,7 +15,7 @@ const loginExample = `curl -X POST http://localhost:3000/api/auth/login \\
 #   "user": { "id": "...", "username": "admin", "role": "admin" }
 # }`;
 
-const createDeploymentExample = `curl -X POST http://localhost:3000/api/deployments \\
+const createDeploymentExample = `curl -X POST http://localhost:9410/api/deployments \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer eyJhbG..." \\
   -d '{
@@ -30,18 +30,18 @@ const createDeploymentExample = `curl -X POST http://localhost:3000/api/deployme
   }'`;
 
 const listDeploymentsExample = `# List all deployments
-curl http://localhost:3000/api/deployments \\
+curl http://localhost:9410/api/deployments \\
   -H "Authorization: Bearer eyJhbG..."
 
 # Filter by status
-curl "http://localhost:3000/api/deployments?status=running" \\
+curl "http://localhost:9410/api/deployments?status=running" \\
   -H "Authorization: Bearer eyJhbG..."
 
 # Filter by partition
-curl "http://localhost:3000/api/deployments?partitionId=part_main" \\
+curl "http://localhost:9410/api/deployments?partitionId=part_main" \\
   -H "Authorization: Bearer eyJhbG..."`;
 
-const agentQueryExample = `curl -X POST http://localhost:3000/api/agent/query \\
+const agentQueryExample = `curl -X POST http://localhost:9410/api/agent/query \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer eyJhbG..." \\
   -d '{
@@ -49,7 +49,7 @@ const agentQueryExample = `curl -X POST http://localhost:3000/api/agent/query \\
   }'`;
 
 const apiKeyExample = `# Create a scoped API key
-curl -X POST http://localhost:3000/api/auth/api-keys \\
+curl -X POST http://localhost:9410/api/auth/api-keys \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer eyJhbG..." \\
   -d '{
@@ -58,14 +58,14 @@ curl -X POST http://localhost:3000/api/auth/api-keys \\
   }'
 
 # Use the API key
-curl http://localhost:3000/api/deployments \\
+curl http://localhost:9410/api/deployments \\
   -H "Authorization: Bearer synth_key_..."`;
 
 const healthExample = `# Basic health check (no auth required)
-curl http://localhost:3000/health
+curl http://localhost:9410/health
 
 # LLM connectivity status
-curl http://localhost:3000/api/health/llm \\
+curl http://localhost:9410/api/health/llm \\
   -H "Authorization: Bearer eyJhbG..."`;
 ---
 
@@ -74,7 +74,7 @@ curl http://localhost:3000/api/health/llm \\
 
   <p>
     Complete reference for the Synth server REST API. The server runs on
-    port <strong>3000</strong> by default. All request and response bodies
+    port <strong>9410</strong> by default. All request and response bodies
     use JSON (<code>Content-Type: application/json</code>).
   </p>
 

@@ -64,13 +64,13 @@ when wiping.
 
 ## Step 4 — Start everything (3 terminals)
 
-**Terminal 1 — Server** (port 3000):
+**Terminal 1 — Server** (port 9410):
 ```bash
 npm run dev
 ```
 Reads `.env` automatically via `tsx --env-file`. Watch for:
 ```
-[Synth] Server listening on http://0.0.0.0:3000
+[Synth] Server listening on http://0.0.0.0:9410
 ```
 If you see `FATAL: SYNTH_JWT_SECRET is not set` — check Step 2.
 
@@ -78,18 +78,18 @@ If you see `FATAL: SYNTH_JWT_SECRET is not set` — check Step 2.
 ```bash
 npm run dev:ui
 ```
-Vite proxies `/api` and `/health` to `http://localhost:3000`. Open `http://localhost:5173`.
+Vite proxies `/api` and `/health` to `http://localhost:9410`. Open `http://localhost:5173`.
 
-**Terminal 3 — Envoy** (port 3001):
+**Terminal 3 — Envoy** (port 9411):
 ```bash
-SYNTH_SERVER_URL=http://localhost:3000 npm run dev --workspace=packages/envoy
+SYNTH_SERVER_URL=http://localhost:9410 npm run dev --workspace=packages/envoy
 ```
 The envoy reads `.env` via `tsx --env-file` but `SYNTH_SERVER_URL` in the shell takes
 precedence. Watch for:
 ```
 ╔══════════════════════════════════════════════════════╗
 ║  Synth Envoy v0.1.0                                  ║
-║  Health:  http://0.0.0.0:3001/health                 ║
+║  Health:  http://0.0.0.0:9411/health                 ║
 ╚══════════════════════════════════════════════════════╝
 ```
 
@@ -102,7 +102,7 @@ precedence. Watch for:
 3. Go to the **Topology** tab (or click the health pill in the header)
 4. Click **+ Add Envoy** (top right)
 5. Switch to the **Manual** tab
-6. Name: `local`, URL: `http://localhost:3001`
+6. Name: `local`, URL: `http://localhost:9411`
 7. Click **Connect** — the envoy status should show as healthy
 
 ---

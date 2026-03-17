@@ -341,7 +341,7 @@ export function registerDeploymentRoutes(
       // Dispatch approved plan to envoy for execution
       if (envoyClient && deployment.plan && deployment.rollbackPlan) {
         const artifact = artifactStore.get(deployment.artifactId);
-        const serverPort = process.env.PORT ?? "3000";
+        const serverPort = process.env.PORT ?? "9410";
         const serverUrl = process.env.SYNTH_SERVER_URL ?? `http://localhost:${serverPort}`;
         const progressCallbackUrl = `${serverUrl}/api/deployments/${deployment.id}/progress`;
         const callbackToken = envoyRegistry?.list().find(r => r.url === envoyClient.url)?.token;
@@ -866,7 +866,7 @@ export function registerDeploymentRoutes(
       }
 
       const actor = (request.user?.email) ?? "anonymous";
-      const serverPort = process.env.PORT ?? "3000";
+      const serverPort = process.env.PORT ?? "9410";
       const serverUrl = process.env.SYNTH_SERVER_URL ?? `http://localhost:${serverPort}`;
       const progressCallbackUrl = `${serverUrl}/api/deployments/${deployment.id}/progress`;
 

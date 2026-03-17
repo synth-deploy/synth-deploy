@@ -13,12 +13,12 @@ npm install
 
 ## Run
 
-**Server only** (port 3000):
+**Server only** (port 9410):
 ```bash
 npm run dev
 ```
 
-**UI dev server** (port 5173, proxies API to 3000):
+**UI dev server** (port 5173, proxies API to 9410):
 ```bash
 npm run dev:ui
 ```
@@ -29,7 +29,7 @@ Both must be running for the full UI experience. Start the server first.
 ```bash
 npm run build:ui
 npm run dev
-# Open http://localhost:3000
+# Open http://localhost:9410
 ```
 
 ## Test
@@ -101,13 +101,13 @@ IDs are printed to the console on startup.
 | URL | What |
 |-----|------|
 | `http://localhost:5173` | UI (Vite dev server) |
-| `http://localhost:3000/api/operations` | Operations API |
-| `http://localhost:3000/api/partitions` | Partitions API |
-| `http://localhost:3000/api/environments` | Environments API |
-| `http://localhost:3000/api/deployments` | Deployments API |
-| `http://localhost:3000/api/diary?limit=10` | Recent diary entries |
-| `http://localhost:3000/health` | Server health check |
-| `http://localhost:3000/mcp` | MCP endpoint |
+| `http://localhost:9410/api/operations` | Operations API |
+| `http://localhost:9410/api/partitions` | Partitions API |
+| `http://localhost:9410/api/environments` | Environments API |
+| `http://localhost:9410/api/deployments` | Deployments API |
+| `http://localhost:9410/api/diary?limit=10` | Recent diary entries |
+| `http://localhost:9410/health` | Server health check |
+| `http://localhost:9410/mcp` | MCP endpoint |
 
 ## Gotcha: Stale dist/
 

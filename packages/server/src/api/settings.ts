@@ -108,7 +108,7 @@ export function registerSettingsRoutes(
       info: {
         version: "0.1.0",
         host: process.env.HOST ?? "0.0.0.0",
-        port: parseInt(process.env.PORT ?? "3000", 10),
+        port: parseInt(process.env.PORT ?? "9410", 10),
         startedAt: commandStartTime,
       },
     };

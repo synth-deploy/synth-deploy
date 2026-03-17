@@ -681,7 +681,7 @@ describe("Settings Routes", () => {
         url: "/api/settings",
         payload: {
           envoy: {
-            url: "http://envoy:3001",
+            url: "http://envoy:9411",
             timeoutMs: 5000,
           },
         },
@@ -689,7 +689,7 @@ describe("Settings Routes", () => {
 
       expect(res.statusCode).toBe(200);
       const body = JSON.parse(res.payload);
-      expect(body.settings.envoy.url).toBe("http://envoy:3001");
+      expect(body.settings.envoy.url).toBe("http://envoy:9411");
       expect(body.settings.envoy.timeoutMs).toBe(5000);
     });
 

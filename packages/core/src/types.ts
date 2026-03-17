@@ -456,7 +456,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     defaultVerificationStrategy: "basic",
   },
   envoy: {
-    url: "http://localhost:3001",
+    url: "http://localhost:9411",
     timeoutMs: 10000,
   },
   mcpServers: [],

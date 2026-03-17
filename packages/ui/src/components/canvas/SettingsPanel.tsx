@@ -706,7 +706,7 @@ export default function SettingsPanel({ title }: Props) {
             <div className="card">
               <div className="card-header"><h3>Server Endpoint</h3></div>
               <SettingRow label="URL" description="The URL envoys use to reach this Synth instance.">
-                <SI value={settings.envoy.url} onChange={v => setSettings({ ...settings, envoy: { ...settings.envoy, url: v } })} placeholder="https://synth.internal:3000" width={280} />
+                <SI value={settings.envoy.url} onChange={v => setSettings({ ...settings, envoy: { ...settings.envoy, url: v } })} placeholder="https://synth.internal:9410" width={280} />
               </SettingRow>
               <SettingRow label="Connection timeout" description="How long to wait for an envoy health probe response." last>
                 <SI value={String(settings.envoy.timeoutMs)} onChange={v => setSettings({ ...settings, envoy: { ...settings.envoy, timeoutMs: Number(v) } })} type="number" width={90} />

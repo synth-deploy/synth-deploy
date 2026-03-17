@@ -14,7 +14,7 @@ import { initEnvoyLogger } from "./logger.js";
 
 // --- Configuration ---
 
-const PORT = parseInt(process.env.ENVOY_PORT ?? "3001", 10);
+const PORT = parseInt(process.env.ENVOY_PORT ?? "9411", 10);
 const HOST = process.env.ENVOY_HOST ?? "0.0.0.0";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const BASE_DIR = process.env.ENVOY_BASE_DIR
