@@ -249,6 +249,7 @@ export function registerDeploymentRoutes(
   // Submit a plan from envoy — transitions deployment to awaiting_approval
   app.post<{ Params: { id: string } }>(
     "/api/deployments/:id/plan",
+    { preHandler: [requirePermission("deployment.create")] },
     async (request, reply) => {
       const deployment = deployments.get(request.params.id);
       if (!deployment) {
@@ -328,6 +329,14 @@ export function registerDeploymentRoutes(
         actor: request.user?.email,
       });
       telemetry.record({ actor, action: "deployment.approved", target: { type: "deployment", id: deployment.id }, details: { modifications: parsed.data.modifications } });
+      telemetry.record({
+        actor,
+        action: parsed.data.modifications ? "agent.recommendation.overridden" : "agent.recommendation.followed",
+        target: { type: "deployment", id: deployment.id },
+        details: parsed.data.modifications
+          ? { modifications: parsed.data.modifications }
+          : { planStepCount: deployment.plan?.steps.length ?? 0 },
+      });
 
       // Dispatch approved plan to envoy for execution
       if (envoyClient && deployment.plan && deployment.rollbackPlan) {
@@ -507,6 +516,12 @@ export function registerDeploymentRoutes(
         action: "deployment.modified" as Parameters<typeof telemetry.record>[0]["action"],
         target: { type: "deployment", id: deployment.id },
         details: { reason: parsed.data.reason, stepCount: parsed.data.steps.length },
+      });
+      telemetry.record({
+        actor,
+        action: "agent.recommendation.overridden",
+        target: { type: "deployment", id: deployment.id },
+        details: { reason: parsed.data.reason, stepCount: parsed.data.steps.length, diff: diffFromPreviousPlan },
       });
 
       return { deployment, modified: true };
@@ -1190,6 +1205,7 @@ export function registerDeploymentRoutes(
   // Auth is via ?token= query param since EventSource cannot send headers
   app.get<{ Params: { id: string } }>(
     "/api/deployments/:id/stream",
+    { preHandler: [requirePermission("deployment.view")] },
     (request, reply) => {
       if (!progressStore) {
         reply.status(501).send({ error: "Progress streaming not configured" });

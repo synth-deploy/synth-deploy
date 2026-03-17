@@ -361,8 +361,6 @@ export class SynthAgent {
       },
     });
 
-    // TODO #154: Emit agent.recommendation.followed / agent.recommendation.overridden telemetry
-    // when user approves/modifies the generated plan
     const approvalEntry = this.debrief.record({
       partitionId: trigger.partitionId ?? null,
       deploymentId,
