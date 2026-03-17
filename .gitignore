@@ -26,6 +26,9 @@ coverage/
 # Internal strategy & planning docs (kept locally, never published)
 docs/internal/
 
+# Design mockups and source of truth (kept locally)
+design/
+
 # Agent config (behavioral contracts, hooks, memory)
 .claude/
 

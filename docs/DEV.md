@@ -34,7 +34,7 @@ npm run dev
 
 ## Test
 
-**All tests** (server + tentacle):
+**All tests** (server + envoy):
 ```bash
 npm test
 ```
@@ -44,9 +44,9 @@ npm test
 npm test --workspace=packages/server
 ```
 
-**Tentacle only:**
+**Envoy only:**
 ```bash
-npm test --workspace=packages/tentacle
+npm test --workspace=packages/envoy
 ```
 
 ## Build
@@ -83,7 +83,7 @@ npm run clean
 packages/
   core/       Shared types, Decision Diary, partition isolation, stores
   server/     Fastify server, REST API, MCP, Server Agent
-  tentacle/   Local deployment agent, diagnostics, query engine
+  envoy/      Local deployment agent, diagnostics, query engine
   ui/         React SPA (Vite)
 ```
 
