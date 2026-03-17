@@ -44,7 +44,7 @@ const dockerCustom = `services:
       - SYNTH_API_KEY=your-secret-key
       - SYNTH_CORS_ORIGIN=https://deploy.example.com
       - SYNTH_SEED_DEMO=false
-      - ANTHROPIC_API_KEY=sk-ant-...
+      - SYNTH_LLM_API_KEY=sk-ant-...
     mem_limit: 512m
     cpus: 1.0
 
@@ -215,8 +215,9 @@ const multiEnvoyInstall = `# On target machine: install Envoy only
       <tr><td><code>SYNTH_RATE_LIMIT_WINDOW_MS</code></td><td><code>60000</code></td><td>Rate limit window in milliseconds</td></tr>
       <tr><td><code>SYNTH_MCP_SESSION_TTL_MS</code></td><td><code>3600000</code></td><td>MCP session time-to-live (1 hour)</td></tr>
       <tr><td><code>SYNTH_MCP_CLEANUP_INTERVAL_MS</code></td><td><code>600000</code></td><td>MCP session cleanup interval (10 minutes)</td></tr>
-      <tr><td><code>ANTHROPIC_API_KEY</code></td><td><em>unset</em></td><td>API key for LLM-powered agent features (intent resolution, diagnostics). Agent degrades gracefully without it.</td></tr>
-      <tr><td><code>ANTHROPIC_BASE_URL</code></td><td><em>unset</em></td><td>Custom base URL for the Anthropic API (useful for proxies)</td></tr>
+      <tr><td><code>SYNTH_LLM_API_KEY</code></td><td><em>unset</em></td><td>API key for LLM-powered features (planning, diagnostics, artifact analysis). Supports Anthropic, OpenAI, and other providers. Agent degrades gracefully without it.</td></tr>
+      <tr><td><code>SYNTH_LLM_PROVIDER</code></td><td><code>anthropic</code></td><td>LLM provider to use. Options: <code>anthropic</code>, <code>openai</code>, <code>bedrock</code>, <code>vertex</code>, <code>openai-compatible</code>.</td></tr>
+      <tr><td><code>SYNTH_LLM_BASE_URL</code></td><td><em>unset</em></td><td>Custom base URL for the LLM API. Required for <code>openai-compatible</code> provider.</td></tr>
     </tbody>
   </table>
 
@@ -231,7 +232,7 @@ const multiEnvoyInstall = `# On target machine: install Envoy only
       <tr><td><code>ENVOY_HOST</code></td><td><code>0.0.0.0</code></td><td>Bind address</td></tr>
       <tr><td><code>ENVOY_BASE_DIR</code></td><td><code>.envoy</code> (cwd)</td><td>Base directory for deployment workspaces and local state</td></tr>
       <tr><td><code>SYNTH_SERVER_URL</code></td><td><em>empty</em></td><td>URL of the Synth server (e.g., <code>http://synth-server:3000</code>). Required for Envoy to report results back.</td></tr>
-      <tr><td><code>ANTHROPIC_API_KEY</code></td><td><em>unset</em></td><td>Enables LLM-powered diagnostic investigation on the Envoy. Degrades gracefully without it.</td></tr>
+      <tr><td><code>SYNTH_LLM_API_KEY</code></td><td><em>unset</em></td><td>Enables LLM-powered diagnostic investigation on the Envoy. Supports same providers as the server.</td></tr>
     </tbody>
   </table>
 
@@ -372,7 +373,7 @@ curl -f http://server-host:3000/health`}</code></pre>
 
   <h3>Agent features not working (intent resolution, diagnostics)</h3>
   <p>
-    LLM-powered features require <code>ANTHROPIC_API_KEY</code> to be set. Without
+    LLM-powered features require <code>SYNTH_LLM_API_KEY</code> to be set. Without
     it, the agent degrades gracefully: deployments still work, but natural-language
     intent resolution and diagnostic investigation are disabled. Check the health
     endpoint for LLM connectivity status:

@@ -1,0 +1,392 @@
+---
+import Layout from "../layouts/Layout.astro";
+---
+
+<Layout title="Synth — Roadmap" description="Where Synth is today and where it's headed. Intelligent deployment planning, artifact analysis, fleet orchestration, and more.">
+  <!-- Hero -->
+  <section class="relative overflow-hidden">
+    <div class="absolute inset-0 pointer-events-none">
+      <div class="absolute top-1/4 left-1/3 w-96 h-96 bg-ds-accent/5 rounded-full blur-[120px]"></div>
+      <div class="absolute bottom-1/3 right-1/4 w-80 h-80 bg-ds-dt-plan/5 rounded-full blur-[100px]"></div>
+    </div>
+    <div class="relative mx-auto max-w-6xl px-6 pt-24 pb-16 text-center">
+      <div class="animate-fade-in-up">
+        <p class="section-heading">Roadmap</p>
+        <h1 class="text-5xl md:text-6xl font-bold leading-tight mb-6">
+          Where we are.<br />
+          <span class="text-ds-accent">Where we're going.</span>
+        </h1>
+        <p class="text-xl text-ds-text-secondary max-w-2xl mx-auto leading-relaxed">
+          Synth is actively developed. Here's where we are and where we're headed.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Available Now (v1.0) -->
+  <section class="py-28 border-t border-ds-border">
+    <div class="mx-auto max-w-6xl px-6">
+      <div class="text-center mb-16 scroll-reveal">
+        <p class="section-heading">Available Now</p>
+        <h2 class="text-3xl md:text-4xl font-bold mb-4">v1.0 — Shipping today</h2>
+        <p class="text-ds-text-secondary text-lg max-w-2xl mx-auto">
+          The foundation is built and proven. Every feature below is live, tested, and ready
+          for production use.
+        </p>
+      </div>
+
+      <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <!-- Intelligent Deployment Planning -->
+        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-1">
+          <div class="flex items-center gap-2 mb-3">
+            <span class="dt-dot bg-ds-dt-plan"></span>
+            <span class="text-xs font-semibold uppercase tracking-wide text-ds-dt-plan">Core</span>
+          </div>
+          <h3 class="text-base font-semibold mb-2">Intelligent Deployment Planning</h3>
+          <p class="text-sm text-ds-text-secondary leading-relaxed">
+            LLM-powered pipeline planning with plain-language reasoning. The agent analyzes
+            artifacts, reasons about target systems, and produces deployment plans with full
+            explanations.
+          </p>
+        </div>
+
+        <!-- Artifact Analysis -->
+        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-2">
+          <div class="flex items-center gap-2 mb-3">
+            <span class="dt-dot bg-ds-dt-config"></span>
+            <span class="text-xs font-semibold uppercase tracking-wide text-ds-dt-config">Core</span>
+          </div>
+          <h3 class="text-base font-semibold mb-2">Artifact Analysis</h3>
+          <p class="text-sm text-ds-text-secondary leading-relaxed">
+            Deterministic extractors for container images, Helm charts, npm/NuGet packages,
+            plus LLM fallback for unknown formats. Hand Synth whatever you produce &mdash; it
+            figures out the rest.
+          </p>
+        </div>
+
+        <!-- Plan Review -->
+        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-3">
+          <div class="flex items-center gap-2 mb-3">
+            <span class="dt-dot bg-ds-dt-plan"></span>
+            <span class="text-xs font-semibold uppercase tracking-wide text-ds-dt-plan">Planning</span>
+          </div>
+          <h3 class="text-base font-semibold mb-2">Plan Review</h3>
+          <p class="text-sm text-ds-text-secondary leading-relaxed">
+            Approve, reject, or modify deployment plans. Three-mode refinement with LLM
+            assessment. The agent explains every recommendation.
+          </p>
+        </div>
+
+        <!-- Debrief -->
+        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-1">
+          <div class="flex items-center gap-2 mb-3">
+            <span class="dt-dot bg-ds-debrief"></span>
+            <span class="text-xs font-semibold uppercase tracking-wide text-ds-debrief">Transparency</span>
+          </div>
+          <h3 class="text-base font-semibold mb-2">Debrief (Decision Record)</h3>
+          <p class="text-sm text-ds-text-secondary leading-relaxed">
+            Every agent decision logged in plain language. Failed deployments generate automatic
+            postmortems. Audit-ready from day one.
+          </p>
+        </div>
+
+        <!-- Environment & Partition Management -->
+        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-2">
+          <div class="flex items-center gap-2 mb-3">
+            <span class="dt-dot bg-ds-partition"></span>
+            <span class="text-xs font-semibold uppercase tracking-wide text-ds-partition">Isolation</span>
+          </div>
+          <h3 class="text-base font-semibold mb-2">Environment & Partition Management</h3>
+          <p class="text-sm text-ds-text-secondary leading-relaxed">
+            Isolated deployment contexts with scoped variables. Configurable conflict resolution
+            policies. No cross-partition data access.
+          </p>
+        </div>
+
+        <!-- LLM-Agnostic -->
+        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-3">
+          <div class="flex items-center gap-2 mb-3">
+            <span class="dt-dot bg-ds-accent"></span>
+            <span class="text-xs font-semibold uppercase tracking-wide text-ds-accent">Infrastructure</span>
+          </div>
+          <h3 class="text-base font-semibold mb-2">LLM-Agnostic</h3>
+          <p class="text-sm text-ds-text-secondary leading-relaxed">
+            Claude, GPT, Gemini, Grok, DeepSeek, Ollama, or any OpenAI-compatible endpoint.
+            Runs entirely on your infrastructure, including the AI.
+          </p>
+        </div>
+
+        <!-- CI/CD Integration -->
+        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-1">
+          <div class="flex items-center gap-2 mb-3">
+            <span class="dt-dot bg-ds-dt-execution"></span>
+            <span class="text-xs font-semibold uppercase tracking-wide text-ds-dt-execution">Integration</span>
+          </div>
+          <h3 class="text-base font-semibold mb-2">CI/CD Integration</h3>
+          <p class="text-sm text-ds-text-secondary leading-relaxed">
+            Webhook intake for GitHub Actions, GitLab CI, Azure DevOps, Jenkins, CircleCI.
+            Docker/npm/NuGet registry polling. Your CI produces the artifact &mdash; Synth takes
+            it from there.
+          </p>
+        </div>
+
+        <!-- Fleet Deployment -->
+        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-2">
+          <div class="flex items-center gap-2 mb-3">
+            <span class="dt-dot bg-ds-envoy"></span>
+            <span class="text-xs font-semibold uppercase tracking-wide text-ds-envoy">Scale</span>
+          </div>
+          <h3 class="text-base font-semibold mb-2">Fleet Deployment</h3>
+          <p class="text-sm text-ds-text-secondary leading-relaxed">
+            Multi-envoy orchestration with representative planning. Deploy across multiple
+            targets from a single operation.
+          </p>
+        </div>
+
+        <!-- Enterprise Identity -->
+        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-3">
+          <div class="flex items-center gap-2 mb-3">
+            <span class="dt-dot bg-ds-dt-health"></span>
+            <span class="text-xs font-semibold uppercase tracking-wide text-ds-dt-health">Enterprise</span>
+          </div>
+          <h3 class="text-base font-semibold mb-2">Enterprise Identity</h3>
+          <p class="text-sm text-ds-text-secondary leading-relaxed">
+            SAML, OIDC, LDAP provider support with automatic role mapping. Local auth with
+            role-based access control.
+          </p>
+        </div>
+
+        <!-- Deployment Graphs -->
+        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-1">
+          <div class="flex items-center gap-2 mb-3">
+            <span class="dt-dot bg-ds-dt-plan"></span>
+            <span class="text-xs font-semibold uppercase tracking-wide text-ds-dt-plan">Orchestration</span>
+          </div>
+          <h3 class="text-base font-semibold mb-2">Deployment Graphs</h3>
+          <p class="text-sm text-ds-text-secondary leading-relaxed">
+            Multi-artifact DAG orchestration with LLM-inferred dependencies. Complex
+            deployments modeled as directed graphs with intelligent ordering.
+          </p>
+        </div>
+
+        <!-- Cross-Deployment Pattern Learning -->
+        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-2">
+          <div class="flex items-center gap-2 mb-3">
+            <span class="dt-dot bg-ds-dt-diagnostic"></span>
+            <span class="text-xs font-semibold uppercase tracking-wide text-ds-dt-diagnostic">Intelligence</span>
+          </div>
+          <h3 class="text-base font-semibold mb-2">Cross-Deployment Pattern Learning</h3>
+          <p class="text-sm text-ds-text-secondary leading-relaxed">
+            Automatic correction tracking and reapplication across deployments. The agent
+            learns from past decisions to improve future plans.
+          </p>
+        </div>
+
+        <!-- Security Hardened -->
+        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-3">
+          <div class="flex items-center gap-2 mb-3">
+            <span class="dt-dot bg-ds-dt-failure"></span>
+            <span class="text-xs font-semibold uppercase tracking-wide text-ds-dt-failure">Security</span>
+          </div>
+          <h3 class="text-base font-semibold mb-2">Security Hardened</h3>
+          <p class="text-sm text-ds-text-secondary leading-relaxed">
+            Prompt injection protection, SSRF validation, path traversal guards, secrets
+            masking, webhook HMAC verification.
+          </p>
+        </div>
+
+        <!-- MCP-Native -->
+        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-1">
+          <div class="flex items-center gap-2 mb-3">
+            <span class="dt-dot bg-ds-server"></span>
+            <span class="text-xs font-semibold uppercase tracking-wide text-ds-server">Protocol</span>
+          </div>
+          <h3 class="text-base font-semibold mb-2">MCP-Native</h3>
+          <p class="text-sm text-ds-text-secondary leading-relaxed">
+            Built on Model Context Protocol from the foundation. Connect external data sources
+            and tools through standardized MCP servers.
+          </p>
+        </div>
+
+        <!-- Co-Branding -->
+        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-2">
+          <div class="flex items-center gap-2 mb-3">
+            <span class="dt-dot bg-ds-order"></span>
+            <span class="text-xs font-semibold uppercase tracking-wide text-ds-order">Enterprise</span>
+          </div>
+          <h3 class="text-base font-semibold mb-2">Co-Branding</h3>
+          <p class="text-sm text-ds-text-secondary leading-relaxed">
+            White-label support for managed service providers. Rebrand the UI and deployment
+            reports with your organization's identity.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Coming Soon (v1.1) -->
+  <section class="py-28 border-t border-ds-border relative overflow-hidden">
+    <div class="absolute inset-0 pointer-events-none">
+      <div class="absolute top-1/3 right-1/4 w-96 h-96 bg-ds-dt-plan/5 rounded-full blur-[120px]"></div>
+      <div class="absolute bottom-1/4 left-1/3 w-72 h-72 bg-ds-partition/5 rounded-full blur-[100px]"></div>
+    </div>
+
+    <div class="relative mx-auto max-w-6xl px-6">
+      <div class="text-center mb-16 scroll-reveal">
+        <p class="section-heading" style="color: #818cf8;">Coming Soon</p>
+        <h2 class="text-3xl md:text-4xl font-bold mb-4">v1.1 — In active development</h2>
+        <p class="text-ds-text-secondary text-lg max-w-2xl mx-auto">
+          The next wave of capabilities, already in progress. Expanding execution targets
+          and compliance workflows.
+        </p>
+      </div>
+
+      <div class="grid md:grid-cols-2 gap-6 max-w-4xl mx-auto">
+        <div class="glass-card p-6 border-ds-partition/20 scroll-reveal scroll-reveal-delay-1">
+          <div class="flex items-center gap-3 mb-3">
+            <div class="entity-badge border-ds-partition/30 bg-ds-partition/10 text-ds-partition text-[10px] py-0.5">
+              v1.1
+            </div>
+          </div>
+          <h3 class="text-base font-semibold mb-2">Kubernetes Deployment</h3>
+          <p class="text-sm text-ds-text-secondary leading-relaxed">
+            Native kubectl execution, Helm install orchestration, and rollout management.
+            The agent understands Kubernetes resources and manages rollbacks intelligently.
+          </p>
+        </div>
+
+        <div class="glass-card p-6 border-ds-partition/20 scroll-reveal scroll-reveal-delay-2">
+          <div class="flex items-center gap-3 mb-3">
+            <div class="entity-badge border-ds-partition/30 bg-ds-partition/10 text-ds-partition text-[10px] py-0.5">
+              v1.1
+            </div>
+          </div>
+          <h3 class="text-base font-semibold mb-2">Terraform / CloudFormation</h3>
+          <p class="text-sm text-ds-text-secondary leading-relaxed">
+            Infrastructure-as-code execution with plan analysis. Synth reviews Terraform plans
+            and CloudFormation changesets before applying.
+          </p>
+        </div>
+
+        <div class="glass-card p-6 border-ds-partition/20 scroll-reveal scroll-reveal-delay-3">
+          <div class="flex items-center gap-3 mb-3">
+            <div class="entity-badge border-ds-partition/30 bg-ds-partition/10 text-ds-partition text-[10px] py-0.5">
+              v1.1
+            </div>
+          </div>
+          <h3 class="text-base font-semibold mb-2">Blue-Green Deployment Strategy</h3>
+          <p class="text-sm text-ds-text-secondary leading-relaxed">
+            Zero-downtime deployment strategy with intelligent traffic switching. The agent
+            manages environment promotion and rollback decisions.
+          </p>
+        </div>
+
+        <div class="glass-card p-6 border-ds-partition/20 scroll-reveal scroll-reveal-delay-4">
+          <div class="flex items-center gap-3 mb-3">
+            <div class="entity-badge border-ds-partition/30 bg-ds-partition/10 text-ds-partition text-[10px] py-0.5">
+              v1.1
+            </div>
+          </div>
+          <h3 class="text-base font-semibold mb-2">Compliance-Ready Audit Export</h3>
+          <p class="text-sm text-ds-text-secondary leading-relaxed">
+            Debrief export formatted for SOC2, HIPAA, and FedRAMP audit requirements.
+            Every deployment decision already logged &mdash; now exportable in the right format.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- On the Horizon (v1.2+) -->
+  <section class="py-28 border-t border-ds-border">
+    <div class="mx-auto max-w-6xl px-6">
+      <div class="text-center mb-16 scroll-reveal">
+        <p class="section-heading" style="color: #6b7280;">On the Horizon</p>
+        <h2 class="text-3xl md:text-4xl font-bold mb-4">v1.2+ — What's next</h2>
+        <p class="text-ds-text-secondary text-lg max-w-2xl mx-auto">
+          Longer-term initiatives that build on the core. Priorities shift as we learn
+          from production usage.
+        </p>
+      </div>
+
+      <div class="max-w-2xl mx-auto space-y-4">
+        <div class="glass-card px-6 py-4 flex items-center gap-4 scroll-reveal scroll-reveal-delay-1">
+          <span class="dt-dot bg-ds-text-muted"></span>
+          <div>
+            <h3 class="text-sm font-semibold">Fleet Deployment at Scale Validation</h3>
+            <p class="text-xs text-ds-text-muted mt-0.5">Large-scale fleet orchestration stress testing and performance optimization.</p>
+          </div>
+        </div>
+
+        <div class="glass-card px-6 py-4 flex items-center gap-4 scroll-reveal scroll-reveal-delay-2">
+          <span class="dt-dot bg-ds-text-muted"></span>
+          <div>
+            <h3 class="text-sm font-semibold">Multi-Envoy Orchestration Enhancements</h3>
+            <p class="text-xs text-ds-text-muted mt-0.5">Advanced coordination patterns for complex multi-target deployments.</p>
+          </div>
+        </div>
+
+        <div class="glass-card px-6 py-4 flex items-center gap-4 scroll-reveal scroll-reveal-delay-3">
+          <span class="dt-dot bg-ds-text-muted"></span>
+          <div>
+            <h3 class="text-sm font-semibold">Advanced Knowledge Store</h3>
+            <p class="text-xs text-ds-text-muted mt-0.5">Cross-organization pattern sharing for deployment intelligence at scale.</p>
+          </div>
+        </div>
+
+        <div class="glass-card px-6 py-4 flex items-center gap-4 scroll-reveal scroll-reveal-delay-4">
+          <span class="dt-dot bg-ds-text-muted"></span>
+          <div>
+            <h3 class="text-sm font-semibold">Deployment Graph Orchestration at Scale</h3>
+            <p class="text-xs text-ds-text-muted mt-0.5">DAG-based deployment pipelines handling hundreds of interconnected artifacts.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="py-28 border-t border-ds-border relative overflow-hidden">
+    <div class="absolute inset-0 pointer-events-none">
+      <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-ds-accent/5 rounded-full blur-[120px]"></div>
+    </div>
+    <div class="relative mx-auto max-w-6xl px-6 text-center scroll-reveal">
+      <h2 class="text-3xl md:text-4xl font-bold mb-4">Ready to deploy smarter?</h2>
+      <p class="text-ds-text-secondary text-lg mb-8 max-w-xl mx-auto">
+        Synth is open source and self-hosted. Get started in minutes.
+      </p>
+      <div class="flex items-center justify-center gap-4">
+        <a
+          href="https://github.com/jmfullerton96/synth-deploy"
+          target="_blank"
+          rel="noopener"
+          class="inline-block rounded-lg bg-ds-accent px-8 py-3 text-ds-bg font-semibold hover:bg-ds-accent/90 transition-colors"
+        >
+          View on GitHub
+        </a>
+        <a
+          href="/docs/installation"
+          class="rounded-lg border border-ds-border px-6 py-3 text-ds-text hover:border-ds-accent/30 hover:bg-ds-surface transition-colors"
+        >
+          Installation Guide
+        </a>
+      </div>
+    </div>
+  </section>
+</Layout>
+
+<!-- Scroll reveal observer -->
+<script>
+  const observer = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add("revealed");
+        }
+      });
+    },
+    { threshold: 0.1, rootMargin: "0px 0px -50px 0px" },
+  );
+
+  document.querySelectorAll(".scroll-reveal").forEach((el) => observer.observe(el));
+</script>

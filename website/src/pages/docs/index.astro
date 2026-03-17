@@ -7,11 +7,14 @@ npm install
 npm run build
 npm start`;
 
-const apiExamples = `# List operations
-curl http://localhost:3000/api/operations
+const apiExamples = `# List partitions
+curl http://localhost:3000/api/partitions
 
-# List partitions
-curl http://localhost:3000/api/partitions`;
+# List artifacts
+curl http://localhost:3000/api/artifacts
+
+# List deployments
+curl http://localhost:3000/api/deployments`;
 ---
 
 <DocsLayout title="Getting Started">
@@ -25,7 +28,7 @@ curl http://localhost:3000/api/partitions`;
 
   <h2>Prerequisites</h2>
   <ul>
-    <li>Node.js 20+</li>
+    <li>Node.js 22+</li>
     <li>npm 10+</li>
   </ul>
 
@@ -53,10 +56,11 @@ curl http://localhost:3000/api/partitions`;
     history, and configuration. Cross-partition data access is never allowed.
   </p>
 
-  <h3>Operations</h3>
+  <h3>Artifacts</h3>
   <p>
-    A named deployment workflow with ordered steps. Operations define
-    <em>what</em> gets deployed.
+    The things you deploy — container images, Helm charts, npm packages, NuGet
+    packages, or archives. Synth analyzes artifacts automatically to understand
+    what they contain and how to deploy them.
   </p>
 
   <h3>Environments</h3>
@@ -80,10 +84,18 @@ curl http://localhost:3000/api/partitions`;
     postmortem reports.
   </p>
 
+  <h3>Envoy</h3>
+  <p>
+    Lightweight agents deployed on target machines. Envoys execute deployment
+    steps, run health checks, and report results back to the Synth server.
+    They can run LLM-powered diagnostics when deployments fail.
+  </p>
+
   <h2>API</h2>
   <p>
     Synth exposes a RESTful API at <code>/api</code> and an MCP server at
     <code>/mcp</code>. The UI communicates through the REST API.
+    See the <a href="/docs/api">API Reference</a> for the full endpoint listing.
   </p>
 
   <pre><code>{apiExamples}</code></pre>

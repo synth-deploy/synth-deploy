@@ -1,0 +1,499 @@
+---
+import DocsLayout from "../../layouts/DocsLayout.astro";
+
+const loginExample = `curl -X POST http://localhost:3000/api/auth/login \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "username": "admin",
+    "password": "your-password"
+  }'
+
+# Response:
+# {
+#   "accessToken": "eyJhbG...",
+#   "refreshToken": "eyJhbG...",
+#   "user": { "id": "...", "username": "admin", "role": "admin" }
+# }`;
+
+const createDeploymentExample = `curl -X POST http://localhost:3000/api/deployments \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer eyJhbG..." \\
+  -d '{
+    "artifactId": "art_abc123",
+    "envoyId": "envoy-prod-01",
+    "environmentId": "env_production",
+    "partitionId": "part_main",
+    "variables": {
+      "APP_VERSION": "2.4.1",
+      "REPLICAS": "3"
+    }
+  }'`;
+
+const listDeploymentsExample = `# List all deployments
+curl http://localhost:3000/api/deployments \\
+  -H "Authorization: Bearer eyJhbG..."
+
+# Filter by status
+curl "http://localhost:3000/api/deployments?status=running" \\
+  -H "Authorization: Bearer eyJhbG..."
+
+# Filter by partition
+curl "http://localhost:3000/api/deployments?partitionId=part_main" \\
+  -H "Authorization: Bearer eyJhbG..."`;
+
+const agentQueryExample = `curl -X POST http://localhost:3000/api/agent/query \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer eyJhbG..." \\
+  -d '{
+    "query": "What failed in the last deployment to production?"
+  }'`;
+
+const apiKeyExample = `# Create a scoped API key
+curl -X POST http://localhost:3000/api/auth/api-keys \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer eyJhbG..." \\
+  -d '{
+    "name": "ci-pipeline",
+    "permissions": ["deployment.create", "deployment.view", "artifact.create"]
+  }'
+
+# Use the API key
+curl http://localhost:3000/api/deployments \\
+  -H "Authorization: Bearer synth_key_..."`;
+
+const healthExample = `# Basic health check (no auth required)
+curl http://localhost:3000/health
+
+# LLM connectivity status
+curl http://localhost:3000/api/health/llm \\
+  -H "Authorization: Bearer eyJhbG..."`;
+---
+
+<DocsLayout title="API Reference">
+  <h1>API Reference</h1>
+
+  <p>
+    Complete reference for the Synth server REST API. The server runs on
+    port <strong>3000</strong> by default. All request and response bodies
+    use JSON (<code>Content-Type: application/json</code>).
+  </p>
+
+  <div class="glass-card" style="border-left: 3px solid var(--ds-accent); padding: 1rem 1.25rem; margin-bottom: 2rem;">
+    <strong>Authentication:</strong> All endpoints except <code>GET /health</code>
+    and <code>GET /api/auth/status</code> require a valid JWT token. Pass it via
+    the <code>Authorization: Bearer &lt;token&gt;</code> header. Obtain a token
+    from the <code>POST /api/auth/login</code> endpoint, or create a scoped API
+    key via <code>POST /api/auth/api-keys</code>.
+  </div>
+
+  <!-- ───────────────── Health & System ───────────────── -->
+
+  <h2>Health & System</h2>
+
+  <table>
+    <thead>
+      <tr><th>Method</th><th>Path</th><th>Auth</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>GET</code></td><td><code>/health</code></td><td>None</td><td>Health check — returns server status, uptime, and component checks</td></tr>
+      <tr><td><code>GET</code></td><td><code>/api/health/llm</code></td><td>Token</td><td>LLM connectivity status and model info</td></tr>
+      <tr><td><code>POST</code></td><td><code>/api/health/llm/verify-task</code></td><td>Token</td><td>Run a verification task against the LLM to confirm end-to-end connectivity</td></tr>
+      <tr><td><code>GET</code></td><td><code>/api/system/state</code></td><td>Token</td><td>System state overview — entity counts, active deployments, agent status</td></tr>
+    </tbody>
+  </table>
+
+  <pre><code>{healthExample}</code></pre>
+
+  <!-- ───────────────── Authentication ───────────────── -->
+
+  <h2>Authentication</h2>
+
+  <p>
+    Synth uses JWT-based authentication. Access tokens are short-lived; refresh
+    tokens allow obtaining new access tokens without re-authenticating. The JWT
+    signing secret is configured via the <code>SYNTH_JWT_SECRET</code> environment
+    variable.
+  </p>
+
+  <table>
+    <thead>
+      <tr><th>Method</th><th>Path</th><th>Auth</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>GET</code></td><td><code>/api/auth/status</code></td><td>None</td><td>Auth configuration status — whether auth is enabled, available providers</td></tr>
+      <tr><td><code>POST</code></td><td><code>/api/auth/register</code></td><td>None</td><td>Register a new user account</td></tr>
+      <tr><td><code>POST</code></td><td><code>/api/auth/login</code></td><td>None</td><td>Authenticate and receive JWT access + refresh tokens</td></tr>
+      <tr><td><code>POST</code></td><td><code>/api/auth/refresh</code></td><td>Refresh token</td><td>Exchange a refresh token for a new access token</td></tr>
+      <tr><td><code>POST</code></td><td><code>/api/auth/logout</code></td><td>Token</td><td>Invalidate tokens and end the session</td></tr>
+      <tr><td><code>GET</code></td><td><code>/api/auth/me</code></td><td>Token</td><td>Current user profile</td></tr>
+      <tr><td><code>PUT</code></td><td><code>/api/auth/me</code></td><td>Token</td><td>Update current user profile</td></tr>
+      <tr><td><code>POST</code></td><td><code>/api/auth/me/password</code></td><td>Token</td><td>Change current user's password</td></tr>
+      <tr><td><code>GET</code></td><td><code>/api/auth/sessions</code></td><td>Token</td><td>List active sessions for the current user</td></tr>
+      <tr><td><code>DELETE</code></td><td><code>/api/auth/sessions/:id</code></td><td>Token</td><td>Revoke a specific session</td></tr>
+      <tr><td><code>DELETE</code></td><td><code>/api/auth/sessions</code></td><td>Token</td><td>Revoke all sessions (force re-login everywhere)</td></tr>
+      <tr><td><code>GET</code></td><td><code>/api/auth/providers</code></td><td>None</td><td>List available authentication providers (for IdP integration)</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Login Example</h3>
+  <pre><code>{loginExample}</code></pre>
+
+  <!-- ───────────────── API Keys ───────────────── -->
+
+  <h2>API Keys</h2>
+
+  <p>
+    API keys provide long-lived, scoped authentication for CI/CD pipelines and
+    programmatic access. Each key has a specific set of permissions, limiting
+    what it can do.
+  </p>
+
+  <table>
+    <thead>
+      <tr><th>Method</th><th>Path</th><th>Auth</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>GET</code></td><td><code>/api/auth/api-keys</code></td><td>Token</td><td>List all API keys for the current user</td></tr>
+      <tr><td><code>POST</code></td><td><code>/api/auth/api-keys</code></td><td>Token</td><td>Create an API key with scoped permissions</td></tr>
+      <tr><td><code>DELETE</code></td><td><code>/api/auth/api-keys/:id</code></td><td>Token</td><td>Delete an API key</td></tr>
+      <tr><td><code>POST</code></td><td><code>/api/auth/api-keys/:id/regenerate</code></td><td>Token</td><td>Regenerate an API key (invalidates the previous value)</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Creating a Scoped API Key</h3>
+  <pre><code>{apiKeyExample}</code></pre>
+
+  <!-- ───────────────── Artifacts ───────────────── -->
+
+  <h2>Artifacts</h2>
+
+  <table>
+    <thead>
+      <tr><th>Method</th><th>Path</th><th>Permission</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>GET</code></td><td><code>/api/artifacts</code></td><td><code>artifact.view</code></td><td>List artifacts — deployment-ready packages, images, or bundles</td></tr>
+      <tr><td><code>POST</code></td><td><code>/api/artifacts</code></td><td><code>artifact.create</code></td><td>Register a new artifact</td></tr>
+    </tbody>
+  </table>
+
+  <!-- ───────────────── Deployments ───────────────── -->
+
+  <h2>Deployments</h2>
+
+  <table>
+    <thead>
+      <tr><th>Method</th><th>Path</th><th>Permission</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>POST</code></td><td><code>/api/deployments</code></td><td><code>deployment.create</code></td><td>Create and dispatch a new deployment</td></tr>
+      <tr><td><code>GET</code></td><td><code>/api/deployments</code></td><td><code>deployment.view</code></td><td>List deployments — supports filtering by status, partition, environment</td></tr>
+      <tr><td><code>GET</code></td><td><code>/api/debrief</code></td><td><code>deployment.view</code></td><td>Query debrief entries — the decision log for agent actions</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Create a Deployment</h3>
+  <pre><code>{createDeploymentExample}</code></pre>
+
+  <h3>List Deployments</h3>
+  <pre><code>{listDeploymentsExample}</code></pre>
+
+  <!-- ───────────────── Partitions ───────────────── -->
+
+  <h2>Partitions</h2>
+
+  <p>
+    Partitions are optional logical groupings with scoped variables and
+    constraints. Deployments work with or without partition context.
+  </p>
+
+  <table>
+    <thead>
+      <tr><th>Method</th><th>Path</th><th>Permission</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>GET</code></td><td><code>/api/partitions</code></td><td><code>partition.view</code></td><td>List all partitions</td></tr>
+      <tr><td><code>POST</code></td><td><code>/api/partitions</code></td><td><code>partition.create</code></td><td>Create a new partition</td></tr>
+    </tbody>
+  </table>
+
+  <!-- ───────────────── Environments ───────────────── -->
+
+  <h2>Environments</h2>
+
+  <table>
+    <thead>
+      <tr><th>Method</th><th>Path</th><th>Permission</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>GET</code></td><td><code>/api/environments</code></td><td><code>environment.view</code></td><td>List environments (staging, production, etc.)</td></tr>
+      <tr><td><code>POST</code></td><td><code>/api/environments</code></td><td><code>environment.create</code></td><td>Create a new environment</td></tr>
+    </tbody>
+  </table>
+
+  <!-- ───────────────── Envoys ───────────────── -->
+
+  <h2>Envoys</h2>
+
+  <p>
+    Envoys are lightweight deployment agents running on target machines. The
+    server manages envoy registration, health monitoring, and token rotation.
+  </p>
+
+  <table>
+    <thead>
+      <tr><th>Method</th><th>Path</th><th>Permission</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>GET</code></td><td><code>/api/envoys</code></td><td><code>envoy.view</code></td><td>List all registered envoys</td></tr>
+      <tr><td><code>POST</code></td><td><code>/api/envoys</code></td><td><code>envoy.register</code></td><td>Register a new envoy</td></tr>
+      <tr><td><code>GET</code></td><td><code>/api/envoys/:id/health</code></td><td><code>envoy.view</code></td><td>Get health status for a specific envoy</td></tr>
+      <tr><td><code>PUT</code></td><td><code>/api/envoys/:id</code></td><td><code>envoy.configure</code></td><td>Update envoy configuration</td></tr>
+      <tr><td><code>DELETE</code></td><td><code>/api/envoys/:id</code></td><td><code>envoy.configure</code></td><td>Unregister and remove an envoy</td></tr>
+      <tr><td><code>POST</code></td><td><code>/api/envoys/:id/rotate-token</code></td><td><code>envoy.configure</code></td><td>Rotate the envoy's authentication token</td></tr>
+      <tr><td><code>GET</code></td><td><code>/api/envoys/:id/knowledge</code></td><td><code>envoy.view</code></td><td>Retrieve the envoy's knowledge store (cached environment data)</td></tr>
+      <tr><td><code>POST</code></td><td><code>/api/envoys/validate-token</code></td><td>Token</td><td>Validate an envoy authentication token</td></tr>
+    </tbody>
+  </table>
+
+  <!-- ───────────────── Agent ───────────────── -->
+
+  <h2>Agent (Intelligence)</h2>
+
+  <p>
+    The agent is Synth's reasoning core. It resolves natural language queries,
+    generates deployment plans, and produces pre-flight analyses. These
+    endpoints require a configured LLM connection
+    (<code>SYNTH_LLM_API_KEY</code>).
+  </p>
+
+  <table>
+    <thead>
+      <tr><th>Method</th><th>Path</th><th>Auth</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>GET</code></td><td><code>/api/agent/context</code></td><td>Token</td><td>Agent context summary — current state the agent is reasoning about</td></tr>
+      <tr><td><code>POST</code></td><td><code>/api/agent/query</code></td><td>Token</td><td>Query the agent in natural language — ask about deployments, failures, environment state</td></tr>
+      <tr><td><code>POST</code></td><td><code>/api/agent/pre-flight</code></td><td>Token</td><td>Generate a pre-flight analysis for a planned deployment</td></tr>
+      <tr><td><code>POST</code></td><td><code>/api/agent/pre-flight/response</code></td><td>Token</td><td>Submit a user response to pre-flight questions or confirmations</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Query the Agent</h3>
+  <pre><code>{agentQueryExample}</code></pre>
+
+  <!-- ───────────────── Settings ───────────────── -->
+
+  <h2>Settings</h2>
+
+  <table>
+    <thead>
+      <tr><th>Method</th><th>Path</th><th>Permission</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>GET</code></td><td><code>/api/settings</code></td><td><code>settings.manage</code></td><td>Get current application settings</td></tr>
+      <tr><td><code>PUT</code></td><td><code>/api/settings</code></td><td><code>settings.manage</code></td><td>Update application settings (partial updates supported)</td></tr>
+      <tr><td><code>GET</code></td><td><code>/api/settings/command-info</code></td><td>Token</td><td>Server version, build info, and runtime metadata</td></tr>
+    </tbody>
+  </table>
+
+  <!-- ───────────────── Users & Roles ───────────────── -->
+
+  <h2>Users & Roles</h2>
+
+  <table>
+    <thead>
+      <tr><th>Method</th><th>Path</th><th>Permission</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>GET</code></td><td><code>/api/users</code></td><td><code>users.manage</code></td><td>List all users</td></tr>
+      <tr><td><code>POST</code></td><td><code>/api/users</code></td><td><code>users.manage</code></td><td>Create a new user</td></tr>
+      <tr><td><code>GET</code></td><td><code>/api/roles</code></td><td><code>users.manage</code></td><td>List all roles and their permissions</td></tr>
+      <tr><td><code>POST</code></td><td><code>/api/roles</code></td><td><code>roles.manage</code></td><td>Create a new role with specific permissions</td></tr>
+    </tbody>
+  </table>
+
+  <!-- ───────────────── Telemetry ───────────────── -->
+
+  <h2>Telemetry</h2>
+
+  <table>
+    <thead>
+      <tr><th>Method</th><th>Path</th><th>Permission</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>GET</code></td><td><code>/api/telemetry</code></td><td><code>settings.manage</code></td><td>Query telemetry events — deployment metrics, agent usage, system performance</td></tr>
+    </tbody>
+  </table>
+
+  <!-- ───────────────── Fleet Deployment ───────────────── -->
+
+  <h2>Fleet Deployment</h2>
+
+  <p>
+    Fleet endpoints coordinate deployments across multiple envoys simultaneously.
+  </p>
+
+  <table>
+    <thead>
+      <tr><th>Method</th><th>Path</th><th>Auth</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>POST</code></td><td><code>/api/fleet/deploy</code></td><td>Token</td><td>Trigger a fleet-wide deployment to multiple envoys</td></tr>
+      <tr><td><code>GET</code></td><td><code>/api/fleet/deployments</code></td><td>Token</td><td>List fleet deployments and their per-envoy status</td></tr>
+    </tbody>
+  </table>
+
+  <!-- ───────────────── Deployment Graphs ───────────────── -->
+
+  <h2>Deployment Graphs</h2>
+
+  <p>
+    Deployment graphs define multi-step, dependency-aware deployment workflows
+    as directed acyclic graphs.
+  </p>
+
+  <table>
+    <thead>
+      <tr><th>Method</th><th>Path</th><th>Auth</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>POST</code></td><td><code>/api/graphs</code></td><td>Token</td><td>Create a new deployment graph</td></tr>
+      <tr><td><code>GET</code></td><td><code>/api/graphs</code></td><td>Token</td><td>List all deployment graphs</td></tr>
+      <tr><td><code>GET</code></td><td><code>/api/graphs/:id</code></td><td>Token</td><td>Get full graph detail including nodes and edges</td></tr>
+      <tr><td><code>PUT</code></td><td><code>/api/graphs/:id</code></td><td>Token</td><td>Update a deployment graph</td></tr>
+      <tr><td><code>DELETE</code></td><td><code>/api/graphs/:id</code></td><td>Token</td><td>Delete a deployment graph</td></tr>
+    </tbody>
+  </table>
+
+  <!-- ───────────────── Intake (CI/CD Webhooks) ───────────────── -->
+
+  <h2>Intake (CI/CD Webhooks)</h2>
+
+  <p>
+    Intake channels receive webhooks from CI/CD systems to automatically trigger
+    deployments when builds complete.
+  </p>
+
+  <table>
+    <thead>
+      <tr><th>Method</th><th>Path</th><th>Auth</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>GET</code></td><td><code>/api/intake/channels</code></td><td>Token</td><td>List configured intake channels</td></tr>
+      <tr><td><code>POST</code></td><td><code>/api/intake/channels</code></td><td>Token</td><td>Create a new intake channel (returns a webhook URL)</td></tr>
+    </tbody>
+  </table>
+
+  <p>
+    Each intake channel provides a webhook URL specific to the CI/CD provider.
+    Supported providers: <strong>GitHub Actions</strong>,
+    <strong>GitLab CI</strong>, <strong>Azure DevOps</strong>,
+    <strong>Jenkins</strong>, and <strong>CircleCI</strong>.
+  </p>
+
+  <!-- ───────────────── MCP Server ───────────────── -->
+
+  <h2>MCP Server</h2>
+
+  <p>
+    Synth exposes a <a href="https://modelcontextprotocol.io">Model Context Protocol</a>
+    server, making deployment operations available as tools for any MCP-compatible
+    AI client.
+  </p>
+
+  <table>
+    <thead>
+      <tr><th>Method</th><th>Path</th><th>Auth</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>POST</code></td><td><code>/mcp</code></td><td>Token</td><td>MCP JSON-RPC endpoint — send tool calls and receive results</td></tr>
+      <tr><td><code>GET</code></td><td><code>/mcp</code></td><td>Token</td><td>MCP Server-Sent Events endpoint — streaming responses</td></tr>
+      <tr><td><code>DELETE</code></td><td><code>/mcp</code></td><td>Token</td><td>Close an active MCP session</td></tr>
+    </tbody>
+  </table>
+
+  <p>
+    MCP sessions have a configurable TTL (default: 1 hour, set via
+    <code>SYNTH_MCP_SESSION_TTL_MS</code>). Idle sessions are cleaned up
+    automatically.
+  </p>
+
+  <!-- ───────────────── Permissions Reference ───────────────── -->
+
+  <h2>Permissions Reference</h2>
+
+  <p>
+    Permissions are assigned to roles, and roles are assigned to users. API keys
+    can be scoped to a subset of the creating user's permissions.
+  </p>
+
+  <table>
+    <thead>
+      <tr><th>Permission</th><th>Grants access to</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>artifact.view</code></td><td>List and read artifacts</td></tr>
+      <tr><td><code>artifact.create</code></td><td>Register new artifacts</td></tr>
+      <tr><td><code>deployment.view</code></td><td>List deployments and query debriefs</td></tr>
+      <tr><td><code>deployment.create</code></td><td>Create and dispatch deployments</td></tr>
+      <tr><td><code>partition.view</code></td><td>List partitions</td></tr>
+      <tr><td><code>partition.create</code></td><td>Create partitions</td></tr>
+      <tr><td><code>environment.view</code></td><td>List environments</td></tr>
+      <tr><td><code>environment.create</code></td><td>Create environments</td></tr>
+      <tr><td><code>envoy.view</code></td><td>List envoys and view health/knowledge</td></tr>
+      <tr><td><code>envoy.register</code></td><td>Register new envoys</td></tr>
+      <tr><td><code>envoy.configure</code></td><td>Update, remove, and rotate envoy tokens</td></tr>
+      <tr><td><code>settings.manage</code></td><td>Read and update application settings, query telemetry</td></tr>
+      <tr><td><code>users.manage</code></td><td>List and create users, list roles</td></tr>
+      <tr><td><code>roles.manage</code></td><td>Create and modify roles</td></tr>
+    </tbody>
+  </table>
+
+  <!-- ───────────────── Error Responses ───────────────── -->
+
+  <h2>Error Responses</h2>
+
+  <p>
+    All error responses follow a consistent format:
+  </p>
+
+  <pre><code>{`{
+  "error": "Short error code",
+  "message": "Human-readable description of what went wrong"
+}`}</code></pre>
+
+  <table>
+    <thead>
+      <tr><th>Status</th><th>Meaning</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>400</code></td><td>Bad request — invalid or missing parameters</td></tr>
+      <tr><td><code>401</code></td><td>Unauthorized — missing or invalid token</td></tr>
+      <tr><td><code>403</code></td><td>Forbidden — valid token but insufficient permissions</td></tr>
+      <tr><td><code>404</code></td><td>Not found — entity does not exist</td></tr>
+      <tr><td><code>409</code></td><td>Conflict — entity already exists or state conflict</td></tr>
+      <tr><td><code>429</code></td><td>Rate limited — too many requests (see <code>SYNTH_RATE_LIMIT_MAX</code>)</td></tr>
+      <tr><td><code>500</code></td><td>Internal server error — check server logs</td></tr>
+    </tbody>
+  </table>
+
+  <!-- ───────────────── Rate Limiting ───────────────── -->
+
+  <h2>Rate Limiting</h2>
+
+  <p>
+    The server enforces per-IP rate limiting. Defaults: <strong>100 requests</strong>
+    per <strong>60-second</strong> window. Configure via environment variables:
+  </p>
+
+  <ul>
+    <li><code>SYNTH_RATE_LIMIT_MAX</code> — maximum requests per window (default: 100)</li>
+    <li><code>SYNTH_RATE_LIMIT_WINDOW_MS</code> — window duration in milliseconds (default: 60000)</li>
+  </ul>
+
+  <p>
+    When rate limited, the server returns <code>429 Too Many Requests</code>
+    with a <code>Retry-After</code> header.
+  </p>
+</DocsLayout>
