@@ -36,7 +36,6 @@ export const ENTERPRISE_FEATURES = {
   "multi-provider-llm": "Multiple LLM providers with fallback chains",
   "task-model-routing": "Per-task model configuration",
   "llm-postmortem": "LLM-generated postmortem analysis",
-  "artifact-annotations": "Operator corrections to artifact analysis",
   "mcp-servers": "External MCP server registration",
   "co-branding": "Custom branding (operator name, logo, accent color)",
   "telemetry-export": "Telemetry event export",

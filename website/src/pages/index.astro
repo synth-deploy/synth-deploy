@@ -11,16 +11,13 @@ import Layout from "../layouts/Layout.astro";
     </div>
     <div class="relative mx-auto max-w-6xl px-6 pt-24 pb-20 text-center">
       <div class="animate-fade-in-up">
-        <span class="inline-block text-xs font-mono border border-ds-accent-border rounded px-2 py-0.5 text-ds-accent mb-4">v1.0 Public Beta</span>
-        <p class="section-heading">Deployment Platform</p>
         <h1 class="text-5xl md:text-6xl font-display font-bold leading-tight mb-6">
           Stop writing runbooks.<br />
           <span class="text-ds-accent">Start deploying intelligently.</span>
         </h1>
         <p class="text-xl text-ds-text-secondary max-w-2xl mx-auto mb-10 leading-relaxed">
-          Synth replaces rigid automation with an intelligent agent that understands
-          what you're doing, makes decisions, and explains every one of them. No chatbot.
-          No new paradigm. Just a deployment tool that thinks.
+          You say what and where. Synth figures out the how — then shows you
+          every step and every decision before it touches a thing.
         </p>
         <div class="flex items-center justify-center gap-4">
           <a
@@ -284,13 +281,13 @@ import Layout from "../layouts/Layout.astro";
         <div class="glass-card p-8 scroll-reveal scroll-reveal-delay-3">
           <div class="flex items-center gap-2 mb-4">
             <div class="entity-badge border-ds-order/30 bg-ds-order/10 text-ds-order text-[10px] py-0.5">
-              Order
+              Deployment
             </div>
           </div>
           <h3 class="text-lg font-semibold mb-2">Immutable Snapshots</h3>
           <p class="text-ds-text-secondary leading-relaxed text-sm">
-            Orders capture the exact configuration at deployment time — steps, variables,
-            deploy config. Re-deploy any previous order with confidence. Full audit trail
+            Deployments capture the exact configuration at execution time — steps, variables,
+            deploy config. Re-deploy any previous snapshot with confidence. Full audit trail
             from intent to outcome.
           </p>
         </div>
@@ -350,69 +347,196 @@ import Layout from "../layouts/Layout.astro";
         </p>
       </div>
 
-      <!-- Flow diagram with entity badges -->
+      <!-- Flow diagram — vertical timeline -->
       <div class="glass-card p-8 md:p-10 max-w-3xl mx-auto scroll-reveal scroll-reveal-delay-2">
-        <div class="font-mono text-sm text-center space-y-6">
-          <!-- Row 1: Engineer → Synth -->
-          <div class="flex items-center justify-center gap-3 md:gap-4 flex-wrap">
-            <span class="entity-badge border-ds-text-muted/30 bg-ds-text-muted/10 text-ds-text-secondary">
-              Engineer
-            </span>
-            <span class="text-ds-text-muted">&rarr;</span>
-            <span class="entity-badge border-ds-partition/30 bg-ds-partition/10 text-ds-partition">
-              Intent / Config
-            </span>
-            <span class="text-ds-text-muted">&rarr;</span>
-            <span class="entity-badge border-ds-server/30 bg-ds-server/10 text-ds-server">
-              Synth
-            </span>
+        <div class="space-y-0">
+          <!-- Step 1: Intent -->
+          <div class="flex gap-4 pb-6 relative">
+            <div class="flex flex-col items-center">
+              <span class="entity-badge border-ds-text-muted/30 bg-ds-text-muted/10 text-ds-text-secondary text-[10px] py-0.5 whitespace-nowrap">1</span>
+              <div class="w-px flex-1 bg-ds-border mt-2"></div>
+            </div>
+            <div>
+              <p class="text-sm font-semibold text-ds-text">Engineer declares intent</p>
+              <p class="text-xs text-ds-text-muted mt-1">What to deploy, where to deploy it, and any partition or environment context.</p>
+            </div>
           </div>
-          <p class="text-ds-text-muted text-xs">resolves variables, plans pipeline, creates order</p>
 
-          <!-- Row 2: Synth → Envoy → Target -->
-          <div class="flex items-center justify-center gap-3 md:gap-4 flex-wrap">
-            <span class="entity-badge border-ds-server/30 bg-ds-server/10 text-ds-server">
-              Synth
-            </span>
-            <span class="text-ds-text-muted">&rarr;</span>
-            <span class="entity-badge border-ds-envoy/30 bg-ds-envoy/10 text-ds-envoy">
-              Envoy
-            </span>
-            <span class="text-ds-text-muted">&rarr;</span>
-            <span class="entity-badge border-ds-warning/30 bg-ds-warning/10 text-ds-warning">
-              Target Machine
-            </span>
+          <!-- Step 2: Planning -->
+          <div class="flex gap-4 pb-6 relative">
+            <div class="flex flex-col items-center">
+              <span class="entity-badge border-ds-server/30 bg-ds-server/10 text-ds-server text-[10px] py-0.5 whitespace-nowrap">2</span>
+              <div class="w-px flex-1 bg-ds-border mt-2"></div>
+            </div>
+            <div>
+              <div class="flex items-center gap-2 mb-1">
+                <p class="text-sm font-semibold text-ds-text">Synth reasons and plans</p>
+                <span class="entity-badge border-ds-server/30 bg-ds-server/10 text-ds-server text-[10px] py-0.5">Synth</span>
+              </div>
+              <p class="text-xs text-ds-text-muted mt-1">The agent analyzes the artifact, resolves variables, probes target systems, and generates a deployment plan — steps are not predefined, they're reasoned from context.</p>
+            </div>
           </div>
-          <p class="text-ds-text-muted text-xs">executes steps, verifies health, writes artifacts</p>
 
-          <!-- Row 3: Debrief ← everything -->
-          <div class="flex items-center justify-center gap-3 md:gap-4 flex-wrap">
-            <span class="entity-badge border-ds-debrief/30 bg-ds-debrief/10 text-ds-debrief">
-              Debrief
-            </span>
-            <span class="text-ds-text-muted">&larr;</span>
-            <span class="text-ds-text-secondary text-xs">every decision logged from both Synth and Envoy</span>
+          <!-- Step 3: Approval -->
+          <div class="flex gap-4 pb-6 relative">
+            <div class="flex flex-col items-center">
+              <span class="entity-badge border-ds-dt-plan/30 bg-ds-dt-plan/10 text-ds-dt-plan text-[10px] py-0.5 whitespace-nowrap">3</span>
+              <div class="w-px flex-1 bg-ds-border mt-2"></div>
+            </div>
+            <div>
+              <p class="text-sm font-semibold text-ds-text">Engineer reviews and approves</p>
+              <p class="text-xs text-ds-text-muted mt-1">Every planned step is visible before execution. Dry-run observations show what will change. Nothing runs until approved.</p>
+            </div>
+          </div>
+
+          <!-- Step 4: Execution -->
+          <div class="flex gap-4 pb-6 relative">
+            <div class="flex flex-col items-center">
+              <span class="entity-badge border-ds-envoy/30 bg-ds-envoy/10 text-ds-envoy text-[10px] py-0.5 whitespace-nowrap">4</span>
+              <div class="w-px flex-1 bg-ds-border mt-2"></div>
+            </div>
+            <div>
+              <div class="flex items-center gap-2 mb-1">
+                <p class="text-sm font-semibold text-ds-text">Envoy executes deterministically</p>
+                <span class="entity-badge border-ds-envoy/30 bg-ds-envoy/10 text-ds-envoy text-[10px] py-0.5">Envoy</span>
+              </div>
+              <p class="text-xs text-ds-text-muted mt-1">The approved plan runs exactly as shown — no re-reasoning, no improvisation. Five handlers cover files, processes, config, containers, and verification.</p>
+            </div>
+          </div>
+
+          <!-- Step 5: Debrief -->
+          <div class="flex gap-4 relative">
+            <div class="flex flex-col items-center">
+              <span class="entity-badge border-ds-debrief/30 bg-ds-debrief/10 text-ds-debrief text-[10px] py-0.5 whitespace-nowrap">5</span>
+            </div>
+            <div>
+              <div class="flex items-center gap-2 mb-1">
+                <p class="text-sm font-semibold text-ds-text">Debrief explains everything</p>
+                <span class="entity-badge border-ds-debrief/30 bg-ds-debrief/10 text-ds-debrief text-[10px] py-0.5">Debrief</span>
+              </div>
+              <p class="text-xs text-ds-text-muted mt-1">Every decision from both Synth and Envoy is logged in plain language — 21 decision types covering planning, conflicts, diagnostics, and outcomes.</p>
+            </div>
           </div>
         </div>
       </div>
 
-      <!-- Stats row -->
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mt-12 max-w-3xl mx-auto">
-        <div class="text-center scroll-reveal scroll-reveal-delay-1">
-          <p class="text-2xl md:text-3xl font-bold text-ds-accent">69</p>
-          <p class="text-xs text-ds-text-muted uppercase tracking-wide mt-1">Step Types</p>
+      <!-- Sample outputs: Artifact Analysis + Plan Approval -->
+      <div class="grid md:grid-cols-2 gap-6 mt-12 max-w-5xl mx-auto">
+
+        <!-- Artifact Analysis -->
+        <div class="glass-card overflow-hidden scroll-reveal scroll-reveal-delay-3">
+          <div class="flex items-center gap-2 px-5 py-3 border-b border-ds-border">
+            <div class="entity-badge border-ds-dt-plan/30 bg-ds-dt-plan/10 text-ds-dt-plan text-[10px] py-0.5">
+              Artifact Analysis
+            </div>
+            <span class="text-xs text-ds-text-muted ml-auto">web-app v2.3.0</span>
+          </div>
+          <div class="p-5 space-y-4 text-sm">
+            <p class="text-ds-text-secondary leading-relaxed">
+              Node.js web application with Express backend and React frontend.
+              Requires PostgreSQL and Redis.
+            </p>
+            <div>
+              <p class="text-[10px] font-semibold uppercase tracking-wide text-ds-text-muted mb-2">Dependencies</p>
+              <div class="flex flex-wrap gap-1.5">
+                <span class="font-mono text-xs px-2 py-0.5 rounded bg-ds-surface text-ds-text-secondary">postgresql</span>
+                <span class="font-mono text-xs px-2 py-0.5 rounded bg-ds-surface text-ds-text-secondary">redis</span>
+                <span class="font-mono text-xs px-2 py-0.5 rounded bg-ds-surface text-ds-text-secondary">node:20</span>
+              </div>
+            </div>
+            <div>
+              <p class="text-[10px] font-semibold uppercase tracking-wide text-ds-text-muted mb-2">Expected Configuration</p>
+              <div class="space-y-1 font-mono text-xs">
+                <div class="flex gap-2"><span class="text-ds-accent">DB_HOST</span><span class="text-ds-text-muted">PostgreSQL hostname</span></div>
+                <div class="flex gap-2"><span class="text-ds-accent">REDIS_URL</span><span class="text-ds-text-muted">Redis connection string</span></div>
+                <div class="flex gap-2"><span class="text-ds-accent">APP_ENV</span><span class="text-ds-text-muted">Runtime environment</span></div>
+              </div>
+            </div>
+            <div class="flex items-center justify-between pt-2 border-t border-ds-border">
+              <span class="text-xs text-ds-text-muted">Deployment intent</span>
+              <span class="text-xs text-ds-text-secondary">Rolling deploy via health check gating</span>
+            </div>
+            <div class="flex items-center justify-between">
+              <span class="text-xs text-ds-text-muted">Confidence</span>
+              <div class="flex items-center gap-2">
+                <div class="w-16 h-1.5 rounded-full bg-ds-surface overflow-hidden">
+                  <div class="h-full rounded-full bg-ds-succeeded" style="width:92%"></div>
+                </div>
+                <span class="text-xs text-ds-succeeded font-medium">0.92</span>
+              </div>
+            </div>
+          </div>
         </div>
-        <div class="text-center scroll-reveal scroll-reveal-delay-2">
-          <p class="text-2xl md:text-3xl font-bold text-ds-partition">5</p>
-          <p class="text-xs text-ds-text-muted uppercase tracking-wide mt-1">Handlers</p>
-        </div>
-        <div class="text-center scroll-reveal scroll-reveal-delay-3">
-          <p class="text-2xl md:text-3xl font-bold text-ds-debrief">12</p>
-          <p class="text-xs text-ds-text-muted uppercase tracking-wide mt-1">Decision Types</p>
-        </div>
-        <div class="text-center scroll-reveal scroll-reveal-delay-4">
-          <p class="text-2xl md:text-3xl font-bold text-ds-envoy">0</p>
-          <p class="text-xs text-ds-text-muted uppercase tracking-wide mt-1">Silent Failures</p>
+
+        <!-- Plan Awaiting Approval -->
+        <div class="glass-card overflow-hidden scroll-reveal scroll-reveal-delay-4">
+          <div class="flex items-center gap-2 px-5 py-3 border-b border-ds-border">
+            <div class="entity-badge border-ds-warning/30 bg-ds-warning/10 text-ds-warning text-[10px] py-0.5">
+              Awaiting Approval
+            </div>
+            <span class="text-xs text-ds-text-muted ml-auto">web-app v2.3.0 &rarr; production</span>
+          </div>
+          <div class="p-5 space-y-4">
+            <!-- Assessment -->
+            <div class="rounded-md bg-ds-surface/50 px-4 py-3">
+              <p class="text-[10px] font-semibold uppercase tracking-wide text-ds-text-muted mb-1.5">Synth Assessment</p>
+              <p class="text-xs text-ds-text-secondary leading-relaxed">
+                Standard 5-step deploy. One config change: <span class="font-mono text-ds-accent">API_ENDPOINT</span> updated
+                to v2 endpoint — validated in staging for 4h. First deployment to production today.
+              </p>
+            </div>
+
+            <!-- Steps -->
+            <div class="space-y-0">
+              <div class="flex items-start gap-2.5 py-2 border-b border-ds-border/50">
+                <span class="text-[10px] font-mono text-ds-text-muted mt-0.5 w-4 shrink-0">[1]</span>
+                <div class="flex-1 min-w-0">
+                  <p class="text-xs text-ds-text-secondary">Stop service</p>
+                  <p class="text-[10px] text-ds-text-muted font-mono mt-0.5">systemctl stop web-app</p>
+                </div>
+                <span class="text-[10px] px-1.5 py-0.5 rounded bg-ds-succeeded/10 text-ds-succeeded shrink-0">low</span>
+              </div>
+              <div class="flex items-start gap-2.5 py-2 border-b border-ds-border/50">
+                <span class="text-[10px] font-mono text-ds-text-muted mt-0.5 w-4 shrink-0">[2]</span>
+                <div class="flex-1 min-w-0">
+                  <p class="text-xs text-ds-text-secondary">Backup current binaries</p>
+                  <p class="text-[10px] text-ds-text-muted font-mono mt-0.5">cp -r /opt/web-app/ /opt/web-app.bak/</p>
+                </div>
+                <span class="text-[10px] px-1.5 py-0.5 rounded bg-ds-failed/10 text-ds-failed shrink-0">high</span>
+              </div>
+              <div class="flex items-start gap-2.5 py-2 border-b border-ds-border/50">
+                <span class="text-[10px] font-mono text-ds-text-muted mt-0.5 w-4 shrink-0">[3]</span>
+                <div class="flex-1 min-w-0">
+                  <p class="text-xs text-ds-text-secondary">Deploy new artifact</p>
+                  <p class="text-[10px] text-ds-text-muted font-mono mt-0.5">tar -xzf web-app-2.3.0.tar.gz -C /opt/web-app/</p>
+                </div>
+                <span class="text-[10px] px-1.5 py-0.5 rounded bg-ds-succeeded/10 text-ds-succeeded shrink-0">low</span>
+              </div>
+              <div class="flex items-start gap-2.5 py-2 border-b border-ds-border/50">
+                <span class="text-[10px] font-mono text-ds-text-muted mt-0.5 w-4 shrink-0">[4]</span>
+                <div class="flex-1 min-w-0">
+                  <p class="text-xs text-ds-text-secondary">Apply environment config <span class="text-ds-accent">(1 variable changed)</span></p>
+                  <p class="text-[10px] text-ds-text-muted font-mono mt-0.5">envsubst &lt; config.template &gt; /opt/web-app/.env</p>
+                </div>
+                <span class="text-[10px] px-1.5 py-0.5 rounded bg-ds-succeeded/10 text-ds-succeeded shrink-0">low</span>
+              </div>
+              <div class="flex items-start gap-2.5 py-2">
+                <span class="text-[10px] font-mono text-ds-text-muted mt-0.5 w-4 shrink-0">[5]</span>
+                <div class="flex-1 min-w-0">
+                  <p class="text-xs text-ds-text-secondary">Start service and verify health</p>
+                  <p class="text-[10px] text-ds-text-muted font-mono mt-0.5">systemctl start web-app &amp;&amp; curl -f localhost:8080/health</p>
+                </div>
+                <span class="text-[10px] px-1.5 py-0.5 rounded bg-ds-succeeded/10 text-ds-succeeded shrink-0">low</span>
+              </div>
+            </div>
+
+            <!-- Action buttons -->
+            <div class="flex items-center gap-2 pt-2">
+              <span class="text-xs font-semibold px-3 py-1.5 rounded-md bg-ds-succeeded/15 text-ds-succeeded">Greenlight</span>
+              <span class="text-xs px-3 py-1.5 rounded-md bg-ds-surface text-ds-text-secondary">Refine</span>
+              <span class="text-xs px-3 py-1.5 rounded-md bg-ds-surface text-ds-text-muted">Reject</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>

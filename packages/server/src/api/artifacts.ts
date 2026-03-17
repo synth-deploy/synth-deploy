@@ -95,7 +95,7 @@ export function registerArtifactRoutes(
   // Add user annotation/correction
   app.post<{ Params: { id: string } }>(
     "/api/artifacts/:id/annotations",
-    { preHandler: [requireEdition("artifact-annotations"), requirePermission("artifact.annotate")] },
+    { preHandler: [requirePermission("artifact.annotate")] },
     async (request, reply) => {
       const artifact = artifactStore.get(request.params.id);
       if (!artifact) {

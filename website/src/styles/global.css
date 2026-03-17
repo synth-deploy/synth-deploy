@@ -62,6 +62,23 @@ body {
   .prose-docs pre code {
     @apply bg-transparent p-0;
   }
+  .prose-docs table {
+    @apply w-full mb-6 text-sm;
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+  .prose-docs thead th {
+    @apply text-left text-[10px] font-semibold uppercase tracking-wider text-ds-text-muted px-4 py-2.5 border-b border-ds-border;
+  }
+  .prose-docs tbody td {
+    @apply px-4 py-3 text-ds-text-secondary border-b border-ds-border/50;
+  }
+  .prose-docs tbody tr:last-child td {
+    @apply border-b-0;
+  }
+  .prose-docs tbody tr:hover {
+    background: rgba(107, 138, 255, 0.03);
+  }
   .prose-docs ul,
   .prose-docs ol {
     @apply mb-4 pl-6 text-ds-text-secondary;

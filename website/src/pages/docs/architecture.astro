@@ -17,7 +17,7 @@ import DocsLayout from "../../layouts/DocsLayout.astro";
     REST API and an MCP server.
   </p>
   <ul>
-    <li><strong>REST API</strong> — CRUD for partitions, operations, environments, orders, and deployments</li>
+    <li><strong>REST API</strong> — CRUD for partitions, artifacts, environments, and deployments</li>
     <li><strong>MCP Server</strong> — Model Context Protocol server for tool-based AI integration</li>
     <li><strong>Agent</strong> — Intent resolution, pipeline planning, and deployment orchestration</li>
     <li><strong>Debrief</strong> — Decision log with SQLite persistence</li>
@@ -37,7 +37,7 @@ import DocsLayout from "../../layouts/DocsLayout.astro";
   </ul>
 
   <h2>Data Flow</h2>
-  <pre><code>Engineer → Synth (resolve intent, plan pipeline, create order)
+  <pre><code>Engineer → Synth (resolve intent, plan pipeline, create deployment)
 Synth → Envoy (dispatch deployment steps)
 Envoy → Target Machine (execute commands, health checks)
 Envoy → Synth (report results)
