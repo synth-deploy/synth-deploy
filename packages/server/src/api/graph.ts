@@ -84,7 +84,7 @@ export function registerGraphRoutes(
       debrief.record({
         partitionId: graph.partitionId ?? null,
         deploymentId: null,
-        agent: "command",
+        agent: "server",
         decisionType: "plan-generation",
         decision: `Created deployment graph "${graph.name}" with ${graph.nodes.length} nodes and ${graph.edges.length} edges`,
         reasoning: `Inferred dependency graph for artifacts: ${body.artifactIds.join(", ")}. Edges: ${JSON.stringify(graph.edges.map((e) => `${e.from} -[${e.type}]-> ${e.to}`))}`,
@@ -167,7 +167,7 @@ export function registerGraphRoutes(
       debrief.record({
         partitionId: graph.partitionId ?? null,
         deploymentId: null,
-        agent: "command",
+        agent: "server",
         decisionType: "plan-modification",
         decision: `User corrected deployment graph "${graph.name}"`,
         reasoning: `Updated fields: ${Object.keys(body).filter((k) => body[k as keyof typeof body] !== undefined).join(", ")}`,
@@ -309,7 +309,7 @@ export function registerGraphRoutes(
       debrief.record({
         partitionId: graph.partitionId ?? null,
         deploymentId: null,
-        agent: "command",
+        agent: "server",
         decisionType:
           finalFailedCount > 0 ? "deployment-failure" : "deployment-completion",
         decision: `Graph "${graph.name}" execution ${finalFailedCount > 0 ? "failed" : "completed"}: ${finalCompletedCount}/${graph.nodes.length} nodes succeeded`,

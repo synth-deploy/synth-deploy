@@ -14,7 +14,7 @@ const DebriefEntrySchema = z.object({
   timestamp: z.string(),
   partitionId: z.string().nullable(),
   deploymentId: z.string().nullable(),
-  agent: z.enum(["command", "envoy"]),
+  agent: z.enum(["server", "envoy"]),
   decisionType: DecisionTypeEnum,
   decision: z.string(),
   reasoning: z.string(),
@@ -91,7 +91,7 @@ export function registerEnvoyReportRoutes(
           debrief.record({
             partitionId: entry.partitionId,
             deploymentId: entry.deploymentId,
-            agent: "command",
+            agent: "server",
             decisionType: "system",
             decision: "Rejected Envoy report: partition boundary violation",
             reasoning: `Deployment ${entry.deploymentId} does not belong to partition ${entry.partitionId}. Report from envoy ${report.envoyId} rejected.`,
@@ -115,7 +115,7 @@ export function registerEnvoyReportRoutes(
       debrief.record({
         partitionId: entry.partitionId,
         deploymentId: entry.deploymentId,
-        agent: entry.agent as "command" | "envoy",
+        agent: entry.agent as "server" | "envoy",
         decisionType: entry.decisionType as DecisionType,
         decision: entry.decision,
         reasoning: entry.reasoning,

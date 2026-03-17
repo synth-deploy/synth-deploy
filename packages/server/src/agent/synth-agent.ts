@@ -276,7 +276,7 @@ export class SynthAgent {
     const analysisEntry = this.debrief.record({
       partitionId: trigger.partitionId ?? null,
       deploymentId,
-      agent: "command",
+      agent: "server",
       decisionType: "artifact-analysis",
       decision: `Analyzed artifact "${artifact.name}" (${artifact.type}) — confidence ${artifact.analysis.confidence}`,
       reasoning:
@@ -310,7 +310,7 @@ export class SynthAgent {
     const planEntry = this.debrief.record({
       partitionId: trigger.partitionId ?? null,
       deploymentId,
-      agent: "command",
+      agent: "server",
       decisionType: "pipeline-plan",
       decision: `Planned deployment pipeline: ${pipelineSteps.join(" → ")}`,
       reasoning:
@@ -350,7 +350,7 @@ export class SynthAgent {
     const planGenEntry = this.debrief.record({
       partitionId: trigger.partitionId ?? null,
       deploymentId,
-      agent: "command",
+      agent: "server",
       decisionType: "plan-generation",
       decision: `Generated deployment plan for "${artifact.name}" v${version} — ${initialPlan.steps.length} step(s)`,
       reasoning: initialPlan.reasoning,
@@ -364,7 +364,7 @@ export class SynthAgent {
     const approvalEntry = this.debrief.record({
       partitionId: trigger.partitionId ?? null,
       deploymentId,
-      agent: "command",
+      agent: "server",
       decisionType: "plan-approval",
       decision: `Auto-approved deployment plan for "${artifact.name}" v${version}`,
       reasoning:
@@ -438,7 +438,7 @@ export class SynthAgent {
       const completionEntry = this.debrief.record({
         partitionId: deployment.partitionId ?? null,
         deploymentId: deployment.id,
-        agent: "command",
+        agent: "server",
         decisionType: "deployment-completion",
         decision: `Marking deployment of ${artifact.name} v${deployment.version} as succeeded on "${environment.name}"`,
         reasoning:
@@ -470,7 +470,7 @@ export class SynthAgent {
       const failEntry = this.debrief.record({
         partitionId: deployment.partitionId ?? null,
         deploymentId: deployment.id,
-        agent: "command",
+        agent: "server",
         decisionType: "deployment-failure",
         decision: `Deployment failed: ${deployment.failureReason}`,
         reasoning:
@@ -533,7 +533,7 @@ export class SynthAgent {
       this.debrief.record({
         partitionId,
         deploymentId: null,
-        agent: "command",
+        agent: "server",
         decisionType: "diagnostic-investigation",
         decision: `${tools.length} external tool(s) available from ${connectedServers.length} MCP server(s)`,
         reasoning:
@@ -558,7 +558,7 @@ export class SynthAgent {
       this.debrief.record({
         partitionId,
         deploymentId: null,
-        agent: "command",
+        agent: "server",
         decisionType: "diagnostic-investigation",
         decision: "External MCP check failed — proceeding without external intelligence",
         reasoning:
@@ -649,7 +649,7 @@ export class SynthAgent {
     const configEntry = this.debrief.record({
       partitionId: deployment.partitionId ?? null,
       deploymentId: deployment.id,
-      agent: "command",
+      agent: "server",
       decisionType: "configuration-resolved",
       decision:
         conflicts.length === 0
@@ -829,7 +829,7 @@ export class SynthAgent {
       const entry = this.debrief.record({
         partitionId: deployment.partitionId ?? null,
         deploymentId: deployment.id,
-        agent: "command",
+        agent: "server",
         decisionType: "variable-conflict",
         decision:
           assessment.action === "block"
@@ -860,7 +860,7 @@ export class SynthAgent {
       const entry = this.debrief.record({
         partitionId: deployment.partitionId ?? null,
         deploymentId: deployment.id,
-        agent: "command",
+        agent: "server",
         decisionType: "variable-conflict",
         decision: `Cross-environment variable pattern in ${crossEnv.length} non-connectivity variable(s)`,
         reasoning:
@@ -885,7 +885,7 @@ export class SynthAgent {
       const entry = this.debrief.record({
         partitionId: deployment.partitionId ?? null,
         deploymentId: deployment.id,
-        agent: "command",
+        agent: "server",
         decisionType: "variable-conflict",
         decision: `Security-sensitive variable(s) overridden: ${sensitiveDetails.map((d) => d.conflict.variable).join(", ")}`,
         reasoning:
@@ -920,7 +920,7 @@ export class SynthAgent {
       const entry = this.debrief.record({
         partitionId: deployment.partitionId ?? null,
         deploymentId: deployment.id,
-        agent: "command",
+        agent: "server",
         decisionType: "variable-conflict",
         decision: `Resolved ${standardDetails.length} variable conflict(s) via precedence rules`,
         reasoning:
@@ -994,7 +994,7 @@ export class SynthAgent {
       const entry = this.debrief.record({
         partitionId: deployment.partitionId ?? null,
         deploymentId: deployment.id,
-        agent: "command",
+        agent: "server",
         decisionType: "health-check",
         decision: `Proceeding with deployment — target environment "${environment.name}" confirmed healthy in ${firstCheck.responseTimeMs}ms`,
         reasoning:
@@ -1026,7 +1026,7 @@ export class SynthAgent {
       const abortEntry = this.debrief.record({
         partitionId: deployment.partitionId ?? null,
         deploymentId: deployment.id,
-        agent: "command",
+        agent: "server",
         decisionType: "health-check",
         decision: "Pre-flight health check failed — aborting without retry",
         reasoning: decision.reasoning,
@@ -1051,7 +1051,7 @@ export class SynthAgent {
     const retryEntry = this.debrief.record({
       partitionId: deployment.partitionId ?? null,
       deploymentId: deployment.id,
-      agent: "command",
+      agent: "server",
       decisionType: "health-check",
       decision: "Pre-flight health check failed — attempting retry",
       reasoning: decision.reasoning,
@@ -1080,7 +1080,7 @@ export class SynthAgent {
         const recoveryEntry = this.debrief.record({
           partitionId: deployment.partitionId ?? null,
           deploymentId: deployment.id,
-          agent: "command",
+          agent: "server",
           decisionType: "health-check",
           decision:
             "Health check recovered on retry — proceeding with deployment",
@@ -1298,7 +1298,7 @@ export class SynthAgent {
     const execEntry = this.debrief.record({
       partitionId: deployment.partitionId ?? null,
       deploymentId: deployment.id,
-      agent: "command",
+      agent: "server",
       decisionType: "deployment-execution",
       decision: `Skipped Envoy delegation for ${artifact.name} v${deployment.version} — no settings reader configured`,
       reasoning:
@@ -1356,7 +1356,7 @@ export class SynthAgent {
     const delegateEntry = this.debrief.record({
       partitionId: deployment.partitionId ?? null,
       deploymentId: deployment.id,
-      agent: "command",
+      agent: "server",
       decisionType: "deployment-execution",
       decision: `Delegating execution of ${artifact.name} v${deployment.version} to Envoy at ${envoyConfig.url}`,
       reasoning:
@@ -1443,7 +1443,7 @@ export class SynthAgent {
     const completionEntry = this.debrief.record({
       partitionId: deployment.partitionId ?? null,
       deploymentId: deployment.id,
-      agent: "command",
+      agent: "server",
       decisionType: "deployment-execution",
       decision: `Envoy completed deployment successfully in ${envoyResult.executionDurationMs}ms — ${envoyResult.artifacts.length} artifact(s) produced`,
       reasoning:
@@ -1476,7 +1476,7 @@ export class SynthAgent {
     const entry = this.debrief.record({
       partitionId: deployment.partitionId ?? null,
       deploymentId: deployment.id,
-      agent: "command",
+      agent: "server",
       decisionType: "deployment-verification",
       decision: `Post-deploy verification skipped for ${artifact.name} v${deployment.version} — no Envoy configured`,
       reasoning:

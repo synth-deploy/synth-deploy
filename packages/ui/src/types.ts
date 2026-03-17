@@ -325,7 +325,7 @@ export type DecisionType =
   | "environment-probe"
   | "pre-flight-llm-failure";
 
-export type AgentType = "command" | "envoy";
+export type AgentType = "server" | "envoy";
 
 export interface DebriefEntry {
   id: string;

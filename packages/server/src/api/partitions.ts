@@ -86,7 +86,7 @@ export function registerPartitionRoutes(
         debrief.record({
           partitionId: id,
           deploymentId: null,
-          agent: "command",
+          agent: "server",
           decisionType: "system",
           decision: `Cascade-deleted partition "${partition.name}" with ${linkedDeployments.length} deployment(s)`,
           reasoning: "User requested cascade deletion via ?cascade=true query parameter",

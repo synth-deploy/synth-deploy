@@ -339,7 +339,7 @@ export function registerAgentRoutes(
             debrief.record({
               partitionId: null,
               deploymentId: null,
-              agent: "command",
+              agent: "server",
               decisionType: "artifact-analysis",
               decision: `User correction recorded for "${target.name}" via channel: ${correction}`,
               reasoning: `Operator typed a natural-language correction into the Synth Channel. Field: ${field || "summary"}.`,
@@ -374,7 +374,7 @@ export function registerAgentRoutes(
             debrief.record({
               partitionId: null,
               deploymentId: null,
-              agent: "command",
+              agent: "server",
               decisionType: "system",
               decision: `Canvas query answered analytically`,
               reasoning: `LLM classified "${query}" as analytical answer, responded with ${answered.content.length} chars of markdown`,
@@ -387,7 +387,7 @@ export function registerAgentRoutes(
           debrief.record({
             partitionId: null,
             deploymentId: null,
-            agent: "command",
+            agent: "server",
             decisionType: "system",
             decision: `Canvas query classified as ${llmAction.action}: ${llmAction.view}`,
             reasoning: `LLM classified "${query}" → ${llmAction.action}/${llmAction.view}`,
@@ -714,7 +714,7 @@ Be directional: say what you recommend, not "here are some data points." Use fir
         debrief.record({
           partitionId: partitionId ?? null,
           deploymentId: null,
-          agent: "command",
+          agent: "server",
           decisionType: "pre-flight-llm-failure",
           decision: "Pre-flight LLM recommendation failed",
           reasoning: llmError instanceof Error ? llmError.message : String(llmError),
@@ -758,7 +758,7 @@ Be directional: say what you recommend, not "here are some data points." Use fir
     debrief.record({
       partitionId: partitionId ?? null,
       deploymentId: null,
-      agent: "command",
+      agent: "server",
       decisionType: "cross-system-context",
       decision: `Pre-flight context generated: ${recommendation.action} (confidence: ${recommendation.confidence})`,
       reasoning: recommendation.reasoning,
@@ -814,7 +814,7 @@ Be directional: say what you recommend, not "here are some data points." Use fir
     debrief.record({
       partitionId: partitionId ?? null,
       deploymentId: null,
-      agent: "command",
+      agent: "server",
       decisionType: "cross-system-context",
       decision: `User ${action} after pre-flight recommendation to ${recommendedAction}`,
       reasoning: `System recommended "${recommendedAction}", user chose to "${action}".`,

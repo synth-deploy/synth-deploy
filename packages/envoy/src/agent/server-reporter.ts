@@ -37,7 +37,7 @@ export interface SerializedDebriefEntry {
   timestamp: string;
   partitionId: string | null;
   deploymentId: string | null;
-  agent: "command" | "envoy";
+  agent: "server" | "envoy";
   decisionType: string;
   decision: string;
   reasoning: string;
