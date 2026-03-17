@@ -8,6 +8,11 @@ export default defineConfig({
   test: {
     root: __dirname,
     include: ["integration/**/*.test.ts", "e2e/**/*.test.ts", "scenarios/**/*.test.ts"],
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "lcov", "html"],
+      reportsDirectory: "./coverage",
+    },
   },
   resolve: {
     alias: {
