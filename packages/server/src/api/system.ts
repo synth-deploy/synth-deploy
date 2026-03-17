@@ -8,6 +8,7 @@ import type {
   Environment,
 } from "@synth-deploy/core";
 import type { EnvoyRegistry } from "../agent/envoy-registry.js";
+import { requirePermission } from "../middleware/permissions.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -150,7 +151,7 @@ export function registerSystemRoutes(
   partitions: IPartitionStore,
   envoyRegistry: EnvoyRegistry,
 ): void {
-  app.get("/api/system/state", async () => {
+  app.get("/api/system/state", { preHandler: [requirePermission("deployment.view")] }, async () => {
     const allArtifacts = artifacts.list();
     const allEnvoys = envoyRegistry.list();
     const allDeployments = deployments.list();

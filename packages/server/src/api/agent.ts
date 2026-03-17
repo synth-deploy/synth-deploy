@@ -6,6 +6,7 @@ import type { EnvoyRegistry } from "../agent/envoy-registry.js";
 import type { ArtifactAnalyzer } from "../artifact-analyzer.js";
 import { z } from "zod";
 import { QueryRequestSchema } from "./schemas.js";
+import { requirePermission } from "../middleware/permissions.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -290,7 +291,7 @@ export function registerAgentRoutes(
    * Get deployment context — signals, trends, health, drift.
    * Fills the space where manual action buttons collapse.
    */
-  app.get("/api/agent/context", async () => {
+  app.get("/api/agent/context", { preHandler: [requirePermission("deployment.view")] }, async () => {
     return generateContext(deployments, environments, partitions);
   });
 
@@ -299,7 +300,7 @@ export function registerAgentRoutes(
    * a structured action telling the UI what view to render.
    * Navigation/data intents resolve entities and return view params.
    */
-  app.post("/api/agent/query", async (request, reply) => {
+  app.post("/api/agent/query", { preHandler: [requirePermission("deployment.view")] }, async (request, reply) => {
     const parsed = QueryRequestSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.status(400).send({ error: "Invalid input", details: parsed.error.format() });
@@ -537,7 +538,7 @@ export function registerAgentRoutes(
     version: z.string().optional(),
   });
 
-  app.post("/api/agent/pre-flight", async (request, reply) => {
+  app.post("/api/agent/pre-flight", { preHandler: [requirePermission("deployment.view")] }, async (request, reply) => {
     const parsed = PreFlightRequestSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.status(400).send({ error: "Invalid input", details: parsed.error.format() });
@@ -802,7 +803,7 @@ Be directional: say what you recommend, not "here are some data points." Use fir
     recommendedAction: z.enum(["proceed", "wait", "investigate"]),
   });
 
-  app.post("/api/agent/pre-flight/response", async (request, reply) => {
+  app.post("/api/agent/pre-flight/response", { preHandler: [requirePermission("deployment.view")] }, async (request, reply) => {
     const parsed = PreFlightResponseSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.status(400).send({ error: "Invalid input", details: parsed.error.format() });

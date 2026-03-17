@@ -85,7 +85,7 @@ export function registerSettingsRoutes(
   });
 
   // Read-only command info
-  app.get("/api/settings/command-info", async () => {
+  app.get("/api/settings/command-info", { preHandler: [requirePermission("settings.manage")] }, async () => {
     return {
       info: {
         version: "0.1.0",

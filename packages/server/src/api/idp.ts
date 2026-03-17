@@ -81,7 +81,7 @@ export function registerIdpRoutes(
   // ─── IdP Provider CRUD (admin only) ───────────────────────────────
 
   // GET /api/idp/providers — list configured IdPs
-  app.get("/api/idp/providers", async () => {
+  app.get("/api/idp/providers", { preHandler: [requirePermission("settings.manage")] }, async () => {
     const providers = idpProviderStore.list();
     return { providers: providers.map(toPublicProvider) };
   });
@@ -193,7 +193,7 @@ export function registerIdpRoutes(
   // ─── Role Mapping CRUD ────────────────────────────────────────────
 
   // GET /api/idp/providers/:id/mappings — list role mapping rules
-  app.get<{ Params: { id: string } }>("/api/idp/providers/:id/mappings", async (request, reply) => {
+  app.get<{ Params: { id: string } }>("/api/idp/providers/:id/mappings", { preHandler: [requirePermission("settings.manage")] }, async (request, reply) => {
     const provider = idpProviderStore.getById(request.params.id);
     if (!provider) {
       return reply.status(404).send({ error: "IdP provider not found" });
