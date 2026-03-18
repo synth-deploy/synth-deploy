@@ -72,6 +72,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Sync package versions from git tag
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/v}"
+          for pkg in packages/core packages/server packages/envoy; do
+            node -e "const p=require('./$pkg/package.json'); p.version='$VERSION'; require('fs').writeFileSync('./$pkg/package.json', JSON.stringify(p,null,2)+'\n')"
+          done
+          echo "Set all package versions to $VERSION"
+
       - name: Build all packages
         run: npm run build
 
