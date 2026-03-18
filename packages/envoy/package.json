@@ -4,7 +4,7 @@
   "license": "BUSL-1.1",
   "type": "module",
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com"
+    "access": "public"
   },
   "main": "dist/index.js",
   "bin": {

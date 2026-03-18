@@ -53,21 +53,21 @@ jobs:
       - name: Run tests
         run: npm test
 
-  # ─── Publish npm packages to GitHub Packages ──────────────
+  # ─── Publish npm packages to public npm ───────────────────
   publish-npm:
-    name: Publish npm Packages
+    name: Publish to npm
     needs: ci
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js for GitHub Packages
+      - name: Setup Node.js for npm
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: 'npm'
-          registry-url: 'https://npm.pkg.github.com'
+          registry-url: 'https://registry.npmjs.org'
 
       - name: Install dependencies
         run: npm ci
@@ -79,17 +79,17 @@ jobs:
       - name: Publish @synth-deploy/core
         run: npm publish --workspace=packages/core || echo "::warning::@synth-deploy/core publish failed or already published"
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish @synth-deploy/server
         run: npm publish --workspace=packages/server || echo "::warning::@synth-deploy/server publish failed or already published"
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish @synth-deploy/envoy
         run: npm publish --workspace=packages/envoy || echo "::warning::@synth-deploy/envoy publish failed or already published"
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   # ─── Docker: Server ──────────────────────────────────────
   docker-server:

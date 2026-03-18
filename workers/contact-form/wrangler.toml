@@ -1,0 +1,8 @@
+name = "synth-contact-form"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+
+[vars]
+FROM_EMAIL = "noreply@synthdeploy.com"
+NOTIFICATION_EMAIL = "licensing@synthdeploy.com"
+PIONEER_NOTIFICATION_EMAIL = "pioneers@synthdeploy.com"

@@ -1,0 +1,340 @@
+---
+interface Props {
+  formType: "enterprise" | "pioneer" | "general";
+  buttonText: string;
+  id: string;
+}
+
+const { formType, buttonText, id } = Astro.props;
+---
+
+<div class="contact-form-wrapper" data-form-id={id}>
+  <button
+    type="button"
+    class="contact-form-trigger inline-block rounded-md bg-ds-accent px-8 py-3 text-ds-bg font-semibold hover:bg-ds-accent/90 transition-colors cursor-pointer"
+    data-target={id}
+  >
+    {buttonText}
+  </button>
+
+  <div
+    id={id}
+    class="contact-form-container hidden mt-6 overflow-hidden transition-all duration-300 ease-out"
+    data-form-type={formType}
+  >
+    <form class="glass-card p-6 space-y-4" data-contact-form data-form-type={formType}>
+      {/* Common fields: Name + Email */}
+      <div>
+        <label class="text-sm font-medium text-ds-text-secondary mb-1.5 block" for={`${id}-name`}>
+          Name <span class="text-ds-failed">*</span>
+        </label>
+        <input
+          type="text"
+          id={`${id}-name`}
+          name="name"
+          required
+          class="w-full bg-ds-bg border border-ds-border rounded-md px-4 py-2.5 text-sm text-ds-text placeholder:text-ds-text-muted focus:border-ds-accent focus:outline-none"
+          placeholder="Your name"
+        />
+      </div>
+
+      <div>
+        <label class="text-sm font-medium text-ds-text-secondary mb-1.5 block" for={`${id}-email`}>
+          Email <span class="text-ds-failed">*</span>
+        </label>
+        <input
+          type="email"
+          id={`${id}-email`}
+          name="email"
+          required
+          class="w-full bg-ds-bg border border-ds-border rounded-md px-4 py-2.5 text-sm text-ds-text placeholder:text-ds-text-muted focus:border-ds-accent focus:outline-none"
+          placeholder="you@company.com"
+        />
+      </div>
+
+      {/* Enterprise fields */}
+      {formType === "enterprise" && (
+        <>
+          <div>
+            <label class="text-sm font-medium text-ds-text-secondary mb-1.5 block" for={`${id}-company`}>
+              Company <span class="text-ds-failed">*</span>
+            </label>
+            <input
+              type="text"
+              id={`${id}-company`}
+              name="company"
+              required
+              class="w-full bg-ds-bg border border-ds-border rounded-md px-4 py-2.5 text-sm text-ds-text placeholder:text-ds-text-muted focus:border-ds-accent focus:outline-none"
+              placeholder="Company name"
+            />
+          </div>
+          <div>
+            <label class="text-sm font-medium text-ds-text-secondary mb-1.5 block" for={`${id}-teamSize`}>
+              Team Size
+            </label>
+            <select
+              id={`${id}-teamSize`}
+              name="teamSize"
+              class="w-full bg-ds-bg border border-ds-border rounded-md px-4 py-2.5 text-sm text-ds-text placeholder:text-ds-text-muted focus:border-ds-accent focus:outline-none"
+            >
+              <option value="">Select team size</option>
+              <option value="1-10">1-10</option>
+              <option value="11-50">11-50</option>
+              <option value="51-200">51-200</option>
+              <option value="200+">200+</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-sm font-medium text-ds-text-secondary mb-1.5 block" for={`${id}-message`}>
+              Message
+            </label>
+            <textarea
+              id={`${id}-message`}
+              name="message"
+              rows="3"
+              class="w-full bg-ds-bg border border-ds-border rounded-md px-4 py-2.5 text-sm text-ds-text placeholder:text-ds-text-muted focus:border-ds-accent focus:outline-none resize-y"
+              placeholder="Tell us about your deployment environment"
+            ></textarea>
+          </div>
+        </>
+      )}
+
+      {/* Pioneer fields */}
+      {formType === "pioneer" && (
+        <>
+          <div>
+            <label class="text-sm font-medium text-ds-text-secondary mb-1.5 block" for={`${id}-company`}>
+              Company <span class="text-ds-failed">*</span>
+            </label>
+            <input
+              type="text"
+              id={`${id}-company`}
+              name="company"
+              required
+              class="w-full bg-ds-bg border border-ds-border rounded-md px-4 py-2.5 text-sm text-ds-text placeholder:text-ds-text-muted focus:border-ds-accent focus:outline-none"
+              placeholder="Company name"
+            />
+          </div>
+          <div>
+            <label class="text-sm font-medium text-ds-text-secondary mb-1.5 block" for={`${id}-role`}>
+              Role / Title <span class="text-ds-failed">*</span>
+            </label>
+            <input
+              type="text"
+              id={`${id}-role`}
+              name="role"
+              required
+              class="w-full bg-ds-bg border border-ds-border rounded-md px-4 py-2.5 text-sm text-ds-text placeholder:text-ds-text-muted focus:border-ds-accent focus:outline-none"
+              placeholder="e.g., Senior DevOps Engineer"
+            />
+          </div>
+          <div>
+            <label class="text-sm font-medium text-ds-text-secondary mb-1.5 block" for={`${id}-tooling`}>
+              Current Deployment Tooling
+            </label>
+            <input
+              type="text"
+              id={`${id}-tooling`}
+              name="tooling"
+              class="w-full bg-ds-bg border border-ds-border rounded-md px-4 py-2.5 text-sm text-ds-text placeholder:text-ds-text-muted focus:border-ds-accent focus:outline-none"
+              placeholder="e.g., Ansible, Terraform, custom scripts"
+            />
+          </div>
+          <div>
+            <label class="text-sm font-medium text-ds-text-secondary mb-1.5 block" for={`${id}-infrastructure`}>
+              Infrastructure
+            </label>
+            <select
+              id={`${id}-infrastructure`}
+              name="infrastructure"
+              class="w-full bg-ds-bg border border-ds-border rounded-md px-4 py-2.5 text-sm text-ds-text placeholder:text-ds-text-muted focus:border-ds-accent focus:outline-none"
+            >
+              <option value="">Select infrastructure type</option>
+              <option value="Linux servers">Linux servers</option>
+              <option value="Containers/Docker">Containers/Docker</option>
+              <option value="Kubernetes">Kubernetes</option>
+              <option value="Mixed">Mixed</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-sm font-medium text-ds-text-secondary mb-1.5 block" for={`${id}-environments`}>
+              Number of Environments
+            </label>
+            <select
+              id={`${id}-environments`}
+              name="environments"
+              class="w-full bg-ds-bg border border-ds-border rounded-md px-4 py-2.5 text-sm text-ds-text placeholder:text-ds-text-muted focus:border-ds-accent focus:outline-none"
+            >
+              <option value="">Select number of environments</option>
+              <option value="1-3">1-3</option>
+              <option value="4-10">4-10</option>
+              <option value="10+">10+</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-sm font-medium text-ds-text-secondary mb-1.5 block" for={`${id}-message`}>
+              Message
+            </label>
+            <textarea
+              id={`${id}-message`}
+              name="message"
+              rows="3"
+              class="w-full bg-ds-bg border border-ds-border rounded-md px-4 py-2.5 text-sm text-ds-text placeholder:text-ds-text-muted focus:border-ds-accent focus:outline-none resize-y"
+              placeholder="Tell us about your deployment challenges"
+            ></textarea>
+          </div>
+        </>
+      )}
+
+      {/* General fields */}
+      {formType === "general" && (
+        <div>
+          <label class="text-sm font-medium text-ds-text-secondary mb-1.5 block" for={`${id}-message`}>
+            Message <span class="text-ds-failed">*</span>
+          </label>
+          <textarea
+            id={`${id}-message`}
+            name="message"
+            rows="4"
+            required
+            class="w-full bg-ds-bg border border-ds-border rounded-md px-4 py-2.5 text-sm text-ds-text placeholder:text-ds-text-muted focus:border-ds-accent focus:outline-none resize-y"
+            placeholder="How can we help?"
+          ></textarea>
+        </div>
+      )}
+
+      <div>
+        <button
+          type="submit"
+          class="contact-form-submit rounded-md bg-ds-accent px-8 py-3 text-ds-bg font-semibold hover:bg-ds-accent/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <span class="submit-label">{buttonText}</span>
+          <span class="submit-spinner hidden">
+            <svg class="animate-spin inline-block w-4 h-4 mr-2 -mt-0.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+            </svg>
+            Sending...
+          </span>
+        </button>
+      </div>
+
+      <div class="form-success hidden rounded-md border border-ds-succeeded/30 bg-ds-succeeded/10 px-4 py-3 text-sm text-ds-succeeded">
+        Thanks! We'll be in touch within 48 hours.
+      </div>
+
+      <div class="form-error hidden rounded-md border border-ds-failed/30 bg-ds-failed/10 px-4 py-3 text-sm text-ds-failed">
+        Something went wrong. Email <a href="mailto:licensing@synthdeploy.com" class="underline">licensing@synthdeploy.com</a> directly.
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+  const FORM_API_URL = 'https://forms.synthdeploy.com/submit';
+
+  document.addEventListener('DOMContentLoaded', () => {
+    // Toggle form visibility
+    document.querySelectorAll<HTMLButtonElement>('.contact-form-trigger').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const targetId = btn.getAttribute('data-target');
+        if (!targetId) return;
+        const container = document.getElementById(targetId);
+        if (!container) return;
+
+        if (container.classList.contains('hidden')) {
+          container.classList.remove('hidden');
+          // Trigger reflow then animate
+          requestAnimationFrame(() => {
+            container.style.maxHeight = container.scrollHeight + 'px';
+            container.style.opacity = '1';
+          });
+        } else {
+          container.style.maxHeight = '0';
+          container.style.opacity = '0';
+          container.addEventListener('transitionend', () => {
+            container.classList.add('hidden');
+            container.style.maxHeight = '';
+            container.style.opacity = '';
+          }, { once: true });
+        }
+      });
+    });
+
+    // Handle form submissions
+    document.querySelectorAll<HTMLFormElement>('form[data-contact-form]').forEach((form) => {
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const formType = form.getAttribute('data-form-type');
+        const submitBtn = form.querySelector<HTMLButtonElement>('.contact-form-submit');
+        const labelEl = form.querySelector<HTMLElement>('.submit-label');
+        const spinnerEl = form.querySelector<HTMLElement>('.submit-spinner');
+        const successEl = form.querySelector<HTMLElement>('.form-success');
+        const errorEl = form.querySelector<HTMLElement>('.form-error');
+
+        if (!submitBtn || !labelEl || !spinnerEl || !successEl || !errorEl) return;
+
+        // Reset states
+        successEl.classList.add('hidden');
+        errorEl.classList.add('hidden');
+
+        // Loading state
+        submitBtn.disabled = true;
+        labelEl.classList.add('hidden');
+        spinnerEl.classList.remove('hidden');
+
+        // Collect form data
+        const formData = new FormData(form);
+        const body: Record<string, string> = { formType: formType || 'general' };
+
+        for (const [key, value] of formData.entries()) {
+          if (typeof value === 'string' && value.trim()) {
+            body[key] = value.trim();
+          }
+        }
+
+        try {
+          const response = await fetch(FORM_API_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          });
+
+          const result = await response.json();
+
+          if (response.ok && result.success) {
+            successEl.classList.remove('hidden');
+            form.reset();
+          } else {
+            errorEl.classList.remove('hidden');
+          }
+        } catch {
+          errorEl.classList.remove('hidden');
+        } finally {
+          submitBtn.disabled = false;
+          labelEl.classList.remove('hidden');
+          spinnerEl.classList.add('hidden');
+        }
+      });
+    });
+  });
+</script>
+
+<style>
+  .contact-form-container {
+    max-height: 0;
+    opacity: 0;
+    transition: max-height 0.4s ease-out, opacity 0.3s ease-out;
+  }
+  .contact-form-container:not(.hidden) {
+    max-height: 800px;
+  }
+  select {
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236a6660' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    padding-right: 36px;
+  }
+</style>

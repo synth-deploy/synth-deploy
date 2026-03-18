@@ -4,7 +4,7 @@
 
 If you discover a security vulnerability in Synth, please report it responsibly. **Do not open a public GitHub issue.**
 
-Email: **joe.fullerton18@gmail.com**
+Email: **security@synthdeploy.com**
 
 Include:
 
