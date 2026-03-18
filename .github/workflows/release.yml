@@ -144,8 +144,8 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository_owner }}/synth-server:${{ steps.version.outputs.VERSION }}
             ghcr.io/${{ github.repository_owner }}/synth-server:latest
-            synth-deploy/server:${{ steps.version.outputs.VERSION }}
-            synth-deploy/server:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/synth-server:${{ steps.version.outputs.VERSION }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/synth-server:latest
           labels: |
             org.opencontainers.image.title=Synth
             org.opencontainers.image.description=Synth orchestration server with embedded UI
@@ -207,8 +207,8 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository_owner }}/synth-envoy:${{ steps.version.outputs.VERSION }}
             ghcr.io/${{ github.repository_owner }}/synth-envoy:latest
-            synth-deploy/envoy:${{ steps.version.outputs.VERSION }}
-            synth-deploy/envoy:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/synth-envoy:${{ steps.version.outputs.VERSION }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/synth-envoy:latest
           labels: |
             org.opencontainers.image.title=Synth Envoy
             org.opencontainers.image.description=Synth local deployment agent
