@@ -22,8 +22,8 @@ COPY packages/core/ packages/core/
 COPY packages/server/ packages/server/
 COPY packages/ui/ packages/ui/
 
-# Build all packages
-RUN npm run build
+# Build core, server, and UI (envoy not needed in server image)
+RUN npm run build -w packages/core && npm run build -w packages/server && npm run build -w packages/ui
 
 # --- Stage 2: Runtime ---
 FROM node:22-slim
@@ -46,9 +46,9 @@ COPY --from=build /app/packages/core/dist packages/core/dist/
 COPY --from=build /app/packages/server/dist packages/server/dist/
 COPY --from=build /app/packages/ui/dist packages/ui/dist/
 
-# Create non-root user
-RUN groupadd --gid 1000 synth && \
-    useradd --uid 1000 --gid synth --shell /bin/sh --create-home synth
+# Create non-root user (GID/UID 1000 may already exist in base image)
+RUN groupadd --gid 1000 synth 2>/dev/null || true && \
+    useradd --uid 1000 --gid 1000 --shell /bin/sh --create-home synth 2>/dev/null || true
 
 # SQLite data directory
 RUN mkdir -p /data && chown synth:synth /data

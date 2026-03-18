@@ -43,9 +43,9 @@ RUN npm ci --omit=dev
 COPY --from=build /app/packages/core/dist packages/core/dist/
 COPY --from=build /app/packages/envoy/dist packages/envoy/dist/
 
-# Create non-root user
-RUN groupadd --gid 1000 synth && \
-    useradd --uid 1000 --gid synth --shell /bin/sh --create-home synth
+# Create non-root user (GID/UID 1000 may already exist in base image)
+RUN groupadd --gid 1000 synth 2>/dev/null || true && \
+    useradd --uid 1000 --gid 1000 --shell /bin/sh --create-home synth 2>/dev/null || true
 
 # Deployment workspace directory
 RUN mkdir -p /workspace && chown synth:synth /workspace
