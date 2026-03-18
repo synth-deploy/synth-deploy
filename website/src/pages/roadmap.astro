@@ -293,6 +293,20 @@ import Layout from "../layouts/Layout.astro";
             Every deployment decision already logged &mdash; now exportable in the right format.
           </p>
         </div>
+
+        <div class="glass-card p-6 border-ds-partition/20 scroll-reveal scroll-reveal-delay-1">
+          <div class="flex items-center gap-3 mb-3">
+            <div class="entity-badge border-ds-partition/30 bg-ds-partition/10 text-ds-partition text-[10px] py-0.5">
+              v1.1
+            </div>
+          </div>
+          <h3 class="text-base font-semibold mb-2">Handler Plugin System</h3>
+          <p class="text-sm text-ds-text-secondary leading-relaxed">
+            Extend the envoy with custom deployment handlers via npm packages or local modules.
+            The OperationHandler interface becomes a public plugin contract &mdash; add support for
+            any deployment target without touching core code.
+          </p>
+        </div>
       </div>
     </div>
   </section>
@@ -310,7 +324,81 @@ import Layout from "../layouts/Layout.astro";
       </div>
 
       <div class="max-w-2xl mx-auto space-y-4">
+        <!-- Handler extensions -->
         <div class="glass-card px-6 py-4 flex items-center gap-4 scroll-reveal scroll-reveal-delay-1">
+          <span class="dt-dot bg-ds-dt-execution"></span>
+          <div>
+            <h3 class="text-sm font-semibold">Database Handler</h3>
+            <p class="text-xs text-ds-text-muted mt-0.5">Migration execution (Flyway, Liquibase, Alembic, raw SQL) with backup-before-migrate, schema diff dry-runs, and automatic rollback on failure.</p>
+          </div>
+        </div>
+
+        <div class="glass-card px-6 py-4 flex items-center gap-4 scroll-reveal scroll-reveal-delay-2">
+          <span class="dt-dot bg-ds-dt-execution"></span>
+          <div>
+            <h3 class="text-sm font-semibold">Secret Handler</h3>
+            <p class="text-xs text-ds-text-muted mt-0.5">HashiCorp Vault, AWS Secrets Manager, Azure Key Vault, and SOPS integration. Inject secrets at deploy time without writing to disk.</p>
+          </div>
+        </div>
+
+        <div class="glass-card px-6 py-4 flex items-center gap-4 scroll-reveal scroll-reveal-delay-3">
+          <span class="dt-dot bg-ds-dt-execution"></span>
+          <div>
+            <h3 class="text-sm font-semibold">Network Handler</h3>
+            <p class="text-xs text-ds-text-muted mt-0.5">DNS updates, load balancer configuration, firewall rules, and SSL/TLS certificate deployment with propagation-aware verification.</p>
+          </div>
+        </div>
+
+        <div class="glass-card px-6 py-4 flex items-center gap-4 scroll-reveal scroll-reveal-delay-4">
+          <span class="dt-dot bg-ds-dt-execution"></span>
+          <div>
+            <h3 class="text-sm font-semibold">Cloud Provider Handler</h3>
+            <p class="text-xs text-ds-text-muted mt-0.5">EC2/VM lifecycle, auto-scaling group updates, and AMI promotion. Imperative cloud operations beyond what Terraform covers.</p>
+          </div>
+        </div>
+
+        <div class="glass-card px-6 py-4 flex items-center gap-4 scroll-reveal scroll-reveal-delay-1">
+          <span class="dt-dot bg-ds-dt-execution"></span>
+          <div>
+            <h3 class="text-sm font-semibold">Package Handler</h3>
+            <p class="text-xs text-ds-text-muted mt-0.5">System package management across apt, yum, brew, and npm with version pinning, dependency awareness, and snapshot rollback.</p>
+          </div>
+        </div>
+
+        <div class="glass-card px-6 py-4 flex items-center gap-4 scroll-reveal scroll-reveal-delay-2">
+          <span class="dt-dot bg-ds-dt-execution"></span>
+          <div>
+            <h3 class="text-sm font-semibold">Notification Handler</h3>
+            <p class="text-xs text-ds-text-muted mt-0.5">Slack, PagerDuty, email, and webhook callbacks at deployment milestones. Delivery confirmation recorded in the debrief.</p>
+          </div>
+        </div>
+
+        <div class="glass-card px-6 py-4 flex items-center gap-4 scroll-reveal scroll-reveal-delay-3">
+          <span class="dt-dot bg-ds-dt-execution"></span>
+          <div>
+            <h3 class="text-sm font-semibold">Registry Handler</h3>
+            <p class="text-xs text-ds-text-muted mt-0.5">Container registry and artifact repository operations &mdash; tag promotion, image scanning gates, and retention policy enforcement for ECR, GCR, and Artifactory.</p>
+          </div>
+        </div>
+
+        <div class="glass-card px-6 py-4 flex items-center gap-4 scroll-reveal scroll-reveal-delay-4">
+          <span class="dt-dot bg-ds-dt-execution"></span>
+          <div>
+            <h3 class="text-sm font-semibold">Windows Handler</h3>
+            <p class="text-xs text-ds-text-muted mt-0.5">PowerShell execution, IIS management, Windows Service lifecycle, and MSI/MSIX deployment for Windows-native targets.</p>
+          </div>
+        </div>
+
+        <div class="glass-card px-6 py-4 flex items-center gap-4 scroll-reveal scroll-reveal-delay-1">
+          <span class="dt-dot bg-ds-dt-execution"></span>
+          <div>
+            <h3 class="text-sm font-semibold">Feature Flag Handler</h3>
+            <p class="text-xs text-ds-text-muted mt-0.5">LaunchDarkly, Split, and Unleash integration. Coordinate flag flips with deployment stages &mdash; deploy dark, flip, verify, auto-kill-switch on failure.</p>
+          </div>
+        </div>
+
+        <!-- Existing horizon items -->
+        <div class="glass-card px-6 py-4 flex items-center gap-4 scroll-reveal scroll-reveal-delay-2">
           <span class="dt-dot bg-ds-text-muted"></span>
           <div>
             <h3 class="text-sm font-semibold">Fleet Deployment at Scale Validation</h3>
@@ -318,7 +406,7 @@ import Layout from "../layouts/Layout.astro";
           </div>
         </div>
 
-        <div class="glass-card px-6 py-4 flex items-center gap-4 scroll-reveal scroll-reveal-delay-2">
+        <div class="glass-card px-6 py-4 flex items-center gap-4 scroll-reveal scroll-reveal-delay-3">
           <span class="dt-dot bg-ds-text-muted"></span>
           <div>
             <h3 class="text-sm font-semibold">Multi-Envoy Orchestration Enhancements</h3>
@@ -326,7 +414,7 @@ import Layout from "../layouts/Layout.astro";
           </div>
         </div>
 
-        <div class="glass-card px-6 py-4 flex items-center gap-4 scroll-reveal scroll-reveal-delay-3">
+        <div class="glass-card px-6 py-4 flex items-center gap-4 scroll-reveal scroll-reveal-delay-4">
           <span class="dt-dot bg-ds-text-muted"></span>
           <div>
             <h3 class="text-sm font-semibold">Advanced Knowledge Store</h3>
@@ -334,7 +422,7 @@ import Layout from "../layouts/Layout.astro";
           </div>
         </div>
 
-        <div class="glass-card px-6 py-4 flex items-center gap-4 scroll-reveal scroll-reveal-delay-4">
+        <div class="glass-card px-6 py-4 flex items-center gap-4 scroll-reveal scroll-reveal-delay-1">
           <span class="dt-dot bg-ds-text-muted"></span>
           <div>
             <h3 class="text-sm font-semibold">Deployment Graph Orchestration at Scale</h3>
@@ -357,7 +445,7 @@ import Layout from "../layouts/Layout.astro";
       </p>
       <div class="flex items-center justify-center gap-4">
         <a
-          href="https://github.com/jmfullerton96/synth-deploy"
+          href="https://github.com/synth-deploy/synth-deploy"
           target="_blank"
           rel="noopener"
           class="inline-block rounded-md bg-ds-accent px-8 py-3 text-ds-bg font-semibold hover:bg-ds-accent/90 transition-colors"

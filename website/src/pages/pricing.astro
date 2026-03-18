@@ -1,10 +1,11 @@
 ---
 import Layout from "../layouts/Layout.astro";
+import ContactForm from "../components/ContactForm.astro";
 
 const communityFeatures = [
   "Intelligent deployment planning",
   "Artifact analysis with LLM reasoning",
-  "5 execution handlers (file, process, config, container, verify)",
+  "6 execution handlers (file, process, config, container, service, verify)",
   "Full Debrief decision log",
   "Variable resolution with conflict detection",
   "Dry-run observations before execution",
@@ -76,7 +77,7 @@ const enterpriseFeatures = [
             ))}
           </ul>
           <a
-            href="https://github.com/jmfullerton96/synth-deploy"
+            href="https://github.com/synth-deploy/synth-deploy"
             target="_blank"
             rel="noopener"
             class="block text-center rounded-md border border-ds-accent-border bg-ds-accent-dim px-6 py-3 text-ds-accent font-semibold hover:bg-ds-accent-hover transition-colors"
@@ -104,12 +105,11 @@ const enterpriseFeatures = [
               </li>
             ))}
           </ul>
-          <a
-            href="mailto:licensing@synthdeploy.com"
-            class="block text-center rounded-md bg-ds-accent px-6 py-3 text-ds-bg font-semibold hover:bg-ds-accent/90 transition-colors"
-          >
-            Contact for Licensing
-          </a>
+          <ContactForm
+            formType="enterprise"
+            buttonText="Contact for Licensing"
+            id="enterprise-form"
+          />
         </div>
       </div>
     </div>
@@ -190,12 +190,11 @@ const enterpriseFeatures = [
       </div>
 
       <div class="text-center scroll-reveal scroll-reveal-delay-4">
-        <a
-          href="mailto:pioneers@synthdeploy.com?subject=Pioneer%20Program%20Interest"
-          class="inline-block rounded-md bg-ds-accent px-8 py-3 text-ds-bg font-semibold hover:bg-ds-accent/90 transition-colors"
-        >
-          Apply to the Pioneer Program
-        </a>
+        <ContactForm
+          formType="pioneer"
+          buttonText="Apply to the Pioneer Program"
+          id="pioneer-form"
+        />
         <p class="text-xs text-ds-text-muted mt-3">No commitment. No credit card. Just a conversation.</p>
       </div>
     </div>
@@ -221,7 +220,7 @@ const enterpriseFeatures = [
           <p>
             Production use beyond 10 Envoys, or offering Synth as a managed service,
             requires a commercial license. Contact
-            <a href="mailto:licensing@synthdeploy.com" class="text-ds-accent hover:underline">licensing@synthdeploy.com</a>.
+            <span class="text-ds-accent">licensing@synthdeploy.com</span>.
           </p>
         </div>
       </div>
@@ -239,19 +238,20 @@ const enterpriseFeatures = [
         Whether you're evaluating Synth for your team or interested in the Pioneer Program,
         we'd like to hear from you.
       </p>
-      <div class="flex items-center justify-center gap-4">
-        <a
-          href="mailto:licensing@synthdeploy.com"
-          class="inline-block rounded-md bg-ds-accent px-8 py-3 text-ds-bg font-semibold hover:bg-ds-accent/90 transition-colors"
-        >
-          Get in Touch
-        </a>
-        <a
-          href="/docs/installation"
-          class="rounded-md border border-ds-border px-6 py-3 text-ds-text hover:border-ds-accent-border hover:bg-ds-surface transition-colors"
-        >
-          Installation Guide
-        </a>
+      <div class="flex flex-col items-center gap-4">
+        <div class="flex items-center gap-4">
+          <ContactForm
+            formType="general"
+            buttonText="Get in Touch"
+            id="general-form"
+          />
+          <a
+            href="/docs/installation"
+            class="rounded-md border border-ds-border px-6 py-3 text-ds-text hover:border-ds-accent-border hover:bg-ds-surface transition-colors"
+          >
+            Installation Guide
+          </a>
+        </div>
       </div>
     </div>
   </section>
