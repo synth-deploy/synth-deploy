@@ -23,8 +23,14 @@ coverage/
 .envoy/deployments/
 .envoy/logs/
 
+# Blog content (draft locally, publish when ready)
+website/src/content/blog/
+
 # Internal strategy & planning docs (kept locally, never published)
 docs/internal/
+
+# Marketing automation scripts (operational tooling, never published)
+scripts/marketing/
 
 # Design mockups and source of truth (kept locally)
 design/

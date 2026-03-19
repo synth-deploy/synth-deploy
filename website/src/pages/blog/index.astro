@@ -1,0 +1,35 @@
+---
+import Layout from "../../layouts/Layout.astro";
+import BlogCard from "../../components/BlogCard.astro";
+import { getCollection } from "astro:content";
+
+const posts = (await getCollection("blog", ({ data }) => !data.draft))
+  .sort((a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf());
+---
+
+<Layout title="Blog — Synth" description="Technical insights on intelligent deployment from the Synth team.">
+  <div class="mx-auto max-w-3xl px-6 py-12">
+    <p class="section-heading">Blog</p>
+    <h1 class="text-3xl font-bold text-ds-text mb-2">Deployment Intelligence</h1>
+    <p class="text-ds-text-secondary mb-10">
+      Technical insights, architecture decisions, and lessons learned building Synth.
+    </p>
+
+    {posts.length === 0 ? (
+      <p class="text-ds-text-muted">No posts yet. Check back soon.</p>
+    ) : (
+      <div class="space-y-4">
+        {posts.map((post) => (
+          <BlogCard
+            title={post.data.title}
+            description={post.data.description}
+            pubDate={post.data.pubDate}
+            author={post.data.author}
+            tags={post.data.tags}
+            slug={post.slug}
+          />
+        ))}
+      </div>
+    )}
+  </div>
+</Layout>

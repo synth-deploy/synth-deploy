@@ -79,12 +79,23 @@ body {
   .prose-docs tbody tr:hover {
     background: rgba(107, 138, 255, 0.03);
   }
-  .prose-docs ul,
+  .prose-docs ul {
+    @apply mb-4 pl-6 text-ds-text-secondary list-disc;
+  }
   .prose-docs ol {
-    @apply mb-4 pl-6 text-ds-text-secondary;
+    @apply mb-4 pl-6 text-ds-text-secondary list-decimal;
   }
   .prose-docs li {
     @apply mb-2;
+  }
+  .prose-docs strong {
+    @apply text-ds-text font-semibold;
+  }
+  .prose-docs a {
+    @apply text-ds-accent hover:underline;
+  }
+  .prose-docs hr {
+    @apply border-ds-border my-8;
   }
 }
 
