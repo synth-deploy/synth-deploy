@@ -31,6 +31,27 @@ function formatDate(date: Date): string {
     </a>
 
     <article>
+      <script type="application/ld+json" set:html={JSON.stringify({
+        "@context": "https://schema.org",
+        "@type": "BlogPosting",
+        "headline": title,
+        "description": description,
+        "author": {
+          "@type": "Person",
+          "name": author,
+        },
+        "datePublished": pubDate.toISOString(),
+        ...(updatedDate ? { "dateModified": updatedDate.toISOString() } : {}),
+        "publisher": {
+          "@type": "Organization",
+          "name": "Synth",
+          "url": "https://synthdeploy.com",
+        },
+        "mainEntityOfPage": {
+          "@type": "WebPage",
+          "@id": `https://synthdeploy.com${Astro.url.pathname}`,
+        },
+      })} />
       <header class="mb-10">
         <h1 class="text-3xl font-bold text-ds-text mb-4">{title}</h1>
         <div class="flex flex-wrap items-center gap-3 text-sm text-ds-text-muted">

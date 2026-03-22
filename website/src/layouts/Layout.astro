@@ -41,6 +41,19 @@ const imageURL = new URL(image, Astro.site);
     <meta name="twitter:description" content={description} />
     <meta name="twitter:image" content={imageURL.href} />
 
+    <!-- Structured Data -->
+    <script type="application/ld+json" set:html={JSON.stringify({
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      "name": "Synth",
+      "url": "https://synthdeploy.com",
+      "logo": "https://synthdeploy.com/favicon.svg",
+      "description": "Intelligent deployment system — deployment intelligence, not deployment automation.",
+      "sameAs": [
+        "https://github.com/synth-deploy/synth-deploy"
+      ]
+    })} />
+
     <title>{title}</title>
   </head>
   <body class="min-h-screen">

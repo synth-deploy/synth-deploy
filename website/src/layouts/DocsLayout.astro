@@ -3,9 +3,10 @@ import Layout from "./Layout.astro";
 
 interface Props {
   title: string;
+  description?: string;
 }
 
-const { title } = Astro.props;
+const { title, description } = Astro.props;
 
 const sections = [
   { title: "Getting Started", href: "/docs" },
@@ -15,9 +16,10 @@ const sections = [
 ];
 
 const currentPath = Astro.url.pathname;
+const isDocsRoot = currentPath === "/docs" || currentPath === "/docs/";
 ---
 
-<Layout title={`${title} — Synth Docs`}>
+<Layout title={`${title} — Synth Docs`} description={description}>
   <div class="mx-auto max-w-6xl px-6 py-12 flex gap-8">
     <aside class="hidden md:block w-56 shrink-0">
       <nav class="sticky top-24 space-y-1">
@@ -37,8 +39,34 @@ const currentPath = Astro.url.pathname;
         ))}
       </nav>
     </aside>
-    <article class="prose-docs flex-1 min-w-0">
-      <slot />
-    </article>
+    <div class="flex-1 min-w-0">
+      <nav aria-label="Breadcrumb" class="text-sm text-ds-text-muted mb-4">
+        <ol class="flex items-center gap-1.5">
+          <li><a href="/" class="hover:text-ds-accent transition-colors">Home</a></li>
+          <li><span class="mx-1">/</span></li>
+          <li><a href="/docs" class="hover:text-ds-accent transition-colors">Docs</a></li>
+          {!isDocsRoot && (
+            <>
+              <li><span class="mx-1">/</span></li>
+              <li class="text-ds-text">{title}</li>
+            </>
+          )}
+        </ol>
+      </nav>
+      <script type="application/ld+json" set:html={JSON.stringify({
+        "@context": "https://schema.org",
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+          { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://synthdeploy.com/" },
+          { "@type": "ListItem", "position": 2, "name": "Docs", "item": "https://synthdeploy.com/docs" },
+          ...(!isDocsRoot
+            ? [{ "@type": "ListItem", "position": 3, "name": title, "item": `https://synthdeploy.com${currentPath}` }]
+            : []),
+        ],
+      })} />
+      <article class="prose-docs">
+        <slot />
+      </article>
+    </div>
   </div>
 </Layout>
