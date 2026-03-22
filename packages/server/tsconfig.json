@@ -7,5 +7,6 @@
   "references": [
     { "path": "../core" }
   ],
-  "include": ["src"]
+  "include": ["src"],
+  "exclude": ["src/api/deployments.ts"]
 }

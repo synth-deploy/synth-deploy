@@ -2,7 +2,8 @@ import crypto from "node:crypto";
 import type {
   Deployment,
   DeploymentId,
-  DeploymentTrigger,
+  OperationInput,
+  OperationTrigger,
   DebriefWriter,
   Environment,
   Partition,
@@ -25,7 +26,7 @@ import { serverLog, serverError } from "../logger.js";
 // Public interfaces
 // ---------------------------------------------------------------------------
 
-export interface DeploymentStore {
+export interface OperationStore {
   save(deployment: Deployment): void;
   get(id: DeploymentId): Deployment | undefined;
   getByPartition(partitionId: string): Deployment[];
@@ -36,6 +37,8 @@ export interface DeploymentStore {
   findRecentByArtifact(artifactId: string, since: Date, status?: string): Deployment[];
   findLatestByEnvironment(envId: string): Deployment | undefined;
 }
+/** @deprecated Use OperationStore */
+export type DeploymentStore = OperationStore;
 
 export interface AgentOptions {
   /** Number of health check retries after initial failure. Default: 1 */
@@ -172,7 +175,7 @@ export class SynthAgent {
 
   constructor(
     private debrief: DebriefWriter,
-    private deployments: DeploymentStore,
+    private deployments: OperationStore,
     private artifactStore: IArtifactStore,
     private environmentStore: IEnvironmentStore,
     private partitionStore: IPartitionStore,
@@ -217,14 +220,23 @@ export class SynthAgent {
   // Main entry point
   // -----------------------------------------------------------------------
 
-  async triggerDeployment(
-    trigger: DeploymentTrigger,
+  async triggerOperation(
+    input: OperationInput,
+    trigger: OperationTrigger,
   ): Promise<Deployment> {
+    if (input.type !== "deploy") {
+      throw new OrchestrationError(
+        "resolve-entities",
+        `Operation type "${input.type}" is not yet supported`,
+        `Only "deploy" operations are currently supported. Received type: "${input.type}".`,
+      );
+    }
+
     const deploymentId = crypto.randomUUID();
 
     // --- Look up entities from stores -----------------------------------------------
 
-    serverLog("DEPLOY-TRIGGER", { deploymentId, artifactId: trigger.artifactId, environmentId: trigger.environmentId, partitionId: trigger.partitionId ?? null, triggeredBy: trigger.triggeredBy });
+    serverLog("DEPLOY-TRIGGER", { operationId: deploymentId, artifactId: input.artifactId, environmentId: trigger.environmentId, partitionId: trigger.partitionId ?? null, triggeredBy: trigger.triggeredBy });
 
     const environment = this.environmentStore.get(trigger.environmentId);
     if (!environment) {
@@ -249,12 +261,12 @@ export class SynthAgent {
       }
     }
 
-    const artifact = this.artifactStore.get(trigger.artifactId);
+    const artifact = this.artifactStore.get(input.artifactId);
     if (!artifact) {
       throw new OrchestrationError(
         "resolve-entities",
-        `Artifact not found: ${trigger.artifactId}`,
-        `The trigger references artifact ID "${trigger.artifactId}" which does not exist in the artifact store. ` +
+        `Artifact not found: ${input.artifactId}`,
+        `The trigger references artifact ID "${input.artifactId}" which does not exist in the artifact store. ` +
         `Verify the artifact ID is correct and the artifact has been created.`,
       );
     }
@@ -275,7 +287,7 @@ export class SynthAgent {
 
     const analysisEntry = this.debrief.record({
       partitionId: trigger.partitionId ?? null,
-      deploymentId,
+      operationId: deploymentId,
       agent: "server",
       decisionType: "artifact-analysis",
       decision: `Analyzed artifact "${artifact.name}" (${artifact.type}) — confidence ${artifact.analysis.confidence}`,
@@ -299,7 +311,7 @@ export class SynthAgent {
 
     // --- Step 1: Plan the pipeline -----------------------------------------
 
-    const version = trigger.artifactVersionId ?? "latest";
+    const version = input.artifactVersionId ?? "latest";
     const pipelineSteps = [
       "resolve-configuration",
       "preflight-health-check",
@@ -309,7 +321,7 @@ export class SynthAgent {
 
     const planEntry = this.debrief.record({
       partitionId: trigger.partitionId ?? null,
-      deploymentId,
+      operationId: deploymentId,
       agent: "server",
       decisionType: "pipeline-plan",
       decision: `Planned deployment pipeline: ${pipelineSteps.join(" → ")}`,
@@ -349,7 +361,7 @@ export class SynthAgent {
 
     const planGenEntry = this.debrief.record({
       partitionId: trigger.partitionId ?? null,
-      deploymentId,
+      operationId: deploymentId,
       agent: "server",
       decisionType: "plan-generation",
       decision: `Generated deployment plan for "${artifact.name}" v${version} — ${initialPlan.steps.length} step(s)`,
@@ -363,7 +375,7 @@ export class SynthAgent {
 
     const approvalEntry = this.debrief.record({
       partitionId: trigger.partitionId ?? null,
-      deploymentId,
+      operationId: deploymentId,
       agent: "server",
       decisionType: "plan-approval",
       decision: `Auto-approved deployment plan for "${artifact.name}" v${version}`,
@@ -378,8 +390,7 @@ export class SynthAgent {
 
     const deployment: Deployment = {
       id: deploymentId,
-      artifactId: trigger.artifactId,
-      artifactVersionId: trigger.artifactVersionId,
+      input,
       environmentId: trigger.environmentId,
       partitionId: trigger.partitionId,
       version,
@@ -397,7 +408,7 @@ export class SynthAgent {
     try {
       // --- Step 2: Resolve configuration -----------------------------------
 
-      serverLog("DEPLOY-CONFIG-RESOLVE", { deploymentId: deployment.id });
+      serverLog("DEPLOY-CONFIG-RESOLVE", { operationId: deployment.id });
       const { variables, hasConflicts } = this.resolveConfiguration(
         deployment,
         trigger.variables,
@@ -411,13 +422,13 @@ export class SynthAgent {
 
       deployment.status = "running";
       this.deployments.save(deployment);
-      serverLog("DEPLOY-HEALTH-CHECK", { deploymentId: deployment.id, environment: environment.name });
+      serverLog("DEPLOY-HEALTH-CHECK", { operationId: deployment.id, environment: environment.name });
 
       await this.preflightHealthCheck(deployment, partition, environment, artifact);
 
       // --- Step 4: Execute deployment ----------------------------------------
 
-      serverLog("DEPLOY-EXECUTE", { deploymentId: deployment.id, artifact: artifact.name, version: deployment.version, environment: environment.name });
+      serverLog("DEPLOY-EXECUTE", { operationId: deployment.id, artifact: artifact.name, version: deployment.version, environment: environment.name });
       const delegated = await this.executeDeployment(deployment, partition, environment, artifact);
 
       // --- Step 5: Post-deploy verify ----------------------------------------
@@ -433,11 +444,11 @@ export class SynthAgent {
 
       deployment.status = "succeeded";
       deployment.completedAt = new Date();
-      serverLog("DEPLOY-SUCCEEDED", { deploymentId: deployment.id, artifact: artifact.name, version: deployment.version, environment: environment.name, durationMs: deployment.completedAt.getTime() - deployment.createdAt.getTime() });
+      serverLog("DEPLOY-SUCCEEDED", { operationId: deployment.id, artifact: artifact.name, version: deployment.version, environment: environment.name, durationMs: deployment.completedAt.getTime() - deployment.createdAt.getTime() });
 
       const completionEntry = this.debrief.record({
         partitionId: deployment.partitionId ?? null,
-        deploymentId: deployment.id,
+        operationId: deployment.id,
         agent: "server",
         decisionType: "deployment-completion",
         decision: `Marking deployment of ${artifact.name} v${deployment.version} as succeeded on "${environment.name}"`,
@@ -465,11 +476,11 @@ export class SynthAgent {
         error instanceof OrchestrationError
           ? error.message
           : `Unexpected error: ${error instanceof Error ? error.message : String(error)}`;
-      serverError("DEPLOY-FAILED", { deploymentId: deployment.id, reason: deployment.failureReason, durationMs: deployment.completedAt.getTime() - deployment.createdAt.getTime() });
+      serverError("DEPLOY-FAILED", { operationId: deployment.id, reason: deployment.failureReason, durationMs: deployment.completedAt.getTime() - deployment.createdAt.getTime() });
 
       const failEntry = this.debrief.record({
         partitionId: deployment.partitionId ?? null,
-        deploymentId: deployment.id,
+        operationId: deployment.id,
         agent: "server",
         decisionType: "deployment-failure",
         decision: `Deployment failed: ${deployment.failureReason}`,
@@ -532,7 +543,7 @@ export class SynthAgent {
 
       this.debrief.record({
         partitionId,
-        deploymentId: null,
+        operationId: null,
         agent: "server",
         decisionType: "diagnostic-investigation",
         decision: `${tools.length} external tool(s) available from ${connectedServers.length} MCP server(s)`,
@@ -557,7 +568,7 @@ export class SynthAgent {
       // Never let external checks block the deployment
       this.debrief.record({
         partitionId,
-        deploymentId: null,
+        operationId: null,
         agent: "server",
         decisionType: "diagnostic-investigation",
         decision: "External MCP check failed — proceeding without external intelligence",
@@ -648,7 +659,7 @@ export class SynthAgent {
     const partitionVarCount = partition ? Object.keys(partition.variables).length : 0;
     const configEntry = this.debrief.record({
       partitionId: deployment.partitionId ?? null,
-      deploymentId: deployment.id,
+      operationId: deployment.id,
       agent: "server",
       decisionType: "configuration-resolved",
       decision:
@@ -828,7 +839,7 @@ export class SynthAgent {
     if (crossEnvConn) {
       const entry = this.debrief.record({
         partitionId: deployment.partitionId ?? null,
-        deploymentId: deployment.id,
+        operationId: deployment.id,
         agent: "server",
         decisionType: "variable-conflict",
         decision:
@@ -859,7 +870,7 @@ export class SynthAgent {
         .join("; ");
       const entry = this.debrief.record({
         partitionId: deployment.partitionId ?? null,
-        deploymentId: deployment.id,
+        operationId: deployment.id,
         agent: "server",
         decisionType: "variable-conflict",
         decision: `Cross-environment variable pattern in ${crossEnv.length} non-connectivity variable(s)`,
@@ -884,7 +895,7 @@ export class SynthAgent {
     if (sensitiveDetails) {
       const entry = this.debrief.record({
         partitionId: deployment.partitionId ?? null,
-        deploymentId: deployment.id,
+        operationId: deployment.id,
         agent: "server",
         decisionType: "variable-conflict",
         decision: `Security-sensitive variable(s) overridden: ${sensitiveDetails.map((d) => d.conflict.variable).join(", ")}`,
@@ -919,7 +930,7 @@ export class SynthAgent {
         .join("; ");
       const entry = this.debrief.record({
         partitionId: deployment.partitionId ?? null,
-        deploymentId: deployment.id,
+        operationId: deployment.id,
         agent: "server",
         decisionType: "variable-conflict",
         decision: `Resolved ${standardDetails.length} variable conflict(s) via precedence rules`,
@@ -993,7 +1004,7 @@ export class SynthAgent {
     if (firstCheck.reachable) {
       const entry = this.debrief.record({
         partitionId: deployment.partitionId ?? null,
-        deploymentId: deployment.id,
+        operationId: deployment.id,
         agent: "server",
         decisionType: "health-check",
         decision: `Proceeding with deployment — target environment "${environment.name}" confirmed healthy in ${firstCheck.responseTimeMs}ms`,
@@ -1025,7 +1036,7 @@ export class SynthAgent {
       // Reasoning determined retrying won't help (e.g., DNS failure)
       const abortEntry = this.debrief.record({
         partitionId: deployment.partitionId ?? null,
-        deploymentId: deployment.id,
+        operationId: deployment.id,
         agent: "server",
         decisionType: "health-check",
         decision: "Pre-flight health check failed — aborting without retry",
@@ -1050,7 +1061,7 @@ export class SynthAgent {
     // Decision is to retry
     const retryEntry = this.debrief.record({
       partitionId: deployment.partitionId ?? null,
-      deploymentId: deployment.id,
+      operationId: deployment.id,
       agent: "server",
       decisionType: "health-check",
       decision: "Pre-flight health check failed — attempting retry",
@@ -1079,7 +1090,7 @@ export class SynthAgent {
       if (retryCheck.reachable) {
         const recoveryEntry = this.debrief.record({
           partitionId: deployment.partitionId ?? null,
-          deploymentId: deployment.id,
+          operationId: deployment.id,
           agent: "server",
           decisionType: "health-check",
           decision:
@@ -1297,7 +1308,7 @@ export class SynthAgent {
     // No settingsReader configured — execution skipped (test/offline environment)
     const execEntry = this.debrief.record({
       partitionId: deployment.partitionId ?? null,
-      deploymentId: deployment.id,
+      operationId: deployment.id,
       agent: "server",
       decisionType: "deployment-execution",
       decision: `Skipped Envoy delegation for ${artifact.name} v${deployment.version} — no settings reader configured`,
@@ -1355,7 +1366,7 @@ export class SynthAgent {
     // Envoy is healthy — delegate the deployment
     const delegateEntry = this.debrief.record({
       partitionId: deployment.partitionId ?? null,
-      deploymentId: deployment.id,
+      operationId: deployment.id,
       agent: "server",
       decisionType: "deployment-execution",
       decision: `Delegating execution of ${artifact.name} v${deployment.version} to Envoy at ${envoyConfig.url}`,
@@ -1382,10 +1393,10 @@ export class SynthAgent {
 
       envoyResult = await client.deploy({
         deploymentId: deployment.id,
+        operationId: deployment.id,
         partitionId: deployment.partitionId ?? "",
         environmentId: deployment.environmentId ?? "",
-        operationId: deployment.artifactId, // Envoy still uses operationId in its API
-        version: deployment.version,
+        version: deployment.version ?? "",
         variables: deployment.variables,
         environmentName: environment.name,
         partitionName: partition?.name ?? "",
@@ -1407,7 +1418,7 @@ export class SynthAgent {
       for (const entry of envoyResult.debriefEntries) {
         const ingested = this.debrief.record({
           partitionId: entry.partitionId ?? deployment.partitionId ?? null,
-          deploymentId: entry.deploymentId ?? deployment.id,
+          operationId: entry.deploymentId ?? deployment.id,
           agent: entry.agent,
           decisionType: entry.decisionType,
           decision: entry.decision,
@@ -1442,7 +1453,7 @@ export class SynthAgent {
     // Record successful delegation completion
     const completionEntry = this.debrief.record({
       partitionId: deployment.partitionId ?? null,
-      deploymentId: deployment.id,
+      operationId: deployment.id,
       agent: "server",
       decisionType: "deployment-execution",
       decision: `Envoy completed deployment successfully in ${envoyResult.executionDurationMs}ms — ${envoyResult.artifacts.length} artifact(s) produced`,
@@ -1475,7 +1486,7 @@ export class SynthAgent {
   ): Promise<void> {
     const entry = this.debrief.record({
       partitionId: deployment.partitionId ?? null,
-      deploymentId: deployment.id,
+      operationId: deployment.id,
       agent: "server",
       decisionType: "deployment-verification",
       decision: `Post-deploy verification skipped for ${artifact.name} v${deployment.version} — no Envoy configured`,
@@ -1506,7 +1517,10 @@ export class SynthAgent {
 // In-memory deployment store
 // ---------------------------------------------------------------------------
 
-export class InMemoryDeploymentStore implements DeploymentStore {
+const getArtifactId = (op: Deployment): string =>
+  op.input?.type === "deploy" ? (op.input as { type: "deploy"; artifactId: string }).artifactId : "";
+
+export class InMemoryDeploymentStore implements OperationStore {
   private deployments: Map<DeploymentId, Deployment> = new Map();
 
   save(deployment: Deployment): void {
@@ -1525,7 +1539,7 @@ export class InMemoryDeploymentStore implements DeploymentStore {
 
   getByArtifact(artifactId: string): Deployment[] {
     return [...this.deployments.values()].filter(
-      (d) => d.artifactId === artifactId,
+      (d) => getArtifactId(d) === artifactId,
     );
   }
 
@@ -1542,7 +1556,7 @@ export class InMemoryDeploymentStore implements DeploymentStore {
   findByArtifactVersion(artifactId: string, version: string, status?: string): Deployment[] {
     return [...this.deployments.values()].filter(
       (d) =>
-        d.artifactId === artifactId &&
+        getArtifactId(d) === artifactId &&
         d.version === version &&
         (!status || d.status === status),
     );
@@ -1552,7 +1566,7 @@ export class InMemoryDeploymentStore implements DeploymentStore {
     return [...this.deployments.values()]
       .filter(
         (d) =>
-          d.artifactId === artifactId &&
+          getArtifactId(d) === artifactId &&
           new Date(d.createdAt).getTime() >= since.getTime() &&
           (!status || d.status === status),
       )

@@ -27,8 +27,9 @@ interface Props {
 }
 
 type DeployScope = "environment" | "envoy" | "partition";
+type OpType = "deploy" | "maintain" | "query" | "investigate" | "trigger";
 
-export default function DeploymentAuthoringPanel({ title, preselectedArtifactId, preselectedEnvironmentId, preselectedPartitionId }: Props) {
+export default function OperationAuthoringPanel({ title, preselectedArtifactId, preselectedEnvironmentId, preselectedPartitionId }: Props) {
   const { pushPanel } = useCanvas();
   const { settings: appSettings } = useSettings();
   const environmentsEnabled = appSettings?.environmentsEnabled ?? true;
@@ -39,6 +40,9 @@ export default function DeploymentAuthoringPanel({ title, preselectedArtifactId,
   const { data: envoys, loading: l4 } = useQuery<EnvoyRegistryEntry[]>("list:envoys", () => listEnvoys().catch(() => [] as EnvoyRegistryEntry[]));
   const { data: recentDeployments } = useQuery<Deployment[]>("list:deployments", listDeployments);
   const loading = l1 || l2 || l3 || l4;
+
+  const [opType, setOpType] = useState<OpType>("deploy");
+  const [intent, setIntent] = useState("");
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -69,7 +73,8 @@ export default function DeploymentAuthoringPanel({ title, preselectedArtifactId,
   const hasTarget = !!(selectedEnvironmentId || selectedPartitionId || selectedEnvoyId);
 
   async function handleRequestPlan() {
-    if (!primaryArtifactId || (environmentsEnabled && !hasTarget)) return;
+    if (opType === "deploy" && (!primaryArtifactId || (environmentsEnabled && !hasTarget))) return;
+    if (opType !== "deploy" && !intent.trim()) return;
     setSubmitting(true);
     setError(null);
 
@@ -89,7 +94,9 @@ export default function DeploymentAuthoringPanel({ title, preselectedArtifactId,
         environmentId: selectedEnvironmentId || undefined,
         partitionId: selectedPartitionId || undefined,
         envoyId: deployScope === "envoy" ? (selectedEnvoyId || undefined) : undefined,
-      });
+        type: opType,
+        intent: intent.trim() || undefined,
+      } as Parameters<typeof createDeployment>[0]);
 
       pushPanel({
         type: "plan-review",
@@ -173,7 +180,9 @@ export default function DeploymentAuthoringPanel({ title, preselectedArtifactId,
     .filter(Boolean) as Artifact[];
 
   const lowConfidenceArtifacts = selectedArtifactObjects.filter((a) => a.analysis.confidence < 0.5);
-  const canDeploy = selectedArtifactIds.length > 0 && hasTarget;
+  const canDeploy = opType === "deploy"
+    ? selectedArtifactIds.length > 0 && hasTarget
+    : intent.trim().length > 0;
   const contextHint = getContextHint();
 
   return (
@@ -182,15 +191,72 @@ export default function DeploymentAuthoringPanel({ title, preselectedArtifactId,
         {error && <div className="error-msg">{error}</div>}
 
         {/* Page title */}
-        <div style={{ marginBottom: 22 }}>
-          <h1 className="v6-page-title">New Deployment</h1>
+        <div style={{ marginBottom: 18 }}>
+          <h1 className="v6-page-title">New Operation</h1>
           <p className="v6-page-subtitle">
             Select what and where. Synth and the envoy figure out how.
           </p>
         </div>
 
-        {/* Two-column layout */}
-        <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 3fr) minmax(0, 2fr)", gap: 22 }}>
+        {/* Operation type selector */}
+        <div style={{ marginBottom: 18 }}>
+          <div className="section-label" style={{ marginBottom: 8 }}>Operation type</div>
+          <div style={{ display: "flex", gap: 4 }}>
+            {(["deploy", "maintain", "query", "investigate", "trigger"] as OpType[]).map((t) => (
+              <button
+                key={t}
+                onClick={() => setOpType(t)}
+                style={{
+                  padding: "5px 12px",
+                  fontSize: 12,
+                  fontFamily: "var(--font-mono)",
+                  fontWeight: 600,
+                  background: opType === t ? "var(--accent)" : "var(--surface-2)",
+                  color: opType === t ? "var(--bg)" : "var(--text-muted)",
+                  border: "1px solid " + (opType === t ? "var(--accent)" : "var(--border)"),
+                  borderRadius: 4,
+                  cursor: "pointer",
+                  textTransform: "capitalize",
+                }}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
+          {opType !== "deploy" && (
+            <div style={{ marginTop: 8, fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
+              Coming soon — only Deploy is fully supported today.
+            </div>
+          )}
+        </div>
+
+        {/* Intent / objective field */}
+        <div style={{ marginBottom: 20 }}>
+          <div className="section-label" style={{ marginBottom: 8 }}>
+            {opType === "deploy" ? "Objective (optional)" : "Objective"}
+          </div>
+          <textarea
+            value={intent}
+            onChange={(e) => setIntent(e.target.value)}
+            placeholder={opType === "deploy" ? "Describe the goal of this deployment…" : "Describe what you want Synth to do…"}
+            rows={2}
+            style={{
+              width: "100%",
+              padding: "8px 10px",
+              fontSize: 13,
+              fontFamily: "var(--font-mono)",
+              background: "var(--surface-2)",
+              color: "var(--text)",
+              border: "1px solid var(--border)",
+              borderRadius: 4,
+              resize: "vertical",
+              boxSizing: "border-box",
+            }}
+          />
+        </div>
+
+        {/* Two-column layout — only shown for deploy operations */}
+        {opType !== "deploy" ? null : <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 3fr) minmax(0, 2fr)", gap: 22 }}>
           {/* WHAT column */}
           <div>
             <div
@@ -450,7 +516,7 @@ export default function DeploymentAuthoringPanel({ title, preselectedArtifactId,
               {contextHint && <div className="nd-context-hint">{contextHint}</div>}
             </div>
           )}
-        </div>
+        </div>}
 
         {/* Low-confidence artifact warning */}
         {lowConfidenceArtifacts.length > 0 && (

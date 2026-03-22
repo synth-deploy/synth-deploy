@@ -10,7 +10,7 @@ export function formatDebriefEntry(entry: DebriefEntry): string {
   const ts = entry.timestamp.toISOString().replace("T", " ").replace(/\.\d+Z$/, " UTC");
   const type = entry.decisionType.toUpperCase();
   const partition = entry.partitionId ?? "system";
-  const deployment = entry.deploymentId ? entry.deploymentId.slice(0, 8) : "n/a";
+  const deployment = entry.operationId ? entry.operationId.slice(0, 8) : "n/a";
 
   const actorLabel = entry.actor ? ` | Actor: ${entry.actor}` : "";
 

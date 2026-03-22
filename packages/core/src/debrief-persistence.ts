@@ -3,7 +3,7 @@ import Database from "better-sqlite3";
 import type {
   AgentType,
   DecisionType,
-  DeploymentId,
+  OperationId,
   DebriefEntry,
   DebriefEntryId,
   PartitionId,
@@ -28,7 +28,7 @@ function rowToEntry(row: DebriefRow): DebriefEntry {
     id: row.id,
     timestamp: new Date(row.timestamp),
     partitionId: row.partition_id,
-    deploymentId: row.deployment_id,
+    operationId: row.deployment_id,
     agent: row.agent as AgentType,
     decisionType: row.decision_type as DecisionType,
     decision: row.decision,
@@ -56,7 +56,7 @@ export class PersistentDecisionDebrief implements DebriefWriter, DebriefReader {
   private stmts: {
     insert: Database.Statement;
     getById: Database.Statement;
-    getByDeployment: Database.Statement;
+    getByOperation: Database.Statement;
     getByPartition: Database.Statement;
     getByType: Database.Statement;
     getByTimeRange: Database.Statement;
@@ -104,7 +104,7 @@ export class PersistentDecisionDebrief implements DebriefWriter, DebriefReader {
         VALUES (@id, @timestamp, @partition_id, @deployment_id, @agent, @decision_type, @decision, @reasoning, @context, @actor)
       `),
       getById: this.db.prepare(`SELECT * FROM diary_entries WHERE id = ?`),
-      getByDeployment: this.db.prepare(
+      getByOperation: this.db.prepare(
         `SELECT * FROM diary_entries WHERE deployment_id = ? ORDER BY timestamp ASC`,
       ),
       getByPartition: this.db.prepare(
@@ -133,7 +133,7 @@ export class PersistentDecisionDebrief implements DebriefWriter, DebriefReader {
       id: crypto.randomUUID(),
       timestamp: new Date(),
       partitionId: params.partitionId,
-      deploymentId: params.deploymentId,
+      operationId: params.operationId,
       agent: params.agent,
       decisionType: params.decisionType,
       decision: params.decision,
@@ -152,7 +152,7 @@ export class PersistentDecisionDebrief implements DebriefWriter, DebriefReader {
         id: entry.id,
         timestamp: entry.timestamp.toISOString(),
         partition_id: entry.partitionId,
-        deployment_id: entry.deploymentId,
+        deployment_id: entry.operationId,
         agent: entry.agent,
         decision_type: entry.decisionType,
         decision: entry.decision,
@@ -178,12 +178,12 @@ export class PersistentDecisionDebrief implements DebriefWriter, DebriefReader {
     }
   }
 
-  getByDeployment(deploymentId: DeploymentId): DebriefEntry[] {
+  getByOperation(operationId: OperationId): DebriefEntry[] {
     try {
-      const rows = this.stmts.getByDeployment.all(deploymentId) as DebriefRow[];
+      const rows = this.stmts.getByOperation.all(operationId) as DebriefRow[];
       return rows.map(rowToEntry);
     } catch (error) {
-      console.warn('Debrief read failed', { operation: 'getByDeployment', deploymentId, error });
+      console.warn('Debrief read failed', { operation: 'getByOperation', operationId, error });
       return [];
     }
   }

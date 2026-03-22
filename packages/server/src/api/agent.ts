@@ -1,7 +1,10 @@
 import type { FastifyInstance } from "fastify";
-import type { IPartitionStore, IEnvironmentStore, IArtifactStore, ISettingsStore, ITelemetryStore, DebriefWriter, DebriefReader, Artifact, Partition, Environment, Deployment } from "@synth-deploy/core";
+import type { IPartitionStore, IEnvironmentStore, IArtifactStore, ISettingsStore, ITelemetryStore, DebriefWriter, DebriefReader, Artifact, Partition, Environment, Deployment, OperationInput } from "@synth-deploy/core";
 import type { LlmClient } from "@synth-deploy/core";
 import type { SynthAgent, DeploymentStore } from "../agent/synth-agent.js";
+
+const getArtifactId = (op: { input: OperationInput }): string =>
+  op.input.type === "deploy" ? op.input.artifactId : "";
 import type { EnvoyRegistry } from "../agent/envoy-registry.js";
 import type { ArtifactAnalyzer } from "../artifact-analyzer.js";
 import { z } from "zod";
@@ -226,7 +229,7 @@ function generateContext(
         : "—",
       lastDeployment: lastDeploy
         ? {
-            version: lastDeploy.version,
+            version: lastDeploy.version ?? "",
             environment: allEnvironments.find((e) => e.id === lastDeploy.environmentId)?.name ?? lastDeploy.environmentId ?? "—",
             status: lastDeploy.status,
             ago: formatAgo(new Date(lastDeploy.createdAt)),
@@ -338,7 +341,7 @@ export function registerAgentRoutes(
             });
             debrief.record({
               partitionId: null,
-              deploymentId: null,
+              operationId: null,
               agent: "server",
               decisionType: "artifact-analysis",
               decision: `User correction recorded for "${target.name}" via channel: ${correction}`,
@@ -373,7 +376,7 @@ export function registerAgentRoutes(
           if (answered) {
             debrief.record({
               partitionId: null,
-              deploymentId: null,
+              operationId: null,
               agent: "server",
               decisionType: "system",
               decision: `Canvas query answered analytically`,
@@ -386,7 +389,7 @@ export function registerAgentRoutes(
         } else {
           debrief.record({
             partitionId: null,
-            deploymentId: null,
+            operationId: null,
             agent: "server",
             decisionType: "system",
             decision: `Canvas query classified as ${llmAction.action}: ${llmAction.view}`,
@@ -504,7 +507,7 @@ export function registerAgentRoutes(
       // Scope to a specific artifact if mentioned
       for (const a of allArtifacts) {
         if (lower.includes(a.name.toLowerCase())) {
-          deps = deps.filter((d) => d.artifactId === a.id);
+          deps = deps.filter((d) => getArtifactId(d) === a.id);
           break;
         }
       }
@@ -584,7 +587,7 @@ export function registerAgentRoutes(
         ? {
             status: latestToEnv.status,
             completedAt: (latestToEnv.completedAt ?? latestToEnv.createdAt).toISOString(),
-            version: latestToEnv.version,
+            version: latestToEnv.version ?? "",
           }
         : undefined,
       recentFailures,
@@ -713,7 +716,7 @@ Be directional: say what you recommend, not "here are some data points." Use fir
         // LLM call failed or timed out — record to debrief and use deterministic fallback
         debrief.record({
           partitionId: partitionId ?? null,
-          deploymentId: null,
+          operationId: null,
           agent: "server",
           decisionType: "pre-flight-llm-failure",
           decision: "Pre-flight LLM recommendation failed",
@@ -757,7 +760,7 @@ Be directional: say what you recommend, not "here are some data points." Use fir
     // --- 6. Debrief + telemetry ---
     debrief.record({
       partitionId: partitionId ?? null,
-      deploymentId: null,
+      operationId: null,
       agent: "server",
       decisionType: "cross-system-context",
       decision: `Pre-flight context generated: ${recommendation.action} (confidence: ${recommendation.confidence})`,
@@ -813,7 +816,7 @@ Be directional: say what you recommend, not "here are some data points." Use fir
 
     debrief.record({
       partitionId: partitionId ?? null,
-      deploymentId: null,
+      operationId: null,
       agent: "server",
       decisionType: "cross-system-context",
       decision: `User ${action} after pre-flight recommendation to ${recommendedAction}`,
@@ -866,7 +869,7 @@ function buildDeploymentTable(
   const rows = deps
     .slice(0, 50)
     .map((d) => {
-      const art = artifactMap.get(d.artifactId) ?? d.artifactId;
+      const art = artifactMap.get(getArtifactId(d)) ?? getArtifactId(d);
       const env = (d.environmentId ? environmentMap.get(d.environmentId) : undefined) ?? d.environmentId ?? "—";
       const part = d.partitionId ? (partitionMap.get(d.partitionId) ?? d.partitionId) : "—";
       const date = new Date(d.createdAt).toLocaleString();
@@ -1015,7 +1018,7 @@ async function answerQueryWithData(
     const ageMs = now - new Date(d.createdAt).getTime();
     const ageHours = Math.round(ageMs / (1000 * 60 * 60));
     const age = ageHours < 24 ? `${ageHours}h ago` : `${Math.round(ageHours / 24)}d ago`;
-    const art = artifactMap.get(d.artifactId) ?? d.artifactId;
+    const art = artifactMap.get(getArtifactId(d)) ?? getArtifactId(d);
     const env = (d.environmentId ? environmentMap.get(d.environmentId) : undefined) ?? d.environmentId ?? "—";
     const part = d.partitionId ? ` (${partitionMap.get(d.partitionId) ?? d.partitionId})` : "";
     // Include synth:// deep-link for UI navigation

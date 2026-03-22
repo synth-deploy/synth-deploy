@@ -83,7 +83,7 @@ export function registerGraphRoutes(
       // Record debrief entry for graph creation with inference reasoning
       debrief.record({
         partitionId: graph.partitionId ?? null,
-        deploymentId: null,
+        operationId: null,
         agent: "server",
         decisionType: "plan-generation",
         decision: `Created deployment graph "${graph.name}" with ${graph.nodes.length} nodes and ${graph.edges.length} edges`,
@@ -166,7 +166,7 @@ export function registerGraphRoutes(
       // Record debrief entry for user corrections
       debrief.record({
         partitionId: graph.partitionId ?? null,
-        deploymentId: null,
+        operationId: null,
         agent: "server",
         decisionType: "plan-modification",
         decision: `User corrected deployment graph "${graph.name}"`,
@@ -308,7 +308,7 @@ export function registerGraphRoutes(
 
       debrief.record({
         partitionId: graph.partitionId ?? null,
-        deploymentId: null,
+        operationId: null,
         agent: "server",
         decisionType:
           finalFailedCount > 0 ? "deployment-failure" : "deployment-completion",

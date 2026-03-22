@@ -6,7 +6,7 @@ import SynthMark from "./SynthMark.js";
 import ThemeToggle from "./ThemeToggle.js";
 
 const TABS = [
-  { id: "deployment-authoring", label: "Deploy", panelTitle: "Deploy" },
+  { id: "operation-authoring", label: "Deploy", panelTitle: "Deploy" },
   { id: "artifact-catalog", label: "Artifacts", panelTitle: "Artifact Catalog" },
   { id: "topology", label: "Topology", panelTitle: "Topology" },
   { id: "debrief", label: "Debriefs", panelTitle: "Debriefs" },

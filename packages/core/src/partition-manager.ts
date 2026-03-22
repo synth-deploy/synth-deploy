@@ -2,8 +2,8 @@ import crypto from "node:crypto";
 import type {
   PartitionId,
   Partition,
-  Deployment,
-  DeploymentId,
+  Operation,
+  OperationId,
   DebriefEntry,
 } from "./types.js";
 import type { DebriefReader } from "./debrief.js";
@@ -22,8 +22,8 @@ import {
  * scoped views. Matches the existing DeploymentStore shape.
  */
 export interface DeploymentStoreReader {
-  get(id: DeploymentId): Deployment | undefined;
-  list(): Deployment[];
+  get(id: OperationId): Operation | undefined;
+  list(): Operation[];
 }
 
 // ---------------------------------------------------------------------------
@@ -41,13 +41,13 @@ class PartitionScopedDeployments implements ScopedDeploymentReader {
     private backing: DeploymentStoreReader,
   ) {}
 
-  get(id: DeploymentId): Deployment | undefined {
+  get(id: OperationId): Operation | undefined {
     const d = this.backing.get(id);
     if (d && d.partitionId !== this.partitionId) return undefined;
     return d;
   }
 
-  list(): Deployment[] {
+  list(): Operation[] {
     return this.backing.list().filter((d) => d.partitionId === this.partitionId);
   }
 }

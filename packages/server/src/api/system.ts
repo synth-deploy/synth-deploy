@@ -156,6 +156,8 @@ export function registerSystemRoutes(
     const allEnvoys = envoyRegistry.list();
     const allDeployments = deployments.list();
     const allEnvironments = environments.list();
+    const getArtifactId = (op: (typeof allDeployments)[number]): string =>
+      op.input?.type === "deploy" ? (op.input as { type: "deploy"; artifactId: string }).artifactId : "";
     const allPartitions = partitions.list();
 
     // --- Stats ---
@@ -264,11 +266,11 @@ export function registerSystemRoutes(
               { time: nowTime(), event: "Signal raised" },
             ],
             relatedDeployments: recentToEnvoy.map((d) => {
-              const artName = allArtifacts.find((a) => a.id === d.artifactId)?.name ?? d.artifactId.slice(0, 8);
+              const artName = allArtifacts.find((a) => a.id === getArtifactId(d))?.name ?? getArtifactId(d).slice(0, 8);
               const envName = allEnvironments.find((e) => e.id === d.environmentId)?.name ?? "unknown";
               return {
                 artifact: artName,
-                version: d.version,
+                version: d.version ?? "",
                 target: envName,
                 status: d.status,
                 time: timeAgo(d.createdAt),
@@ -291,9 +293,9 @@ export function registerSystemRoutes(
     type FailureGroup = { artifactId: string; environmentId: string | undefined; failures: typeof recentFailures };
     const failureGroups = new Map<string, FailureGroup>();
     for (const dep of recentFailures) {
-      const key = `${dep.artifactId}::${dep.environmentId}`;
+      const key = `${getArtifactId(dep)}::${dep.environmentId}`;
       if (!failureGroups.has(key)) {
-        failureGroups.set(key, { artifactId: dep.artifactId, environmentId: dep.environmentId, failures: [] });
+        failureGroups.set(key, { artifactId: getArtifactId(dep), environmentId: dep.environmentId, failures: [] });
       }
       failureGroups.get(key)!.failures.push(dep);
     }
@@ -303,7 +305,7 @@ export function registerSystemRoutes(
 
       const hasRecovery = allDeployments.some(
         (d) =>
-          d.artifactId === group.artifactId &&
+          getArtifactId(d) === group.artifactId &&
           d.environmentId === group.environmentId &&
           d.status === "succeeded" &&
           new Date(d.createdAt).getTime() > new Date(group.failures[0].createdAt).getTime(),
@@ -320,7 +322,7 @@ export function registerSystemRoutes(
       const prevSuccessful = allDeployments
         .filter(
           (d) =>
-            d.artifactId === group.artifactId &&
+            getArtifactId(d) === group.artifactId &&
             d.environmentId === group.environmentId &&
             d.status === "succeeded",
         )
@@ -379,7 +381,7 @@ export function registerSystemRoutes(
           ],
           relatedDeployments: sorted.map((d) => ({
             artifact: artifactName,
-            version: d.version,
+            version: d.version ?? "",
             target: envName,
             status: d.status,
             time: timeAgo(d.createdAt),
@@ -397,7 +399,7 @@ export function registerSystemRoutes(
     type EnvLatest = { dep: (typeof succeededDeps)[0]; envName: string };
     const latestByTarget = new Map<string, EnvLatest>();
     for (const dep of succeededDeps) {
-      const key = `${dep.artifactId}::${dep.environmentId}`;
+      const key = `${getArtifactId(dep)}::${dep.environmentId}`;
       const existing = latestByTarget.get(key);
       if (!existing || new Date(dep.createdAt) > new Date(existing.dep.createdAt)) {
         const envName = allEnvironments.find((e) => e.id === dep.environmentId)?.name ?? "unknown";
@@ -408,13 +410,13 @@ export function registerSystemRoutes(
     for (const { dep, envName } of latestByTarget.values()) {
       if (new Date(dep.createdAt).getTime() > thirtyDaysAgo) continue; // Not stale yet
 
-      const artifactName = allArtifacts.find((a) => a.id === dep.artifactId)?.name ?? "unknown";
+      const artifactName = allArtifacts.find((a) => a.id === getArtifactId(dep))?.name ?? "unknown";
       const weeksAgo = Math.floor((now - new Date(dep.createdAt).getTime()) / (7 * 24 * 60 * 60 * 1000));
 
       // Check if newer versions of this artifact have been deployed to any other environment
       const newerElsewhere = succeededDeps.filter(
         (d) =>
-          d.artifactId === dep.artifactId &&
+          getArtifactId(d) === getArtifactId(dep) &&
           d.environmentId !== dep.environmentId &&
           new Date(d.createdAt).getTime() > new Date(dep.createdAt).getTime(),
       );
@@ -427,7 +429,7 @@ export function registerSystemRoutes(
         severity: "info",
         title: `Stale deployment: ${artifactName} in ${envName}`,
         detail: `v${dep.version} deployed ${weeksAgo}w ago. ${newerVersions.length} newer version${newerVersions.length > 1 ? "s" : ""} running elsewhere. May be intentional.`,
-        relatedEntity: { type: "artifact", id: dep.artifactId, name: artifactName },
+        relatedEntity: { type: "artifact", id: getArtifactId(dep), name: artifactName },
         investigation: {
           title: `Stale Deployment — ${artifactName} in ${envName}`,
           entity: `${artifactName} in ${envName}`,
@@ -461,10 +463,10 @@ export function registerSystemRoutes(
             { time: nowTime(), event: `Signal raised — ${weeksAgo}w without update, newer versions exist` },
           ],
           relatedDeployments: [
-            { artifact: artifactName, version: dep.version, target: envName, status: "succeeded", time: timeAgo(dep.createdAt) },
+            { artifact: artifactName, version: dep.version ?? "", target: envName, status: "succeeded", time: timeAgo(dep.createdAt) },
             ...newerElsewhere.slice(0, 3).map((d) => {
               const env = allEnvironments.find((e) => e.id === d.environmentId)?.name ?? "unknown";
-              return { artifact: artifactName, version: d.version, target: env, status: d.status, time: timeAgo(d.createdAt) };
+              return { artifact: artifactName, version: d.version ?? "", target: env, status: d.status, time: timeAgo(d.createdAt) };
             }),
           ],
         },
@@ -475,11 +477,11 @@ export function registerSystemRoutes(
     // pattern that suggests a missed or skipped promotion.
     const artifactEnvVersions = new Map<string, Map<string, { version: string; deployedAt: Date }>>();
     for (const { dep, envName } of latestByTarget.values()) {
-      if (!artifactEnvVersions.has(dep.artifactId)) {
-        artifactEnvVersions.set(dep.artifactId, new Map());
+      if (!artifactEnvVersions.has(getArtifactId(dep))) {
+        artifactEnvVersions.set(getArtifactId(dep), new Map());
       }
-      artifactEnvVersions.get(dep.artifactId)!.set(envName, {
-        version: dep.version,
+      artifactEnvVersions.get(getArtifactId(dep))!.set(envName, {
+        version: dep.version ?? "",
         deployedAt: new Date(dep.createdAt),
       });
     }
@@ -503,7 +505,7 @@ export function registerSystemRoutes(
 
       // Also require that the ahead env has more recent deployments of this artifact (not just same artifact)
       const aheadHasMultiple = succeededDeps.filter(
-        (d) => d.artifactId === artifactId &&
+        (d) => getArtifactId(d) === artifactId &&
           allEnvironments.find((e) => e.id === d.environmentId)?.name === aheadEnv,
       ).length >= 2;
       if (!aheadHasMultiple) continue;
@@ -620,10 +622,10 @@ export function registerSystemRoutes(
                 { time: nowTime(), event: "Signal raised" },
               ],
               relatedDeployments: recentToEnv.map((d) => {
-                const artName = allArtifacts.find((a) => a.id === d.artifactId)?.name ?? d.artifactId.slice(0, 8);
+                const artName = allArtifacts.find((a) => a.id === getArtifactId(d))?.name ?? getArtifactId(d).slice(0, 8);
                 return {
                   artifact: artName,
-                  version: d.version,
+                  version: d.version ?? "",
                   target: env.name,
                   status: d.status,
                   time: timeAgo(d.createdAt),
@@ -682,7 +684,7 @@ export function registerSystemRoutes(
       detail = infos[0].detail;
     } else if (activeDeployments.length > 0) {
       const d = activeDeployments[0];
-      const artName = allArtifacts.find((a) => a.id === d.artifactId)?.name ?? "A deployment";
+      const artName = allArtifacts.find((a) => a.id === getArtifactId(d))?.name ?? "A deployment";
       const envName = allEnvironments.find((e) => e.id === d.environmentId)?.name ?? "target";
       headline = "Deployment in progress.";
       detail = `${artName} is being deployed to ${envName}. All other environments are stable.`;

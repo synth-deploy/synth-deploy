@@ -163,7 +163,7 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
               </div>
             </div>
             <button
-              onClick={() => pushPanel({ type: "deployment-authoring", title: "New Deployment", params: { artifactId: artifact.id } })}
+              onClick={() => pushPanel({ type: "operation-authoring", title: "New Deployment", params: { artifactId: artifact.id } })}
               style={{
                 padding: "9px 18px",
                 borderRadius: 6,

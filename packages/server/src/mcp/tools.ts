@@ -57,14 +57,10 @@ export function registerTools(
         }
       }
 
-      const deployment = await agent.triggerDeployment({
-        artifactId,
-        artifactVersionId: version,
-        environmentId,
-        partitionId,
-        triggeredBy: "agent",
-        variables,
-      });
+      const deployment = await agent.triggerOperation(
+        { type: "deploy", artifactId, ...(version ? { artifactVersionId: version } : {}) },
+        { environmentId, partitionId, triggeredBy: "agent", variables },
+      );
 
       return {
         content: [

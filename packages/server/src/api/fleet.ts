@@ -97,7 +97,7 @@ export function registerFleetRoutes(
 
       debrief.record({
         partitionId: null,
-        deploymentId: fleetDeployment.id,
+        operationId: fleetDeployment.id,
         agent: "server",
         decisionType: "system",
         decision: `Fleet deployment created for ${targetEnvoys.length} envoys with ${rolloutConfig.strategy} strategy`,
@@ -143,8 +143,7 @@ export function registerFleetRoutes(
 
       const deployment: Deployment = {
         id: crypto.randomUUID(),
-        artifactId: fleet.artifactId,
-        artifactVersionId: fleet.artifactVersionId,
+        input: { type: "deploy" as const, artifactId: fleet.artifactId, ...(fleet.artifactVersionId ? { artifactVersionId: fleet.artifactVersionId } : {}) },
         envoyId: targetEnvoyId,
         environmentId: fleet.environmentId,
         version: "",
@@ -162,7 +161,7 @@ export function registerFleetRoutes(
 
       debrief.record({
         partitionId: null,
-        deploymentId: fleet.id,
+        operationId: fleet.id,
         agent: "server",
         decisionType: "system",
         decision: `Representative plan created for envoy ${targetEnvoyId}`,
@@ -240,7 +239,7 @@ export function registerFleetRoutes(
 
       debrief.record({
         partitionId: null,
-        deploymentId: fleet.id,
+        operationId: fleet.id,
         agent: "server",
         decisionType: "system",
         decision: `Fleet deployment approved by ${actor}, starting fleet validation`,
@@ -262,7 +261,7 @@ export function registerFleetRoutes(
 
           debrief.record({
             partitionId: null,
-            deploymentId: fleet.id,
+            operationId: fleet.id,
             agent: "server",
             decisionType: "system",
             decision: `Fleet validation complete: ${validationResult.validated}/${validationResult.total} envoys passed`,
@@ -278,7 +277,7 @@ export function registerFleetRoutes(
 
           debrief.record({
             partitionId: null,
-            deploymentId: fleet.id,
+            operationId: fleet.id,
             agent: "server",
             decisionType: "deployment-failure",
             decision: "Fleet validation failed unexpectedly",
@@ -328,7 +327,7 @@ export function registerFleetRoutes(
 
       debrief.record({
         partitionId: null,
-        deploymentId: fleet.id,
+        operationId: fleet.id,
         agent: "server",
         decisionType: "system",
         decision: `Fleet rollout started by ${actor}`,
@@ -359,7 +358,7 @@ export function registerFleetRoutes(
             if (event.type === "envoy-failed") {
               debrief.record({
                 partitionId: null,
-                deploymentId: fleet.id,
+                operationId: fleet.id,
                 agent: "server",
                 decisionType: "deployment-failure",
                 decision: `Envoy ${event.envoyName ?? event.envoyId} failed during fleet rollout`,
@@ -369,7 +368,7 @@ export function registerFleetRoutes(
             } else if (event.type === "fleet-completed") {
               debrief.record({
                 partitionId: null,
-                deploymentId: fleet.id,
+                operationId: fleet.id,
                 agent: "server",
                 decisionType: "deployment-completion",
                 decision: `Fleet rollout completed: ${event.progress.succeeded}/${event.progress.totalEnvoys} succeeded`,
@@ -379,7 +378,7 @@ export function registerFleetRoutes(
             } else if (event.type === "fleet-failed") {
               debrief.record({
                 partitionId: null,
-                deploymentId: fleet.id,
+                operationId: fleet.id,
                 agent: "server",
                 decisionType: "deployment-failure",
                 decision: `Fleet rollout halted: failure threshold reached`,
@@ -394,7 +393,7 @@ export function registerFleetRoutes(
           const durationSec = Math.round(durationMs / 1000);
           debrief.record({
             partitionId: null,
-            deploymentId: fleet.id,
+            operationId: fleet.id,
             agent: "server",
             decisionType: "deployment-completion",
             decision: `Fleet deployment ${fleet.status}: ${fleet.progress.succeeded}/${fleet.progress.totalEnvoys} envoys succeeded, ${fleet.progress.failed} failed`,
@@ -417,7 +416,7 @@ export function registerFleetRoutes(
 
           debrief.record({
             partitionId: null,
-            deploymentId: fleet.id,
+            operationId: fleet.id,
             agent: "server",
             decisionType: "deployment-failure",
             decision: `Fleet rollout failed with unexpected error after ${durationSec}s`,
@@ -456,7 +455,7 @@ export function registerFleetRoutes(
 
       debrief.record({
         partitionId: null,
-        deploymentId: fleet.id,
+        operationId: fleet.id,
         agent: "server",
         decisionType: "system",
         decision: `Fleet rollout paused by ${actor}`,
@@ -495,7 +494,7 @@ export function registerFleetRoutes(
 
       debrief.record({
         partitionId: null,
-        deploymentId: fleet.id,
+        operationId: fleet.id,
         agent: "server",
         decisionType: "system",
         decision: `Fleet rollout resumed by ${actor}`,

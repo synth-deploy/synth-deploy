@@ -274,13 +274,13 @@ export async function listDeployments(filters?: { partitionId?: string; artifact
   if (filters?.artifactId) params.set("artifactId", filters.artifactId);
   if (filters?.envoyId) params.set("envoyId", filters.envoyId);
   const qs = params.toString();
-  const url = qs ? `/api/deployments?${qs}` : "/api/deployments";
+  const url = qs ? `/api/operations?${qs}` : "/api/operations";
   const data = await fetchJson<{ deployments: Deployment[] }>(url);
   return data.deployments;
 }
 
 export async function getDeployment(id: string): Promise<{ deployment: Deployment; debrief: DebriefEntry[] }> {
-  return fetchJson(`/api/deployments/${id}`);
+  return fetchJson(`/api/operations/${id}`);
 }
 
 export interface WhatsNewResult {
@@ -291,7 +291,7 @@ export interface WhatsNewResult {
 }
 
 export async function getWhatsNew(deploymentId: string): Promise<WhatsNewResult> {
-  return fetchJson(`/api/deployments/${deploymentId}/whats-new`);
+  return fetchJson(`/api/operations/${deploymentId}/whats-new`);
 }
 
 export async function createDeployment(trigger: {
@@ -301,7 +301,7 @@ export async function createDeployment(trigger: {
   envoyId?: string;
   version?: string;
 }): Promise<{ deployment: Deployment }> {
-  return fetchJson("/api/deployments", {
+  return fetchJson("/api/operations", {
     method: "POST",
     body: JSON.stringify(trigger),
   });
@@ -311,7 +311,7 @@ export async function approveDeployment(
   id: string,
   data: { approvedBy: string; modifications?: string },
 ): Promise<{ deployment: Deployment; approved: boolean }> {
-  return fetchJson(`/api/deployments/${id}/approve`, {
+  return fetchJson(`/api/operations/${id}/approve`, {
     method: "POST",
     body: JSON.stringify(data),
   });
@@ -321,7 +321,7 @@ export async function rejectDeployment(
   id: string,
   data: { reason: string },
 ): Promise<{ deployment: Deployment; rejected: boolean }> {
-  return fetchJson(`/api/deployments/${id}/reject`, {
+  return fetchJson(`/api/operations/${id}/reject`, {
     method: "POST",
     body: JSON.stringify(data),
   });
@@ -331,7 +331,7 @@ export async function modifyDeploymentPlan(
   id: string,
   data: { steps: PlannedStep[]; reason: string },
 ): Promise<{ deployment: Deployment; modified: boolean }> {
-  return fetchJson(`/api/deployments/${id}/modify`, {
+  return fetchJson(`/api/operations/${id}/modify`, {
     method: "POST",
     body: JSON.stringify(data),
   });
@@ -340,29 +340,29 @@ export async function modifyDeploymentPlan(
 export async function getDeploymentEnrichment(
   id: string,
 ): Promise<{ enrichment: DeploymentEnrichment; recommendation?: DeploymentRecommendation }> {
-  return fetchJson(`/api/deployments/${id}/context`);
+  return fetchJson(`/api/operations/${id}/context`);
 }
 
 export async function requestRollbackPlan(
   id: string,
 ): Promise<{ deployment: Deployment; rollbackPlan: DeploymentPlan }> {
-  return fetchJson(`/api/deployments/${id}/request-rollback-plan`, { method: "POST", body: JSON.stringify({}) });
+  return fetchJson(`/api/operations/${id}/request-rollback-plan`, { method: "POST", body: JSON.stringify({}) });
 }
 
 export async function executeRollback(
   id: string,
 ): Promise<{ deployment: Deployment; accepted: boolean }> {
-  return fetchJson(`/api/deployments/${id}/execute-rollback`, { method: "POST", body: JSON.stringify({}) });
+  return fetchJson(`/api/operations/${id}/execute-rollback`, { method: "POST", body: JSON.stringify({}) });
 }
 
 export async function retryDeployment(
   id: string,
 ): Promise<{ deployment: Deployment; sourceDeploymentId: string; attemptNumber: number }> {
-  return fetchJson(`/api/deployments/${id}/retry`, { method: "POST", body: JSON.stringify({}) });
+  return fetchJson(`/api/operations/${id}/retry`, { method: "POST", body: JSON.stringify({}) });
 }
 
 export async function replanDeployment(deploymentId: string, feedback: string): Promise<{ deployment: Deployment } | { mode: "response"; message: string }> {
-  return fetchJson(`/api/deployments/${deploymentId}/replan`, {
+  return fetchJson(`/api/operations/${deploymentId}/replan`, {
     method: "POST",
     body: JSON.stringify({ feedback }),
   });
@@ -397,7 +397,7 @@ export async function getRecentDebrief(filters?: {
 }
 
 export async function getPostmortem(deploymentId: string): Promise<{ postmortem: PostmortemReport; llmPostmortem?: LlmPostmortem }> {
-  return fetchJson(`/api/deployments/${deploymentId}/postmortem`);
+  return fetchJson(`/api/operations/${deploymentId}/postmortem`);
 }
 
 // --- Health ---

@@ -29,7 +29,7 @@ const MIN_CHAT_WIDTH = 220;
 const MAX_CHAT_WIDTH = 640;
 const DEFAULT_CHAT_WIDTH = 340;
 
-const TAB_ORDER = ["deployment-authoring", "artifact-catalog", "topology", "debrief"] as const;
+const TAB_ORDER = ["operation-authoring", "artifact-catalog", "topology", "debrief"] as const;
 type TabType = typeof TAB_ORDER[number];
 
 export default function AgentCanvas() {
@@ -148,10 +148,10 @@ export default function AgentCanvas() {
           />
         );
 
-      case "deployment-authoring":
+      case "operation-authoring":
         return (
           <DeploymentAuthoringPanel
-            key={`deployment-authoring:${params.artifactId ?? ""}:${params.environmentId ?? ""}:${params.partitionId ?? ""}`}
+            key={`operation-authoring:${params.artifactId ?? ""}:${params.environmentId ?? ""}:${params.partitionId ?? ""}`}
             title={panel.title}
             preselectedArtifactId={params.artifactId}
             preselectedEnvironmentId={params.environmentId}
@@ -261,7 +261,7 @@ export default function AgentCanvas() {
   }
 
   const scope = currentPanel.type === "partition-detail" ? currentPanel.title : undefined;
-  const hideChannel = currentPanel.type === "deployment-authoring";
+  const hideChannel = currentPanel.type === "operation-authoring";
 
   // SynthChannel is always rendered as a sibling of the canvas-main-content div
   // so React preserves its internal state (messages) when chatOpen switches.

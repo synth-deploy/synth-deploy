@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import type {
   AgentType,
   DecisionType,
-  DeploymentId,
+  OperationId,
   DebriefEntry,
   DebriefEntryId,
   PartitionId,
@@ -10,7 +10,7 @@ import type {
 
 export interface DebriefRecordParams {
   partitionId: PartitionId | null;
-  deploymentId: DeploymentId | null;
+  operationId: OperationId | null;
   agent: AgentType;
   decisionType: DecisionType;
   decision: string;
@@ -31,7 +31,7 @@ export interface DebriefWriter {
 
 export interface DebriefReader {
   getById(id: DebriefEntryId): DebriefEntry | undefined;
-  getByDeployment(deploymentId: DeploymentId): DebriefEntry[];
+  getByOperation(operationId: OperationId): DebriefEntry[];
   getByPartition(partitionId: PartitionId): DebriefEntry[];
   getByType(decisionType: DecisionType): DebriefEntry[];
   getByTimeRange(from: Date, to: Date): DebriefEntry[];
@@ -50,7 +50,7 @@ export class DecisionDebrief implements DebriefWriter, DebriefReader {
       id: crypto.randomUUID(),
       timestamp: new Date(),
       partitionId: params.partitionId,
-      deploymentId: params.deploymentId,
+      operationId: params.operationId,
       agent: params.agent,
       decisionType: params.decisionType,
       decision: params.decision,
@@ -73,9 +73,9 @@ export class DecisionDebrief implements DebriefWriter, DebriefReader {
     return this.entries.get(id);
   }
 
-  getByDeployment(deploymentId: DeploymentId): DebriefEntry[] {
+  getByOperation(operationId: OperationId): DebriefEntry[] {
     return [...this.entries.values()].filter(
-      (e) => e.deploymentId === deploymentId,
+      (e) => e.operationId === operationId,
     );
   }
 

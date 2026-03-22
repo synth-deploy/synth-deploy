@@ -73,8 +73,8 @@ function useDeploymentStream(deploymentId: string, isRunning: boolean) {
 
     const token = getAuthToken();
     const url = token
-      ? `/api/deployments/${deploymentId}/stream?token=${encodeURIComponent(token)}`
-      : `/api/deployments/${deploymentId}/stream`;
+      ? `/api/operations/${deploymentId}/stream?token=${encodeURIComponent(token)}`
+      : `/api/operations/${deploymentId}/stream`;
     const es = new EventSource(url);
     eventSourceRef.current = es;
     resetStaleTimer();

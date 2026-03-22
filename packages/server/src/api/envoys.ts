@@ -202,7 +202,7 @@ export function registerEnvoyRoutes(
     const observations: { id: string; timestamp: string; text: string }[] = [];
 
     for (const d of envoyDeployments) {
-      const entries = debrief.getByDeployment(d.id);
+      const entries = debrief.getByOperation(d.id);
       for (const e of entries) {
         if (e.decisionType === "environment-scan") {
           observations.push({ id: e.id, timestamp: e.timestamp.toISOString(), text: e.reasoning || e.decision });

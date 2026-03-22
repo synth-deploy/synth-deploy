@@ -367,7 +367,7 @@ Produce a JSON analysis that incorporates all user corrections. Raise confidence
 
       this._debrief.record({
         partitionId: null,
-        deploymentId: null,
+        operationId: null,
         agent: "server",
         decisionType: "artifact-analysis",
         decision: `Re-analyzed "${artifact.name}" with ${artifact.annotations.length} user correction(s). Confidence: ${revised.confidence}.`,
@@ -406,7 +406,7 @@ Produce a JSON analysis that incorporates all user corrections. Raise confidence
 
     this._debrief.record({
       partitionId: null,
-      deploymentId: null,
+      operationId: null,
       agent: "server",
       decisionType: "artifact-analysis",
       decision: `Analyzed artifact "${artifact.name}" (${artifactType}) via ${method}. ` +

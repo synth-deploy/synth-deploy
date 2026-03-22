@@ -5,6 +5,8 @@ import type {
   PartitionId,
   Environment,
   EnvironmentId,
+  Operation,
+  OperationId,
   Deployment,
   DeploymentId,
   AppSettings,
@@ -760,10 +762,11 @@ export class PersistentDeploymentStore {
   }
 
   save(deployment: Deployment): void {
+    const deployInput = deployment.input?.type === 'deploy' ? deployment.input : undefined;
     this.stmts.upsert.run({
       id: deployment.id,
-      artifact_id: deployment.artifactId,
-      artifact_version_id: deployment.artifactVersionId ?? null,
+      artifact_id: deployInput?.artifactId ?? null,
+      artifact_version_id: deployInput?.artifactVersionId ?? null,
       envoy_id: deployment.envoyId ?? null,
       environment_id: deployment.environmentId ?? null,
       partition_id: deployment.partitionId ?? null,
@@ -782,24 +785,24 @@ export class PersistentDeploymentStore {
     });
   }
 
-  get(id: DeploymentId): Deployment | undefined {
+  get(id: OperationId): Operation | undefined {
     const row = this.stmts.getById.get(id) as DeploymentRow | undefined;
-    return row ? rowToDeployment(row) : undefined;
+    return row ? rowToOperation(row) : undefined;
   }
 
-  getByPartition(partitionId: PartitionId): Deployment[] {
+  getByPartition(partitionId: PartitionId): Operation[] {
     const rows = this.stmts.getByPartition.all(partitionId) as DeploymentRow[];
-    return rows.map(rowToDeployment);
+    return rows.map(rowToOperation);
   }
 
-  getByArtifact(artifactId: string): Deployment[] {
+  getByArtifact(artifactId: string): Operation[] {
     const rows = this.stmts.getByArtifact.all(artifactId) as DeploymentRow[];
-    return rows.map(rowToDeployment);
+    return rows.map(rowToOperation);
   }
 
-  list(): Deployment[] {
+  list(): Operation[] {
     const rows = this.stmts.list.all() as DeploymentRow[];
-    return rows.map(rowToDeployment);
+    return rows.map(rowToOperation);
   }
 
   countByEnvironment(envId: string, since: Date): number {
@@ -807,23 +810,23 @@ export class PersistentDeploymentStore {
     return row.cnt;
   }
 
-  findByArtifactVersion(artifactId: string, version: string, status?: string): Deployment[] {
+  findByArtifactVersion(artifactId: string, version: string, status?: string): Operation[] {
     const rows = status
       ? (this.stmts.findByArtifactVersionStatus.all(artifactId, version, status) as DeploymentRow[])
       : (this.stmts.findByArtifactVersion.all(artifactId, version) as DeploymentRow[]);
-    return rows.map(rowToDeployment);
+    return rows.map(rowToOperation);
   }
 
-  findRecentByArtifact(artifactId: string, since: Date, status?: string): Deployment[] {
+  findRecentByArtifact(artifactId: string, since: Date, status?: string): Operation[] {
     const rows = status
       ? (this.stmts.findRecentByArtifactStatus.all(artifactId, since.toISOString(), status) as DeploymentRow[])
       : (this.stmts.findRecentByArtifact.all(artifactId, since.toISOString()) as DeploymentRow[]);
-    return rows.map(rowToDeployment);
+    return rows.map(rowToOperation);
   }
 
-  findLatestByEnvironment(envId: string): Deployment | undefined {
+  findLatestByEnvironment(envId: string): Operation | undefined {
     const row = this.stmts.findLatestByEnv.get(envId) as DeploymentRow | undefined;
-    return row ? rowToDeployment(row) : undefined;
+    return row ? rowToOperation(row) : undefined;
   }
 }
 
@@ -848,28 +851,31 @@ interface DeploymentRow {
   failure_reason: string | null;
 }
 
-function rowToDeployment(row: DeploymentRow): Deployment {
-  const deployment: Deployment = {
+function rowToOperation(row: DeploymentRow): Operation {
+  const operation: Operation = {
     id: row.id,
-    artifactId: row.artifact_id,
+    input: {
+      type: 'deploy' as const,
+      artifactId: row.artifact_id,
+      ...(row.artifact_version_id ? { artifactVersionId: row.artifact_version_id } : {}),
+    },
     environmentId: row.environment_id ?? undefined,
-    version: row.version,
-    status: row.status as Deployment["status"],
+    version: row.version ?? undefined,
+    status: row.status as Operation["status"],
     variables: safeJsonParse(row.variables, {}, { table: "deployments", rowId: row.id, column: "variables" }),
     debriefEntryIds: safeJsonParse(row.debrief_entry_ids, [], { table: "deployments", rowId: row.id, column: "debrief_entry_ids" }),
     createdAt: new Date(row.created_at),
   };
-  if (row.artifact_version_id) deployment.artifactVersionId = row.artifact_version_id;
-  if (row.envoy_id) deployment.envoyId = row.envoy_id;
-  if (row.partition_id) deployment.partitionId = row.partition_id;
-  if (row.plan) deployment.plan = safeJsonParse(row.plan, undefined, { table: "deployments", rowId: row.id, column: "plan" });
-  if (row.rollback_plan) deployment.rollbackPlan = safeJsonParse(row.rollback_plan, undefined, { table: "deployments", rowId: row.id, column: "rollback_plan" });
-  if (row.execution_record) deployment.executionRecord = safeJsonParse(row.execution_record, undefined, { table: "deployments", rowId: row.id, column: "execution_record" });
-  if (row.approved_by) deployment.approvedBy = row.approved_by;
-  if (row.approved_at) deployment.approvedAt = new Date(row.approved_at);
-  if (row.completed_at) deployment.completedAt = new Date(row.completed_at);
-  if (row.failure_reason) deployment.failureReason = row.failure_reason;
-  return deployment;
+  if (row.envoy_id) operation.envoyId = row.envoy_id;
+  if (row.partition_id) operation.partitionId = row.partition_id;
+  if (row.plan) operation.plan = safeJsonParse(row.plan, undefined, { table: "deployments", rowId: row.id, column: "plan" });
+  if (row.rollback_plan) operation.rollbackPlan = safeJsonParse(row.rollback_plan, undefined, { table: "deployments", rowId: row.id, column: "rollback_plan" });
+  if (row.execution_record) operation.executionRecord = safeJsonParse(row.execution_record, undefined, { table: "deployments", rowId: row.id, column: "execution_record" });
+  if (row.approved_by) operation.approvedBy = row.approved_by;
+  if (row.approved_at) operation.approvedAt = new Date(row.approved_at);
+  if (row.completed_at) operation.completedAt = new Date(row.completed_at);
+  if (row.failure_reason) operation.failureReason = row.failure_reason;
+  return operation;
 }
 
 // ---------------------------------------------------------------------------

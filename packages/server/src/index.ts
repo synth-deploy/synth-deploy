@@ -15,7 +15,7 @@ import { SynthAgent } from "./agent/synth-agent.js";
 import { EnvoyHealthChecker } from "./agent/health-checker.js";
 import { McpClientManager } from "./agent/mcp-client-manager.js";
 import { createMcpServer } from "./mcp/server.js";
-import { registerDeploymentRoutes } from "./api/deployments.js";
+import { registerOperationRoutes } from "./api/operations.js";
 import { registerHealthRoutes } from "./api/health.js";
 import { registerEnvoyReportRoutes } from "./api/envoy-reports.js";
 import { registerArtifactRoutes } from "./api/artifacts.js";
@@ -291,7 +291,7 @@ if (process.env.SYNTH_SEED_DEMO !== 'false' && partitions.list().length === 0) {
   // --- Deployments (mix of statuses and ages) ---
 
   const dep1: Deployment = {
-    id: crypto.randomUUID() as Deployment["id"], artifactId: webAppArtifact.id as Deployment["artifactId"], partitionId: acmePartition.id as Deployment["partitionId"],
+    id: crypto.randomUUID() as Deployment["id"], input: { type: "deploy" as const, artifactId: webAppArtifact.id }, partitionId: acmePartition.id as Deployment["partitionId"],
     environmentId: prodEnv.id as Deployment["environmentId"], version: "2.3.0", status: "succeeded",
     variables: { ...acmePartition.variables, ...prodEnv.variables },
     plan: {
@@ -311,21 +311,21 @@ if (process.env.SYNTH_SEED_DEMO !== 'false' && partitions.list().length === 0) {
     createdAt: hoursAgo(72), completedAt: hoursAgo(71.5), failureReason: undefined,
   };
   const dep2: Deployment = {
-    id: crypto.randomUUID() as Deployment["id"], artifactId: webAppArtifact.id as Deployment["artifactId"], partitionId: acmePartition.id as Deployment["partitionId"],
+    id: crypto.randomUUID() as Deployment["id"], input: { type: "deploy" as const, artifactId: webAppArtifact.id }, partitionId: acmePartition.id as Deployment["partitionId"],
     environmentId: prodEnv.id as Deployment["environmentId"], version: "2.4.0", status: "succeeded",
     variables: { ...acmePartition.variables, ...prodEnv.variables },
     debriefEntryIds: [],
     createdAt: hoursAgo(48), completedAt: hoursAgo(47.8), failureReason: undefined,
   };
   const dep3: Deployment = {
-    id: crypto.randomUUID() as Deployment["id"], artifactId: webAppArtifact.id as Deployment["artifactId"], partitionId: acmePartition.id as Deployment["partitionId"],
+    id: crypto.randomUUID() as Deployment["id"], input: { type: "deploy" as const, artifactId: webAppArtifact.id }, partitionId: acmePartition.id as Deployment["partitionId"],
     environmentId: prodEnv.id as Deployment["environmentId"], version: "2.4.1", status: "succeeded",
     variables: { ...acmePartition.variables, ...prodEnv.variables },
     debriefEntryIds: [],
     createdAt: hoursAgo(24), completedAt: hoursAgo(23.7), failureReason: undefined,
   };
   const dep4: Deployment = {
-    id: crypto.randomUUID() as Deployment["id"], artifactId: apiArtifact.id as Deployment["artifactId"], partitionId: acmePartition.id as Deployment["partitionId"],
+    id: crypto.randomUUID() as Deployment["id"], input: { type: "deploy" as const, artifactId: apiArtifact.id }, partitionId: acmePartition.id as Deployment["partitionId"],
     environmentId: prodEnv.id as Deployment["environmentId"], version: "1.11.0", status: "failed",
     variables: { ...acmePartition.variables, ...prodEnv.variables },
     debriefEntryIds: [],
@@ -333,21 +333,21 @@ if (process.env.SYNTH_SEED_DEMO !== 'false' && partitions.list().length === 0) {
     failureReason: "Health check failed after 3 retries: connection refused on port 8080",
   };
   const dep5: Deployment = {
-    id: crypto.randomUUID() as Deployment["id"], artifactId: apiArtifact.id as Deployment["artifactId"], partitionId: acmePartition.id as Deployment["partitionId"],
+    id: crypto.randomUUID() as Deployment["id"], input: { type: "deploy" as const, artifactId: apiArtifact.id }, partitionId: acmePartition.id as Deployment["partitionId"],
     environmentId: prodEnv.id as Deployment["environmentId"], version: "1.12.0", status: "succeeded",
     variables: { ...acmePartition.variables, ...prodEnv.variables },
     debriefEntryIds: [],
     createdAt: hoursAgo(12), completedAt: hoursAgo(11.8), failureReason: undefined,
   };
   const dep6: Deployment = {
-    id: crypto.randomUUID() as Deployment["id"], artifactId: webAppArtifact.id as Deployment["artifactId"], partitionId: globexPartition.id as Deployment["partitionId"],
+    id: crypto.randomUUID() as Deployment["id"], input: { type: "deploy" as const, artifactId: webAppArtifact.id }, partitionId: globexPartition.id as Deployment["partitionId"],
     environmentId: stagingEnv.id as Deployment["environmentId"], version: "2.5.0-rc.1", status: "succeeded",
     variables: { ...globexPartition.variables, ...stagingEnv.variables },
     debriefEntryIds: [],
     createdAt: hoursAgo(6), completedAt: hoursAgo(5.8), failureReason: undefined,
   };
   const dep7: Deployment = {
-    id: crypto.randomUUID() as Deployment["id"], artifactId: workerArtifact.id as Deployment["artifactId"], partitionId: initechPartition.id as Deployment["partitionId"],
+    id: crypto.randomUUID() as Deployment["id"], input: { type: "deploy" as const, artifactId: workerArtifact.id }, partitionId: initechPartition.id as Deployment["partitionId"],
     environmentId: prodEnv.id as Deployment["environmentId"], version: "2.9.0", status: "failed",
     variables: { ...initechPartition.variables, ...prodEnv.variables },
     debriefEntryIds: [],
@@ -355,14 +355,14 @@ if (process.env.SYNTH_SEED_DEMO !== 'false' && partitions.list().length === 0) {
     failureReason: "Queue depth exceeded threshold (342 > 100) during verification",
   };
   const dep8: Deployment = {
-    id: crypto.randomUUID() as Deployment["id"], artifactId: workerArtifact.id as Deployment["artifactId"], partitionId: initechPartition.id as Deployment["partitionId"],
+    id: crypto.randomUUID() as Deployment["id"], input: { type: "deploy" as const, artifactId: workerArtifact.id }, partitionId: initechPartition.id as Deployment["partitionId"],
     environmentId: prodEnv.id as Deployment["environmentId"], version: "3.0.0", status: "succeeded",
     variables: { ...initechPartition.variables, ...prodEnv.variables },
     debriefEntryIds: [],
     createdAt: hoursAgo(3), completedAt: hoursAgo(2.7), failureReason: undefined,
   };
   const dep9: Deployment = {
-    id: crypto.randomUUID() as Deployment["id"], artifactId: apiArtifact.id as Deployment["artifactId"], partitionId: globexPartition.id as Deployment["partitionId"],
+    id: crypto.randomUUID() as Deployment["id"], input: { type: "deploy" as const, artifactId: apiArtifact.id }, partitionId: globexPartition.id as Deployment["partitionId"],
     environmentId: stagingEnv.id as Deployment["environmentId"], version: "1.13.0-beta.2", status: "running",
     variables: { ...globexPartition.variables, ...stagingEnv.variables },
     plan: {
@@ -378,7 +378,7 @@ if (process.env.SYNTH_SEED_DEMO !== 'false' && partitions.list().length === 0) {
     createdAt: hoursAgo(0.5),
   };
   const dep11: Deployment = {
-    id: crypto.randomUUID() as Deployment["id"], artifactId: workerArtifact.id as Deployment["artifactId"], partitionId: globexPartition.id as Deployment["partitionId"],
+    id: crypto.randomUUID() as Deployment["id"], input: { type: "deploy" as const, artifactId: workerArtifact.id }, partitionId: globexPartition.id as Deployment["partitionId"],
     environmentId: prodEnv.id as Deployment["environmentId"], version: "3.1.0", status: "awaiting_approval",
     variables: { ...globexPartition.variables, ...prodEnv.variables },
     plan: {
@@ -396,7 +396,7 @@ if (process.env.SYNTH_SEED_DEMO !== 'false' && partitions.list().length === 0) {
     createdAt: hoursAgo(0.1),
   };
   const dep10: Deployment = {
-    id: crypto.randomUUID() as Deployment["id"], artifactId: webAppArtifact.id as Deployment["artifactId"], partitionId: initechPartition.id as Deployment["partitionId"],
+    id: crypto.randomUUID() as Deployment["id"], input: { type: "deploy" as const, artifactId: webAppArtifact.id }, partitionId: initechPartition.id as Deployment["partitionId"],
     environmentId: prodEnv.id as Deployment["environmentId"], version: "2.4.1", status: "rolled_back",
     variables: { ...initechPartition.variables, ...prodEnv.variables },
     debriefEntryIds: [],
@@ -428,7 +428,7 @@ if (process.env.SYNTH_SEED_DEMO !== 'false' && partitions.list().length === 0) {
   // --- Debrief entries (rich decision diary) ---
 
   debrief.record({
-    partitionId: null, deploymentId: null, agent: "server", decisionType: "system",
+    partitionId: null, operationId: null, agent: "server", decisionType: "system",
     decision: "Command initialized with demo data",
     reasoning: "Seeded 3 partitions, 3 environments, 3 artifacts, 10 deployments, and 2 envoy security boundary sets.",
     context: { partitions: 3, environments: 3, deployments: 10, artifacts: 3, securityBoundaries: 2 },
@@ -436,31 +436,31 @@ if (process.env.SYNTH_SEED_DEMO !== 'false' && partitions.list().length === 0) {
 
   // dep1 — web-app 2.3.0 succeeded
   debrief.record({
-    partitionId: acmePartition.id, deploymentId: dep1.id, agent: "server", decisionType: "pipeline-plan",
+    partitionId: acmePartition.id, operationId: dep1.id, agent: "server", decisionType: "pipeline-plan",
     decision: "Planned deployment pipeline for web-app v2.3.0 to Acme Corp production",
     reasoning: "Standard 3-step pipeline: install deps, run migrations, health check. No variable conflicts.",
     context: { version: "2.3.0", steps: 3 },
   });
   debrief.record({
-    partitionId: acmePartition.id, deploymentId: dep1.id, agent: "server", decisionType: "configuration-resolved",
+    partitionId: acmePartition.id, operationId: dep1.id, agent: "server", decisionType: "configuration-resolved",
     decision: "Resolved 4 variables for Acme Corp production (partition + environment merged)",
     reasoning: "Merged partition variables (APP_ENV, DB_HOST, REGION) with environment variables (APP_ENV, LOG_LEVEL). APP_ENV conflict resolved: environment value takes precedence.",
     context: { resolvedCount: 4, conflicts: 1, policy: "environment-wins" },
   });
   debrief.record({
-    partitionId: acmePartition.id, deploymentId: dep1.id, agent: "envoy", decisionType: "deployment-execution",
+    partitionId: acmePartition.id, operationId: dep1.id, agent: "envoy", decisionType: "deployment-execution",
     decision: "Executed deployment web-app v2.3.0 on Acme Corp production",
     reasoning: "All 3 steps completed. Total execution time: 28.4s.",
     context: { duration: 28400 },
   });
   debrief.record({
-    partitionId: acmePartition.id, deploymentId: dep1.id, agent: "envoy", decisionType: "health-check",
+    partitionId: acmePartition.id, operationId: dep1.id, agent: "envoy", decisionType: "health-check",
     decision: "Health check passed on first attempt",
     reasoning: "GET /health returned 200 with body {\"status\":\"ok\"} in 45ms.",
     context: { attempts: 1, responseTime: 45 },
   });
   debrief.record({
-    partitionId: acmePartition.id, deploymentId: dep1.id, agent: "server", decisionType: "deployment-completion",
+    partitionId: acmePartition.id, operationId: dep1.id, agent: "server", decisionType: "deployment-completion",
     decision: "Deployment web-app v2.3.0 completed successfully",
     reasoning: "All pipeline steps passed. Health check confirmed. Marked as succeeded.",
     context: { status: "succeeded" },
@@ -468,31 +468,31 @@ if (process.env.SYNTH_SEED_DEMO !== 'false' && partitions.list().length === 0) {
 
   // dep4 — api-service 1.11.0 failed
   debrief.record({
-    partitionId: acmePartition.id, deploymentId: dep4.id, agent: "server", decisionType: "pipeline-plan",
+    partitionId: acmePartition.id, operationId: dep4.id, agent: "server", decisionType: "pipeline-plan",
     decision: "Planned deployment pipeline for api-service v1.11.0 to Acme Corp production",
     reasoning: "2-step pipeline: pull image, verify endpoint.",
     context: { version: "1.11.0", steps: 2 },
   });
   debrief.record({
-    partitionId: acmePartition.id, deploymentId: dep4.id, agent: "envoy", decisionType: "deployment-execution",
+    partitionId: acmePartition.id, operationId: dep4.id, agent: "envoy", decisionType: "deployment-execution",
     decision: "Image pull succeeded, starting verification",
     reasoning: "docker pull completed in 12.3s. Image sha256:a4f8e... verified.",
     context: { step: "Pull image", duration: 12300 },
   });
   debrief.record({
-    partitionId: acmePartition.id, deploymentId: dep4.id, agent: "envoy", decisionType: "health-check",
+    partitionId: acmePartition.id, operationId: dep4.id, agent: "envoy", decisionType: "health-check",
     decision: "Health check failed after 3 retries",
     reasoning: "Connection refused on port 8080. Retry 1: refused (5s). Retry 2: refused (10s). Retry 3: refused (15s). Container logs: \"Error: EADDRINUSE :::8080\".",
     context: { attempts: 3, lastError: "ECONNREFUSED", containerLog: "EADDRINUSE" },
   });
   debrief.record({
-    partitionId: acmePartition.id, deploymentId: dep4.id, agent: "envoy", decisionType: "diagnostic-investigation",
+    partitionId: acmePartition.id, operationId: dep4.id, agent: "envoy", decisionType: "diagnostic-investigation",
     decision: "Root cause: port 8080 bound by stale process from previous deployment",
     reasoning: "Found zombie process from api-service v1.10.0 holding port 8080. Previous deployment did not cleanly shut down.",
     context: { rootCause: "port-conflict", stalePid: 14823 },
   });
   debrief.record({
-    partitionId: acmePartition.id, deploymentId: dep4.id, agent: "server", decisionType: "deployment-failure",
+    partitionId: acmePartition.id, operationId: dep4.id, agent: "server", decisionType: "deployment-failure",
     decision: "Deployment api-service v1.11.0 failed — health check could not connect",
     reasoning: "Envoy diagnostic identified port conflict from stale process. Recommend adding a pre-deploy cleanup step.",
     context: { status: "failed", recommendation: "Add cleanup step" },
@@ -500,25 +500,25 @@ if (process.env.SYNTH_SEED_DEMO !== 'false' && partitions.list().length === 0) {
 
   // dep7 — worker-service 2.9.0 failed
   debrief.record({
-    partitionId: initechPartition.id, deploymentId: dep7.id, agent: "server", decisionType: "pipeline-plan",
+    partitionId: initechPartition.id, operationId: dep7.id, agent: "server", decisionType: "pipeline-plan",
     decision: "Planned deployment pipeline for worker-service v2.9.0 to Initech production",
     reasoning: "4-step pipeline with full verification strategy.",
     context: { version: "2.9.0", steps: 4, verificationStrategy: "full" },
   });
   debrief.record({
-    partitionId: initechPartition.id, deploymentId: dep7.id, agent: "envoy", decisionType: "deployment-execution",
+    partitionId: initechPartition.id, operationId: dep7.id, agent: "envoy", decisionType: "deployment-execution",
     decision: "Workers stopped and binary deployed successfully",
     reasoning: "Pre-deploy steps completed. Workers stopped gracefully (0 in-flight jobs lost). Binary copied.",
     context: { stepsCompleted: 2, jobsLost: 0 },
   });
   debrief.record({
-    partitionId: initechPartition.id, deploymentId: dep7.id, agent: "envoy", decisionType: "deployment-verification",
+    partitionId: initechPartition.id, operationId: dep7.id, agent: "envoy", decisionType: "deployment-verification",
     decision: "Verification failed: queue depth 342 exceeds threshold of 100",
     reasoning: "Workers restarted but queue depth grew rapidly. v2.9.0 introduced a regression in the message processing loop causing 10x slowdown.",
     context: { queueDepth: 342, threshold: 100, processingRate: "0.3/s vs expected 3/s" },
   });
   debrief.record({
-    partitionId: initechPartition.id, deploymentId: dep7.id, agent: "server", decisionType: "deployment-failure",
+    partitionId: initechPartition.id, operationId: dep7.id, agent: "server", decisionType: "deployment-failure",
     decision: "Deployment worker-service v2.9.0 failed — queue depth exceeded threshold",
     reasoning: "Queue depth check returned 342 (max 100). Processing regression in v2.9.0.",
     context: { status: "failed" },
@@ -526,25 +526,25 @@ if (process.env.SYNTH_SEED_DEMO !== 'false' && partitions.list().length === 0) {
 
   // dep10 — web-app 2.4.1 rolled back
   debrief.record({
-    partitionId: initechPartition.id, deploymentId: dep10.id, agent: "server", decisionType: "pipeline-plan",
+    partitionId: initechPartition.id, operationId: dep10.id, agent: "server", decisionType: "pipeline-plan",
     decision: "Planned deployment pipeline for web-app v2.4.1 to Initech production",
     reasoning: "Standard 3-step pipeline.",
     context: { version: "2.4.1", steps: 3 },
   });
   debrief.record({
-    partitionId: initechPartition.id, deploymentId: dep10.id, agent: "envoy", decisionType: "deployment-execution",
+    partitionId: initechPartition.id, operationId: dep10.id, agent: "envoy", decisionType: "deployment-execution",
     decision: "All deployment steps completed, starting post-deploy verification",
     reasoning: "Dependencies installed (14.2s), migrations ran (3.1s), health check passed (0.2s).",
     context: { totalDuration: 17500 },
   });
   debrief.record({
-    partitionId: initechPartition.id, deploymentId: dep10.id, agent: "envoy", decisionType: "deployment-verification",
+    partitionId: initechPartition.id, operationId: dep10.id, agent: "envoy", decisionType: "deployment-verification",
     decision: "Post-deploy smoke test detected 502 errors on /api/v2/users",
     reasoning: "12 endpoint checks: 10 passed, 2 returned 502 (GET and POST /api/v2/users). The v2 users endpoint depends on a schema migration that was partially applied.",
     context: { passed: 10, failed: 2, failedEndpoints: ["/api/v2/users"] },
   });
   debrief.record({
-    partitionId: initechPartition.id, deploymentId: dep10.id, agent: "server", decisionType: "deployment-failure",
+    partitionId: initechPartition.id, operationId: dep10.id, agent: "server", decisionType: "deployment-failure",
     decision: "Initiated rollback of web-app v2.4.1 on Initech production",
     reasoning: "502 errors on critical user endpoints. Rolling back to previous known-good version.",
     context: { status: "rolled_back", rolledBackFrom: "2.4.1" },
@@ -552,19 +552,19 @@ if (process.env.SYNTH_SEED_DEMO !== 'false' && partitions.list().length === 0) {
 
   // dep6 — web-app 2.5.0-rc.1 with variable conflict
   debrief.record({
-    partitionId: globexPartition.id, deploymentId: dep6.id, agent: "server", decisionType: "pipeline-plan",
+    partitionId: globexPartition.id, operationId: dep6.id, agent: "server", decisionType: "pipeline-plan",
     decision: "Planned deployment for web-app v2.5.0-rc.1 to Globex staging",
     reasoning: "Standard 3-step pipeline. Release candidate — permissive conflict policy.",
     context: { version: "2.5.0-rc.1", steps: 3 },
   });
   debrief.record({
-    partitionId: globexPartition.id, deploymentId: dep6.id, agent: "server", decisionType: "variable-conflict",
+    partitionId: globexPartition.id, operationId: dep6.id, agent: "server", decisionType: "variable-conflict",
     decision: "Variable conflict: APP_ENV defined in both partition and environment",
     reasoning: "Partition sets APP_ENV=production, environment sets APP_ENV=staging. Permissive policy — using environment value.",
     context: { variable: "APP_ENV", partitionValue: "production", environmentValue: "staging", resolution: "environment-wins" },
   });
   debrief.record({
-    partitionId: globexPartition.id, deploymentId: dep6.id, agent: "server", decisionType: "deployment-completion",
+    partitionId: globexPartition.id, operationId: dep6.id, agent: "server", decisionType: "deployment-completion",
     decision: "Deployment web-app v2.5.0-rc.1 completed on Globex staging",
     reasoning: "All steps passed despite variable conflict. RC verified in staging.",
     context: { status: "succeeded" },
@@ -572,13 +572,13 @@ if (process.env.SYNTH_SEED_DEMO !== 'false' && partitions.list().length === 0) {
 
   // dep9 — in-progress
   debrief.record({
-    partitionId: globexPartition.id, deploymentId: dep9.id, agent: "server", decisionType: "pipeline-plan",
+    partitionId: globexPartition.id, operationId: dep9.id, agent: "server", decisionType: "pipeline-plan",
     decision: "Planned deployment for api-service v1.13.0-beta.2 to Globex staging",
     reasoning: "2-step pipeline for staging. Beta version — monitoring closely.",
     context: { version: "1.13.0-beta.2", steps: 2 },
   });
   debrief.record({
-    partitionId: globexPartition.id, deploymentId: dep9.id, agent: "envoy", decisionType: "deployment-execution",
+    partitionId: globexPartition.id, operationId: dep9.id, agent: "envoy", decisionType: "deployment-execution",
     decision: "Image pull in progress for api-service v1.13.0-beta.2",
     reasoning: "Pulling docker image from registry. Download progress: 67%.",
     context: { step: "Pull image", progress: "67%" },
@@ -586,13 +586,13 @@ if (process.env.SYNTH_SEED_DEMO !== 'false' && partitions.list().length === 0) {
 
   // Environment scans
   debrief.record({
-    partitionId: acmePartition.id, deploymentId: null, agent: "envoy", decisionType: "environment-scan",
+    partitionId: acmePartition.id, operationId: null, agent: "envoy", decisionType: "environment-scan",
     decision: "Environment scan completed for Acme Corp production",
     reasoning: "Current versions: web-app v2.4.1, api-service v1.12.0. Disk: 62%. Memory: 71%. No drift detected.",
     context: { versions: { "web-app": "2.4.1", "api-service": "1.12.0" }, diskUsage: "62%", memoryUsage: "71%" },
   });
   debrief.record({
-    partitionId: initechPartition.id, deploymentId: null, agent: "envoy", decisionType: "environment-scan",
+    partitionId: initechPartition.id, operationId: null, agent: "envoy", decisionType: "environment-scan",
     decision: "Environment scan for Initech production — drift detected",
     reasoning: "worker-service v3.0.0 running. web-app at v2.4.0 (v2.4.1 was rolled back). Drift: LOG_LEVEL manually changed from 'warn' to 'debug' outside deployment pipeline.",
     context: { drift: true, driftDetails: "LOG_LEVEL changed outside pipeline" },
@@ -706,7 +706,7 @@ registerHealthRoutes(app, {
 });
 const progressStore = new ProgressEventStore();
 const defaultEnvoyClient = new EnvoyClient(settings.get().envoy.url, settings.get().envoy.timeoutMs);
-registerDeploymentRoutes(app, deployments, debrief, partitions, environments, artifactStore, settings, telemetryStore, progressStore, defaultEnvoyClient, envoyRegistry, llm);
+registerOperationRoutes(app, deployments, debrief, partitions, environments, artifactStore, settings, telemetryStore, progressStore, defaultEnvoyClient, envoyRegistry, llm);
 registerEnvoyReportRoutes(app, debrief, deployments, envoyRegistry);
 registerArtifactRoutes(app, artifactStore, telemetryStore, artifactAnalyzer);
 registerSecurityBoundaryRoutes(app, securityBoundaryStore, telemetryStore);

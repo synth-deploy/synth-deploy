@@ -3,7 +3,7 @@ import { generatePostmortem, generatePostmortemAsync } from "@synth-deploy/core"
 import type { LlmClient, IPartitionStore, IEnvironmentStore, IArtifactStore, ISettingsStore, IDeploymentStore, ITelemetryStore, DebriefWriter, DebriefReader, DeploymentEnrichment, RecommendationVerdict } from "@synth-deploy/core";
 import { requirePermission } from "../middleware/permissions.js";
 import {
-  CreateDeploymentSchema,
+  CreateOperationSchema,
   ApproveDeploymentSchema,
   RejectDeploymentSchema,
   ModifyDeploymentPlanSchema,
@@ -21,7 +21,11 @@ import type { EnvoyRegistry } from "../agent/envoy-registry.js";
  * REST API routes for deployments. These are the traditional (non-MCP) interface
  * for the web UI and integrations.
  */
-export function registerDeploymentRoutes(
+function getArtifactId(op: { input: import("@synth-deploy/core").OperationInput }): string {
+  return op.input.type === "deploy" ? op.input.artifactId : "";
+}
+
+export function registerOperationRoutes(
   app: FastifyInstance,
   deployments: IDeploymentStore,
   debrief: DebriefWriter & DebriefReader,
@@ -35,18 +39,22 @@ export function registerDeploymentRoutes(
   envoyRegistry?: EnvoyRegistry,
   llm?: LlmClient,
 ): void {
+
   // Create a deployment (plan phase)
-  app.post("/api/deployments", { preHandler: [requirePermission("deployment.create")] }, async (request, reply) => {
-    const parsed = CreateDeploymentSchema.safeParse(request.body);
+  app.post("/api/operations", { preHandler: [requirePermission("deployment.create")] }, async (request, reply) => {
+    const parsed = CreateOperationSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.status(400).send({ error: parsed.error.message });
     }
 
-    const { artifactId, environmentId, partitionId, envoyId, version } = parsed.data;
+    const { artifactId, environmentId, partitionId, envoyId, version, type: operationType, intent } = parsed.data;
 
-    // Validate artifact exists
-    const artifact = artifactStore.get(artifactId);
-    if (!artifact) {
+    // Validate artifact exists (required for deploy operations)
+    if (operationType === "deploy" && !artifactId) {
+      return reply.status(400).send({ error: "artifactId is required for deploy operations" });
+    }
+    const artifact = artifactId ? artifactStore.get(artifactId) : undefined;
+    if (operationType === "deploy" && !artifact) {
       return reply.status(404).send({ error: `Artifact not found: ${artifactId}` });
     }
 
@@ -75,7 +83,8 @@ export function registerDeploymentRoutes(
 
     const deployment = {
       id: crypto.randomUUID(),
-      artifactId,
+      input: { type: "deploy" as const, artifactId: artifactId!, ...(version ? { artifactVersionId: version } : {}) },
+      intent,
       environmentId,
       partitionId,
       envoyId: targetEnvoy?.id,
@@ -98,14 +107,14 @@ export function registerDeploymentRoutes(
         ?? (environment ? envoyRegistry.findForEnvironment(environment.name) : undefined)
         ?? envoyRegistry.list()[0];
 
-      if (planningEnvoy) {
+      if (planningEnvoy && artifact) {
         const planningClient = new EnvoyClient(planningEnvoy.url);
         const environmentForPlanning = environment
           ? { id: environment.id, name: environment.name, variables: environment.variables }
           : { id: `direct:${planningEnvoy.id}`, name: planningEnvoy.name, variables: {} };
 
         planningClient.requestPlan({
-          operationId: deployment.id,
+          deploymentId: deployment.id,
           artifact: {
             id: artifact.id,
             name: artifact.name,
@@ -122,7 +131,7 @@ export function registerDeploymentRoutes(
           partition: partition
             ? { id: partition.id, name: partition.name, variables: partition.variables }
             : undefined,
-          version: deployment.version,
+          version: deployment.version ?? "",
           resolvedVariables: resolved,
         }).then((result) => {
           const dep = deployments.get(deployment.id);
@@ -189,7 +198,7 @@ export function registerDeploymentRoutes(
   });
 
   // Get deployment by ID
-  app.get<{ Params: { id: string } }>("/api/deployments/:id", { preHandler: [requirePermission("deployment.view")] }, async (request, reply) => {
+  app.get<{ Params: { id: string } }>("/api/operations/:id", { preHandler: [requirePermission("deployment.view")] }, async (request, reply) => {
     const deployment = deployments.get(request.params.id);
     if (!deployment) {
       return reply.status(404).send({ error: "Deployment not found" });
@@ -202,13 +211,13 @@ export function registerDeploymentRoutes(
   });
 
   // What's New — compare deployed artifact version against catalog latest
-  app.get<{ Params: { id: string } }>("/api/deployments/:id/whats-new", { preHandler: [requirePermission("deployment.view")] }, async (request, reply) => {
+  app.get<{ Params: { id: string } }>("/api/operations/:id/whats-new", { preHandler: [requirePermission("deployment.view")] }, async (request, reply) => {
     const deployment = deployments.get(request.params.id);
     if (!deployment) {
       return reply.status(404).send({ error: "Deployment not found" });
     }
 
-    const versions = artifactStore.getVersions(deployment.artifactId);
+    const versions = artifactStore.getVersions(getArtifactId(deployment));
     const sorted = versions.slice().sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
     );
@@ -226,7 +235,7 @@ export function registerDeploymentRoutes(
   });
 
   // List deployments (optionally filtered by partition, artifact, or envoy)
-  app.get("/api/deployments", { preHandler: [requirePermission("deployment.view")] }, async (request) => {
+  app.get("/api/operations", { preHandler: [requirePermission("deployment.view")] }, async (request) => {
     const qParsed = DeploymentListQuerySchema.safeParse(request.query);
     const { partitionId, artifactId, envoyId } = qParsed.success ? qParsed.data : {};
 
@@ -248,7 +257,7 @@ export function registerDeploymentRoutes(
 
   // Submit a plan from envoy — transitions deployment to awaiting_approval
   app.post<{ Params: { id: string } }>(
-    "/api/deployments/:id/plan",
+    "/api/operations/:id/plan",
     { preHandler: [requirePermission("deployment.create")] },
     async (request, reply) => {
       const deployment = deployments.get(request.params.id);
@@ -290,7 +299,7 @@ export function registerDeploymentRoutes(
 
   // Approve a deployment plan
   app.post<{ Params: { id: string } }>(
-    "/api/deployments/:id/approve",
+    "/api/operations/:id/approve",
     { preHandler: [requirePermission("deployment.approve")] },
     async (request, reply) => {
       const deployment = deployments.get(request.params.id);
@@ -340,10 +349,10 @@ export function registerDeploymentRoutes(
 
       // Dispatch approved plan to envoy for execution
       if (envoyClient && deployment.plan && deployment.rollbackPlan) {
-        const artifact = artifactStore.get(deployment.artifactId);
+        const artifact = artifactStore.get(getArtifactId(deployment));
         const serverPort = process.env.PORT ?? "9410";
         const serverUrl = process.env.SYNTH_SERVER_URL ?? `http://localhost:${serverPort}`;
-        const progressCallbackUrl = `${serverUrl}/api/deployments/${deployment.id}/progress`;
+        const progressCallbackUrl = `${serverUrl}/api/operations/${deployment.id}/progress`;
         const callbackToken = envoyRegistry?.list().find(r => r.url === envoyClient.url)?.token;
 
         deployment.status = "running" as typeof deployment.status;
@@ -351,7 +360,7 @@ export function registerDeploymentRoutes(
 
         // Fire-and-forget: execution runs async, progress comes via callback
         envoyClient.executeApprovedPlan({
-          operationId: deployment.id,
+          deploymentId: deployment.id,
           plan: deployment.plan,
           rollbackPlan: deployment.rollbackPlan,
           artifactType: artifact?.type ?? "unknown",
@@ -383,7 +392,7 @@ export function registerDeploymentRoutes(
 
   // Reject a deployment plan
   app.post<{ Params: { id: string } }>(
-    "/api/deployments/:id/reject",
+    "/api/operations/:id/reject",
     { preHandler: [requirePermission("deployment.reject")] },
     async (request, reply) => {
       const deployment = deployments.get(request.params.id);
@@ -426,7 +435,7 @@ export function registerDeploymentRoutes(
 
   // Modify a deployment plan (user edits steps before approval)
   app.post<{ Params: { id: string } }>(
-    "/api/deployments/:id/modify",
+    "/api/operations/:id/modify",
     { preHandler: [requirePermission("deployment.approve")] },
     async (request, reply) => {
       const deployment = deployments.get(request.params.id);
@@ -530,7 +539,7 @@ export function registerDeploymentRoutes(
 
   // Replan a deployment with user feedback — triggers a new LLM planning pass
   app.post<{ Params: { id: string } }>(
-    "/api/deployments/:id/replan",
+    "/api/operations/:id/replan",
     { preHandler: [requirePermission("deployment.approve")] },
     async (request, reply) => {
       const deploymentId = request.params.id;
@@ -548,9 +557,9 @@ export function registerDeploymentRoutes(
         return reply.status(400).send({ error: parsed.error.message });
       }
 
-      const artifact = artifactStore.get(deployment.artifactId);
+      const artifact = artifactStore.get(getArtifactId(deployment));
       if (!artifact) {
-        return reply.status(404).send({ error: `Artifact not found: ${deployment.artifactId}` });
+        return reply.status(404).send({ error: `Artifact not found: ${getArtifactId(deployment)}` });
       }
 
       const environment = deployment.environmentId ? environments.get(deployment.environmentId) : undefined;
@@ -596,7 +605,7 @@ export function registerDeploymentRoutes(
       let result: Awaited<ReturnType<typeof planningClient.requestPlan>>;
       try {
         result = await planningClient.requestPlan({
-          operationId: deploymentId,
+          deploymentId,
           artifact: {
             id: artifact.id,
             name: artifact.name,
@@ -613,7 +622,7 @@ export function registerDeploymentRoutes(
           partition: partition
             ? { id: partition.id, name: partition.name, variables: partition.variables }
             : undefined,
-          version: deployment.version,
+          version: deployment.version ?? "",
           resolvedVariables: deployment.variables,
           refinementFeedback: parsed.data.feedback,
         });
@@ -653,7 +662,7 @@ export function registerDeploymentRoutes(
 
   // Get cross-system enrichment context for a deployment
   app.get<{ Params: { id: string } }>(
-    "/api/deployments/:id/context",
+    "/api/operations/:id/context",
     { preHandler: [requirePermission("deployment.view")] },
     async (request, reply) => {
       const deployment = deployments.get(request.params.id);
@@ -672,7 +681,7 @@ export function registerDeploymentRoutes(
       // Check if the same artifact version was previously rolled back
       const previouslyRolledBack = deployment.version
         ? deployments.findByArtifactVersion(
-            deployment.artifactId,
+            getArtifactId(deployment),
             deployment.version,
             "rolled_back",
           ).length > 0
@@ -698,7 +707,7 @@ export function registerDeploymentRoutes(
         ? {
             id: lastDeploy.id,
             status: lastDeploy.status,
-            version: lastDeploy.version,
+            version: lastDeploy.version ?? "",
             completedAt: lastDeploy.completedAt,
           }
         : undefined;
@@ -720,7 +729,7 @@ export function registerDeploymentRoutes(
   // Request a post-hoc rollback plan — asks the envoy to reason about
   // what actually ran and produce a targeted rollback plan
   app.post<{ Params: { id: string } }>(
-    "/api/deployments/:id/request-rollback-plan",
+    "/api/operations/:id/request-rollback-plan",
     { preHandler: [requirePermission("deployment.approve")] },
     async (request, reply) => {
       const deployment = deployments.get(request.params.id);
@@ -735,7 +744,7 @@ export function registerDeploymentRoutes(
         });
       }
 
-      const artifact = artifactStore.get(deployment.artifactId);
+      const artifact = artifactStore.get(getArtifactId(deployment));
       if (!artifact) {
         return reply.status(404).send({ error: "Artifact not found" });
       }
@@ -775,7 +784,7 @@ export function registerDeploymentRoutes(
 
       try {
         const rollbackPlan = await rollbackClient.requestRollbackPlan({
-          operationId: deployment.id,
+          deploymentId: deployment.id,
           artifact: {
             name: artifact.name,
             type: artifact.type,
@@ -793,7 +802,7 @@ export function registerDeploymentRoutes(
           },
           completedSteps,
           deployedVariables: deployment.variables,
-          version: deployment.version,
+          version: deployment.version ?? "",
           failureReason: deployment.failureReason ?? undefined,
         });
 
@@ -837,7 +846,7 @@ export function registerDeploymentRoutes(
 
   // Execute rollback — runs the stored rollback plan against the envoy
   app.post<{ Params: { id: string } }>(
-    "/api/deployments/:id/execute-rollback",
+    "/api/operations/:id/execute-rollback",
     { preHandler: [requirePermission("deployment.approve")] },
     async (request, reply) => {
       const deployment = deployments.get(request.params.id);
@@ -856,7 +865,7 @@ export function registerDeploymentRoutes(
         });
       }
 
-      const artifact = artifactStore.get(deployment.artifactId);
+      const artifact = artifactStore.get(getArtifactId(deployment));
       const targetEnvoy = deployment.envoyId
         ? envoyRegistry?.get(deployment.envoyId)
         : envoyRegistry?.list()[0];
@@ -868,7 +877,7 @@ export function registerDeploymentRoutes(
       const actor = (request.user?.email) ?? "anonymous";
       const serverPort = process.env.PORT ?? "9410";
       const serverUrl = process.env.SYNTH_SERVER_URL ?? `http://localhost:${serverPort}`;
-      const progressCallbackUrl = `${serverUrl}/api/deployments/${deployment.id}/progress`;
+      const progressCallbackUrl = `${serverUrl}/api/operations/${deployment.id}/progress`;
 
       deployment.status = "running" as typeof deployment.status;
       deployments.save(deployment);
@@ -878,7 +887,7 @@ export function registerDeploymentRoutes(
         operationId: deployment.id,
         agent: "server",
         decisionType: "rollback-execution" as Parameters<typeof debrief.record>[0]["decisionType"],
-        decision: `Rollback execution initiated for ${artifact?.name ?? deployment.artifactId} v${deployment.version}`,
+        decision: `Rollback execution initiated for ${artifact?.name ?? getArtifactId(deployment)} v${deployment.version}`,
         reasoning: `Rollback requested by ${actor}. Executing ${deployment.rollbackPlan.steps.length} rollback step(s).`,
         context: { initiatedBy: actor, stepCount: deployment.rollbackPlan.steps.length },
         actor: request.user?.email,
@@ -897,7 +906,7 @@ export function registerDeploymentRoutes(
       const emptyPlan = { steps: [], reasoning: "No rollback of rollback." };
 
       rollbackClient.executeApprovedPlan({
-        operationId: deployment.id,
+        deploymentId: deployment.id,
         plan: deployment.rollbackPlan,
         rollbackPlan: emptyPlan,
         artifactType: artifact?.type ?? "unknown",
@@ -922,8 +931,8 @@ export function registerDeploymentRoutes(
           agent: "server",
           decisionType: "rollback-execution" as Parameters<typeof debrief.record>[0]["decisionType"],
           decision: result.success
-            ? `Rollback completed successfully for ${artifact?.name ?? dep.artifactId} v${dep.version}`
-            : `Rollback failed for ${artifact?.name ?? dep.artifactId} v${dep.version}`,
+            ? `Rollback completed successfully for ${artifact?.name ?? getArtifactId(dep)} v${dep.version}`
+            : `Rollback failed for ${artifact?.name ?? getArtifactId(dep)} v${dep.version}`,
           reasoning: result.success
             ? `All rollback steps executed successfully.`
             : `Rollback failed: ${result.failureReason}`,
@@ -944,7 +953,7 @@ export function registerDeploymentRoutes(
 
   // Retry (redeploy) — create a new deployment with the same parameters as the source
   app.post<{ Params: { id: string } }>(
-    "/api/deployments/:id/retry",
+    "/api/operations/:id/retry",
     { preHandler: [requirePermission("deployment.create")] },
     async (request, reply) => {
       const source = deployments.get(request.params.id);
@@ -962,9 +971,9 @@ export function registerDeploymentRoutes(
       attemptNumber++; // this new deployment is one more
 
       // Validate artifact still exists
-      const artifact = artifactStore.get(source.artifactId);
+      const artifact = artifactStore.get(getArtifactId(source));
       if (!artifact) {
-        return reply.status(404).send({ error: `Artifact not found: ${source.artifactId}` });
+        return reply.status(404).send({ error: `Artifact not found: ${getArtifactId(source)}` });
       }
 
       // Validate environment still exists (if present on source)
@@ -992,7 +1001,7 @@ export function registerDeploymentRoutes(
 
       const deployment = {
         id: crypto.randomUUID(),
-        artifactId: source.artifactId,
+        input: source.input,
         environmentId: source.environmentId,
         partitionId: source.partitionId,
         envoyId: targetEnvoy?.id,
@@ -1007,7 +1016,7 @@ export function registerDeploymentRoutes(
       deployments.save(deployment);
 
       const actor = (request.user?.email) ?? "anonymous";
-      telemetry.record({ actor, action: "operation.created", target: { type: "deployment", id: deployment.id }, details: { artifactId: source.artifactId, environmentId: source.environmentId, partitionId: source.partitionId, envoyId: source.envoyId, retryOf: source.id } });
+      telemetry.record({ actor, action: "operation.created", target: { type: "deployment", id: deployment.id }, details: { artifactId: getArtifactId(source), environmentId: source.environmentId, partitionId: source.partitionId, envoyId: source.envoyId, retryOf: source.id } });
 
       // Record retry debrief entry
       debrief.record({
@@ -1034,7 +1043,7 @@ export function registerDeploymentRoutes(
             : { id: `direct:${planningEnvoy.id}`, name: planningEnvoy.name, variables: {} };
 
           planningClient.requestPlan({
-            operationId: deployment.id,
+            deploymentId: deployment.id,
             artifact: {
               id: artifact.id,
               name: artifact.name,
@@ -1051,7 +1060,7 @@ export function registerDeploymentRoutes(
             partition: partition
               ? { id: partition.id, name: partition.name, variables: partition.variables }
               : undefined,
-            version: deployment.version,
+            version: deployment.version ?? "",
             resolvedVariables: resolved,
           }).then((result) => {
             const dep = deployments.get(deployment.id);
@@ -1117,7 +1126,7 @@ export function registerDeploymentRoutes(
 
   // Get deployment postmortem
   app.get<{ Params: { id: string } }>(
-    "/api/deployments/:id/postmortem",
+    "/api/operations/:id/postmortem",
     { preHandler: [requirePermission("deployment.view")] },
     async (request, reply) => {
       const deployment = deployments.get(request.params.id);
@@ -1169,7 +1178,7 @@ export function registerDeploymentRoutes(
 
   // POST /api/deployments/:id/progress — receives progress events from envoy
   app.post<{ Params: { id: string } }>(
-    "/api/deployments/:id/progress",
+    "/api/operations/:id/progress",
     async (request, reply) => {
       if (!progressStore) {
         return reply.status(501).send({ error: "Progress streaming not configured" });
@@ -1204,7 +1213,7 @@ export function registerDeploymentRoutes(
   // GET /api/deployments/:id/stream — SSE endpoint for live progress
   // Auth is via ?token= query param since EventSource cannot send headers
   app.get<{ Params: { id: string } }>(
-    "/api/deployments/:id/stream",
+    "/api/operations/:id/stream",
     { preHandler: [requirePermission("deployment.view")] },
     (request, reply) => {
       if (!progressStore) {
@@ -1245,7 +1254,7 @@ export function registerDeploymentRoutes(
       }
 
       // Subscribe to new events
-      const listener = (event: { id?: number; operationId: string; type: string }) => {
+      const listener = (event: { id?: number; deploymentId: string; type: string }) => {
         try {
           reply.raw.write(`id: ${event.id}\ndata: ${JSON.stringify(event)}\n\n`);
 
@@ -1287,7 +1296,7 @@ function computeRecommendation(
   // Check for previously rolled-back version
   if (deployment.version) {
     const rolledBack = store.findByArtifactVersion(
-      deployment.artifactId,
+      getArtifactId(deployment),
       deployment.version,
       "rolled_back",
     );

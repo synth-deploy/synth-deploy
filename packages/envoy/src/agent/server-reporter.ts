@@ -36,7 +36,7 @@ export interface SerializedDebriefEntry {
   id: string;
   timestamp: string;
   partitionId: string | null;
-  deploymentId: string | null;
+  operationId: string | null;
   agent: "server" | "envoy";
   decisionType: string;
   decision: string;
@@ -127,7 +127,7 @@ function serializeDebriefEntry(entry: DebriefEntry): SerializedDebriefEntry {
     id: entry.id,
     timestamp: entry.timestamp.toISOString(),
     partitionId: entry.partitionId,
-    deploymentId: entry.deploymentId,
+    operationId: entry.operationId,
     agent: entry.agent,
     decisionType: entry.decisionType,
     decision: entry.decision,

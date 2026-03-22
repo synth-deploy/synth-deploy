@@ -407,7 +407,7 @@ export default function ArtifactCatalogPanel({ title }: Props) {
                   cursor: "pointer",
                 }}
                 onClick={() => pushPanel({
-                  type: "deployment-authoring",
+                  type: "operation-authoring",
                   title: "New Deployment",
                   params: { artifactId: selectedArtifact.id },
                 })}

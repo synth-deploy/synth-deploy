@@ -439,7 +439,7 @@ export class EnvoyAgent {
 
     recordEntry({
       partitionId: instruction.partitionId,
-      deploymentId: instruction.deploymentId,
+      operationId: instruction.deploymentId,
       agent: "envoy",
       decisionType: "pipeline-plan",
       decision:
@@ -468,7 +468,7 @@ export class EnvoyAgent {
     if (!readiness.ready) {
       recordEntry({
         partitionId: instruction.partitionId,
-        deploymentId: instruction.deploymentId,
+        operationId: instruction.deploymentId,
         agent: "envoy",
         decisionType: "environment-scan",
         decision: "Local environment not ready — aborting deployment",
@@ -506,7 +506,7 @@ export class EnvoyAgent {
 
     recordEntry({
       partitionId: instruction.partitionId,
-      deploymentId: instruction.deploymentId,
+      operationId: instruction.deploymentId,
       agent: "envoy",
       decisionType: "environment-scan",
       decision: existingEnv
@@ -593,7 +593,7 @@ export class EnvoyAgent {
 
     recordEntry({
       partitionId: instruction.partitionId,
-      deploymentId: instruction.deploymentId,
+      operationId: instruction.deploymentId,
       agent: "envoy",
       decisionType: "deployment-execution",
       decision:
@@ -639,7 +639,7 @@ export class EnvoyAgent {
 
       recordEntry({
         partitionId: instruction.partitionId,
-        deploymentId: instruction.deploymentId,
+        operationId: instruction.deploymentId,
         agent: "envoy",
         decisionType: "deployment-failure",
         decision: `Plan execution failed at step ${(planResult.failedStepIndex ?? 0) + 1}/${steps.length}: ${errorMsg}`,
@@ -653,7 +653,7 @@ export class EnvoyAgent {
 
       recordEntry({
         partitionId: instruction.partitionId,
-        deploymentId: instruction.deploymentId,
+        operationId: instruction.deploymentId,
         agent: "envoy",
         decisionType: "diagnostic-investigation",
         decision: `Investigation: ${diagnostic.summary}`,
@@ -696,7 +696,7 @@ export class EnvoyAgent {
 
     recordEntry({
       partitionId: instruction.partitionId,
-      deploymentId: instruction.deploymentId,
+      operationId: instruction.deploymentId,
       agent: "envoy",
       decisionType: "deployment-verification",
       decision: `Plan execution verified — all ${planResult.results.length} steps completed`,
@@ -709,7 +709,7 @@ export class EnvoyAgent {
 
     recordEntry({
       partitionId: instruction.partitionId,
-      deploymentId: instruction.deploymentId,
+      operationId: instruction.deploymentId,
       agent: "envoy",
       decisionType: "deployment-completion",
       decision:
@@ -773,7 +773,7 @@ export class EnvoyAgent {
   ): Promise<DeploymentResult> {
     recordEntry({
       partitionId: instruction.partitionId,
-      deploymentId: instruction.deploymentId,
+      operationId: instruction.deploymentId,
       agent: "envoy",
       decisionType: "deployment-execution",
       decision:
@@ -811,7 +811,7 @@ export class EnvoyAgent {
 
       recordEntry({
         partitionId: instruction.partitionId,
-        deploymentId: instruction.deploymentId,
+        operationId: instruction.deploymentId,
         agent: "envoy",
         decisionType: "deployment-failure",
         decision: `Deployment execution failed: ${execResult.error}`,
@@ -833,7 +833,7 @@ export class EnvoyAgent {
 
       recordEntry({
         partitionId: instruction.partitionId,
-        deploymentId: instruction.deploymentId,
+        operationId: instruction.deploymentId,
         agent: "envoy",
         decisionType: "diagnostic-investigation",
         decision: `Investigation: ${diagnostic.summary}`,
@@ -875,7 +875,7 @@ export class EnvoyAgent {
 
     recordEntry({
       partitionId: instruction.partitionId,
-      deploymentId: instruction.deploymentId,
+      operationId: instruction.deploymentId,
       agent: "envoy",
       decisionType: "deployment-verification",
       decision: verification.passed
@@ -913,7 +913,7 @@ export class EnvoyAgent {
 
       recordEntry({
         partitionId: instruction.partitionId,
-        deploymentId: instruction.deploymentId,
+        operationId: instruction.deploymentId,
         agent: "envoy",
         decisionType: "diagnostic-investigation",
         decision: `Investigation: ${diagnostic.summary}`,
@@ -964,7 +964,7 @@ export class EnvoyAgent {
 
     recordEntry({
       partitionId: instruction.partitionId,
-      deploymentId: instruction.deploymentId,
+      operationId: instruction.deploymentId,
       agent: "envoy",
       decisionType: "deployment-completion",
       decision:
@@ -1219,7 +1219,7 @@ export class EnvoyAgent {
       systemPrompt: "You are a deployment plan reviewer. Respond with JSON only.",
       promptSummary: "Validate refinement feedback",
       partitionId: null,
-      deploymentId: null,
+      operationId: null,
       maxTokens: 256,
     });
 
@@ -1314,7 +1314,7 @@ export class EnvoyAgent {
 
     recordEntry({
       partitionId: instruction.partition?.id ?? null,
-      deploymentId: instruction.deploymentId,
+      operationId: instruction.deploymentId,
       agent: "envoy",
       decisionType: "plan-generation",
       decision:
@@ -1562,13 +1562,13 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
           systemPrompt: probeSystemPrompt,
           promptSummary,
           partitionId: instruction.partition?.id ?? null,
-          deploymentId: instruction.deploymentId,
+          operationId: instruction.deploymentId,
           maxTokens: 4096,
           onProbe: async (command: string) => {
             const result = await probeExecutor.execute(command);
             recordEntry({
               partitionId: instruction.partition?.id ?? null,
-              deploymentId: instruction.deploymentId,
+              operationId: instruction.deploymentId,
               agent: "envoy",
               decisionType: "environment-probe",
               decision: result.blocked
@@ -1601,7 +1601,7 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
           systemPrompt: retrySystemPrompt,
           promptSummary,
           partitionId: instruction.partition?.id ?? null,
-          deploymentId: instruction.deploymentId,
+          operationId: instruction.deploymentId,
           maxTokens: 4096,
         });
       }
@@ -1610,7 +1610,7 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
         this.planLog.log(`LLM-FAIL attempt=${attempt}`, llmResult.reason);
         recordEntry({
           partitionId: instruction.partition?.id ?? null,
-          deploymentId: instruction.deploymentId,
+          operationId: instruction.deploymentId,
           agent: "envoy",
           decisionType: "plan-generation",
           decision: `LLM planning failed on attempt ${attempt}` +
@@ -1678,7 +1678,7 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
         this.planLog.log(`PARSE-FAIL attempt=${attempt}`, `error=${parseErr instanceof Error ? parseErr.message : String(parseErr)} preview=${preview}`);
         recordEntry({
           partitionId: instruction.partition?.id ?? null,
-          deploymentId: instruction.deploymentId,
+          operationId: instruction.deploymentId,
           agent: "envoy",
           decisionType: "plan-generation",
           decision: `LLM response could not be parsed on attempt ${attempt}`,
@@ -1727,7 +1727,7 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
       if (!this.operationExecutor) {
         recordEntry({
           partitionId: instruction.partition?.id ?? null,
-          deploymentId: instruction.deploymentId,
+          operationId: instruction.deploymentId,
           agent: "envoy",
           decisionType: "plan-generation",
           decision:
@@ -1771,7 +1771,7 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
 
         recordEntry({
           partitionId: instruction.partition?.id ?? null,
-          deploymentId: instruction.deploymentId,
+          operationId: instruction.deploymentId,
           agent: "envoy",
           decisionType: "plan-generation",
           decision:
@@ -1817,7 +1817,7 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
         envoyWarn("PLAN-STUCK", `same failures after ${attempt} attempts, falling back to reason()`);
         recordEntry({
           partitionId: instruction.partition?.id ?? null,
-          deploymentId: instruction.deploymentId,
+          operationId: instruction.deploymentId,
           agent: "envoy",
           decisionType: "plan-generation",
           decision: `Plan generation stuck — same failed observations after ${attempt} attempts`,
@@ -1845,7 +1845,7 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
         this.planLog.log("BLOCKED", `max attempts reached: ${currentObsSummary}`);
         recordEntry({
           partitionId: instruction.partition?.id ?? null,
-          deploymentId: instruction.deploymentId,
+          operationId: instruction.deploymentId,
           agent: "envoy",
           decisionType: "plan-generation",
           decision: `Plan blocked — unresolved environmental issues after ${MAX_DRY_RUN_ATTEMPTS} attempts`,
@@ -1887,7 +1887,7 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
 
       recordEntry({
         partitionId: instruction.partition?.id ?? null,
-        deploymentId: instruction.deploymentId,
+        operationId: instruction.deploymentId,
         agent: "envoy",
         decisionType: "plan-generation",
         decision: `Dry-run found failed observations — re-planning with environmental context (attempt ${attempt + 1}/${MAX_DRY_RUN_ATTEMPTS})`,
@@ -2121,7 +2121,7 @@ IMPORTANT: Every step's "action" field MUST contain at least one of the recogniz
         `Generate rollback plan for ${instruction.artifact.name} v${instruction.version} ` +
         `in "${instruction.environment.name}"`,
       partitionId: null,
-      deploymentId: instruction.deploymentId,
+      operationId: instruction.deploymentId,
       maxTokens: 2048,
     });
 
@@ -2148,7 +2148,7 @@ IMPORTANT: Every step's "action" field MUST contain at least one of the recogniz
 
       this.debrief.record({
         partitionId: null,
-        deploymentId: instruction.deploymentId,
+        operationId: instruction.deploymentId,
         agent: "envoy",
         decisionType: "plan-generation",
         decision: `Generated rollback plan for ${instruction.artifact.name} v${instruction.version}: ${parsed.steps.length} step(s)`,
@@ -2258,7 +2258,7 @@ IMPORTANT: Every step's "action" field MUST contain at least one of the recogniz
 
     recordEntry({
       partitionId: null,
-      deploymentId,
+      operationId: deploymentId,
       agent: "envoy",
       decisionType: "deployment-execution",
       decision:
@@ -2314,7 +2314,7 @@ IMPORTANT: Every step's "action" field MUST contain at least one of the recogniz
 
       recordEntry({
         partitionId: null,
-        deploymentId,
+        operationId: deploymentId,
         agent: "envoy",
         decisionType: "deployment-failure",
         decision:
@@ -2342,7 +2342,7 @@ IMPORTANT: Every step's "action" field MUST contain at least one of the recogniz
 
         recordEntry({
           partitionId: null,
-          deploymentId,
+          operationId: deploymentId,
           agent: "envoy",
           decisionType: "rollback-execution",
           decision:
@@ -2387,7 +2387,7 @@ IMPORTANT: Every step's "action" field MUST contain at least one of the recogniz
 
     recordEntry({
       partitionId: null,
-      deploymentId,
+      operationId: deploymentId,
       agent: "envoy",
       decisionType: "deployment-completion",
       decision:

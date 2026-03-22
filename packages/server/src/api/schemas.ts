@@ -232,6 +232,18 @@ export const CreateDeploymentSchema = z.object({
   version: z.string().optional(),
 });
 
+// --- Operations ---
+
+export const CreateOperationSchema = z.object({
+  artifactId: z.string().min(1).optional(),
+  environmentId: z.string().min(1).optional(),
+  partitionId: z.string().optional(),
+  envoyId: z.string().optional(),
+  version: z.string().optional(),
+  type: z.enum(["deploy", "maintain", "query", "investigate", "trigger", "composite"]).default("deploy"),
+  intent: z.string().optional(),
+});
+
 export const ApproveDeploymentSchema = z.object({
   approvedBy: z.string().min(1),
   modifications: z.string().optional(),

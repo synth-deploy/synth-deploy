@@ -52,7 +52,7 @@ export function registerResources(
       if (!deployment) {
         return { contents: [{ uri: uri.href, text: JSON.stringify({ error: "Deployment not found" }) }] };
       }
-      const entries = debrief.getByDeployment(deploymentId as string);
+      const entries = debrief.getByOperation(deploymentId as string);
       return {
         contents: [
           {
@@ -71,7 +71,7 @@ export function registerResources(
       list: async () => ({
         resources: deployments.list().map((d) => ({
           uri: `deployment://${d.id}`,
-          name: `${d.artifactId} v${d.version} → ${d.environmentId}`,
+          name: `${d.input.type === 'deploy' ? d.input.artifactId : d.intent ?? d.input.type} v${d.version ?? ''} → ${d.environmentId}`,
         })),
       }),
     }),

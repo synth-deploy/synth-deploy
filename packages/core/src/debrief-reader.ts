@@ -190,7 +190,8 @@ export function buildPostmortemPrompt(
   lines.push(`Deployment ID: ${deployment.id}`);
   lines.push(`Status: ${deployment.status}`);
   lines.push(`Version: ${deployment.version}`);
-  lines.push(`Artifact: ${deployment.artifactId}`);
+  const artifactId = deployment.input?.type === 'deploy' ? deployment.input.artifactId : undefined;
+  lines.push(`Artifact: ${artifactId ?? 'n/a'}`);
   if (deployment.environmentId) lines.push(`Environment: ${deployment.environmentId}`);
   if (deployment.partitionId) {
     lines.push(`Partition: ${deployment.partitionId}`);
@@ -314,7 +315,7 @@ export async function generatePostmortemAsync(
       systemPrompt: POSTMORTEM_SYSTEM_PROMPT,
       promptSummary: `Postmortem generation for deployment ${deployment.id}`,
       partitionId: deployment.partitionId,
-      deploymentId: deployment.id,
+      operationId: deployment.id,
       maxTokens: 4096,
     }, "postmortemGeneration");
   } catch {
@@ -355,7 +356,8 @@ export async function generatePostmortemAsync(
 
 function buildSummary(entries: DebriefEntry[], deployment: Deployment): string {
   const planEntry = entries.find((e) => e.decisionType === "pipeline-plan");
-  const operation = (planEntry?.context?.artifactName as string) ?? deployment.artifactId;
+  const deployArtifactId = deployment.input?.type === 'deploy' ? deployment.input.artifactId : undefined;
+  const operation = (planEntry?.context?.artifactName as string) ?? deployArtifactId;
   const version = (planEntry?.context?.version as string) ?? deployment.version;
   const environment =
     (planEntry?.context?.environmentName as string) ?? deployment.environmentId;
@@ -648,7 +650,7 @@ function buildDeploymentSummaries(
   entries: DebriefEntry[],
 ): DeploymentSummary[] {
   return deployments.map((d) => {
-    const deployEntries = entries.filter((e) => e.deploymentId === d.id);
+    const deployEntries = entries.filter((e) => e.operationId === d.id);
     const planEntry = deployEntries.find(
       (e) => e.decisionType === "pipeline-plan",
     );
@@ -824,7 +826,7 @@ function buildEnvironmentNotes(
   >();
 
   for (const d of deployments) {
-    const deployEntries = entries.filter((e) => e.deploymentId === d.id);
+    const deployEntries = entries.filter((e) => e.operationId === d.id);
     const planEntry = deployEntries.find(
       (e) => e.decisionType === "pipeline-plan",
     );
@@ -880,7 +882,7 @@ function buildEnvironmentNotes(
       for (const f of failures) {
         const failEntry = data.entries.find(
           (e) =>
-            e.deploymentId === f.id &&
+            e.operationId === f.id &&
             e.decisionType === "deployment-failure",
         );
         const step = failEntry?.context?.step;

@@ -63,7 +63,7 @@ const agent = new EnvoyAgent(debrief, state, BASE_DIR, reporter, llm);
 
 debrief.record({
   partitionId: null,
-  deploymentId: null,
+  operationId: null,
   agent: "envoy",
   decisionType: "system",
   decision: "Envoy initialized with seed data",
@@ -141,31 +141,31 @@ if (process.env.SYNTH_SEED_DEMO !== 'false') {
 
   // Envoy-side debrief entries
   debrief.record({
-    partitionId: partitionIds.acme, deploymentId: envoyDeps[2].deploymentId, agent: "envoy", decisionType: "deployment-execution",
+    partitionId: partitionIds.acme, operationId: envoyDeps[2].deploymentId, agent: "envoy", decisionType: "deployment-execution",
     decision: "Executed web-app v2.4.1 on Acme Corp production",
     reasoning: "All steps completed in 32.1s. Dependencies installed, migrations applied, health check passed.",
     context: { duration: 32100 },
   });
   debrief.record({
-    partitionId: partitionIds.acme, deploymentId: envoyDeps[3].deploymentId, agent: "envoy", decisionType: "diagnostic-investigation",
+    partitionId: partitionIds.acme, operationId: envoyDeps[3].deploymentId, agent: "envoy", decisionType: "diagnostic-investigation",
     decision: "Diagnosed api-service v1.11.0 failure: port conflict",
     reasoning: "Port 8080 held by stale process (PID 14823) from previous deployment. Recommend adding pre-deploy cleanup step.",
     context: { rootCause: "port-conflict", stalePid: 14823 },
   });
   debrief.record({
-    partitionId: partitionIds.initech, deploymentId: envoyDeps[7].deploymentId, agent: "envoy", decisionType: "deployment-execution",
+    partitionId: partitionIds.initech, operationId: envoyDeps[7].deploymentId, agent: "envoy", decisionType: "deployment-execution",
     decision: "Executed worker-service v3.0.0 on Initech production",
     reasoning: "Workers stopped (0 jobs lost), binary deployed, workers restarted. Queue depth stabilized at 12.",
     context: { duration: 45200, queueDepth: 12 },
   });
   debrief.record({
-    partitionId: partitionIds.acme, deploymentId: null, agent: "envoy", decisionType: "environment-scan",
+    partitionId: partitionIds.acme, operationId: null, agent: "envoy", decisionType: "environment-scan",
     decision: "Environment scan: Acme Corp production healthy",
     reasoning: "web-app v2.4.1 and api-service v1.12.0 running. Disk 62%, Memory 71%. No drift.",
     context: { diskUsage: "62%", memoryUsage: "71%", drift: false },
   });
   debrief.record({
-    partitionId: partitionIds.initech, deploymentId: null, agent: "envoy", decisionType: "environment-scan",
+    partitionId: partitionIds.initech, operationId: null, agent: "envoy", decisionType: "environment-scan",
     decision: "Environment scan: Initech production — configuration drift detected",
     reasoning: "worker-service v3.0.0 running. LOG_LEVEL manually changed from 'warn' to 'debug' outside pipeline.",
     context: { drift: true, driftVariable: "LOG_LEVEL", expected: "warn", actual: "debug" },

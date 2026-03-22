@@ -368,7 +368,7 @@ export class QueryEngine {
     // Gather debrief entries for these deployments
     const allDebriefEntries: DebriefEntry[] = [];
     for (const deployment of relevantDeployments) {
-      const entries = this.debrief.getByDeployment(deployment.deploymentId);
+      const entries = this.debrief.getByOperation(deployment.deploymentId);
       allDebriefEntries.push(...entries);
     }
 
@@ -399,14 +399,14 @@ export class QueryEngine {
     // Detail each deployment
     for (const deployment of relevantDeployments) {
       const deployEntries = allDebriefEntries.filter(
-        (e) => e.deploymentId === deployment.deploymentId,
+        (e) => e.operationId === deployment.deploymentId,
       );
 
       const line = `• ${deployment.operationId} v${deployment.version} — ${deployment.status.toUpperCase()}`;
 
       if (deployment.status === "failed") {
         const diagnostic = diagnosticEntries.find(
-          (e) => e.deploymentId === deployment.deploymentId,
+          (e) => e.operationId === deployment.deploymentId,
         );
         const failureEntry = deployEntries.find(
           (e) => e.decisionType === "deployment-failure",
@@ -448,10 +448,10 @@ export class QueryEngine {
 
         // Check for conflicts or health retries that could indicate problems
         const deployConflicts = conflictEntries.filter(
-          (e) => e.deploymentId === deployment.deploymentId,
+          (e) => e.operationId === deployment.deploymentId,
         );
         const deployHealthRetries = healthEntries.filter(
-          (e) => e.deploymentId === deployment.deploymentId,
+          (e) => e.operationId === deployment.deploymentId,
         );
 
         if (deployConflicts.length > 0 || deployHealthRetries.length > 0) {
@@ -722,7 +722,7 @@ export class QueryEngine {
         const report = diag.context?.diagnostic as Record<string, unknown> | undefined;
         if (report) {
           evidence.push({
-            source: `previous diagnostic (${diag.deploymentId})`,
+            source: `previous diagnostic (${diag.operationId})`,
             summary: diag.decision,
             detail: (report.recommendation as string) ?? diag.reasoning,
           });

@@ -90,7 +90,7 @@ export function registerEnvoyReportRoutes(
         if (!deployment || deployment.partitionId !== entry.partitionId) {
           debrief.record({
             partitionId: entry.partitionId,
-            deploymentId: entry.deploymentId,
+            operationId: entry.deploymentId,
             agent: "server",
             decisionType: "system",
             decision: "Rejected Envoy report: partition boundary violation",
@@ -114,7 +114,7 @@ export function registerEnvoyReportRoutes(
     for (const entry of report.debriefEntries) {
       debrief.record({
         partitionId: entry.partitionId,
-        deploymentId: entry.deploymentId,
+        operationId: entry.deploymentId,
         agent: entry.agent as "server" | "envoy",
         decisionType: entry.decisionType as DecisionType,
         decision: entry.decision,

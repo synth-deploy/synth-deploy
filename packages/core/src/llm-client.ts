@@ -36,8 +36,8 @@ export interface LlmCallParams {
   promptSummary: string;
   /** Partition context for debrief */
   partitionId?: string | null;
-  /** Deployment context for debrief */
-  deploymentId?: string | null;
+  /** Operation context for debrief */
+  operationId?: string | null;
   /** Max tokens for response */
   maxTokens?: number;
 }
@@ -670,7 +670,7 @@ export class LlmClient {
   ): void {
     this._debrief.record({
       partitionId: params.partitionId ?? null,
-      deploymentId: params.deploymentId ?? null,
+      operationId: params.operationId ?? null,
       agent: this._agent,
       decisionType: "llm-call",
       decision: fallbackUsed
@@ -701,7 +701,7 @@ export class LlmClient {
     const action = gating.proceed ? "proceeded" : "skipped";
     this._debrief.record({
       partitionId: params.partitionId ?? null,
-      deploymentId: params.deploymentId ?? null,
+      operationId: params.operationId ?? null,
       agent: this._agent,
       decisionType: "llm-call",
       decision: `Task ${taskDescription(task)} gated: ${gating.level}`,
@@ -743,7 +743,7 @@ export class LlmClient {
     maxTokens?: number;
     promptSummary: string;
     partitionId?: string | null;
-    deploymentId?: string | null;
+    operationId?: string | null;
   }): Promise<LlmResult> {
     console.log(`[LlmClient.callWithProbeLoop] Entry — available: ${this.isAvailable()}, timestamps: ${this._callTimestamps.length}`);
     if (!this.isAvailable()) {

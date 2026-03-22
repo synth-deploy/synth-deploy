@@ -87,7 +87,7 @@ export class EscalationPackager {
     reason: string,
   ): EscalationPackage {
     const deployment = this.state.getDeployment(deploymentId);
-    const debriefEntries = this.debrief.getByDeployment(deploymentId);
+    const debriefEntries = this.debrief.getByOperation(deploymentId);
 
     // Get diagnostics from debrief entries
     const diagnosticEntries = debriefEntries.filter(
@@ -125,7 +125,7 @@ export class EscalationPackager {
       );
       for (const related of envDeployments.slice(-3)) {
         if (related.deploymentId !== deploymentId) {
-          const relatedEntries = this.debrief.getByDeployment(related.deploymentId);
+          const relatedEntries = this.debrief.getByOperation(related.deploymentId);
           allRelevantEntries.push(...relatedEntries);
         }
       }
@@ -175,7 +175,7 @@ export class EscalationPackager {
     const diagnostics: Array<{ deploymentId: string; report: DiagnosticReport }> = [];
     const recentFailures = recentDeployments.filter((d) => d.status === "failed");
     for (const failure of recentFailures.slice(-3)) {
-      const diagEntries = this.debrief.getByDeployment(failure.deploymentId).filter(
+      const diagEntries = this.debrief.getByOperation(failure.deploymentId).filter(
         (e) => e.decisionType === "diagnostic-investigation",
       );
       for (const diagEntry of diagEntries) {

@@ -10,7 +10,13 @@ export type {
   UserId,
   RoleId,
   DeploymentStatus,
-  DeploymentTrigger,
+  OperationId,
+  OperationStatus,
+  Operation,
+  OperationInput,
+  OperationType,
+  OperationTrigger,
+  OperationPlan,
   DeploymentPlan,
   PlannedStep,
   ExecutionRecord,
@@ -85,7 +91,7 @@ export type {
 } from "./types.js";
 
 export {
-  DeploymentTriggerSchema,
+  OperationTriggerSchema,
   DeploymentStatus as DeploymentStatusEnum,
   AgentType as AgentTypeEnum,
   DecisionType as DecisionTypeEnum,

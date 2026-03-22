@@ -85,7 +85,7 @@ export function registerPartitionRoutes(
         // Log cascade deletion to Decision Diary
         debrief.record({
           partitionId: id,
-          deploymentId: null,
+          operationId: null,
           agent: "server",
           decisionType: "system",
           decision: `Cascade-deleted partition "${partition.name}" with ${linkedDeployments.length} deployment(s)`,

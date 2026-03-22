@@ -515,7 +515,7 @@ export class DefaultOperationExecutor {
       if (result.status === "failed") {
         this.debrief?.record({
           partitionId: null,
-          deploymentId: depId,
+          operationId: depId,
           agent: "envoy",
           decisionType: "rollback-execution",
           decision: `Rollback step failed: ${step.description}`,
@@ -561,7 +561,7 @@ export class DefaultOperationExecutor {
 
     this.debrief.record({
       partitionId: null,
-      deploymentId: null,
+      operationId: null,
       agent: "envoy",
       decisionType: "deployment-execution",
       decision: `Executed: ${step.action} ${step.target} — ${success ? "succeeded" : "failed"}`,

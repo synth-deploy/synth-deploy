@@ -3,7 +3,9 @@ import { z } from "zod";
 // --- Identifiers ---
 
 export type PartitionId = string;
-export type DeploymentId = string;
+export type OperationId = string;
+/** @deprecated Use OperationId */
+export type DeploymentId = OperationId;
 export type EnvironmentId = string;
 export type DebriefEntryId = string;
 export type EnvoyId = string;
@@ -13,9 +15,9 @@ export type SecurityBoundaryId = string;
 export type UserId = string & { readonly __brand: "UserId" };
 export type RoleId = string & { readonly __brand: "RoleId" };
 
-// --- Deployment ---
+// --- Operation ---
 
-export const DeploymentStatus = z.enum([
+export const OperationStatus = z.enum([
   "pending",
   "planning",
   "awaiting_approval",
@@ -26,19 +28,33 @@ export const DeploymentStatus = z.enum([
   "failed",
   "rolled_back",
 ]);
-export type DeploymentStatus = z.infer<typeof DeploymentStatus>;
+export type OperationStatus = z.infer<typeof OperationStatus>;
+/** @deprecated Use OperationStatus */
+export const DeploymentStatus = OperationStatus;
+/** @deprecated Use OperationStatus */
+export type DeploymentStatus = OperationStatus;
 
-export const DeploymentTriggerSchema = z.object({
-  artifactId: z.string(),
-  artifactVersionId: z.string().optional(),
+// OperationInput — discriminated union describing what the operation does
+export type OperationInput =
+  | { type: "deploy"; artifactId: string; artifactVersionId?: string }
+  | { type: "maintain"; intent: string; parameters?: Record<string, unknown> }
+  | { type: "query"; intent: string }
+  | { type: "investigate"; intent: string; allowWrite?: boolean }
+  | { type: "trigger"; condition: string; responseIntent: string; parameters?: Record<string, unknown> }
+  | { type: "composite"; operations: OperationInput[] };
+
+export type OperationType = OperationInput["type"];
+
+// OperationTrigger — who/what initiated this operation and where it targets
+export const OperationTriggerSchema = z.object({
   environmentId: z.string(),
   partitionId: z.string().optional(),
-  triggeredBy: z.enum(["user", "agent"]).default("user"),
+  triggeredBy: z.enum(["user", "agent", "webhook"]).default("user"),
   variables: z.record(z.string()).optional(),
 });
-export type DeploymentTrigger = z.infer<typeof DeploymentTriggerSchema>;
+export type OperationTrigger = z.infer<typeof OperationTriggerSchema>;
 
-// --- Deployment Plan & Execution ---
+// --- Operation Plan & Execution ---
 
 export interface ConfigChange {
   key: string;
@@ -46,12 +62,14 @@ export interface ConfigChange {
   to: string;
 }
 
-export interface DeploymentPlan {
+export interface OperationPlan {
   steps: PlannedStep[];
   reasoning: string;
   diffFromCurrent?: ConfigChange[];
   diffFromPreviousPlan?: string;
 }
+/** @deprecated Use OperationPlan */
+export type DeploymentPlan = OperationPlan;
 
 export interface PlannedStep {
   description: string;
@@ -79,9 +97,9 @@ export interface ExecutedStep {
   error?: string;
 }
 
-// --- Deployment Enrichment (cross-system context) ---
+// --- Operation Enrichment (cross-system context) ---
 
-export interface DeploymentEnrichment {
+export interface OperationEnrichment {
   recentDeploymentsToEnv: number;
   previouslyRolledBack: boolean;
   conflictingDeployments: string[];
@@ -92,43 +110,54 @@ export interface DeploymentEnrichment {
     completedAt?: Date;
   };
 }
+/** @deprecated Use OperationEnrichment */
+export type DeploymentEnrichment = OperationEnrichment;
 
-// --- Deployment Recommendation (combined command + envoy) ---
+// --- Operation Recommendation ---
 
 export type RecommendationVerdict = "proceed" | "caution" | "hold";
 
-export interface DeploymentRecommendation {
+export interface OperationRecommendation {
   verdict: RecommendationVerdict;
   summary: string;
   factors: string[];
 }
+/** @deprecated Use OperationRecommendation */
+export type DeploymentRecommendation = OperationRecommendation;
 
-// --- Deployment (unified lifecycle) ---
+// --- Operation (unified lifecycle) ---
 
-export interface Deployment {
-  id: DeploymentId;
-  artifactId: ArtifactId;
-  artifactVersionId?: ArtifactVersionId;
+export interface Operation {
+  id: OperationId;
+  input: OperationInput;
+  /** Natural language objective — populated for non-deploy types; optional context for deploy */
+  intent?: string;
+  /** Parent operation that spawned this one (e.g. trigger → child operation) */
+  lineage?: OperationId;
+  /** Structured findings — populated by investigate operations */
+  findings?: string;
   envoyId?: EnvoyId;
   environmentId?: EnvironmentId;
   partitionId?: PartitionId;
-  version: string;
-  status: DeploymentStatus;
+  version?: string;
+  status: OperationStatus;
   variables: Record<string, string>;
-  plan?: DeploymentPlan;
-  rollbackPlan?: DeploymentPlan;
+  plan?: OperationPlan;
+  rollbackPlan?: OperationPlan;
   executionRecord?: ExecutionRecord;
   approvedBy?: string;
   approvedAt?: Date;
   rejectionReason?: string;
-  enrichment?: DeploymentEnrichment;
-  recommendation?: DeploymentRecommendation;
-  retryOf?: DeploymentId;
+  enrichment?: OperationEnrichment;
+  recommendation?: OperationRecommendation;
+  retryOf?: OperationId;
   debriefEntryIds: DebriefEntryId[];
   createdAt: Date;
   completedAt?: Date;
   failureReason?: string;
 }
+/** @deprecated Use Operation */
+export type Deployment = Operation;
 
 // --- Debrief ---
 
@@ -164,7 +193,7 @@ export interface DebriefEntry {
   id: DebriefEntryId;
   timestamp: Date;
   partitionId: PartitionId | null;
-  deploymentId: DeploymentId | null;
+  operationId: OperationId | null;
   agent: AgentType;
   decisionType: DecisionType;
   decision: string;
@@ -421,10 +450,10 @@ export interface TelemetryEvent {
 }
 
 export type TelemetryAction =
-  | "deployment.created"
-  | "deployment.approved"
-  | "deployment.rejected"
-  | "deployment.modified"
+  | "operation.created"
+  | "operation.approved"
+  | "operation.rejected"
+  | "operation.modified"
   | "artifact.created"
   | "artifact.annotated"
   | "partition.created"
