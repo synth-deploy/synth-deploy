@@ -158,7 +158,7 @@ describe("API client — deployments", () => {
 
     const result = await listDeployments();
     expect(result).toEqual([{ id: "d-1" }]);
-    expect(fetchMock).toHaveBeenCalledWith("/api/deployments", expect.anything());
+    expect(fetchMock).toHaveBeenCalledWith("/api/operations", expect.anything());
   });
 
   it("listDeployments filters by partitionId", async () => {
@@ -166,7 +166,7 @@ describe("API client — deployments", () => {
 
     await listDeployments({ partitionId: "p-1" });
     expect(fetchMock).toHaveBeenCalledWith(
-      "/api/deployments?partitionId=p-1",
+      "/api/operations?partitionId=p-1",
       expect.anything(),
     );
   });
@@ -176,7 +176,7 @@ describe("API client — deployments", () => {
 
     await listDeployments({ artifactId: "art-1" });
     expect(fetchMock).toHaveBeenCalledWith(
-      "/api/deployments?artifactId=art-1",
+      "/api/operations?artifactId=art-1",
       expect.anything(),
     );
   });
@@ -200,7 +200,7 @@ describe("API client — deployments", () => {
 
     await createDeployment(params);
     const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toBe("/api/deployments");
+    expect(url).toBe("/api/operations");
     expect(init.method).toBe("POST");
     expect(JSON.parse(init.body)).toEqual(params);
   });
