@@ -27,7 +27,6 @@ function makeInstruction(
   overrides: Partial<DeploymentInstruction> = {},
 ): DeploymentInstruction {
   return {
-    deploymentId: `deploy-${Date.now()}`,
     partitionId: "partition-1",
     environmentId: "env-prod",
     operationId: "web-app",
@@ -178,7 +177,7 @@ describe("DiagnosticInvestigator — LLM-Enhanced Log Scanning", () => {
     expect(mockLlm.classifyCalls.length).toBe(1);
     expect(mockLlm.classifyCalls[0].promptSummary).toContain("Log pattern analysis");
     expect(mockLlm.classifyCalls[0].partitionId).toBe(instruction.partitionId);
-    expect(mockLlm.classifyCalls[0].deploymentId).toBe(instruction.deploymentId);
+    expect(mockLlm.classifyCalls[0].operationId).toBe(instruction.operationId);
 
     // Should have parsed LLM response into findings
     expect(findings.length).toBe(1);
@@ -386,7 +385,7 @@ describe("DiagnosticInvestigator — LLM-Enhanced Report Generation", () => {
     expect(mockLlm.reasonCalls.length).toBe(1);
     expect(mockLlm.reasonCalls[0].promptSummary).toContain("Diagnostic report generation");
     expect(mockLlm.reasonCalls[0].partitionId).toBe(instruction.partitionId);
-    expect(mockLlm.reasonCalls[0].deploymentId).toBe(instruction.deploymentId);
+    expect(mockLlm.reasonCalls[0].operationId).toBe(instruction.operationId);
 
     // Report should contain LLM-generated content
     expect(report.summary).toContain("REDIS_URL");

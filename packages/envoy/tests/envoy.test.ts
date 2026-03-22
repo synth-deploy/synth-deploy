@@ -27,7 +27,6 @@ function cleanDir(dir: string): void {
 
 function makeInstruction(overrides: Partial<DeploymentInstruction> = {}): DeploymentInstruction {
   return {
-    deploymentId: `deploy-${Date.now()}`,
     partitionId: "partition-1",
     environmentId: "env-prod",
     operationId: "web-app",
@@ -220,10 +219,10 @@ describe("EnvoyAgent — Local Pipeline", () => {
   });
 
   it("records all pipeline steps to the Decision Diary", async () => {
-    const instruction = makeInstruction({ deploymentId: "diary-test" });
+    const instruction = makeInstruction({ operationId: "diary-test" });
     await agent.executeDeployment(instruction);
 
-    const entries = diary.getByDeployment("diary-test");
+    const entries = diary.getByOperation("diary-test");
 
     // Expect: receipt, scan, execution, verification, completion
     expect(entries.length).toBeGreaterThanOrEqual(5);
@@ -231,8 +230,8 @@ describe("EnvoyAgent — Local Pipeline", () => {
     // All entries should be from the envoy agent
     expect(entries.every((e) => e.agent === "envoy")).toBe(true);
 
-    // All entries should reference this deployment
-    expect(entries.every((e) => e.deploymentId === "diary-test")).toBe(true);
+    // All entries should reference this operation
+    expect(entries.every((e) => e.operationId === "diary-test")).toBe(true);
 
     // Check decision types present
     const types = entries.map((e) => e.decisionType);
@@ -244,10 +243,10 @@ describe("EnvoyAgent — Local Pipeline", () => {
   });
 
   it("diary entries have specific, actionable reasoning", async () => {
-    const instruction = makeInstruction({ deploymentId: "reasoning-test" });
+    const instruction = makeInstruction({ operationId: "reasoning-test" });
     await agent.executeDeployment(instruction);
 
-    const entries = diary.getByDeployment("reasoning-test");
+    const entries = diary.getByOperation("reasoning-test");
 
     for (const entry of entries) {
       // No empty reasoning
@@ -257,7 +256,7 @@ describe("EnvoyAgent — Local Pipeline", () => {
       expect(entry.reasoning).not.toContain("placeholder");
       // Every entry should reference something specific
       expect(
-        entry.reasoning.includes("web-app") ||
+        entry.reasoning.includes("reasoning-test") ||
         entry.reasoning.includes("2.0.0") ||
         entry.reasoning.includes("production") ||
         entry.reasoning.includes("Acme Corp") ||
@@ -268,10 +267,10 @@ describe("EnvoyAgent — Local Pipeline", () => {
   });
 
   it("updates local state after successful deployment", async () => {
-    const instruction = makeInstruction({ deploymentId: "state-test" });
+    const instruction = makeInstruction({ operationId: "state-test" });
     await agent.executeDeployment(instruction);
 
-    // Check deployment record
+    // Check deployment record (LocalStateStore uses operationId as the deploymentId key)
     const record = state.getDeployment("state-test");
     expect(record).toBeDefined();
     expect(record!.status).toBe("succeeded");
@@ -288,14 +287,14 @@ describe("EnvoyAgent — Local Pipeline", () => {
   it("recognizes upgrade from previous version", async () => {
     // First deployment
     const first = makeInstruction({
-      deploymentId: "upgrade-v1",
+      operationId: "upgrade-v1",
       version: "1.0.0",
     });
     await agent.executeDeployment(first);
 
     // Second deployment — should recognize as upgrade
     const second = makeInstruction({
-      deploymentId: "upgrade-v2",
+      operationId: "upgrade-v2",
       version: "2.0.0",
     });
     const result = await agent.executeDeployment(second);
@@ -303,7 +302,7 @@ describe("EnvoyAgent — Local Pipeline", () => {
     expect(result.success).toBe(true);
 
     // The scan entry should mention upgrading from v1
-    const entries = diary.getByDeployment("upgrade-v2");
+    const entries = diary.getByOperation("upgrade-v2");
     const scanEntry = entries.find((e) => e.decisionType === "environment-scan");
     expect(scanEntry).toBeDefined();
     expect(scanEntry!.decision).toContain("upgrading from v1.0.0");
@@ -311,10 +310,10 @@ describe("EnvoyAgent — Local Pipeline", () => {
   });
 
   it("first deployment is recognized as initial", async () => {
-    const instruction = makeInstruction({ deploymentId: "first-deploy" });
+    const instruction = makeInstruction({ operationId: "first-deploy" });
     await agent.executeDeployment(instruction);
 
-    const entries = diary.getByDeployment("first-deploy");
+    const entries = diary.getByOperation("first-deploy");
     const scanEntry = entries.find((e) => e.decisionType === "environment-scan");
     expect(scanEntry).toBeDefined();
     expect(scanEntry!.decision).toContain("first deployment");
@@ -336,12 +335,12 @@ describe("EnvoyAgent — Local Pipeline", () => {
 
   it("handles multiple partitions with isolation", async () => {
     const partitionA = makeInstruction({
-      deploymentId: "d-a",
+      operationId: "d-a",
       partitionId: "partition-a",
       partitionName: "Alpha Corp",
     });
     const partitionB = makeInstruction({
-      deploymentId: "d-b",
+      operationId: "d-b",
       partitionId: "partition-b",
       partitionName: "Beta Corp",
     });
@@ -349,7 +348,7 @@ describe("EnvoyAgent — Local Pipeline", () => {
     await agent.executeDeployment(partitionA);
     await agent.executeDeployment(partitionB);
 
-    // Both succeeded
+    // Both succeeded (state uses operationId as deploymentId key)
     expect(state.getDeployment("d-a")!.status).toBe("succeeded");
     expect(state.getDeployment("d-b")!.status).toBe("succeeded");
 
@@ -401,7 +400,7 @@ describe("Envoy HTTP Server", () => {
   });
 
   it("POST /deploy executes a deployment", async () => {
-    const instruction = makeInstruction({ deploymentId: "http-deploy" });
+    const instruction = makeInstruction({ operationId: "http-deploy" });
     const response = await app.inject({
       method: "POST",
       url: "/deploy",
@@ -412,7 +411,7 @@ describe("Envoy HTTP Server", () => {
 
     const body = JSON.parse(response.body);
     expect(body.success).toBe(true);
-    expect(body.deploymentId).toBe("http-deploy");
+    expect(body.operationId).toBe("http-deploy");
     expect(body.verificationPassed).toBe(true);
     expect(body.artifacts.length).toBeGreaterThan(0);
   });
@@ -433,7 +432,7 @@ describe("Envoy HTTP Server", () => {
     await app.inject({
       method: "POST",
       url: "/deploy",
-      payload: makeInstruction({ deploymentId: "status-deploy" }),
+      payload: makeInstruction({ operationId: "status-deploy" }),
     });
 
     const response = await app.inject({ method: "GET", url: "/status" });
@@ -451,7 +450,7 @@ describe("Envoy HTTP Server", () => {
     await app.inject({
       method: "POST",
       url: "/deploy",
-      payload: makeInstruction({ deploymentId: "detail-deploy" }),
+      payload: makeInstruction({ operationId: "detail-deploy" }),
     });
 
     const response = await app.inject({
@@ -476,12 +475,12 @@ describe("Envoy HTTP Server", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Test Suite 6: Full Command → Envoy Deployment Cycle
+// Test Suite 6: Full Server → Envoy Deployment Cycle
 // ---------------------------------------------------------------------------
 
-describe("Full Deployment Cycle — Command triggers, Envoy executes", () => {
+describe("Full Deployment Cycle — Server triggers, Envoy executes", () => {
   let baseDir: string;
-  let commandDiary: DecisionDebrief;
+  let serverDiary: DecisionDebrief;
   let envoyDiary: DecisionDebrief;
   let state: LocalStateStore;
   let envoyAgent: EnvoyAgent;
@@ -490,7 +489,7 @@ describe("Full Deployment Cycle — Command triggers, Envoy executes", () => {
   beforeEach(async () => {
     baseDir = makeTmpDir();
     fs.mkdirSync(path.join(baseDir, "deployments"), { recursive: true });
-    commandDiary = new DecisionDebrief();
+    serverDiary = new DecisionDebrief();
     envoyDiary = new DecisionDebrief();
     state = new LocalStateStore();
     envoyAgent = new EnvoyAgent(envoyDiary, state, baseDir);
@@ -503,34 +502,33 @@ describe("Full Deployment Cycle — Command triggers, Envoy executes", () => {
     cleanDir(baseDir);
   });
 
-  it("simulates complete Command→Envoy deployment flow", async () => {
-    // Step 1: Command decides to deploy (simulated — we record Command's decision)
-    const deploymentId = "full-cycle-001";
-    commandDiary.record({
+  it("simulates complete Server→Envoy deployment flow", async () => {
+    // Step 1: Server decides to deploy (simulated — we record Server's decision)
+    const operationId = "full-cycle-001";
+    serverDiary.record({
       partitionId: "partition-1",
-      deploymentId,
-      agent: "command",
+      operationId,
+      agent: "server",
       decisionType: "pipeline-plan",
       decision: "Planned deployment pipeline: resolve-configuration → preflight-health-check → execute-deployment → post-deploy-verify",
-      reasoning: "Command orchestrating deployment of web-app v3.0.0 to production",
+      reasoning: "Server orchestrating deployment of web-app v3.0.0 to production",
       context: { operationId: "web-app", version: "3.0.0" },
     });
 
-    // Step 2: Command checks Envoy health via HTTP
+    // Step 2: Server checks Envoy health via HTTP
     const healthResponse = await app.inject({ method: "GET", url: "/health" });
     const health = JSON.parse(healthResponse.body);
     expect(health.status).toBe("healthy");
     expect(health.readiness.ready).toBe(true);
 
-    // Step 3: Command delegates execution to Envoy via HTTP
+    // Step 3: Server delegates execution to Envoy via HTTP
     const deployResponse = await app.inject({
       method: "POST",
       url: "/deploy",
       payload: {
-        deploymentId,
+        operationId,
         partitionId: "partition-1",
         environmentId: "env-prod",
-        operationId: "web-app",
         version: "3.0.0",
         variables: { APP_ENV: "production", LOG_LEVEL: "warn" },
         environmentName: "production",
@@ -542,15 +540,15 @@ describe("Full Deployment Cycle — Command triggers, Envoy executes", () => {
     expect(deployResult.success).toBe(true);
     expect(deployResult.verificationPassed).toBe(true);
 
-    // Step 4: Command records Envoy's result (simulated)
-    commandDiary.record({
+    // Step 4: Server records Envoy's result (simulated)
+    serverDiary.record({
       partitionId: "partition-1",
-      deploymentId,
-      agent: "command",
+      operationId,
+      agent: "server",
       decisionType: "deployment-completion",
       decision: `Envoy confirmed deployment: ${deployResult.artifacts.length} artifacts, all verification checks passed`,
       reasoning:
-        `Envoy executed deployment of web-app v3.0.0 on production. ` +
+        `Envoy executed deployment of ${operationId} v3.0.0 on production. ` +
         `Workspace: ${deployResult.workspacePath}. ` +
         `Execution took ${deployResult.executionDurationMs}ms. ` +
         `${deployResult.verificationChecks.length} verification checks all passed.`,
@@ -559,21 +557,21 @@ describe("Full Deployment Cycle — Command triggers, Envoy executes", () => {
       },
     });
 
-    // Verify: both diaries have entries for this deployment
-    const commandEntries = commandDiary.getByDeployment(deploymentId);
-    const envoyEntries = envoyDiary.getByDeployment(deploymentId);
+    // Verify: both diaries have entries for this operation
+    const serverEntries = serverDiary.getByOperation(operationId);
+    const envoyEntries = envoyDiary.getByOperation(operationId);
 
-    expect(commandEntries.length).toBeGreaterThanOrEqual(2);
+    expect(serverEntries.length).toBeGreaterThanOrEqual(2);
     expect(envoyEntries.length).toBeGreaterThanOrEqual(5);
 
-    // Command entries use "command" agent
-    expect(commandEntries.every((e) => e.agent === "command")).toBe(true);
+    // Server entries use "server" agent
+    expect(serverEntries.every((e) => e.agent === "server")).toBe(true);
     // Envoy entries use "envoy" agent
     expect(envoyEntries.every((e) => e.agent === "envoy")).toBe(true);
 
-    // Both reference the same deployment
-    expect(commandEntries.every((e) => e.deploymentId === deploymentId)).toBe(true);
-    expect(envoyEntries.every((e) => e.deploymentId === deploymentId)).toBe(true);
+    // Both reference the same operation
+    expect(serverEntries.every((e) => e.operationId === operationId)).toBe(true);
+    expect(envoyEntries.every((e) => e.operationId === operationId)).toBe(true);
   });
 
   it("Envoy health check → deploy → status shows complete lifecycle", async () => {
@@ -585,7 +583,7 @@ describe("Full Deployment Cycle — Command triggers, Envoy executes", () => {
     const d = await app.inject({
       method: "POST",
       url: "/deploy",
-      payload: makeInstruction({ deploymentId: "lifecycle-001" }),
+      payload: makeInstruction({ operationId: "lifecycle-001" }),
     });
     expect(JSON.parse(d.body).success).toBe(true);
 
@@ -602,7 +600,7 @@ describe("Full Deployment Cycle — Command triggers, Envoy executes", () => {
       method: "POST",
       url: "/deploy",
       payload: makeInstruction({
-        deploymentId: "lifecycle-002",
+        operationId: "lifecycle-002",
         version: "3.0.0",
       }),
     });
@@ -617,24 +615,24 @@ describe("Full Deployment Cycle — Command triggers, Envoy executes", () => {
   });
 
   it("combined diary tells the complete story across both agents", async () => {
-    const deploymentId = "combined-story";
+    const operationId = "combined-story";
 
-    // Command plan
-    commandDiary.record({
+    // Server plan
+    serverDiary.record({
       partitionId: "partition-1",
-      deploymentId,
-      agent: "command",
+      operationId,
+      agent: "server",
       decisionType: "pipeline-plan",
       decision: "Planned deployment pipeline",
-      reasoning: "Command orchestrating web-app v2.0.0 to production",
+      reasoning: "Server orchestrating web-app v2.0.0 to production",
       context: {},
     });
 
-    // Command config resolution
-    commandDiary.record({
+    // Server config resolution
+    serverDiary.record({
       partitionId: "partition-1",
-      deploymentId,
-      agent: "command",
+      operationId,
+      agent: "server",
       decisionType: "configuration-resolved",
       decision: "Configuration accepted",
       reasoning: "3 variables merged, no conflicts",
@@ -645,14 +643,14 @@ describe("Full Deployment Cycle — Command triggers, Envoy executes", () => {
     await app.inject({
       method: "POST",
       url: "/deploy",
-      payload: makeInstruction({ deploymentId }),
+      payload: makeInstruction({ operationId }),
     });
 
-    // Command records completion
-    commandDiary.record({
+    // Server records completion
+    serverDiary.record({
       partitionId: "partition-1",
-      deploymentId,
-      agent: "command",
+      operationId,
+      agent: "server",
       decisionType: "deployment-completion",
       decision: "Deployment confirmed by Envoy",
       reasoning: "All checks passed",
@@ -660,18 +658,18 @@ describe("Full Deployment Cycle — Command triggers, Envoy executes", () => {
     });
 
     // Combined view: server decisions + envoy decisions
-    const commandEntries = commandDiary.getByDeployment(deploymentId);
-    const envoyEntries = envoyDiary.getByDeployment(deploymentId);
+    const serverEntries = serverDiary.getByOperation(operationId);
+    const envoyEntries = envoyDiary.getByOperation(operationId);
 
-    // Both diaries recorded entries for this deployment
-    expect(commandEntries.length).toBeGreaterThanOrEqual(3);
+    // Both diaries recorded entries for this operation
+    expect(serverEntries.length).toBeGreaterThanOrEqual(3);
     expect(envoyEntries.length).toBeGreaterThanOrEqual(5);
 
-    // Command entries cover the orchestration story
-    const commandTypes = commandEntries.map((e) => e.decisionType);
-    expect(commandTypes).toContain("pipeline-plan");
-    expect(commandTypes).toContain("configuration-resolved");
-    expect(commandTypes).toContain("deployment-completion");
+    // Server entries cover the orchestration story
+    const serverTypes = serverEntries.map((e) => e.decisionType);
+    expect(serverTypes).toContain("pipeline-plan");
+    expect(serverTypes).toContain("configuration-resolved");
+    expect(serverTypes).toContain("deployment-completion");
 
     // Envoy entries cover the local execution story
     const envoyTypes = envoyEntries.map((e) => e.decisionType);
@@ -682,18 +680,18 @@ describe("Full Deployment Cycle — Command triggers, Envoy executes", () => {
     expect(envoyTypes).toContain("deployment-completion");
 
     // Together they tell the complete story — 8+ entries total
-    const totalEntries = commandEntries.length + envoyEntries.length;
+    const totalEntries = serverEntries.length + envoyEntries.length;
     expect(totalEntries).toBeGreaterThanOrEqual(8);
 
     // Agent attribution is correct
-    expect(commandEntries.every((e) => e.agent === "command")).toBe(true);
+    expect(serverEntries.every((e) => e.agent === "server")).toBe(true);
     expect(envoyEntries.every((e) => e.agent === "envoy")).toBe(true);
 
-    // Command's final entry references Envoy completion
-    const commandCompletion = commandEntries.find(
+    // Server's final entry references Envoy completion
+    const serverCompletion = serverEntries.find(
       (e) => e.decisionType === "deployment-completion",
     );
-    expect(commandCompletion).toBeDefined();
-    expect(commandCompletion!.decision).toContain("confirmed");
+    expect(serverCompletion).toBeDefined();
+    expect(serverCompletion!.decision).toContain("confirmed");
   });
 });

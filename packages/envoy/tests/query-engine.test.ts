@@ -31,10 +31,9 @@ function makeInstruction(
   overrides: Partial<DeploymentInstruction> = {},
 ): DeploymentInstruction {
   return {
-    deploymentId: `deploy-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
     partitionId: "partition-1",
     environmentId: "env-prod",
-    operationId: "web-app",
+    operationId: `web-app-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
     version: "2.0.0",
     variables: {
       APP_ENV: "production",
@@ -61,45 +60,40 @@ async function seedDeploymentHistory(
 
   // Deployment 1: v1.0.0 — success (30 days ago)
   const d1 = makeInstruction({
-    deploymentId: "deploy-001",
+    operationId: "web-app-v1",
     version: "1.0.0",
-    operationId: "web-app",
   });
   instructions.push(d1);
   await agent.executeDeployment(d1);
 
   // Deployment 2: v1.1.0 — success (15 days ago)
   const d2 = makeInstruction({
-    deploymentId: "deploy-002",
+    operationId: "web-app-v1.1",
     version: "1.1.0",
-    operationId: "web-app",
   });
   instructions.push(d2);
   await agent.executeDeployment(d2);
 
   // Deployment 3: v2.0.0 — success (7 days ago, "last Tuesday" area)
   const d3 = makeInstruction({
-    deploymentId: "deploy-003",
+    operationId: "web-app-v2",
     version: "2.0.0",
-    operationId: "web-app",
   });
   instructions.push(d3);
   await agent.executeDeployment(d3);
 
   // Deployment 4: v2.1.0 — success (3 days ago)
   const d4 = makeInstruction({
-    deploymentId: "deploy-004",
+    operationId: "web-app-v2.1",
     version: "2.1.0",
-    operationId: "web-app",
   });
   instructions.push(d4);
   await agent.executeDeployment(d4);
 
   // Deployment 5: api-service v1.0.0 — success (5 days ago)
   const d5 = makeInstruction({
-    deploymentId: "deploy-005",
+    operationId: "api-service-v1",
     version: "1.0.0",
-    operationId: "api-service",
     environmentId: "env-staging",
     environmentName: "staging",
   });
@@ -225,7 +219,7 @@ describe("QueryEngine", () => {
     it("includes diagnostic details for failed deployments", async () => {
       // Execute a deployment that will succeed, then check diagnostic handling
       const instruction = makeInstruction({
-        deploymentId: "deploy-diag-test",
+        operationId: "web-app-diag",
         version: "3.0.0",
       });
       await agent.executeDeployment(instruction);
@@ -233,7 +227,7 @@ describe("QueryEngine", () => {
       const result = queryEngine.query("Why did the recent deployment have issues?");
 
       // Should reference the actual deployment
-      expect(result.answer).toContain("web-app");
+      expect(result.answer).toContain("web-app-diag");
       expect(result.answer).toContain("v3.0.0");
     });
   });
@@ -662,7 +656,7 @@ describe("EscalationPackager", () => {
   describe("Deployment-specific escalation", () => {
     it("packages a failed deployment with full context", async () => {
       const instruction = makeInstruction({
-        deploymentId: "deploy-esc-001",
+        operationId: "deploy-esc-001",
         version: "3.0.0",
       });
       await agent.executeDeployment(instruction);
@@ -673,7 +667,7 @@ describe("EscalationPackager", () => {
       );
 
       expect(pkg.severity).toBeTruthy();
-      expect(pkg.summary).toContain("web-app");
+      expect(pkg.summary).toContain("deploy-esc-001");
       expect(pkg.summary).toContain("v3.0.0");
       expect(pkg.recommendedAction).toBeTruthy();
       expect(pkg.relevantDebriefEntries.length).toBeGreaterThan(0);
@@ -682,7 +676,7 @@ describe("EscalationPackager", () => {
 
     it("includes environment state at time of escalation", async () => {
       const instruction = makeInstruction({
-        deploymentId: "deploy-esc-002",
+        operationId: "deploy-esc-002",
         version: "2.0.0",
       });
       await agent.executeDeployment(instruction);
@@ -701,7 +695,7 @@ describe("EscalationPackager", () => {
       await seedDeploymentHistory(agent, baseDir, state, diary);
 
       const pkg = packager.packageForDeployment(
-        "deploy-004",
+        "web-app-v2.1",
         "Last deployment caused issues",
       );
 
@@ -713,15 +707,15 @@ describe("EscalationPackager", () => {
       await seedDeploymentHistory(agent, baseDir, state, diary);
 
       const pkg = packager.packageForDeployment(
-        "deploy-004",
+        "web-app-v2.1",
         "Need context on recent changes",
       );
 
-      // Should include entries from deploy-004 AND related deployments
-      const deploymentIds = new Set(
-        pkg.relevantDebriefEntries.map((e) => e.deploymentId),
+      // Should include entries from web-app-v2.1 AND related deployments
+      const operationIds = new Set(
+        pkg.relevantDebriefEntries.map((e) => e.operationId),
       );
-      expect(deploymentIds.has("deploy-004")).toBe(true);
+      expect(operationIds.has("web-app-v2.1")).toBe(true);
       // May include entries from other deployments in the same environment
       expect(pkg.relevantDebriefEntries.length).toBeGreaterThan(0);
     });
@@ -740,7 +734,7 @@ describe("EscalationPackager", () => {
       await seedDeploymentHistory(agent, baseDir, state, diary);
 
       const pkg = packager.packageForDeployment(
-        "deploy-004",
+        "web-app-v2.1",
         "Investigating performance issue",
       );
 
@@ -751,7 +745,7 @@ describe("EscalationPackager", () => {
       expect(pkg.formatted).toContain("## Recent Deployment History");
       expect(pkg.formatted).toContain("## Decision Trail");
       // Should contain actual data
-      expect(pkg.formatted).toContain("web-app");
+      expect(pkg.formatted).toContain("web-app-v2.1");
       expect(pkg.formatted).toContain("envoy-test-01");
     });
   });
@@ -807,7 +801,7 @@ describe("EscalationPackager", () => {
     it("rates severity based on failure patterns", async () => {
       // Execute a successful deployment
       const instruction = makeInstruction({
-        deploymentId: "deploy-sev-001",
+        operationId: "deploy-sev-001",
         version: "1.0.0",
       });
       await agent.executeDeployment(instruction);
@@ -893,7 +887,7 @@ describe("Envoy HTTP — query and escalation endpoints", () => {
       method: "POST",
       url: "/escalate/deployment",
       payload: {
-        deploymentId: "deploy-004",
+        deploymentId: "web-app-v2.1",
         reason: "Deployment caused performance degradation",
       },
     });
@@ -901,7 +895,7 @@ describe("Envoy HTTP — query and escalation endpoints", () => {
     expect(response.statusCode).toBe(200);
     const body = JSON.parse(response.body);
     expect(body.severity).toBeTruthy();
-    expect(body.summary).toContain("web-app");
+    expect(body.summary).toContain("web-app-v2.1");
     expect(body.formatted).toContain("# Escalation Package");
     expect(body.relevantDebriefEntries.length).toBeGreaterThan(0);
 

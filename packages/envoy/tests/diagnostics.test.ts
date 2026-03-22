@@ -32,7 +32,6 @@ function makeInstruction(
   overrides: Partial<DeploymentInstruction> = {},
 ): DeploymentInstruction {
   return {
-    deploymentId: `deploy-${Date.now()}`,
     partitionId: "partition-1",
     environmentId: "env-prod",
     operationId: "web-app",
@@ -87,7 +86,6 @@ function setupServiceCrashWorkspace(
   fs.writeFileSync(
     path.join(workspacePath, "manifest.json"),
     JSON.stringify({
-      deploymentId: instruction.deploymentId,
       operationId: instruction.operationId,
       version: instruction.version,
       variables: instruction.variables,
@@ -134,7 +132,6 @@ function setupHealthTimeoutWorkspace(
   fs.writeFileSync(
     path.join(workspacePath, "manifest.json"),
     JSON.stringify({
-      deploymentId: instruction.deploymentId,
       operationId: instruction.operationId,
       version: instruction.version,
     }),
@@ -182,7 +179,6 @@ function setupDependencyUnavailableWorkspace(
   fs.writeFileSync(
     path.join(workspacePath, "manifest.json"),
     JSON.stringify({
-      deploymentId: instruction.deploymentId,
       operationId: instruction.operationId,
       version: instruction.version,
     }),
@@ -229,7 +225,6 @@ function setupPartialDeploymentWorkspace(
   fs.writeFileSync(
     path.join(workspacePath, "manifest.json"),
     JSON.stringify({
-      deploymentId: instruction.deploymentId,
       operationId: instruction.operationId,
       version: instruction.version,
     }),
@@ -269,7 +264,7 @@ describe("DiagnosticInvestigator — Failure Scenario Investigation", () => {
 
   describe("Scenario 1: Service failed to start", () => {
     it("identifies port conflict as root cause", () => {
-      const instruction = makeInstruction({ deploymentId: "crash-001" });
+      const instruction = makeInstruction();
       const workspacePath = path.join(baseDir, "deployments", "crash-001");
       setupServiceCrashWorkspace(workspacePath, instruction);
 
@@ -285,7 +280,7 @@ describe("DiagnosticInvestigator — Failure Scenario Investigation", () => {
     });
 
     it("provides actionable recommendation with port", () => {
-      const instruction = makeInstruction({ deploymentId: "crash-002" });
+      const instruction = makeInstruction();
       const workspacePath = path.join(baseDir, "deployments", "crash-002");
       setupServiceCrashWorkspace(workspacePath, instruction);
 
@@ -300,7 +295,7 @@ describe("DiagnosticInvestigator — Failure Scenario Investigation", () => {
     });
 
     it("collects evidence from service log", () => {
-      const instruction = makeInstruction({ deploymentId: "crash-003" });
+      const instruction = makeInstruction();
       const workspacePath = path.join(baseDir, "deployments", "crash-003");
       setupServiceCrashWorkspace(workspacePath, instruction);
 
@@ -324,7 +319,7 @@ describe("DiagnosticInvestigator — Failure Scenario Investigation", () => {
     });
 
     it("root cause explains the crash is runtime, not packaging", () => {
-      const instruction = makeInstruction({ deploymentId: "crash-004" });
+      const instruction = makeInstruction();
       const workspacePath = path.join(baseDir, "deployments", "crash-004");
       setupServiceCrashWorkspace(workspacePath, instruction);
 
@@ -338,7 +333,7 @@ describe("DiagnosticInvestigator — Failure Scenario Investigation", () => {
     });
 
     it("is categorically different from traditional agent output", () => {
-      const instruction = makeInstruction({ deploymentId: "crash-005" });
+      const instruction = makeInstruction();
       const workspacePath = path.join(baseDir, "deployments", "crash-005");
       setupServiceCrashWorkspace(workspacePath, instruction);
 
@@ -364,7 +359,7 @@ describe("DiagnosticInvestigator — Failure Scenario Investigation", () => {
 
   describe("Scenario 2: Health check timeout", () => {
     it("identifies health timeout as the failure type", () => {
-      const instruction = makeInstruction({ deploymentId: "timeout-001" });
+      const instruction = makeInstruction();
       const workspacePath = path.join(
         baseDir,
         "deployments",
@@ -383,7 +378,7 @@ describe("DiagnosticInvestigator — Failure Scenario Investigation", () => {
     });
 
     it("reports the timeout duration from logs", () => {
-      const instruction = makeInstruction({ deploymentId: "timeout-002" });
+      const instruction = makeInstruction();
       const workspacePath = path.join(
         baseDir,
         "deployments",
@@ -400,7 +395,7 @@ describe("DiagnosticInvestigator — Failure Scenario Investigation", () => {
     });
 
     it("distinguishes between slow startup and dependency issues", () => {
-      const instruction = makeInstruction({ deploymentId: "timeout-003" });
+      const instruction = makeInstruction();
       const workspacePath = path.join(
         baseDir,
         "deployments",
@@ -423,7 +418,7 @@ describe("DiagnosticInvestigator — Failure Scenario Investigation", () => {
     });
 
     it("provides environment-aware recommendation", () => {
-      const instruction = makeInstruction({ deploymentId: "timeout-004" });
+      const instruction = makeInstruction();
       const workspacePath = path.join(
         baseDir,
         "deployments",
@@ -444,7 +439,7 @@ describe("DiagnosticInvestigator — Failure Scenario Investigation", () => {
     });
 
     it("reads HEALTH file as evidence", () => {
-      const instruction = makeInstruction({ deploymentId: "timeout-005" });
+      const instruction = makeInstruction();
       const workspacePath = path.join(
         baseDir,
         "deployments",
@@ -465,7 +460,7 @@ describe("DiagnosticInvestigator — Failure Scenario Investigation", () => {
     });
 
     it("is categorically different from traditional agent output", () => {
-      const instruction = makeInstruction({ deploymentId: "timeout-006" });
+      const instruction = makeInstruction();
       const workspacePath = path.join(
         baseDir,
         "deployments",
@@ -496,7 +491,7 @@ describe("DiagnosticInvestigator — Failure Scenario Investigation", () => {
 
   describe("Scenario 3: Dependency not available", () => {
     it("identifies dependency unavailable as the failure type", () => {
-      const instruction = makeInstruction({ deploymentId: "dep-001" });
+      const instruction = makeInstruction();
       const workspacePath = path.join(baseDir, "deployments", "dep-001");
       setupDependencyUnavailableWorkspace(workspacePath, instruction);
 
@@ -510,7 +505,6 @@ describe("DiagnosticInvestigator — Failure Scenario Investigation", () => {
 
     it("identifies the specific dependency host from logs", () => {
       const instruction = makeInstruction({
-        deploymentId: "dep-002",
         variables: {
           APP_ENV: "production",
           DB_HOST: "db-prod.internal:5432",
@@ -531,7 +525,7 @@ describe("DiagnosticInvestigator — Failure Scenario Investigation", () => {
     });
 
     it("recommends network connectivity test", () => {
-      const instruction = makeInstruction({ deploymentId: "dep-003" });
+      const instruction = makeInstruction();
       const workspacePath = path.join(baseDir, "deployments", "dep-003");
       setupDependencyUnavailableWorkspace(workspacePath, instruction);
 
@@ -548,7 +542,7 @@ describe("DiagnosticInvestigator — Failure Scenario Investigation", () => {
     });
 
     it("explains the failure is environmental, not deployment-related", () => {
-      const instruction = makeInstruction({ deploymentId: "dep-004" });
+      const instruction = makeInstruction();
       const workspacePath = path.join(baseDir, "deployments", "dep-004");
       setupDependencyUnavailableWorkspace(workspacePath, instruction);
 
@@ -563,7 +557,6 @@ describe("DiagnosticInvestigator — Failure Scenario Investigation", () => {
 
     it("cross-references connection variables from the instruction", () => {
       const instruction = makeInstruction({
-        deploymentId: "dep-005",
         variables: {
           APP_ENV: "production",
           DB_HOST: "db-prod.internal:5432",
@@ -588,7 +581,7 @@ describe("DiagnosticInvestigator — Failure Scenario Investigation", () => {
     });
 
     it("is categorically different from traditional agent output", () => {
-      const instruction = makeInstruction({ deploymentId: "dep-006" });
+      const instruction = makeInstruction();
       const workspacePath = path.join(baseDir, "deployments", "dep-006");
       setupDependencyUnavailableWorkspace(workspacePath, instruction);
 
@@ -614,7 +607,7 @@ describe("DiagnosticInvestigator — Failure Scenario Investigation", () => {
 
   describe("Scenario 4: Partial deployment failure", () => {
     it("identifies partial deployment as the failure type", () => {
-      const instruction = makeInstruction({ deploymentId: "partial-001" });
+      const instruction = makeInstruction();
       const workspacePath = path.join(
         baseDir,
         "deployments",
@@ -631,7 +624,7 @@ describe("DiagnosticInvestigator — Failure Scenario Investigation", () => {
     });
 
     it("identifies exactly which artifacts are missing", () => {
-      const instruction = makeInstruction({ deploymentId: "partial-002" });
+      const instruction = makeInstruction();
       const workspacePath = path.join(
         baseDir,
         "deployments",
@@ -651,7 +644,7 @@ describe("DiagnosticInvestigator — Failure Scenario Investigation", () => {
     });
 
     it("warns against starting the service in incomplete state", () => {
-      const instruction = makeInstruction({ deploymentId: "partial-003" });
+      const instruction = makeInstruction();
       const workspacePath = path.join(
         baseDir,
         "deployments",
@@ -669,7 +662,7 @@ describe("DiagnosticInvestigator — Failure Scenario Investigation", () => {
     });
 
     it("recommends disk space check", () => {
-      const instruction = makeInstruction({ deploymentId: "partial-004" });
+      const instruction = makeInstruction();
       const workspacePath = path.join(
         baseDir,
         "deployments",
@@ -703,7 +696,7 @@ describe("DiagnosticInvestigator — Failure Scenario Investigation", () => {
         activeVariables: {},
       });
 
-      const instruction = makeInstruction({ deploymentId: "partial-005" });
+      const instruction = makeInstruction();
       const workspacePath = path.join(
         baseDir,
         "deployments",
@@ -721,7 +714,7 @@ describe("DiagnosticInvestigator — Failure Scenario Investigation", () => {
     });
 
     it("is categorically different from traditional agent output", () => {
-      const instruction = makeInstruction({ deploymentId: "partial-006" });
+      const instruction = makeInstruction();
       const workspacePath = path.join(
         baseDir,
         "deployments",
@@ -783,14 +776,11 @@ describe("Diagnostic Quality Standards", () => {
         "deployments",
         `unique-${scenario.name}`,
       );
-      scenario.setup(workspacePath, {
-        ...instruction,
-        deploymentId: `unique-${scenario.name}`,
-      });
+      scenario.setup(workspacePath, instruction);
 
       const diagnostic = investigator.investigate(
         workspacePath,
-        { ...instruction, deploymentId: `unique-${scenario.name}` },
+        instruction,
       );
       summaries.push(diagnostic.summary);
     }
@@ -816,14 +806,11 @@ describe("Diagnostic Quality Standards", () => {
         "deployments",
         `rec-${scenario.name}`,
       );
-      scenario.setup(workspacePath, {
-        ...instruction,
-        deploymentId: `rec-${scenario.name}`,
-      });
+      scenario.setup(workspacePath, instruction);
 
       const diagnostic = investigator.investigate(
         workspacePath,
-        { ...instruction, deploymentId: `rec-${scenario.name}` },
+        instruction,
       );
       recommendations.push(diagnostic.recommendation);
     }
@@ -850,14 +837,11 @@ describe("Diagnostic Quality Standards", () => {
         "deployments",
         `ref-${i}`,
       );
-      scenarios[i](workspacePath, {
-        ...instruction,
-        deploymentId: `ref-${i}`,
-      });
+      scenarios[i](workspacePath, instruction);
 
       const diagnostic = investigator.investigate(
         workspacePath,
-        { ...instruction, deploymentId: `ref-${i}` },
+        instruction,
       );
 
       expect(diagnostic.summary).toContain("billing-service");
@@ -882,14 +866,11 @@ describe("Diagnostic Quality Standards", () => {
         "deployments",
         `env-${i}`,
       );
-      scenarios[i](workspacePath, {
-        ...instruction,
-        deploymentId: `env-${i}`,
-      });
+      scenarios[i](workspacePath, instruction);
 
       const diagnostic = investigator.investigate(
         workspacePath,
-        { ...instruction, deploymentId: `env-${i}` },
+        instruction,
       );
 
       expect(diagnostic.summary).toContain("staging-eu-west");
@@ -911,14 +892,11 @@ describe("Diagnostic Quality Standards", () => {
         "deployments",
         `evidence-${i}`,
       );
-      scenarios[i](workspacePath, {
-        ...instruction,
-        deploymentId: `evidence-${i}`,
-      });
+      scenarios[i](workspacePath, instruction);
 
       const diagnostic = investigator.investigate(
         workspacePath,
-        { ...instruction, deploymentId: `evidence-${i}` },
+        instruction,
       );
 
       expect(diagnostic.evidence.length).toBeGreaterThanOrEqual(3);
@@ -940,14 +918,11 @@ describe("Diagnostic Quality Standards", () => {
         "deployments",
         `compare-${i}`,
       );
-      scenarios[i](workspacePath, {
-        ...instruction,
-        deploymentId: `compare-${i}`,
-      });
+      scenarios[i](workspacePath, instruction);
 
       const diagnostic = investigator.investigate(
         workspacePath,
-        { ...instruction, deploymentId: `compare-${i}` },
+        instruction,
       );
 
       expect(diagnostic.traditionalComparison).toContain(
@@ -989,7 +964,7 @@ describe("EnvoyAgent — Diagnostic Investigation in Pipeline", () => {
 
   it("successful deployments have null diagnostic", async () => {
     const result = await agent.executeDeployment(
-      makeInstruction({ deploymentId: "success-diag" }),
+      makeInstruction({ operationId: "success-diag" }),
     );
 
     expect(result.success).toBe(true);
@@ -1013,7 +988,7 @@ describe("EnvoyAgent — Diagnostic Investigation in Pipeline", () => {
 
     const readOnlyAgent = new EnvoyAgent(diary, state, readOnlyDir);
     const result = await readOnlyAgent.executeDeployment(
-      makeInstruction({ deploymentId: "fail-diag" }),
+      makeInstruction({ operationId: "fail-diag" }),
     );
 
     // Restore permissions for cleanup
@@ -1026,7 +1001,7 @@ describe("EnvoyAgent — Diagnostic Investigation in Pipeline", () => {
       expect(result.diagnostic!.summary.length).toBeGreaterThan(20);
 
       // Should have a diagnostic-investigation diary entry
-      const entries = diary.getByDeployment("fail-diag");
+      const entries = diary.getByOperation("fail-diag");
       const investigationEntry = entries.find(
         (e) => e.decisionType === "diagnostic-investigation",
       );
@@ -1040,7 +1015,7 @@ describe("EnvoyAgent — Diagnostic Investigation in Pipeline", () => {
   it("diagnostic report is included in DeploymentResult for service crash", async () => {
     // Execute a successful deployment first to create workspace
     const deployId = "service-crash-integrated";
-    const instruction = makeInstruction({ deploymentId: deployId });
+    const instruction = makeInstruction({ operationId: deployId });
     const result = await agent.executeDeployment(instruction);
 
     expect(result.success).toBe(true);
@@ -1097,18 +1072,18 @@ describe("EnvoyAgent — Diagnostic Investigation in Pipeline", () => {
       );
       scenario.setup(workspacePath, {
         ...instruction,
-        deploymentId: `integrated-${scenario.name}`,
+        operationId: `integrated-${scenario.name}`,
       });
 
       const diagnostic = investigator.investigate(
         workspacePath,
-        { ...instruction, deploymentId: `integrated-${scenario.name}` },
+        { ...instruction, operationId: `integrated-${scenario.name}` },
       );
 
       // Record investigation to diary (as the EnvoyAgent would)
       diary.record({
         partitionId: instruction.partitionId,
-        deploymentId: `integrated-${scenario.name}`,
+        operationId: `integrated-${scenario.name}`,
         agent: "envoy",
         decisionType: "diagnostic-investigation",
         decision: `Investigation: ${diagnostic.summary}`,
@@ -1188,7 +1163,7 @@ describe("Traditional Agent vs. Envoy Agent — Output Comparison", () => {
     describe(`${scenario.name}`, () => {
       it("traditional output is generic — Envoy output is specific", () => {
         const instruction = makeInstruction({
-          deploymentId: `compare-${scenario.type}`,
+          operationId: `compare-${scenario.type}`,
         });
         const workspacePath = path.join(
           baseDir,
@@ -1202,13 +1177,13 @@ describe("Traditional Agent vs. Envoy Agent — Output Comparison", () => {
           instruction,
         );
 
-        // Traditional output does NOT contain:
-        expect(scenario.traditional).not.toContain("web-app");
+        // Traditional output does NOT contain operation-specific details:
+        expect(scenario.traditional).not.toContain(instruction.operationId);
         expect(scenario.traditional).not.toContain("v2.0.0");
         expect(scenario.traditional).not.toContain("production");
 
-        // Envoy output DOES contain:
-        expect(diagnostic.summary).toContain("web-app");
+        // Envoy output DOES contain the operation name and context:
+        expect(diagnostic.summary).toContain(instruction.operationId);
         expect(diagnostic.summary).toContain("2.0.0");
         expect(diagnostic.summary).toContain("production");
       });
@@ -1223,7 +1198,7 @@ describe("Traditional Agent vs. Envoy Agent — Output Comparison", () => {
 
       it("Envoy provides actionable recommendation with commands", () => {
         const instruction = makeInstruction({
-          deploymentId: `action-${scenario.type}`,
+          operationId: `action-${scenario.type}`,
         });
         const workspacePath = path.join(
           baseDir,
@@ -1252,7 +1227,7 @@ describe("Traditional Agent vs. Envoy Agent — Output Comparison", () => {
 
       it("Envoy provides evidence — traditional provides none", () => {
         const instruction = makeInstruction({
-          deploymentId: `evidence-${scenario.type}`,
+          operationId: `evidence-${scenario.type}`,
         });
         const workspacePath = path.join(
           baseDir,
@@ -1300,7 +1275,7 @@ describe("DiagnosticInvestigator — Edge Cases", () => {
   });
 
   it("handles completely empty workspace gracefully", () => {
-    const instruction = makeInstruction({ deploymentId: "empty-001" });
+    const instruction = makeInstruction({ operationId: "empty-001" });
     const workspacePath = path.join(baseDir, "deployments", "empty-001");
     fs.mkdirSync(workspacePath, { recursive: true });
 
@@ -1315,7 +1290,7 @@ describe("DiagnosticInvestigator — Edge Cases", () => {
   });
 
   it("handles nonexistent workspace path", () => {
-    const instruction = makeInstruction({ deploymentId: "noexist-001" });
+    const instruction = makeInstruction({ operationId: "noexist-001" });
     const workspacePath = path.join(baseDir, "nonexistent");
 
     const diagnostic = investigator.investigate(
@@ -1330,7 +1305,7 @@ describe("DiagnosticInvestigator — Edge Cases", () => {
   });
 
   it("handles workspace with logs but no status files", () => {
-    const instruction = makeInstruction({ deploymentId: "logsonly-001" });
+    const instruction = makeInstruction({ operationId: "logsonly-001" });
     const workspacePath = path.join(
       baseDir,
       "deployments",
@@ -1365,7 +1340,7 @@ describe("DiagnosticInvestigator — Edge Cases", () => {
     });
     state.completeDeployment("prev-fail", "failed", "Port conflict");
 
-    const instruction = makeInstruction({ deploymentId: "history-001" });
+    const instruction = makeInstruction({ operationId: "history-001" });
     const workspacePath = path.join(
       baseDir,
       "deployments",
@@ -1386,7 +1361,7 @@ describe("DiagnosticInvestigator — Edge Cases", () => {
   });
 
   it("handles executor error in context", () => {
-    const instruction = makeInstruction({ deploymentId: "execerror-001" });
+    const instruction = makeInstruction({ operationId: "execerror-001" });
     const workspacePath = path.join(
       baseDir,
       "deployments",
