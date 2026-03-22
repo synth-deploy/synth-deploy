@@ -256,11 +256,11 @@ import Layout from "../layouts/Layout.astro";
               Partition
             </div>
           </div>
-          <h3 class="text-lg font-semibold mb-2">Absolute Isolation</h3>
+          <h3 class="text-lg font-semibold mb-2">Scoped Isolation</h3>
           <p class="text-ds-text-secondary leading-relaxed text-sm">
-            Each partition is a self-contained deployment context with its own
-            variables, history, and configuration. No cross-partition data access
-            or failure propagation — ever.
+            Partitions give deployments their own variables, history, and configuration.
+            Use them when you need isolation — no cross-partition data access or failure
+            propagation. Deployments work with or without partition context.
           </p>
         </div>
 
@@ -273,8 +273,8 @@ import Layout from "../layouts/Layout.astro";
           <h3 class="text-lg font-semibold mb-2">Decision Transparency</h3>
           <p class="text-ds-text-secondary leading-relaxed text-sm">
             Every agent decision is logged in plain language. When something goes wrong,
-            the decision log tells you exactly what happened, why, and what to do next.
-            Postmortems generate automatically.
+            the Debrief tells you exactly what happened, why, and what to do next —
+            specific enough to act on at 2am.
           </p>
         </div>
 
@@ -595,6 +595,27 @@ import Layout from "../layouts/Layout.astro";
     </div>
   </section>
 
+  <!-- Pioneer Program callout -->
+  <section class="py-28 border-t border-ds-border relative overflow-hidden">
+    <div class="absolute inset-0 pointer-events-none">
+      <div class="absolute top-1/2 left-1/3 w-96 h-96 bg-ds-partition/5 rounded-full blur-[120px]"></div>
+    </div>
+    <div class="relative mx-auto max-w-3xl px-6 text-center scroll-reveal">
+      <p class="section-heading text-ds-partition">Pioneer Program</p>
+      <h2 class="text-3xl md:text-4xl font-display font-bold mb-4">Run Synth in production. Pay nothing.</h2>
+      <p class="text-ds-text-secondary text-lg mb-8 max-w-xl mx-auto">
+        We're looking for engineering teams to run Synth against real workflows.
+        You get full Enterprise access. We get honest feedback.
+      </p>
+      <a
+        href="/pricing#pioneer-form"
+        class="inline-block rounded-md bg-ds-accent px-8 py-3 text-ds-bg font-semibold hover:bg-ds-accent/90 transition-colors"
+      >
+        Apply to the Pioneer Program
+      </a>
+    </div>
+  </section>
+
   <!-- CTA -->
   <section class="py-28 border-t border-ds-border relative overflow-hidden">
     <div class="absolute inset-0 pointer-events-none">
@@ -603,7 +624,7 @@ import Layout from "../layouts/Layout.astro";
     <div class="relative mx-auto max-w-6xl px-6 text-center scroll-reveal">
       <h2 class="text-3xl md:text-4xl font-display font-bold mb-4">Ready to deploy smarter?</h2>
       <p class="text-ds-text-secondary text-lg mb-8 max-w-xl mx-auto">
-        Synth is open source and self-hosted. Get started in minutes.
+        Synth is source-available and self-hosted. Get started in minutes.
       </p>
       <div class="flex items-center justify-center gap-4">
         <a
