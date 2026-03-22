@@ -127,16 +127,19 @@ async function testDeploy(
     opts.envVars ?? {},
   );
 
-  const trigger = {
+  const operationInput = {
+    type: "deploy" as const,
     artifactId: artifact.id,
     artifactVersionId: opts.version ?? "2.0.0",
+  };
+  const operationTrigger = {
     partitionId: opts.partitionId ?? partition.id,
     environmentId: env.id,
     triggeredBy: "user" as const,
     ...(opts.variables ? { variables: opts.variables } : {}),
   };
 
-  return agent.triggerOperation(trigger);
+  return agent.triggerOperation(operationInput, operationTrigger);
 }
 
 // ---------------------------------------------------------------------------
@@ -318,14 +321,10 @@ describe("Decision Diary — orchestration completeness", () => {
     const partition = partitionStore.create("Acme Corp", { DB_HOST: "prod-db.internal" });
     const env = environmentStore.create("staging", { DB_HOST: "staging-db.internal" });
 
-    const trigger = {
-      artifactId: artifact.id,
-      artifactVersionId: "2.0.0",
-      partitionId: partition.id,
-      environmentId: env.id,
-      triggeredBy: "user" as const,
-    };
-    const result = await agent.triggerOperation(trigger);
+    const result = await agent.triggerOperation(
+      { type: "deploy", artifactId: artifact.id, artifactVersionId: "2.0.0" },
+      { partitionId: partition.id, environmentId: env.id, triggeredBy: "user" },
+    );
 
     const entries = diary.getByOperation(result.id);
     const types = entries.map((e) => e.decisionType);
@@ -421,14 +420,14 @@ describe("Decision Diary — retrieval dimensions", () => {
     const artifactA = seedArtifact(artifactStore, "app-a");
     const artifactB = seedArtifact(artifactStore, "app-b");
 
-    await agent.triggerOperation({
-      artifactId: artifactA.id, artifactVersionId: "1.0.0",
-      partitionId: partA.id, environmentId: envA.id, triggeredBy: "user",
-    });
-    await agent.triggerOperation({
-      artifactId: artifactB.id, artifactVersionId: "1.0.0",
-      partitionId: partB.id, environmentId: envB.id, triggeredBy: "user",
-    });
+    await agent.triggerOperation(
+      { type: "deploy", artifactId: artifactA.id, artifactVersionId: "1.0.0" },
+      { partitionId: partA.id, environmentId: envA.id, triggeredBy: "user" },
+    );
+    await agent.triggerOperation(
+      { type: "deploy", artifactId: artifactB.id, artifactVersionId: "1.0.0" },
+      { partitionId: partB.id, environmentId: envB.id, triggeredBy: "user" },
+    );
 
     const entriesA = diary.getByPartition(partA.id);
     const entriesB = diary.getByPartition(partB.id);
@@ -640,7 +639,7 @@ describe("PersistentDecisionDebrief — SQLite backing store", () => {
   it("retrieval by decision type filters correctly", () => {
     diary.record({
       partitionId: "t1",
-      deploymentId: "d1",
+      operationId: "d1",
       agent: "command",
       decisionType: "health-check",
       decision: "Health check passed",
@@ -648,7 +647,7 @@ describe("PersistentDecisionDebrief — SQLite backing store", () => {
     });
     diary.record({
       partitionId: "t1",
-      deploymentId: "d1",
+      operationId: "d1",
       agent: "command",
       decisionType: "variable-conflict",
       decision: "LOG_LEVEL conflict resolved",
@@ -656,7 +655,7 @@ describe("PersistentDecisionDebrief — SQLite backing store", () => {
     });
     diary.record({
       partitionId: "t1",
-      deploymentId: "d1",
+      operationId: "d1",
       agent: "command",
       decisionType: "health-check",
       decision: "Post-flight check passed",
@@ -678,7 +677,7 @@ describe("PersistentDecisionDebrief — SQLite backing store", () => {
     const before = new Date();
     diary.record({
       partitionId: "t1",
-      deploymentId: "d1",
+      operationId: "d1",
       agent: "command",
       decisionType: "pipeline-plan",
       decision: "First entry",
@@ -686,7 +685,7 @@ describe("PersistentDecisionDebrief — SQLite backing store", () => {
     });
     diary.record({
       partitionId: "t1",
-      deploymentId: "d1",
+      operationId: "d1",
       agent: "command",
       decisionType: "deployment-completion",
       decision: "Second entry",
@@ -709,7 +708,7 @@ describe("PersistentDecisionDebrief — SQLite backing store", () => {
     for (let i = 0; i < 5; i++) {
       diary.record({
         partitionId: "t1",
-        deploymentId: `d${i}`,
+        operationId: `d${i}`,
         agent: "command",
         decisionType: "pipeline-plan",
         decision: `Entry ${i}`,
@@ -731,7 +730,7 @@ describe("PersistentDecisionDebrief — SQLite backing store", () => {
   it("context round-trips through JSON correctly", () => {
     const entry = diary.record({
       partitionId: "t1",
-      deploymentId: "d1",
+      operationId: "d1",
       agent: "command",
       decisionType: "health-check",
       decision: "Health check with complex context",
@@ -800,14 +799,14 @@ describe("PersistentDecisionDebrief — integration with SynthAgent", () => {
     expect(result.status).toBe("succeeded");
 
     // Verify entries exist before close
-    const entriesBefore = diary.getByDeployment(result.id);
+    const entriesBefore = diary.getByOperation(result.id);
     expect(entriesBefore.length).toBeGreaterThanOrEqual(5);
 
     diary.close();
 
     // Reopen and verify persistence
     const diary2 = new PersistentDecisionDebrief(dbPath);
-    const entriesAfter = diary2.getByDeployment(result.id);
+    const entriesAfter = diary2.getByOperation(result.id);
     expect(entriesAfter).toHaveLength(entriesBefore.length);
 
     // Verify key decision types from the pipeline are present
@@ -832,18 +831,18 @@ describe("PersistentDecisionDebrief — integration with SynthAgent", () => {
     const artA = seedArtifact(artifactStore, "app-a");
     const artB = seedArtifact(artifactStore, "app-b");
 
-    const result1 = await agent.triggerDeployment({
-      artifactId: artA.id, artifactVersionId: "1.0.0",
-      partitionId: partA.id, environmentId: envA.id, triggeredBy: "user",
-    });
-    const result2 = await agent.triggerDeployment({
-      artifactId: artB.id, artifactVersionId: "1.0.0",
-      partitionId: partB.id, environmentId: envB.id, triggeredBy: "user",
-    });
+    const result1 = await agent.triggerOperation(
+      { type: "deploy", artifactId: artA.id, artifactVersionId: "1.0.0" },
+      { partitionId: partA.id, environmentId: envA.id, triggeredBy: "user" },
+    );
+    const result2 = await agent.triggerOperation(
+      { type: "deploy", artifactId: artB.id, artifactVersionId: "1.0.0" },
+      { partitionId: partB.id, environmentId: envB.id, triggeredBy: "user" },
+    );
 
     // By deployment
-    const acmeEntries = diary.getByDeployment(result1.id);
-    const betaEntries = diary.getByDeployment(result2.id);
+    const acmeEntries = diary.getByOperation(result1.id);
+    const betaEntries = diary.getByOperation(result2.id);
     expect(acmeEntries.length).toBeGreaterThanOrEqual(5);
     expect(betaEntries.length).toBeGreaterThanOrEqual(5);
 
@@ -879,7 +878,7 @@ describe("Decision Diary — human-readable format", () => {
       id: "abc-123-def-456",
       timestamp: new Date("2026-02-23T14:30:05.000Z"),
       partitionId: "partition-acme",
-      deploymentId: "deploy-789",
+      operationId: "deploy-789",
       agent: "command",
       decisionType: "health-check",
       decision: "Pre-flight health check passed",
@@ -905,7 +904,7 @@ describe("Decision Diary — human-readable format", () => {
       id: "sys-001",
       timestamp: new Date("2026-02-23T12:00:00.000Z"),
       partitionId: null,
-      deploymentId: null,
+      operationId: null,
       agent: "command",
       decisionType: "system",
       decision: "Command initialized with demo data",
@@ -925,7 +924,7 @@ describe("Decision Diary — human-readable format", () => {
         id: "e1",
         timestamp: new Date("2026-02-23T14:00:00.000Z"),
         partitionId: "t1",
-        deploymentId: "d1",
+        operationId: "d1",
         agent: "command",
         decisionType: "pipeline-plan",
         decision: "Entry one",
@@ -936,7 +935,7 @@ describe("Decision Diary — human-readable format", () => {
         id: "e2",
         timestamp: new Date("2026-02-23T14:01:00.000Z"),
         partitionId: "t1",
-        deploymentId: "d1",
+        operationId: "d1",
         agent: "command",
         decisionType: "deployment-completion",
         decision: "Entry two",

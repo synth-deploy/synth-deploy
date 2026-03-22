@@ -115,14 +115,18 @@ function makeTrigger(opts: {
   version?: string;
   variables?: Record<string, string>;
 }) {
-  return {
+  const input = {
+    type: "deploy" as const,
     artifactId: opts.artifact?.id ?? "",
     artifactVersionId: opts.version ?? "2.0.0",
+  };
+  const trigger = {
     partitionId: opts.partition?.id,
     environmentId: opts.environment?.id ?? "",
     triggeredBy: "user" as const,
     ...(opts.variables ? { variables: opts.variables } : {}),
   };
+  return { input, trigger };
 }
 
 // ---------------------------------------------------------------------------
@@ -159,7 +163,7 @@ describe("Deployment Orchestration Engine", () => {
         artifact, partition, environment: env,
         variables: { LOG_LEVEL: "error" },
       });
-      const result = await agent.triggerDeployment(trigger);
+      const result = await agent.triggerOperation(trigger.input, trigger.trigger);
 
       expect(result.status).toBe("succeeded");
       expect(result.completedAt).not.toBeUndefined();
@@ -172,7 +176,7 @@ describe("Deployment Orchestration Engine", () => {
       });
 
       // Diary records every pipeline step
-      const entries = diary.getByDeployment(result.id);
+      const entries = diary.getByOperation(result.id);
       expect(entries.length).toBeGreaterThanOrEqual(5);
 
       // Each entry has a real decision and reasoning
@@ -195,7 +199,7 @@ describe("Deployment Orchestration Engine", () => {
       healthChecker.willReturn(HEALTHY);
 
       const trigger = makeTrigger({ artifact, partition, environment: env });
-      const result = await agent.triggerDeployment(trigger);
+      const result = await agent.triggerOperation(trigger.input, trigger.trigger);
 
       expect(result.status).toBe("succeeded");
       expect(result.variables).toEqual({
@@ -203,7 +207,7 @@ describe("Deployment Orchestration Engine", () => {
         PARTITION_SPECIFIC: "abc",
       });
 
-      const entries = diary.getByDeployment(result.id);
+      const entries = diary.getByOperation(result.id);
       const completion = findDecisions(entries, "Marking deployment of")[0];
       expect(completion.reasoning).toContain("No variable conflicts");
     });
@@ -222,7 +226,7 @@ describe("Deployment Orchestration Engine", () => {
       const env = seedEnvironment("staging");
 
       const trigger = makeTrigger({ artifact, partition, environment: env });
-      const result = await agent.triggerDeployment(trigger);
+      const result = await agent.triggerOperation(trigger.input, trigger.trigger);
 
       expect(result.status).toBe("failed");
       expect(result.failureReason).toContain("unreachable");
@@ -230,7 +234,7 @@ describe("Deployment Orchestration Engine", () => {
       // Should have retried (initial + 1 retry = 2 calls)
       expect(healthChecker.callCount).toBe(2);
 
-      const entries = diary.getByDeployment(result.id);
+      const entries = diary.getByOperation(result.id);
       const retryEntries = findDecisions(entries, "attempting retry");
       expect(retryEntries).toHaveLength(1);
       expect(retryEntries[0].reasoning).toContain("restarting");
@@ -250,14 +254,14 @@ describe("Deployment Orchestration Engine", () => {
       const env = seedEnvironment("staging");
 
       const trigger = makeTrigger({ artifact, partition, environment: env });
-      const result = await agent.triggerDeployment(trigger);
+      const result = await agent.triggerOperation(trigger.input, trigger.trigger);
 
       expect(result.status).toBe("failed");
 
       // Only called once — no retry for DNS errors
       expect(healthChecker.callCount).toBe(1);
 
-      const entries = diary.getByDeployment(result.id);
+      const entries = diary.getByOperation(result.id);
 
       // Should have decided NOT to retry
       const abortEntries = findDecisions(entries, "aborting without retry");
@@ -280,11 +284,11 @@ describe("Deployment Orchestration Engine", () => {
       const env = seedEnvironment("production");
 
       const trigger = makeTrigger({ artifact, partition, environment: env });
-      const result = await agent.triggerDeployment(trigger);
+      const result = await agent.triggerOperation(trigger.input, trigger.trigger);
 
       expect(result.status).toBe("failed");
 
-      const entries = diary.getByDeployment(result.id);
+      const entries = diary.getByOperation(result.id);
       const retryEntries = findDecisions(entries, "attempting retry");
       expect(retryEntries).toHaveLength(1);
 
@@ -305,11 +309,11 @@ describe("Deployment Orchestration Engine", () => {
       const env = seedEnvironment("staging");
 
       const trigger = makeTrigger({ artifact, partition, environment: env });
-      const result = await agent.triggerDeployment(trigger);
+      const result = await agent.triggerOperation(trigger.input, trigger.trigger);
 
       expect(result.status).toBe("failed");
 
-      const entries = diary.getByDeployment(result.id);
+      const entries = diary.getByOperation(result.id);
       const retryEntries = findDecisions(entries, "attempting retry");
       expect(retryEntries).toHaveLength(1);
 
@@ -326,11 +330,11 @@ describe("Deployment Orchestration Engine", () => {
       const env = seedEnvironment("production");
 
       const trigger = makeTrigger({ artifact, partition, environment: env });
-      const result = await agent.triggerDeployment(trigger);
+      const result = await agent.triggerOperation(trigger.input, trigger.trigger);
 
       expect(result.status).toBe("succeeded");
 
-      const entries = diary.getByDeployment(result.id);
+      const entries = diary.getByOperation(result.id);
       const recoveryEntries = findDecisions(entries, "recovered on retry");
       expect(recoveryEntries).toHaveLength(1);
       expect(recoveryEntries[0].reasoning).toContain("transient");
@@ -345,11 +349,11 @@ describe("Deployment Orchestration Engine", () => {
       const env = seedEnvironment("production");
 
       const trigger = makeTrigger({ artifact, partition, environment: env });
-      const result = await agent.triggerDeployment(trigger);
+      const result = await agent.triggerOperation(trigger.input, trigger.trigger);
 
       expect(result.status).toBe("succeeded");
 
-      const entries = diary.getByDeployment(result.id);
+      const entries = diary.getByOperation(result.id);
       const retryEntries = findDecisions(entries, "attempting retry");
       expect(retryEntries).toHaveLength(1);
       // Server errors get different reasoning than connection refused
@@ -371,13 +375,13 @@ describe("Deployment Orchestration Engine", () => {
       healthChecker.willReturn(HEALTHY);
 
       const trigger = makeTrigger({ artifact, partition, environment: env });
-      const result = await agent.triggerDeployment(trigger);
+      const result = await agent.triggerOperation(trigger.input, trigger.trigger);
 
       // Single override → agent proceeds (might be intentional)
       expect(result.status).toBe("succeeded");
       expect(result.variables.DB_HOST).toBe("prod-db.internal");
 
-      const entries = diary.getByDeployment(result.id);
+      const entries = diary.getByOperation(result.id);
       const crossEnvEntries = findDecisions(entries, "Cross-environment");
       expect(crossEnvEntries).toHaveLength(1);
 
@@ -402,14 +406,14 @@ describe("Deployment Orchestration Engine", () => {
       healthChecker.willReturn(HEALTHY);
 
       const trigger = makeTrigger({ artifact, partition, environment: env });
-      const result = await agent.triggerDeployment(trigger);
+      const result = await agent.triggerOperation(trigger.input, trigger.trigger);
 
       // THIS IS THE KEY BEHAVIORAL DIFFERENCE:
       // Multiple cross-env connectivity overrides → deployment blocked
       expect(result.status).toBe("failed");
       expect(result.failureReason).toContain("high-risk");
 
-      const entries = diary.getByDeployment(result.id);
+      const entries = diary.getByOperation(result.id);
 
       // Agent explains WHY it blocked
       const blockEntries = findDecisions(entries, "Blocking deployment");
@@ -435,7 +439,7 @@ describe("Deployment Orchestration Engine", () => {
       healthChecker.willReturn(HEALTHY);
 
       const trigger = makeTrigger({ artifact, partition, environment: env });
-      const result = await agent.triggerDeployment(trigger);
+      const result = await agent.triggerOperation(trigger.input, trigger.trigger);
 
       // Non-connectivity cross-env → proceeds (can't route traffic)
       expect(result.status).toBe("succeeded");
@@ -449,12 +453,12 @@ describe("Deployment Orchestration Engine", () => {
       healthChecker.willReturn(HEALTHY);
 
       const trigger = makeTrigger({ artifact, partition, environment: env });
-      const result = await agent.triggerDeployment(trigger);
+      const result = await agent.triggerOperation(trigger.input, trigger.trigger);
 
       expect(result.status).toBe("succeeded");
       expect(result.variables.API_SECRET).toBe("partition-secret-xyz");
 
-      const entries = diary.getByDeployment(result.id);
+      const entries = diary.getByOperation(result.id);
       const sensitiveEntries = findDecisions(entries, "Security-sensitive");
       expect(sensitiveEntries).toHaveLength(1);
       expect(sensitiveEntries[0].reasoning).toContain("audit");
@@ -479,8 +483,8 @@ describe("Deployment Orchestration Engine", () => {
       healthChecker.willReturn(HEALTHY);
 
       const trigger = makeTrigger({ artifact, partition, environment: env });
-      const result = await agent.triggerDeployment(trigger);
-      const entries = diary.getByDeployment(result.id);
+      const result = await agent.triggerOperation(trigger.input, trigger.trigger);
+      const entries = diary.getByOperation(result.id);
 
       for (const entry of entries) {
         expect(entry.partitionId).toBe(partition.id);
@@ -499,17 +503,17 @@ describe("Deployment Orchestration Engine", () => {
       const env = seedEnvironment("production");
 
       const trigger = makeTrigger({ artifact, partition, environment: env });
-      const result = await agent.triggerDeployment(trigger);
+      const result = await agent.triggerOperation(trigger.input, trigger.trigger);
 
       expect(result.status).toBe("failed");
 
       for (const entryId of result.debriefEntryIds) {
         const entry = diary.getById(entryId);
         expect(entry).toBeDefined();
-        expect(entry!.deploymentId).toBe(result.id);
+        expect(entry!.operationId).toBe(result.id);
       }
 
-      const entries = diary.getByDeployment(result.id);
+      const entries = diary.getByOperation(result.id);
       const failEntry = findDecisions(entries, "Deployment failed")[0];
       expect(failEntry.context).toHaveProperty(
         "step",
@@ -525,7 +529,7 @@ describe("Deployment Orchestration Engine", () => {
       const env = seedEnvironment("production");
 
       const trigger = makeTrigger({ artifact, partition, environment: env });
-      const result = await agent.triggerDeployment(trigger);
+      const result = await agent.triggerOperation(trigger.input, trigger.trigger);
 
       const stored = deployments.get(result.id);
       expect(stored).toBeDefined();

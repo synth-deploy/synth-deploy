@@ -141,14 +141,10 @@ async function testDeploy(
   forceInsertEnvironment(stores.environments, e);
   forceInsertArtifact(stores.artifacts, DEFAULT_ARTIFACT_ID, "web-app");
 
-  return agent.triggerDeployment({
-    artifactId: DEFAULT_ARTIFACT_ID,
-    artifactVersionId: version,
-    environmentId: e.id,
-    partitionId: effectivePartition.id,
-    triggeredBy: "user",
-    variables: oldTrigger.variables,
-  });
+  return agent.triggerOperation(
+    { type: "deploy", artifactId: DEFAULT_ARTIFACT_ID, artifactVersionId: version },
+    { environmentId: e.id, partitionId: effectivePartition.id, triggeredBy: "user", variables: oldTrigger.variables },
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -190,7 +186,7 @@ describe("Simulated Postmortem — failed deployment read experience", () => {
 
     expect(deployment.status).toBe("failed");
 
-    const entries = diary.getByDeployment(deployment.id);
+    const entries = diary.getByOperation(deployment.id);
     const postmortem = generatePostmortem(entries, deployment);
 
     // 1. Reviewer can identify WHAT was being deployed
@@ -241,7 +237,7 @@ describe("Simulated Postmortem — failed deployment read experience", () => {
 
     const deployment = await testDeploy(agent, stores, {});
 
-    const entries = diary.getByDeployment(deployment.id);
+    const entries = diary.getByOperation(deployment.id);
     const postmortem = generatePostmortem(entries, deployment);
 
     // The postmortem should explain that DNS failures don't benefit from retry
@@ -284,7 +280,7 @@ describe("Simulated Postmortem — failed deployment read experience", () => {
 
     expect(deployment.status).toBe("failed");
 
-    const entries = diary.getByDeployment(deployment.id);
+    const entries = diary.getByOperation(deployment.id);
     const postmortem = generatePostmortem(entries, deployment);
 
     // Should explain the configuration block
@@ -313,7 +309,7 @@ describe("Simulated Postmortem — failed deployment read experience", () => {
 
     expect(deployment.status).toBe("succeeded");
 
-    const entries = diary.getByDeployment(deployment.id);
+    const entries = diary.getByOperation(deployment.id);
     const postmortem = generatePostmortem(entries, deployment);
 
     expect(postmortem.summary).toContain("SUCCEEDED");
@@ -333,7 +329,7 @@ describe("Simulated Postmortem — failed deployment read experience", () => {
 
     expect(deployment.status).toBe("succeeded");
 
-    const entries = diary.getByDeployment(deployment.id);
+    const entries = diary.getByOperation(deployment.id);
     const postmortem = generatePostmortem(entries, deployment);
 
     // Timeline should show the retry decision chain
@@ -368,7 +364,7 @@ describe("Simulated Postmortem — failed deployment read experience", () => {
       makeEnvironment({ name: "staging" }),
     );
 
-    const entries = diary.getByDeployment(deployment.id);
+    const entries = diary.getByOperation(deployment.id);
     const postmortem = generatePostmortem(entries, deployment);
 
     const text = postmortem.formatted;
@@ -724,7 +720,7 @@ describe("Postmortem report — structural guarantees", () => {
 
     const deployment = await testDeploy(agent, stores, {});
 
-    const entries = diary.getByDeployment(deployment.id);
+    const entries = diary.getByOperation(deployment.id);
     const postmortem = generatePostmortem(entries, deployment);
 
     for (let i = 1; i < postmortem.timeline.length; i++) {
@@ -747,7 +743,7 @@ describe("Postmortem report — structural guarantees", () => {
 
     const deployment = await testDeploy(agent, stores, { variables: { LOG_LEVEL: "debug" } }, partition, env);
 
-    const entries = diary.getByDeployment(deployment.id);
+    const entries = diary.getByOperation(deployment.id);
     const postmortem = generatePostmortem(entries, deployment);
 
     // LOG_LEVEL has three-way conflict (env → partition → trigger), total vars = 3
@@ -760,7 +756,7 @@ describe("Postmortem report — structural guarantees", () => {
 
     const deployment = await testDeploy(agent, stores, {});
 
-    const entries = diary.getByDeployment(deployment.id);
+    const entries = diary.getByOperation(deployment.id);
     const postmortem = generatePostmortem(entries, deployment);
 
     expect(postmortem.failureAnalysis).toBeNull();
@@ -771,7 +767,7 @@ describe("Postmortem report — structural guarantees", () => {
 
     const deployment = await testDeploy(agent, stores, {});
 
-    const entries = diary.getByDeployment(deployment.id);
+    const entries = diary.getByOperation(deployment.id);
     const postmortem = generatePostmortem(entries, deployment);
 
     expect(postmortem.failureAnalysis).not.toBeNull();

@@ -119,15 +119,10 @@ async function testDeployWithPartition(
 
   const artifact = getOrCreateArtifact();
 
-  const trigger = {
-    artifactId: artifact.id,
-    artifactVersionId: version,
-    partitionId: partition.id,
-    environmentId: env.id,
-    triggeredBy: "user" as const,
-    ...(variables ? { variables } : {}),
-  };
-  return agent.triggerDeployment(trigger);
+  return agent.triggerOperation(
+    { type: "deploy", artifactId: artifact.id, artifactVersionId: version },
+    { partitionId: partition.id, environmentId: env.id, triggeredBy: "user", ...(variables ? { variables } : {}) },
+  );
 }
 
 // ---------------------------------------------------------------------------
