@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
@@ -31,6 +32,7 @@ function makeInstruction(
   overrides: Partial<DeploymentInstruction> = {},
 ): DeploymentInstruction {
   return {
+    deploymentId: crypto.randomUUID(),
     partitionId: "partition-1",
     environmentId: "env-prod",
     operationId: `web-app-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -60,6 +62,7 @@ async function seedDeploymentHistory(
 
   // Deployment 1: v1.0.0 — success (30 days ago)
   const d1 = makeInstruction({
+    deploymentId: "web-app-v1",
     operationId: "web-app-v1",
     version: "1.0.0",
   });
@@ -68,6 +71,7 @@ async function seedDeploymentHistory(
 
   // Deployment 2: v1.1.0 — success (15 days ago)
   const d2 = makeInstruction({
+    deploymentId: "web-app-v1.1",
     operationId: "web-app-v1.1",
     version: "1.1.0",
   });
@@ -76,6 +80,7 @@ async function seedDeploymentHistory(
 
   // Deployment 3: v2.0.0 — success (7 days ago, "last Tuesday" area)
   const d3 = makeInstruction({
+    deploymentId: "web-app-v2",
     operationId: "web-app-v2",
     version: "2.0.0",
   });
@@ -84,6 +89,7 @@ async function seedDeploymentHistory(
 
   // Deployment 4: v2.1.0 — success (3 days ago)
   const d4 = makeInstruction({
+    deploymentId: "web-app-v2.1",
     operationId: "web-app-v2.1",
     version: "2.1.0",
   });
@@ -92,6 +98,7 @@ async function seedDeploymentHistory(
 
   // Deployment 5: api-service v1.0.0 — success (5 days ago)
   const d5 = makeInstruction({
+    deploymentId: "api-service-v1",
     operationId: "api-service-v1",
     version: "1.0.0",
     environmentId: "env-staging",
@@ -656,6 +663,7 @@ describe("EscalationPackager", () => {
   describe("Deployment-specific escalation", () => {
     it("packages a failed deployment with full context", async () => {
       const instruction = makeInstruction({
+        deploymentId: "deploy-esc-001",
         operationId: "deploy-esc-001",
         version: "3.0.0",
       });
@@ -676,6 +684,7 @@ describe("EscalationPackager", () => {
 
     it("includes environment state at time of escalation", async () => {
       const instruction = makeInstruction({
+        deploymentId: "deploy-esc-002",
         operationId: "deploy-esc-002",
         version: "2.0.0",
       });
@@ -801,6 +810,7 @@ describe("EscalationPackager", () => {
     it("rates severity based on failure patterns", async () => {
       // Execute a successful deployment
       const instruction = makeInstruction({
+        deploymentId: "deploy-sev-001",
         operationId: "deploy-sev-001",
         version: "1.0.0",
       });

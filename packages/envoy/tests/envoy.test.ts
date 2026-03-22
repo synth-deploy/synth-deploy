@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
@@ -27,6 +28,7 @@ function cleanDir(dir: string): void {
 
 function makeInstruction(overrides: Partial<DeploymentInstruction> = {}): DeploymentInstruction {
   return {
+    deploymentId: crypto.randomUUID(),
     partitionId: "partition-1",
     environmentId: "env-prod",
     operationId: "web-app",
@@ -267,10 +269,10 @@ describe("EnvoyAgent — Local Pipeline", () => {
   });
 
   it("updates local state after successful deployment", async () => {
-    const instruction = makeInstruction({ operationId: "state-test" });
+    const instruction = makeInstruction({ deploymentId: "state-test", operationId: "state-test" });
     await agent.executeDeployment(instruction);
 
-    // Check deployment record (LocalStateStore uses operationId as the deploymentId key)
+    // Check deployment record
     const record = state.getDeployment("state-test");
     expect(record).toBeDefined();
     expect(record!.status).toBe("succeeded");
@@ -335,11 +337,13 @@ describe("EnvoyAgent — Local Pipeline", () => {
 
   it("handles multiple partitions with isolation", async () => {
     const partitionA = makeInstruction({
+      deploymentId: "d-a",
       operationId: "d-a",
       partitionId: "partition-a",
       partitionName: "Alpha Corp",
     });
     const partitionB = makeInstruction({
+      deploymentId: "d-b",
       operationId: "d-b",
       partitionId: "partition-b",
       partitionName: "Beta Corp",
@@ -348,7 +352,7 @@ describe("EnvoyAgent — Local Pipeline", () => {
     await agent.executeDeployment(partitionA);
     await agent.executeDeployment(partitionB);
 
-    // Both succeeded (state uses operationId as deploymentId key)
+    // Both succeeded
     expect(state.getDeployment("d-a")!.status).toBe("succeeded");
     expect(state.getDeployment("d-b")!.status).toBe("succeeded");
 
@@ -400,7 +404,7 @@ describe("Envoy HTTP Server", () => {
   });
 
   it("POST /deploy executes a deployment", async () => {
-    const instruction = makeInstruction({ operationId: "http-deploy" });
+    const instruction = makeInstruction({ deploymentId: "http-deploy", operationId: "http-deploy" });
     const response = await app.inject({
       method: "POST",
       url: "/deploy",
@@ -432,7 +436,7 @@ describe("Envoy HTTP Server", () => {
     await app.inject({
       method: "POST",
       url: "/deploy",
-      payload: makeInstruction({ operationId: "status-deploy" }),
+      payload: makeInstruction({ deploymentId: "status-deploy", operationId: "status-deploy" }),
     });
 
     const response = await app.inject({ method: "GET", url: "/status" });
@@ -450,7 +454,7 @@ describe("Envoy HTTP Server", () => {
     await app.inject({
       method: "POST",
       url: "/deploy",
-      payload: makeInstruction({ operationId: "detail-deploy" }),
+      payload: makeInstruction({ deploymentId: "detail-deploy", operationId: "detail-deploy" }),
     });
 
     const response = await app.inject({
@@ -526,6 +530,7 @@ describe("Full Deployment Cycle — Server triggers, Envoy executes", () => {
       method: "POST",
       url: "/deploy",
       payload: {
+        deploymentId: operationId,
         operationId,
         partitionId: "partition-1",
         environmentId: "env-prod",
@@ -583,7 +588,7 @@ describe("Full Deployment Cycle — Server triggers, Envoy executes", () => {
     const d = await app.inject({
       method: "POST",
       url: "/deploy",
-      payload: makeInstruction({ operationId: "lifecycle-001" }),
+      payload: makeInstruction({ deploymentId: "lifecycle-001", operationId: "lifecycle-001" }),
     });
     expect(JSON.parse(d.body).success).toBe(true);
 
@@ -600,6 +605,7 @@ describe("Full Deployment Cycle — Server triggers, Envoy executes", () => {
       method: "POST",
       url: "/deploy",
       payload: makeInstruction({
+        deploymentId: "lifecycle-002",
         operationId: "lifecycle-002",
         version: "3.0.0",
       }),
@@ -643,7 +649,7 @@ describe("Full Deployment Cycle — Server triggers, Envoy executes", () => {
     await app.inject({
       method: "POST",
       url: "/deploy",
-      payload: makeInstruction({ operationId }),
+      payload: makeInstruction({ deploymentId: operationId, operationId }),
     });
 
     // Server records completion
