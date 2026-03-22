@@ -49,7 +49,7 @@ There are two distinct phases, and the separation is the whole point:
 
 Intelligence during planning. Determinism during execution. That's the architecture.
 
-It's open source, self-hosted, MCP-native from day one, and works with Claude, GPT, Gemini, or Ollama. Every decision gets logged in plain language: what was done, what the reasoning was, and what information drove it.
+It's source-available, self-hosted, MCP-native from day one, and works with Claude, GPT, Gemini, or Ollama. Every decision gets logged in plain language: what was done, what the reasoning was, and what information drove it.
 
 ## Why This Post Exists
 
