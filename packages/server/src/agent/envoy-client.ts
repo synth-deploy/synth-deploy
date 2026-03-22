@@ -274,7 +274,7 @@ export class EnvoyClient {
     blocked?: boolean;
     blockReason?: string;
     queryFindings?: { targetsSurveyed: string[]; summary: string; findings: Array<{ target: string; observations: string[] }> };
-    investigationFindings?: { targetsSurveyed: string[]; summary: string; findings: Array<{ target: string; observations: string[] }>; rootCause?: string; proposedResolution?: { intent: string; operationType: string; parameters?: Record<string, unknown> } };
+    investigationFindings?: { targetsSurveyed: string[]; summary: string; findings: Array<{ target: string; observations: string[] }>; rootCause?: string; proposedResolution?: { intent: string; operationType: "deploy" | "maintain"; parameters?: Record<string, unknown> } };
   }> {
     // Forward the LLM API key so the Envoy can use it if it started without one.
     // Sent in the request body (not headers) over the trusted server↔envoy channel.
