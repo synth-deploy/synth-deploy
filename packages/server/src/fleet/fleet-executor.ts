@@ -197,7 +197,7 @@ export class FleetExecutor {
         const client = this.createEnvoyClient(entry.url, entry.token);
         try {
           await client.executeApprovedPlan({
-            deploymentId: fleetDeployment.id,
+            operationId: fleetDeployment.id,
             plan,
             rollbackPlan: rollbackPlan ?? plan,
             artifactType: "fleet",

@@ -75,7 +75,7 @@ export class ServerReporter {
     const report: EnvoyReport = {
       type: "deployment-result",
       envoyId: this.envoyId,
-      deploymentId: result.deploymentId,
+      deploymentId: result.operationId,
       success: result.success,
       failureReason: result.failureReason,
       debriefEntries: result.debriefEntries.map(serializeDebriefEntry),

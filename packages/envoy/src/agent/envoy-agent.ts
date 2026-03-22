@@ -4,7 +4,7 @@ import path from "node:path";
 import type {
   DebriefWriter,
   DebriefEntry,
-  DeploymentId,
+  OperationId,
   PartitionId,
   EnvironmentId,
   PlannedStep,
@@ -56,10 +56,9 @@ export type LifecycleState = "active" | "draining" | "paused";
  * What the Server sends to the Envoy when it wants a deployment executed.
  */
 export interface DeploymentInstruction {
-  deploymentId: DeploymentId;
+  operationId: OperationId;
   partitionId: PartitionId;
   environmentId: EnvironmentId;
-  operationId: string;
   version: string;
   variables: Record<string, string>;
   /** Name of the environment (for reasoning — "production" vs "staging" matters) */
@@ -80,7 +79,7 @@ export interface DeploymentInstruction {
  * What the Envoy returns to the Server after executing a deployment.
  */
 export interface DeploymentResult {
-  deploymentId: DeploymentId;
+  operationId: OperationId;
   success: boolean;
   /** Where the deployment artifacts live on this machine */
   workspacePath: string;
@@ -116,7 +115,7 @@ export interface DeploymentResult {
  * This is the input to the planning phase — read-only, zero side effects.
  */
 export interface PlanningInstruction {
-  deploymentId: string;
+  operationId: string;
   artifact: {
     id: string;
     name: string;
@@ -177,7 +176,7 @@ export interface PlanningResult {
  * this is backward-planning based on what actually happened.
  */
 export interface RollbackPlanningInstruction {
-  deploymentId: string;
+  operationId: string;
   artifact: {
     name: string;
     type: string;
@@ -409,7 +408,7 @@ export class EnvoyAgent {
           : "Envoy is paused — not accepting deployments";
 
       return {
-        deploymentId: instruction.deploymentId,
+        operationId: instruction.operationId,
         success: false,
         workspacePath: "",
         artifacts: [],
@@ -439,7 +438,7 @@ export class EnvoyAgent {
 
     recordEntry({
       partitionId: instruction.partitionId,
-      operationId: instruction.deploymentId,
+      operationId: instruction.operationId,
       agent: "envoy",
       decisionType: "pipeline-plan",
       decision:
@@ -468,7 +467,7 @@ export class EnvoyAgent {
     if (!readiness.ready) {
       recordEntry({
         partitionId: instruction.partitionId,
-        operationId: instruction.deploymentId,
+        operationId: instruction.operationId,
         agent: "envoy",
         decisionType: "environment-scan",
         decision: "Local environment not ready — aborting deployment",
@@ -483,7 +482,7 @@ export class EnvoyAgent {
       });
 
       return {
-        deploymentId: instruction.deploymentId,
+        operationId: instruction.operationId,
         success: false,
         workspacePath: "",
         artifacts: [],
@@ -506,7 +505,7 @@ export class EnvoyAgent {
 
     recordEntry({
       partitionId: instruction.partitionId,
-      operationId: instruction.deploymentId,
+      operationId: instruction.operationId,
       agent: "envoy",
       decisionType: "environment-scan",
       decision: existingEnv
@@ -538,13 +537,13 @@ export class EnvoyAgent {
     // --- Step 3: Record to local state -----------------------------------------
 
     const localRecord = this.state.recordDeployment({
-      deploymentId: instruction.deploymentId,
+      deploymentId: instruction.operationId,
       partitionId: instruction.partitionId,
       environmentId: instruction.environmentId,
       operationId: instruction.operationId,
       version: instruction.version,
       variables: instruction.variables,
-      workspacePath: `${this.baseDir}/deployments/${instruction.deploymentId}`,
+      workspacePath: `${this.baseDir}/deployments/${instruction.operationId}`,
     });
 
     // --- Step 4: Execute -------------------------------------------------------
@@ -593,7 +592,7 @@ export class EnvoyAgent {
 
     recordEntry({
       partitionId: instruction.partitionId,
-      operationId: instruction.deploymentId,
+      operationId: instruction.operationId,
       agent: "envoy",
       decisionType: "deployment-execution",
       decision:
@@ -614,22 +613,22 @@ export class EnvoyAgent {
       },
     });
 
-    envoyLog("EXECUTE-START", { deploymentId: instruction.deploymentId, steps: steps.length });
+    envoyLog("EXECUTE-START", { operationId: instruction.operationId, steps: steps.length });
     const execStart = Date.now();
     const planResult = await this.operationExecutor!.executePlan(
       steps,
       boundaries,
       undefined,
-      instruction.deploymentId,
+      instruction.operationId,
     );
     const execDurationMs = Date.now() - execStart;
 
     if (!planResult.success) {
       const failedResult = planResult.results.find((r) => r.status === "failed");
       const errorMsg = failedResult?.error ?? "Unknown execution error";
-      envoyError("EXECUTE-FAILED", { deploymentId: instruction.deploymentId, reason: errorMsg });
+      envoyError("EXECUTE-FAILED", { operationId: instruction.operationId, reason: errorMsg });
 
-      this.state.completeDeployment(instruction.deploymentId, "failed", errorMsg);
+      this.state.completeDeployment(instruction.operationId, "failed", errorMsg);
 
       const diagnostic = this.investigator.investigate(
         localRecord.workspacePath,
@@ -639,7 +638,7 @@ export class EnvoyAgent {
 
       recordEntry({
         partitionId: instruction.partitionId,
-        operationId: instruction.deploymentId,
+        operationId: instruction.operationId,
         agent: "envoy",
         decisionType: "deployment-failure",
         decision: `Plan execution failed at step ${(planResult.failedStepIndex ?? 0) + 1}/${steps.length}: ${errorMsg}`,
@@ -653,7 +652,7 @@ export class EnvoyAgent {
 
       recordEntry({
         partitionId: instruction.partitionId,
-        operationId: instruction.deploymentId,
+        operationId: instruction.operationId,
         agent: "envoy",
         decisionType: "diagnostic-investigation",
         decision: `Investigation: ${diagnostic.summary}`,
@@ -662,7 +661,7 @@ export class EnvoyAgent {
       });
 
       const failResult: DeploymentResult = {
-        deploymentId: instruction.deploymentId,
+        operationId: instruction.operationId,
         success: false,
         workspacePath: localRecord.workspacePath,
         artifacts: [],
@@ -685,10 +684,10 @@ export class EnvoyAgent {
       .map((r) => r.step.description);
 
     // Update state and record completion
-    this.state.completeDeployment(instruction.deploymentId, "succeeded");
+    this.state.completeDeployment(instruction.operationId, "succeeded");
     this.state.updateEnvironment(instruction.partitionId, instruction.environmentId, {
       currentVersion: instruction.version,
-      currentDeploymentId: instruction.deploymentId,
+      currentDeploymentId: instruction.operationId,
       activeVariables: instruction.variables,
     });
 
@@ -696,7 +695,7 @@ export class EnvoyAgent {
 
     recordEntry({
       partitionId: instruction.partitionId,
-      operationId: instruction.deploymentId,
+      operationId: instruction.operationId,
       agent: "envoy",
       decisionType: "deployment-verification",
       decision: `Plan execution verified — all ${planResult.results.length} steps completed`,
@@ -709,7 +708,7 @@ export class EnvoyAgent {
 
     recordEntry({
       partitionId: instruction.partitionId,
-      operationId: instruction.deploymentId,
+      operationId: instruction.operationId,
       agent: "envoy",
       decisionType: "deployment-completion",
       decision:
@@ -732,9 +731,9 @@ export class EnvoyAgent {
       },
     });
 
-    envoyLog("EXECUTE-COMPLETE", { deploymentId: instruction.deploymentId, success: true });
+    envoyLog("EXECUTE-COMPLETE", { operationId: instruction.operationId, success: true });
     const successResult: DeploymentResult = {
-      deploymentId: instruction.deploymentId,
+      operationId: instruction.operationId,
       success: true,
       workspacePath: localRecord.workspacePath,
       artifacts,
@@ -773,7 +772,7 @@ export class EnvoyAgent {
   ): Promise<DeploymentResult> {
     recordEntry({
       partitionId: instruction.partitionId,
-      operationId: instruction.deploymentId,
+      operationId: instruction.operationId,
       agent: "envoy",
       decisionType: "deployment-execution",
       decision:
@@ -798,7 +797,7 @@ export class EnvoyAgent {
 
     if (!execResult.success) {
       this.state.completeDeployment(
-        instruction.deploymentId,
+        instruction.operationId,
         "failed",
         execResult.error,
       );
@@ -811,7 +810,7 @@ export class EnvoyAgent {
 
       recordEntry({
         partitionId: instruction.partitionId,
-        operationId: instruction.deploymentId,
+        operationId: instruction.operationId,
         agent: "envoy",
         decisionType: "deployment-failure",
         decision: `Deployment execution failed: ${execResult.error}`,
@@ -833,7 +832,7 @@ export class EnvoyAgent {
 
       recordEntry({
         partitionId: instruction.partitionId,
-        operationId: instruction.deploymentId,
+        operationId: instruction.operationId,
         agent: "envoy",
         decisionType: "diagnostic-investigation",
         decision: `Investigation: ${diagnostic.summary}`,
@@ -848,7 +847,7 @@ export class EnvoyAgent {
       });
 
       const failResult: DeploymentResult = {
-        deploymentId: instruction.deploymentId,
+        operationId: instruction.operationId,
         success: false,
         workspacePath: execResult.workspacePath,
         artifacts: [],
@@ -875,7 +874,7 @@ export class EnvoyAgent {
 
     recordEntry({
       partitionId: instruction.partitionId,
-      operationId: instruction.deploymentId,
+      operationId: instruction.operationId,
       agent: "envoy",
       decisionType: "deployment-verification",
       decision: verification.passed
@@ -900,7 +899,7 @@ export class EnvoyAgent {
 
     if (!verification.passed) {
       this.state.completeDeployment(
-        instruction.deploymentId,
+        instruction.operationId,
         "failed",
         "Post-deployment verification failed",
       );
@@ -913,7 +912,7 @@ export class EnvoyAgent {
 
       recordEntry({
         partitionId: instruction.partitionId,
-        operationId: instruction.deploymentId,
+        operationId: instruction.operationId,
         agent: "envoy",
         decisionType: "diagnostic-investigation",
         decision: `Investigation: ${diagnostic.summary}`,
@@ -928,7 +927,7 @@ export class EnvoyAgent {
       });
 
       const failResult: DeploymentResult = {
-        deploymentId: instruction.deploymentId,
+        operationId: instruction.operationId,
         success: false,
         workspacePath: execResult.workspacePath,
         artifacts: execResult.artifacts,
@@ -947,13 +946,13 @@ export class EnvoyAgent {
 
     // --- Update local state --------------------------------------------
 
-    this.state.completeDeployment(instruction.deploymentId, "succeeded");
+    this.state.completeDeployment(instruction.operationId, "succeeded");
     this.state.updateEnvironment(
       instruction.partitionId,
       instruction.environmentId,
       {
         currentVersion: instruction.version,
-        currentDeploymentId: instruction.deploymentId,
+        currentDeploymentId: instruction.operationId,
         activeVariables: instruction.variables,
       },
     );
@@ -964,7 +963,7 @@ export class EnvoyAgent {
 
     recordEntry({
       partitionId: instruction.partitionId,
-      operationId: instruction.deploymentId,
+      operationId: instruction.operationId,
       agent: "envoy",
       decisionType: "deployment-completion",
       decision:
@@ -989,7 +988,7 @@ export class EnvoyAgent {
     });
 
     const successResult: DeploymentResult = {
-      deploymentId: instruction.deploymentId,
+      operationId: instruction.operationId,
       success: true,
       workspacePath: execResult.workspacePath,
       artifacts: execResult.artifacts,
@@ -1028,7 +1027,6 @@ export class EnvoyAgent {
       // Write deployment manifest
       const manifestPath = path.join(workspacePath, "manifest.json");
       fs.writeFileSync(manifestPath, JSON.stringify({
-        deploymentId: instruction.deploymentId,
         operationId: instruction.operationId,
         partitionId: instruction.partitionId,
         environmentId: instruction.environmentId,
@@ -1314,7 +1312,7 @@ export class EnvoyAgent {
 
     recordEntry({
       partitionId: instruction.partition?.id ?? null,
-      operationId: instruction.deploymentId,
+      operationId: instruction.operationId,
       agent: "envoy",
       decisionType: "plan-generation",
       decision:
@@ -1350,7 +1348,7 @@ export class EnvoyAgent {
     latestPlan: ReturnType<EnvoyKnowledgeStore["getLatestPlan"]>,
     recordEntry: (params: Parameters<DebriefWriter["record"]>[0]) => DebriefEntry,
   ): Promise<PlanningResult> {
-    const reqId = instruction.deploymentId ?? crypto.randomUUID().slice(0, 8);
+    const reqId = instruction.operationId ?? crypto.randomUUID().slice(0, 8);
     this.planLog.startRequest(
       reqId,
       instruction.artifact.name,
@@ -1562,13 +1560,13 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
           systemPrompt: probeSystemPrompt,
           promptSummary,
           partitionId: instruction.partition?.id ?? null,
-          operationId: instruction.deploymentId,
+          operationId: instruction.operationId,
           maxTokens: 4096,
           onProbe: async (command: string) => {
             const result = await probeExecutor.execute(command);
             recordEntry({
               partitionId: instruction.partition?.id ?? null,
-              operationId: instruction.deploymentId,
+              operationId: instruction.operationId,
               agent: "envoy",
               decisionType: "environment-probe",
               decision: result.blocked
@@ -1601,7 +1599,7 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
           systemPrompt: retrySystemPrompt,
           promptSummary,
           partitionId: instruction.partition?.id ?? null,
-          operationId: instruction.deploymentId,
+          operationId: instruction.operationId,
           maxTokens: 4096,
         });
       }
@@ -1610,7 +1608,7 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
         this.planLog.log(`LLM-FAIL attempt=${attempt}`, llmResult.reason);
         recordEntry({
           partitionId: instruction.partition?.id ?? null,
-          operationId: instruction.deploymentId,
+          operationId: instruction.operationId,
           agent: "envoy",
           decisionType: "plan-generation",
           decision: `LLM planning failed on attempt ${attempt}` +
@@ -1678,7 +1676,7 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
         this.planLog.log(`PARSE-FAIL attempt=${attempt}`, `error=${parseErr instanceof Error ? parseErr.message : String(parseErr)} preview=${preview}`);
         recordEntry({
           partitionId: instruction.partition?.id ?? null,
-          operationId: instruction.deploymentId,
+          operationId: instruction.operationId,
           agent: "envoy",
           decisionType: "plan-generation",
           decision: `LLM response could not be parsed on attempt ${attempt}`,
@@ -1727,7 +1725,7 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
       if (!this.operationExecutor) {
         recordEntry({
           partitionId: instruction.partition?.id ?? null,
-          operationId: instruction.deploymentId,
+          operationId: instruction.operationId,
           agent: "envoy",
           decisionType: "plan-generation",
           decision:
@@ -1771,7 +1769,7 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
 
         recordEntry({
           partitionId: instruction.partition?.id ?? null,
-          operationId: instruction.deploymentId,
+          operationId: instruction.operationId,
           agent: "envoy",
           decisionType: "plan-generation",
           decision:
@@ -1817,7 +1815,7 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
         envoyWarn("PLAN-STUCK", `same failures after ${attempt} attempts, falling back to reason()`);
         recordEntry({
           partitionId: instruction.partition?.id ?? null,
-          operationId: instruction.deploymentId,
+          operationId: instruction.operationId,
           agent: "envoy",
           decisionType: "plan-generation",
           decision: `Plan generation stuck — same failed observations after ${attempt} attempts`,
@@ -1845,7 +1843,7 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
         this.planLog.log("BLOCKED", `max attempts reached: ${currentObsSummary}`);
         recordEntry({
           partitionId: instruction.partition?.id ?? null,
-          operationId: instruction.deploymentId,
+          operationId: instruction.operationId,
           agent: "envoy",
           decisionType: "plan-generation",
           decision: `Plan blocked — unresolved environmental issues after ${MAX_DRY_RUN_ATTEMPTS} attempts`,
@@ -1887,7 +1885,7 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
 
       recordEntry({
         partitionId: instruction.partition?.id ?? null,
-        operationId: instruction.deploymentId,
+        operationId: instruction.operationId,
         agent: "envoy",
         decisionType: "plan-generation",
         decision: `Dry-run found failed observations — re-planning with environmental context (attempt ${attempt + 1}/${MAX_DRY_RUN_ATTEMPTS})`,
@@ -1930,7 +1928,7 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
    * configure + restart pattern based on artifact type.
    */
   private buildFallbackPlan(instruction: PlanningInstruction): PlanningResult {
-    const workspacePath = `${this.baseDir}/deployments/${instruction.deploymentId}`;
+    const workspacePath = `${this.baseDir}/deployments/${instruction.operationId}`;
 
     const plan: DeploymentPlan = {
       steps: [
@@ -1951,7 +1949,7 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
               name: instruction.artifact.name,
               type: instruction.artifact.type,
               version: instruction.version,
-              deploymentId: instruction.deploymentId,
+              operationId: instruction.operationId,
             }, null, 2),
           },
           reversible: true,
@@ -1975,7 +1973,7 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
           target: `${workspacePath}/manifest.json`,
           params: {
             content: JSON.stringify({
-              deploymentId: instruction.deploymentId,
+              operationId: instruction.operationId,
               artifact: instruction.artifact.name,
               version: instruction.version,
               environment: instruction.environment.name,
@@ -2121,7 +2119,7 @@ IMPORTANT: Every step's "action" field MUST contain at least one of the recogniz
         `Generate rollback plan for ${instruction.artifact.name} v${instruction.version} ` +
         `in "${instruction.environment.name}"`,
       partitionId: null,
-      operationId: instruction.deploymentId,
+      operationId: instruction.operationId,
       maxTokens: 2048,
     });
 
@@ -2148,7 +2146,7 @@ IMPORTANT: Every step's "action" field MUST contain at least one of the recogniz
 
       this.debrief.record({
         partitionId: null,
-        operationId: instruction.deploymentId,
+        operationId: instruction.operationId,
         agent: "envoy",
         decisionType: "plan-generation",
         decision: `Generated rollback plan for ${instruction.artifact.name} v${instruction.version}: ${parsed.steps.length} step(s)`,
@@ -2211,7 +2209,7 @@ IMPORTANT: Every step's "action" field MUST contain at least one of the recogniz
    * planning context.
    */
   async executeApprovedPlan(
-    deploymentId: string,
+    operationId: string,
     plan: DeploymentPlan,
     rollbackPlan: DeploymentPlan,
     artifactContext?: { artifactType: string; artifactName: string; environmentId: string },
@@ -2230,7 +2228,7 @@ IMPORTANT: Every step's "action" field MUST contain at least one of the recogniz
           : "Envoy is paused — not accepting deployments";
 
       return {
-        deploymentId,
+        operationId,
         success: false,
         workspacePath: "",
         artifacts: [],
@@ -2258,11 +2256,11 @@ IMPORTANT: Every step's "action" field MUST contain at least one of the recogniz
 
     recordEntry({
       partitionId: null,
-      operationId: deploymentId,
+      operationId: operationId,
       agent: "envoy",
       decisionType: "deployment-execution",
       decision:
-        `Executing approved plan: ${plan.steps.length} step(s) for deployment ${deploymentId}`,
+        `Executing approved plan: ${plan.steps.length} step(s) for deployment ${operationId}`,
       reasoning:
         `User approved the deployment plan. Executing ${plan.steps.length} step(s) ` +
         `deterministically — no re-reasoning. Rollback plan has ` +
@@ -2290,7 +2288,7 @@ IMPORTANT: Every step's "action" field MUST contain at least one of the recogniz
         plan.steps,
         [],
         progressCallback,
-        deploymentId,
+        operationId,
       );
 
       if (!planResult.success) {
@@ -2314,7 +2312,7 @@ IMPORTANT: Every step's "action" field MUST contain at least one of the recogniz
 
       recordEntry({
         partitionId: null,
-        operationId: deploymentId,
+        operationId: operationId,
         agent: "envoy",
         decisionType: "deployment-failure",
         decision:
@@ -2337,12 +2335,12 @@ IMPORTANT: Every step's "action" field MUST contain at least one of the recogniz
           rollbackPlan.steps,
           [],
           undefined,
-          deploymentId,
+          operationId,
         );
 
         recordEntry({
           partitionId: null,
-          operationId: deploymentId,
+          operationId: operationId,
           agent: "envoy",
           decisionType: "rollback-execution",
           decision:
@@ -2359,7 +2357,7 @@ IMPORTANT: Every step's "action" field MUST contain at least one of the recogniz
       }
 
       const failResult: DeploymentResult = {
-        deploymentId,
+        operationId,
         success: false,
         workspacePath: "",
         artifacts: [],
@@ -2375,7 +2373,7 @@ IMPORTANT: Every step's "action" field MUST contain at least one of the recogniz
       this.reportToServer(failResult, callbackToken);
 
       // Store the failed plan in knowledge store for future planning context
-      this.storePlanOutcome(deploymentId, plan, rollbackPlan, false, failureError, execDurationMs, artifactContext);
+      this.storePlanOutcome(operationId, plan, rollbackPlan, false, failureError, execDurationMs, artifactContext);
 
       return failResult;
     }
@@ -2387,11 +2385,11 @@ IMPORTANT: Every step's "action" field MUST contain at least one of the recogniz
 
     recordEntry({
       partitionId: null,
-      operationId: deploymentId,
+      operationId: operationId,
       agent: "envoy",
       decisionType: "deployment-completion",
       decision:
-        `Approved plan executed: all ${plan.steps.length} step(s) completed for deployment ${deploymentId}`,
+        `Approved plan executed: all ${plan.steps.length} step(s) completed for deployment ${operationId}`,
       reasoning:
         `All ${plan.steps.length} planned steps executed deterministically in ${execDurationMs}ms. ` +
         `No re-reasoning was performed — the plan was executed exactly as approved. ` +
@@ -2405,7 +2403,7 @@ IMPORTANT: Every step's "action" field MUST contain at least one of the recogniz
     });
 
     const successResult: DeploymentResult = {
-      deploymentId,
+      operationId,
       success: true,
       workspacePath: "",
       artifacts,
@@ -2425,7 +2423,7 @@ IMPORTANT: Every step's "action" field MUST contain at least one of the recogniz
     this.reportToServer(successResult, callbackToken);
 
     // Store the successful plan in knowledge store for future planning context
-    this.storePlanOutcome(deploymentId, plan, rollbackPlan, true, undefined, execDurationMs, artifactContext);
+    this.storePlanOutcome(operationId, plan, rollbackPlan, true, undefined, execDurationMs, artifactContext);
 
     return successResult;
   }
@@ -2435,7 +2433,7 @@ IMPORTANT: Every step's "action" field MUST contain at least one of the recogniz
    * for future planning context.
    */
   private storePlanOutcome(
-    deploymentId: string,
+    operationId: string,
     plan: DeploymentPlan,
     rollbackPlan: DeploymentPlan,
     success: boolean,
@@ -2446,7 +2444,7 @@ IMPORTANT: Every step's "action" field MUST contain at least one of the recogniz
     try {
       this.state.storePlan({
         id: crypto.randomUUID(),
-        deploymentId,
+        deploymentId: operationId,
         artifactType: artifactContext?.artifactType ?? "unknown",
         artifactName: artifactContext?.artifactName ?? "unknown",
         environmentId: artifactContext?.environmentId ?? "unknown",
@@ -2516,7 +2514,7 @@ IMPORTANT: Every step's "action" field MUST contain at least one of the recogniz
       // Log but don't fail — the synchronous response already went back.
       // Command can also pull this data via GET /deployments/:id.
       console.error(
-        `[Envoy] Failed to report deployment ${result.deploymentId} to Command:`,
+        `[Envoy] Failed to report deployment ${result.operationId} to Command:`,
         err instanceof Error ? err.message : err,
       );
     });

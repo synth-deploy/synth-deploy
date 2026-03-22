@@ -1392,7 +1392,6 @@ export class SynthAgent {
       const progressCallbackUrl = `http://${commandHost}:${commandPort}/api/deployments/${deployment.id}/progress`;
 
       envoyResult = await client.deploy({
-        deploymentId: deployment.id,
         operationId: deployment.id,
         partitionId: deployment.partitionId ?? "",
         environmentId: deployment.environmentId ?? "",
@@ -1418,7 +1417,7 @@ export class SynthAgent {
       for (const entry of envoyResult.debriefEntries) {
         const ingested = this.debrief.record({
           partitionId: entry.partitionId ?? deployment.partitionId ?? null,
-          operationId: entry.deploymentId ?? deployment.id,
+          operationId: entry.operationId ?? deployment.id,
           agent: entry.agent,
           decisionType: entry.decisionType,
           decision: entry.decision,

@@ -378,7 +378,7 @@ export class DiagnosticInvestigator {
         `Last log lines:\n${tailLines.join("\n")}`,
       promptSummary: `Log pattern analysis for ${instruction.operationId} v${instruction.version} (regex found nothing, LLM fallback)`,
       partitionId: instruction.partitionId,
-      operationId: instruction.deploymentId,
+      operationId: instruction.operationId,
       maxTokens: 1024,
     });
 
@@ -474,7 +474,7 @@ export class DiagnosticInvestigator {
         `${historyContext.isFirstDeployment ? "This is the first deployment to this environment." : ""}`,
       promptSummary: `Diagnostic report generation for ${instruction.operationId} v${instruction.version} (${failureType})`,
       partitionId: instruction.partitionId,
-      operationId: instruction.deploymentId,
+      operationId: instruction.operationId,
       maxTokens: 2048,
     }, "diagnosticSynthesis");
 

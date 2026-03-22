@@ -10,7 +10,7 @@ import type { DecisionType, DeploymentPlan, PlannedStep, SecurityBoundary } from
 // ---------------------------------------------------------------------------
 
 export interface EnvoyDeployResult {
-  deploymentId: string;
+  operationId: string;
   success: boolean;
   workspacePath: string;
   artifacts: string[];
@@ -25,7 +25,7 @@ export interface EnvoyDeployResult {
     id: string;
     timestamp: string;
     partitionId: string | null;
-    deploymentId: string | null;
+    operationId: string | null;
     agent: "server" | "envoy";
     decisionType: DecisionType;
     decision: string;
@@ -175,10 +175,9 @@ export class EnvoyClient {
    * Send a deployment instruction to the Envoy and wait for the result.
    */
   async deploy(instruction: {
-    deploymentId: string;
+    operationId: string;
     partitionId: string;
     environmentId: string;
-    operationId: string;
     version: string;
     variables: Record<string, string>;
     environmentName: string;
@@ -202,7 +201,7 @@ export class EnvoyClient {
    * Dispatch an approved plan to the Envoy for deterministic execution.
    */
   async executeApprovedPlan(params: {
-    deploymentId: string;
+    operationId: string;
     plan: DeploymentPlan;
     rollbackPlan: DeploymentPlan;
     artifactType: string;
@@ -211,7 +210,7 @@ export class EnvoyClient {
     progressCallbackUrl?: string;
     callbackToken?: string;
   }): Promise<EnvoyDeployResult> {
-    serverLog("ENVOY-EXECUTE", { deploymentId: params.deploymentId, envoyUrl: this.baseUrl, artifact: params.artifactName, steps: params.plan?.steps?.length ?? 0 });
+    serverLog("ENVOY-EXECUTE", { operationId: params.operationId, envoyUrl: this.baseUrl, artifact: params.artifactName, steps: params.plan?.steps?.length ?? 0 });
     const execStart = Date.now();
     const response = await fetchWithRetry(
       `${this.baseUrl}/execute`,
@@ -225,9 +224,9 @@ export class EnvoyClient {
 
     const execResult = (await response.json()) as EnvoyDeployResult;
     if (execResult.success) {
-      serverLog("ENVOY-EXECUTE-COMPLETE", { deploymentId: params.deploymentId, durationMs: Date.now() - execStart });
+      serverLog("ENVOY-EXECUTE-COMPLETE", { operationId: params.operationId, durationMs: Date.now() - execStart });
     } else {
-      serverLog("ENVOY-EXECUTE-FAILED", { deploymentId: params.deploymentId, failureReason: execResult.failureReason, durationMs: Date.now() - execStart });
+      serverLog("ENVOY-EXECUTE-FAILED", { operationId: params.operationId, failureReason: execResult.failureReason, durationMs: Date.now() - execStart });
     }
     return execResult;
   }
@@ -238,7 +237,7 @@ export class EnvoyClient {
    * POST /api/deployments/:id/plan to move the deployment to awaiting_approval.
    */
   async requestPlan(params: {
-    deploymentId: string;
+    operationId: string;
     artifact: {
       id: string;
       name: string;
@@ -267,7 +266,7 @@ export class EnvoyClient {
   }): Promise<{ plan: DeploymentPlan; rollbackPlan: DeploymentPlan; delta?: string; assessmentSummary?: string; blocked?: boolean; blockReason?: string }> {
     // Forward the LLM API key so the Envoy can use it if it started without one.
     // Sent in the request body (not headers) over the trusted server↔envoy channel.
-    serverLog("ENVOY-PLAN-REQUEST", { deploymentId: params.deploymentId, envoyUrl: this.baseUrl, artifact: params.artifact.name, version: params.version, environment: params.environment.name });
+    serverLog("ENVOY-PLAN-REQUEST", { operationId: params.operationId, envoyUrl: this.baseUrl, artifact: params.artifact.name, version: params.version, environment: params.environment.name });
     const llmApiKey = process.env.SYNTH_LLM_API_KEY;
     const planStart = Date.now();
     const response = await fetchWithRetry(
@@ -282,12 +281,12 @@ export class EnvoyClient {
 
     if (!response.ok) {
       const body = await response.text().catch(() => "");
-      serverLog("ENVOY-PLAN-FAILED", { deploymentId: params.deploymentId, status: response.status, durationMs: Date.now() - planStart });
+      serverLog("ENVOY-PLAN-FAILED", { operationId: params.operationId, status: response.status, durationMs: Date.now() - planStart });
       throw new Error(`Envoy planning failed (HTTP ${response.status}): ${body}`);
     }
 
     const planResult = (await response.json()) as { plan: DeploymentPlan; rollbackPlan: DeploymentPlan; delta?: string; assessmentSummary?: string; blocked?: boolean; blockReason?: string };
-    serverLog("ENVOY-PLAN-RECEIVED", { deploymentId: params.deploymentId, steps: planResult.plan?.steps?.length ?? 0, blocked: planResult.blocked ?? false, durationMs: Date.now() - planStart });
+    serverLog("ENVOY-PLAN-RECEIVED", { operationId: params.operationId, steps: planResult.plan?.steps?.length ?? 0, blocked: planResult.blocked ?? false, durationMs: Date.now() - planStart });
     return planResult;
   }
 
@@ -297,7 +296,7 @@ export class EnvoyClient {
    * than the forward plan, so the rollback is targeted to what actually changed.
    */
   async requestRollbackPlan(params: {
-    deploymentId: string;
+    operationId: string;
     artifact: {
       name: string;
       type: string;

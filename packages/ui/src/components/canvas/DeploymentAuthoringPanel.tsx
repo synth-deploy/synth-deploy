@@ -202,26 +202,32 @@ export default function OperationAuthoringPanel({ title, preselectedArtifactId, 
         <div style={{ marginBottom: 18 }}>
           <div className="section-label" style={{ marginBottom: 8 }}>Operation type</div>
           <div style={{ display: "flex", gap: 4 }}>
-            {(["deploy", "maintain", "query", "investigate", "trigger"] as OpType[]).map((t) => (
-              <button
-                key={t}
-                onClick={() => setOpType(t)}
-                style={{
-                  padding: "5px 12px",
-                  fontSize: 12,
-                  fontFamily: "var(--font-mono)",
-                  fontWeight: 600,
-                  background: opType === t ? "var(--accent)" : "var(--surface-2)",
-                  color: opType === t ? "var(--bg)" : "var(--text-muted)",
-                  border: "1px solid " + (opType === t ? "var(--accent)" : "var(--border)"),
-                  borderRadius: 4,
-                  cursor: "pointer",
-                  textTransform: "capitalize",
-                }}
-              >
-                {t}
-              </button>
-            ))}
+            {(["deploy", "maintain", "query", "investigate", "trigger"] as OpType[]).map((t) => {
+              const isAvailable = t === "deploy";
+              return (
+                <button
+                  key={t}
+                  disabled={!isAvailable}
+                  onClick={() => isAvailable && setOpType(t)}
+                  title={isAvailable ? undefined : "Coming soon"}
+                  style={{
+                    padding: "5px 12px",
+                    fontSize: 12,
+                    fontFamily: "var(--font-mono)",
+                    fontWeight: 600,
+                    background: opType === t ? "var(--accent)" : "var(--surface-2)",
+                    color: opType === t ? "var(--bg)" : "var(--text-muted)",
+                    border: "1px solid " + (opType === t ? "var(--accent)" : "var(--border)"),
+                    borderRadius: 4,
+                    cursor: isAvailable ? "pointer" : "not-allowed",
+                    textTransform: "capitalize",
+                    opacity: isAvailable ? 1 : 0.4,
+                  }}
+                >
+                  {t}
+                </button>
+              );
+            })}
           </div>
           {opType !== "deploy" && (
             <div style={{ marginTop: 8, fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>

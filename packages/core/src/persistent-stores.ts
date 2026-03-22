@@ -7,6 +7,7 @@ import type {
   EnvironmentId,
   Operation,
   OperationId,
+  OperationInput,
   Deployment,
   DeploymentId,
   AppSettings,
@@ -48,7 +49,7 @@ import { DEFAULT_APP_SETTINGS } from "./types.js";
 // Schema version — bump when table definitions change
 // ---------------------------------------------------------------------------
 
-const SCHEMA_VERSION = 7;
+const SCHEMA_VERSION = 8;
 
 // ---------------------------------------------------------------------------
 // Safe JSON parse — returns fallback on corruption instead of crashing
@@ -115,12 +116,18 @@ export function openEntityDatabase(dbPath: string): Database.Database {
 
     CREATE TABLE IF NOT EXISTS deployments (
       id TEXT PRIMARY KEY,
-      artifact_id TEXT NOT NULL,
+      operation_type TEXT NOT NULL DEFAULT 'deploy',
+      artifact_id TEXT,
       artifact_version_id TEXT,
+      input_json TEXT,
+      intent TEXT,
+      lineage TEXT,
+      findings TEXT,
+      retry_of TEXT,
       envoy_id TEXT,
       environment_id TEXT,
       partition_id TEXT,
-      version TEXT NOT NULL,
+      version TEXT,
       status TEXT NOT NULL,
       variables TEXT NOT NULL DEFAULT '{}',
       plan TEXT,
@@ -495,6 +502,52 @@ export function openEntityDatabase(dbPath: string): Database.Database {
     console.log("[Synth] Migrated database schema from v6 to v7 (persistent api_keys, envoy_registrations, intake, fleet)");
   }
 
+  // Migrate from v7 to v8: generalize deployments → operations
+  // Adds operation_type, input_json, intent, lineage, findings, retry_of columns;
+  // makes artifact_id and version nullable to support non-deploy operation types.
+  if (versionRow && versionRow.version < 8) {
+    db.exec(`
+      PRAGMA foreign_keys = OFF;
+      ALTER TABLE deployments RENAME TO _deployments_v7;
+      CREATE TABLE deployments (
+        id TEXT PRIMARY KEY,
+        operation_type TEXT NOT NULL DEFAULT 'deploy',
+        artifact_id TEXT,
+        artifact_version_id TEXT,
+        input_json TEXT,
+        intent TEXT,
+        lineage TEXT,
+        findings TEXT,
+        retry_of TEXT,
+        envoy_id TEXT,
+        environment_id TEXT,
+        partition_id TEXT,
+        version TEXT,
+        status TEXT NOT NULL,
+        variables TEXT NOT NULL DEFAULT '{}',
+        plan TEXT,
+        rollback_plan TEXT,
+        execution_record TEXT,
+        approved_by TEXT,
+        approved_at TEXT,
+        debrief_entry_ids TEXT NOT NULL DEFAULT '[]',
+        created_at TEXT NOT NULL,
+        completed_at TEXT,
+        failure_reason TEXT
+      );
+      INSERT INTO deployments (id, artifact_id, artifact_version_id, envoy_id, environment_id, partition_id, version, status, variables, plan, rollback_plan, execution_record, approved_by, approved_at, debrief_entry_ids, created_at, completed_at, failure_reason)
+        SELECT id, artifact_id, artifact_version_id, envoy_id, environment_id, partition_id, version, status, variables, plan, rollback_plan, execution_record, approved_by, approved_at, debrief_entry_ids, created_at, completed_at, failure_reason
+        FROM _deployments_v7;
+      DROP TABLE _deployments_v7;
+      CREATE INDEX IF NOT EXISTS idx_deployments_partition ON deployments(partition_id);
+      CREATE INDEX IF NOT EXISTS idx_deployments_artifact ON deployments(artifact_id);
+      CREATE INDEX IF NOT EXISTS idx_deployments_status ON deployments(status);
+      PRAGMA foreign_keys = ON;
+    `);
+    db.prepare(`UPDATE schema_version SET version = ?`).run(8);
+    console.log("[Synth] Migrated database schema from v7 to v8 (operation type generalization)");
+  }
+
   if (!versionRow) {
     db.prepare(`INSERT INTO schema_version (version) VALUES (?)`).run(SCHEMA_VERSION);
   } else if (versionRow.version !== SCHEMA_VERSION) {
@@ -718,8 +771,8 @@ export class PersistentDeploymentStore {
   constructor(private db: Database.Database) {
     this.stmts = {
       upsert: db.prepare(
-        `INSERT INTO deployments (id, artifact_id, artifact_version_id, envoy_id, environment_id, partition_id, version, status, variables, plan, rollback_plan, execution_record, approved_by, approved_at, debrief_entry_ids, created_at, completed_at, failure_reason)
-         VALUES (@id, @artifact_id, @artifact_version_id, @envoy_id, @environment_id, @partition_id, @version, @status, @variables, @plan, @rollback_plan, @execution_record, @approved_by, @approved_at, @debrief_entry_ids, @created_at, @completed_at, @failure_reason)
+        `INSERT INTO deployments (id, operation_type, artifact_id, artifact_version_id, input_json, intent, lineage, findings, retry_of, envoy_id, environment_id, partition_id, version, status, variables, plan, rollback_plan, execution_record, approved_by, approved_at, debrief_entry_ids, created_at, completed_at, failure_reason)
+         VALUES (@id, @operation_type, @artifact_id, @artifact_version_id, @input_json, @intent, @lineage, @findings, @retry_of, @envoy_id, @environment_id, @partition_id, @version, @status, @variables, @plan, @rollback_plan, @execution_record, @approved_by, @approved_at, @debrief_entry_ids, @created_at, @completed_at, @failure_reason)
          ON CONFLICT(id) DO UPDATE SET
            status = excluded.status,
            variables = excluded.variables,
@@ -730,7 +783,9 @@ export class PersistentDeploymentStore {
            approved_at = excluded.approved_at,
            debrief_entry_ids = excluded.debrief_entry_ids,
            completed_at = excluded.completed_at,
-           failure_reason = excluded.failure_reason`,
+           failure_reason = excluded.failure_reason,
+           intent = excluded.intent,
+           findings = excluded.findings`,
       ),
       getById: db.prepare(`SELECT * FROM deployments WHERE id = ?`),
       getByPartition: db.prepare(
@@ -765,12 +820,18 @@ export class PersistentDeploymentStore {
     const deployInput = deployment.input?.type === 'deploy' ? deployment.input : undefined;
     this.stmts.upsert.run({
       id: deployment.id,
+      operation_type: deployment.input?.type ?? 'deploy',
       artifact_id: deployInput?.artifactId ?? null,
       artifact_version_id: deployInput?.artifactVersionId ?? null,
+      input_json: deployment.input?.type !== 'deploy' && deployment.input ? JSON.stringify(deployment.input) : null,
+      intent: deployment.intent ?? null,
+      lineage: deployment.lineage ?? null,
+      findings: deployment.findings ?? null,
+      retry_of: deployment.retryOf ?? null,
       envoy_id: deployment.envoyId ?? null,
       environment_id: deployment.environmentId ?? null,
       partition_id: deployment.partitionId ?? null,
-      version: deployment.version,
+      version: deployment.version ?? null,
       status: deployment.status,
       variables: JSON.stringify(deployment.variables),
       plan: deployment.plan ? JSON.stringify(deployment.plan) : null,
@@ -832,12 +893,18 @@ export class PersistentDeploymentStore {
 
 interface DeploymentRow {
   id: string;
-  artifact_id: string;
+  operation_type: string | null;
+  artifact_id: string | null;
   artifact_version_id: string | null;
+  input_json: string | null;
+  intent: string | null;
+  lineage: string | null;
+  findings: string | null;
+  retry_of: string | null;
   envoy_id: string | null;
   environment_id: string | null;
   partition_id: string | null;
-  version: string;
+  version: string | null;
   status: string;
   variables: string;
   plan: string | null;
@@ -852,13 +919,24 @@ interface DeploymentRow {
 }
 
 function rowToOperation(row: DeploymentRow): Operation {
+  const opType = (row.operation_type ?? 'deploy') as OperationInput['type'];
+  let input: OperationInput;
+  if (opType === 'deploy') {
+    input = { type: 'deploy', artifactId: row.artifact_id ?? '', ...(row.artifact_version_id ? { artifactVersionId: row.artifact_version_id } : {}) };
+  } else if (row.input_json) {
+    input = JSON.parse(row.input_json) as OperationInput;
+  } else {
+    // Fallback: treat as deploy with empty artifactId (should not occur for well-formed rows)
+    input = { type: 'deploy', artifactId: '' };
+  }
+
   const operation: Operation = {
     id: row.id,
-    input: {
-      type: 'deploy' as const,
-      artifactId: row.artifact_id,
-      ...(row.artifact_version_id ? { artifactVersionId: row.artifact_version_id } : {}),
-    },
+    input,
+    ...(row.intent ? { intent: row.intent } : {}),
+    ...(row.lineage ? { lineage: row.lineage } : {}),
+    ...(row.findings ? { findings: row.findings } : {}),
+    ...(row.retry_of ? { retryOf: row.retry_of } : {}),
     environmentId: row.environment_id ?? undefined,
     version: row.version ?? undefined,
     status: row.status as Operation["status"],

@@ -243,7 +243,7 @@ export class GraphExecutor {
               : plan;
 
           const result: EnvoyDeployResult = await client.executeApprovedPlan({
-            deploymentId: node.deploymentId ?? node.id,
+            operationId: node.deploymentId ?? node.id,
             plan: enrichedPlan,
             rollbackPlan: {
               steps: [],
@@ -416,7 +416,7 @@ export class GraphExecutor {
 
       try {
         await client.executeApprovedPlan({
-          deploymentId: node.deploymentId ?? nodeId,
+          operationId: node.deploymentId ?? nodeId,
           plan,
           rollbackPlan: {
             steps: [],

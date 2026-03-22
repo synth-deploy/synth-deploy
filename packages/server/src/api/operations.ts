@@ -21,8 +21,8 @@ import type { EnvoyRegistry } from "../agent/envoy-registry.js";
  * REST API routes for deployments. These are the traditional (non-MCP) interface
  * for the web UI and integrations.
  */
-function getArtifactId(op: { input: import("@synth-deploy/core").OperationInput }): string {
-  return op.input.type === "deploy" ? op.input.artifactId : "";
+function getArtifactId(op: { input: import("@synth-deploy/core").OperationInput }): string | undefined {
+  return op.input.type === "deploy" ? op.input.artifactId : undefined;
 }
 
 export function registerOperationRoutes(
@@ -81,9 +81,17 @@ export function registerOperationRoutes(
     const partitionVars = partition?.variables ?? {};
     const resolved: Record<string, string> = { ...partitionVars, ...envVars };
 
+    const operationInput = operationType === "deploy"
+      ? { type: "deploy" as const, artifactId: artifactId!, ...(version ? { artifactVersionId: version } : {}) }
+      : operationType === "trigger"
+        ? { type: "trigger" as const, condition: intent ?? "", responseIntent: intent ?? "" }
+        : operationType === "composite"
+          ? { type: "composite" as const, operations: [] }
+          : { type: operationType as "maintain" | "query" | "investigate", intent: intent ?? "" };
+
     const deployment = {
       id: crypto.randomUUID(),
-      input: { type: "deploy" as const, artifactId: artifactId!, ...(version ? { artifactVersionId: version } : {}) },
+      input: operationInput,
       intent,
       environmentId,
       partitionId,
@@ -114,7 +122,7 @@ export function registerOperationRoutes(
           : { id: `direct:${planningEnvoy.id}`, name: planningEnvoy.name, variables: {} };
 
         planningClient.requestPlan({
-          deploymentId: deployment.id,
+          operationId: deployment.id,
           artifact: {
             id: artifact.id,
             name: artifact.name,
@@ -217,7 +225,7 @@ export function registerOperationRoutes(
       return reply.status(404).send({ error: "Deployment not found" });
     }
 
-    const versions = artifactStore.getVersions(getArtifactId(deployment));
+    const versions = artifactStore.getVersions(getArtifactId(deployment) ?? "");
     const sorted = versions.slice().sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
     );
@@ -270,7 +278,7 @@ export function registerOperationRoutes(
         return reply.status(400).send({ error: "Invalid plan submission", details: parsed.error.format() });
       }
 
-      if ((deployment.status as string) !== "pending" && (deployment.status as string) !== "planning") {
+      if ((deployment.status) !== "pending" && (deployment.status) !== "planning") {
         return reply.status(409).send({ error: `Cannot submit plan for deployment in "${deployment.status}" status` });
       }
 
@@ -312,7 +320,7 @@ export function registerOperationRoutes(
         return reply.status(400).send({ error: parsed.error.message });
       }
 
-      if ((deployment.status as string) !== "awaiting_approval") {
+      if ((deployment.status) !== "awaiting_approval") {
         return reply.status(409).send({ error: `Cannot approve deployment in "${deployment.status}" status — must be "awaiting_approval"` });
       }
 
@@ -349,7 +357,7 @@ export function registerOperationRoutes(
 
       // Dispatch approved plan to envoy for execution
       if (envoyClient && deployment.plan && deployment.rollbackPlan) {
-        const artifact = artifactStore.get(getArtifactId(deployment));
+        const artifact = artifactStore.get(getArtifactId(deployment) ?? "");
         const serverPort = process.env.PORT ?? "9410";
         const serverUrl = process.env.SYNTH_SERVER_URL ?? `http://localhost:${serverPort}`;
         const progressCallbackUrl = `${serverUrl}/api/operations/${deployment.id}/progress`;
@@ -360,7 +368,7 @@ export function registerOperationRoutes(
 
         // Fire-and-forget: execution runs async, progress comes via callback
         envoyClient.executeApprovedPlan({
-          deploymentId: deployment.id,
+          operationId: deployment.id,
           plan: deployment.plan,
           rollbackPlan: deployment.rollbackPlan,
           artifactType: artifact?.type ?? "unknown",
@@ -405,7 +413,7 @@ export function registerOperationRoutes(
         return reply.status(400).send({ error: parsed.error.message });
       }
 
-      if ((deployment.status as string) !== "awaiting_approval") {
+      if ((deployment.status) !== "awaiting_approval") {
         return reply.status(409).send({ error: `Cannot reject deployment in "${deployment.status}" status — must be "awaiting_approval"` });
       }
 
@@ -448,7 +456,7 @@ export function registerOperationRoutes(
         return reply.status(400).send({ error: parsed.error.message });
       }
 
-      if ((deployment.status as string) !== "awaiting_approval") {
+      if ((deployment.status) !== "awaiting_approval") {
         return reply.status(409).send({ error: `Cannot modify deployment in "${deployment.status}" status — must be "awaiting_approval"` });
       }
 
@@ -548,7 +556,7 @@ export function registerOperationRoutes(
         return reply.status(404).send({ error: "Deployment not found" });
       }
 
-      if ((deployment.status as string) !== "awaiting_approval") {
+      if ((deployment.status) !== "awaiting_approval") {
         return reply.status(409).send({ error: `Cannot replan deployment in "${deployment.status}" status — must be "awaiting_approval"` });
       }
 
@@ -557,7 +565,7 @@ export function registerOperationRoutes(
         return reply.status(400).send({ error: parsed.error.message });
       }
 
-      const artifact = artifactStore.get(getArtifactId(deployment));
+      const artifact = artifactStore.get(getArtifactId(deployment) ?? "");
       if (!artifact) {
         return reply.status(404).send({ error: `Artifact not found: ${getArtifactId(deployment)}` });
       }
@@ -605,7 +613,7 @@ export function registerOperationRoutes(
       let result: Awaited<ReturnType<typeof planningClient.requestPlan>>;
       try {
         result = await planningClient.requestPlan({
-          deploymentId,
+          operationId: deploymentId,
           artifact: {
             id: artifact.id,
             name: artifact.name,
@@ -681,7 +689,7 @@ export function registerOperationRoutes(
       // Check if the same artifact version was previously rolled back
       const previouslyRolledBack = deployment.version
         ? deployments.findByArtifactVersion(
-            getArtifactId(deployment),
+            getArtifactId(deployment) ?? "",
             deployment.version,
             "rolled_back",
           ).length > 0
@@ -694,7 +702,7 @@ export function registerOperationRoutes(
               (d) =>
                 d.environmentId === deployment.environmentId &&
                 d.id !== deployment.id &&
-                ((d.status as string) === "running" || (d.status as string) === "approved" || (d.status as string) === "awaiting_approval"),
+                ((d.status) === "running" || (d.status) === "approved" || (d.status) === "awaiting_approval"),
             )
             .map((d) => d.id)
         : [];
@@ -738,13 +746,13 @@ export function registerOperationRoutes(
       }
 
       const finishedStatuses = new Set(["succeeded", "failed", "rolled_back"]);
-      if (!finishedStatuses.has(deployment.status as string)) {
+      if (!finishedStatuses.has(deployment.status)) {
         return reply.status(409).send({
           error: `Cannot request rollback plan for deployment in "${deployment.status}" status — deployment must be finished`,
         });
       }
 
-      const artifact = artifactStore.get(getArtifactId(deployment));
+      const artifact = artifactStore.get(getArtifactId(deployment) ?? "");
       if (!artifact) {
         return reply.status(404).send({ error: "Artifact not found" });
       }
@@ -784,7 +792,7 @@ export function registerOperationRoutes(
 
       try {
         const rollbackPlan = await rollbackClient.requestRollbackPlan({
-          deploymentId: deployment.id,
+          operationId: deployment.id,
           artifact: {
             name: artifact.name,
             type: artifact.type,
@@ -859,13 +867,13 @@ export function registerOperationRoutes(
       }
 
       const finishedStatuses = new Set(["succeeded", "failed"]);
-      if (!finishedStatuses.has(deployment.status as string)) {
+      if (!finishedStatuses.has(deployment.status)) {
         return reply.status(409).send({
           error: `Cannot execute rollback for deployment in "${deployment.status}" status`,
         });
       }
 
-      const artifact = artifactStore.get(getArtifactId(deployment));
+      const artifact = artifactStore.get(getArtifactId(deployment) ?? "");
       const targetEnvoy = deployment.envoyId
         ? envoyRegistry?.get(deployment.envoyId)
         : envoyRegistry?.list()[0];
@@ -906,7 +914,7 @@ export function registerOperationRoutes(
       const emptyPlan = { steps: [], reasoning: "No rollback of rollback." };
 
       rollbackClient.executeApprovedPlan({
-        deploymentId: deployment.id,
+        operationId: deployment.id,
         plan: deployment.rollbackPlan,
         rollbackPlan: emptyPlan,
         artifactType: artifact?.type ?? "unknown",
@@ -971,7 +979,7 @@ export function registerOperationRoutes(
       attemptNumber++; // this new deployment is one more
 
       // Validate artifact still exists
-      const artifact = artifactStore.get(getArtifactId(source));
+      const artifact = artifactStore.get(getArtifactId(source) ?? "");
       if (!artifact) {
         return reply.status(404).send({ error: `Artifact not found: ${getArtifactId(source)}` });
       }
@@ -1043,7 +1051,7 @@ export function registerOperationRoutes(
             : { id: `direct:${planningEnvoy.id}`, name: planningEnvoy.name, variables: {} };
 
           planningClient.requestPlan({
-            deploymentId: deployment.id,
+            operationId: deployment.id,
             artifact: {
               id: artifact.id,
               name: artifact.name,
@@ -1296,7 +1304,7 @@ function computeRecommendation(
   // Check for previously rolled-back version
   if (deployment.version) {
     const rolledBack = store.findByArtifactVersion(
-      getArtifactId(deployment),
+      getArtifactId(deployment) ?? "",
       deployment.version,
       "rolled_back",
     );
@@ -1312,7 +1320,7 @@ function computeRecommendation(
       (d) =>
         d.environmentId === deployment.environmentId &&
         d.id !== deployment.id &&
-        ((d.status as string) === "running" || (d.status as string) === "approved"),
+        ((d.status) === "running" || (d.status) === "approved"),
     );
     if (conflicting.length > 0) {
       verdict = "hold";
@@ -1334,10 +1342,10 @@ function computeRecommendation(
     ? store.findLatestByEnvironment(deployment.environmentId)
     : undefined;
   if (lastDeploy && lastDeploy.id !== deployment.id) {
-    if ((lastDeploy.status as string) === "failed" || (lastDeploy.status as string) === "rolled_back") {
+    if ((lastDeploy.status) === "failed" || (lastDeploy.status) === "rolled_back") {
       if (verdict === "proceed") verdict = "caution";
       factors.push(`Last deployment to this environment ${lastDeploy.status}`);
-    } else if ((lastDeploy.status as string) === "succeeded") {
+    } else if ((lastDeploy.status) === "succeeded") {
       factors.push("Last deployment to this environment succeeded");
     }
   }

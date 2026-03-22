@@ -11,10 +11,9 @@ import type { EscalationPackager } from "./agent/escalation-packager.js";
 // ---------------------------------------------------------------------------
 
 const DeployRequestSchema = z.object({
-  deploymentId: z.string(),
+  operationId: z.string(),
   partitionId: z.string(),
   environmentId: z.string(),
-  operationId: z.string(),
   version: z.string(),
   variables: z.record(z.string()),
   environmentName: z.string(),
@@ -36,7 +35,7 @@ const EscalateGeneralSchema = z.object({
 });
 
 const PlanRequestSchema = z.object({
-  deploymentId: z.string(),
+  operationId: z.string(),
   artifact: z.object({
     id: z.string(),
     name: z.string(),
@@ -84,7 +83,7 @@ const PlanSchema = z.object({
 });
 
 const ExecuteRequestSchema = z.object({
-  deploymentId: z.string(),
+  operationId: z.string(),
   artifactType: z.string(),
   artifactName: z.string(),
   environmentId: z.string(),
@@ -194,8 +193,8 @@ export function createEnvoyServer(
       });
     }
 
-    const { deploymentId, artifactType, artifactName, environmentId, plan, rollbackPlan, progressCallbackUrl, callbackToken } = parsed.data;
-    const result = await agent.executeApprovedPlan(deploymentId, plan, rollbackPlan, {
+    const { operationId, artifactType, artifactName, environmentId, plan, rollbackPlan, progressCallbackUrl, callbackToken } = parsed.data;
+    const result = await agent.executeApprovedPlan(operationId, plan, rollbackPlan, {
       artifactType,
       artifactName,
       environmentId,
@@ -207,7 +206,7 @@ export function createEnvoyServer(
   // -- Rollback plan generation (post-hoc, based on what actually ran) --------
 
   const RollbackPlanRequestSchema = z.object({
-    deploymentId: z.string(),
+    operationId: z.string(),
     artifact: z.object({
       name: z.string(),
       type: z.string(),
