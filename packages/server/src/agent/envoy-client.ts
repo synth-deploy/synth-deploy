@@ -10,6 +10,7 @@ import type { DecisionType, DeploymentPlan, PlannedStep, SecurityBoundary } from
 // ---------------------------------------------------------------------------
 
 export interface EnvoyDeployResult {
+  deploymentId: string;
   operationId: string;
   success: boolean;
   workspacePath: string;
@@ -175,6 +176,7 @@ export class EnvoyClient {
    * Send a deployment instruction to the Envoy and wait for the result.
    */
   async deploy(instruction: {
+    deploymentId: string;
     operationId: string;
     partitionId: string;
     environmentId: string;

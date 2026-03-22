@@ -11,6 +11,7 @@ import type { EscalationPackager } from "./agent/escalation-packager.js";
 // ---------------------------------------------------------------------------
 
 const DeployRequestSchema = z.object({
+  deploymentId: z.string(),
   operationId: z.string(),
   partitionId: z.string(),
   environmentId: z.string(),

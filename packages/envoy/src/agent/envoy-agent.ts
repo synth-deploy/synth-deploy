@@ -4,6 +4,7 @@ import path from "node:path";
 import type {
   DebriefWriter,
   DebriefEntry,
+  DeploymentId,
   OperationId,
   PartitionId,
   EnvironmentId,
@@ -58,6 +59,7 @@ export type LifecycleState = "active" | "draining" | "paused";
  * What the Server sends to the Envoy when it wants a deployment executed.
  */
 export interface DeploymentInstruction {
+  deploymentId: DeploymentId;
   operationId: OperationId;
   partitionId: PartitionId;
   environmentId: EnvironmentId;
@@ -81,6 +83,7 @@ export interface DeploymentInstruction {
  * What the Envoy returns to the Server after executing a deployment.
  */
 export interface DeploymentResult {
+  deploymentId: DeploymentId;
   operationId: OperationId;
   success: boolean;
   /** Where the deployment artifacts live on this machine */
@@ -420,6 +423,7 @@ export class EnvoyAgent {
           : "Envoy is paused — not accepting deployments";
 
       return {
+        deploymentId: instruction.deploymentId,
         operationId: instruction.operationId,
         success: false,
         workspacePath: "",
@@ -494,6 +498,7 @@ export class EnvoyAgent {
       });
 
       return {
+        deploymentId: instruction.deploymentId,
         operationId: instruction.operationId,
         success: false,
         workspacePath: "",
@@ -549,7 +554,7 @@ export class EnvoyAgent {
     // --- Step 3: Record to local state -----------------------------------------
 
     const localRecord = this.state.recordDeployment({
-      deploymentId: instruction.operationId,
+      deploymentId: instruction.deploymentId,
       partitionId: instruction.partitionId,
       environmentId: instruction.environmentId,
       operationId: instruction.operationId,
@@ -640,7 +645,7 @@ export class EnvoyAgent {
       const errorMsg = failedResult?.error ?? "Unknown execution error";
       envoyError("EXECUTE-FAILED", { operationId: instruction.operationId, reason: errorMsg });
 
-      this.state.completeDeployment(instruction.operationId, "failed", errorMsg);
+      this.state.completeDeployment(instruction.deploymentId, "failed", errorMsg);
 
       const diagnostic = this.investigator.investigate(
         localRecord.workspacePath,
@@ -673,6 +678,7 @@ export class EnvoyAgent {
       });
 
       const failResult: DeploymentResult = {
+        deploymentId: instruction.deploymentId,
         operationId: instruction.operationId,
         success: false,
         workspacePath: localRecord.workspacePath,
@@ -696,10 +702,10 @@ export class EnvoyAgent {
       .map((r) => r.step.description);
 
     // Update state and record completion
-    this.state.completeDeployment(instruction.operationId, "succeeded");
+    this.state.completeDeployment(instruction.deploymentId, "succeeded");
     this.state.updateEnvironment(instruction.partitionId, instruction.environmentId, {
       currentVersion: instruction.version,
-      currentDeploymentId: instruction.operationId,
+      currentDeploymentId: instruction.deploymentId,
       activeVariables: instruction.variables,
     });
 
@@ -745,6 +751,7 @@ export class EnvoyAgent {
 
     envoyLog("EXECUTE-COMPLETE", { operationId: instruction.operationId, success: true });
     const successResult: DeploymentResult = {
+      deploymentId: instruction.deploymentId,
       operationId: instruction.operationId,
       success: true,
       workspacePath: localRecord.workspacePath,
@@ -859,6 +866,7 @@ export class EnvoyAgent {
       });
 
       const failResult: DeploymentResult = {
+        deploymentId: instruction.deploymentId,
         operationId: instruction.operationId,
         success: false,
         workspacePath: execResult.workspacePath,
@@ -939,6 +947,7 @@ export class EnvoyAgent {
       });
 
       const failResult: DeploymentResult = {
+        deploymentId: instruction.deploymentId,
         operationId: instruction.operationId,
         success: false,
         workspacePath: execResult.workspacePath,
@@ -958,13 +967,13 @@ export class EnvoyAgent {
 
     // --- Update local state --------------------------------------------
 
-    this.state.completeDeployment(instruction.operationId, "succeeded");
+    this.state.completeDeployment(instruction.deploymentId, "succeeded");
     this.state.updateEnvironment(
       instruction.partitionId,
       instruction.environmentId,
       {
         currentVersion: instruction.version,
-        currentDeploymentId: instruction.operationId,
+        currentDeploymentId: instruction.deploymentId,
         activeVariables: instruction.variables,
       },
     );
@@ -1000,6 +1009,7 @@ export class EnvoyAgent {
     });
 
     const successResult: DeploymentResult = {
+      deploymentId: instruction.deploymentId,
       operationId: instruction.operationId,
       success: true,
       workspacePath: execResult.workspacePath,
@@ -1039,6 +1049,7 @@ export class EnvoyAgent {
       // Write deployment manifest
       const manifestPath = path.join(workspacePath, "manifest.json");
       fs.writeFileSync(manifestPath, JSON.stringify({
+        deploymentId: instruction.deploymentId,
         operationId: instruction.operationId,
         partitionId: instruction.partitionId,
         environmentId: instruction.environmentId,
@@ -2493,6 +2504,7 @@ IMPORTANT: Every step's "action" field MUST contain at least one of the recogniz
     artifactContext?: { artifactType: string; artifactName: string; environmentId: string },
     progressCallbackUrl?: string,
     callbackToken?: string,
+    deploymentId?: string,
   ): Promise<DeploymentResult> {
     await this.executorReady;
     // Probe cache is stale after real execution changes machine state
@@ -2506,6 +2518,7 @@ IMPORTANT: Every step's "action" field MUST contain at least one of the recogniz
           : "Envoy is paused — not accepting deployments";
 
       return {
+        deploymentId: (deploymentId ?? operationId) as DeploymentId,
         operationId,
         success: false,
         workspacePath: "",
@@ -2635,6 +2648,7 @@ IMPORTANT: Every step's "action" field MUST contain at least one of the recogniz
       }
 
       const failResult: DeploymentResult = {
+        deploymentId: (deploymentId ?? operationId) as DeploymentId,
         operationId,
         success: false,
         workspacePath: "",
@@ -2681,6 +2695,7 @@ IMPORTANT: Every step's "action" field MUST contain at least one of the recogniz
     });
 
     const successResult: DeploymentResult = {
+      deploymentId: (deploymentId ?? operationId) as DeploymentId,
       operationId,
       success: true,
       workspacePath: "",
