@@ -227,8 +227,8 @@ export class SynthAgent {
     if (input.type !== "deploy") {
       throw new OrchestrationError(
         "resolve-entities",
-        `Operation type "${input.type}" is not yet supported`,
-        `Only "deploy" operations are currently supported. Received type: "${input.type}".`,
+        `Operation type "${input.type}" is not supported via programmatic triggers`,
+        `"query" and "investigate" operations run through the REST API path (web UI), not programmatic triggers. Only "deploy" is supported via triggerOperation().`,
       );
     }
 

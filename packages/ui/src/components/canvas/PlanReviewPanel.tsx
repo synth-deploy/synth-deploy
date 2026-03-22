@@ -9,6 +9,7 @@ import {
   listEnvironments,
   listArtifacts,
   listPartitions,
+  createDeployment,
 } from "../../api.js";
 import { invalidateExact } from "../../hooks/useQuery.js";
 import type {
@@ -16,11 +17,176 @@ import type {
   DeploymentEnrichment,
   DeploymentRecommendation,
   PlannedStep,
+  QueryFindings,
+  InvestigationFindings,
 } from "../../types.js";
 import { useCanvas } from "../../context/CanvasContext.js";
 import { useQuery } from "../../hooks/useQuery.js";
 import SynthMark from "../SynthMark.js";
 import ConfidenceIndicator from "../ConfidenceIndicator.js";
+import CanvasPanelHost from "./CanvasPanelHost.js";
+
+// ── FindingsView ─────────────────────────────────────────────────────────────
+
+function FindingsView({
+  deployment,
+  onLaunchResolution,
+}: {
+  deployment: Deployment;
+  onLaunchResolution: () => void;
+}) {
+  const findings = deployment.queryFindings ?? deployment.investigationFindings;
+  if (!findings) return null;
+  const isInvestigation = !!deployment.investigationFindings;
+
+  return (
+    <div style={{ padding: "0 4px" }}>
+      {/* Header */}
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: "var(--text)" }}>
+            {isInvestigation ? "Investigation Complete" : "Query Complete"}
+          </h2>
+          <span style={{
+            fontSize: 11,
+            fontWeight: 600,
+            padding: "2px 8px",
+            borderRadius: 20,
+            background: "var(--success-bg, #1a3a2a)",
+            color: "var(--success, #4caf50)",
+            fontFamily: "var(--font-mono)",
+          }}>
+            Complete
+          </span>
+        </div>
+        {deployment.intent && (
+          <div style={{ fontSize: 13, color: "var(--text-muted)" }}>{deployment.intent}</div>
+        )}
+      </div>
+
+      {/* Targets surveyed */}
+      {findings.targetsSurveyed.length > 0 && (
+        <div style={{ marginBottom: 16 }}>
+          <div className="section-label" style={{ marginBottom: 8 }}>Targets surveyed</div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {findings.targetsSurveyed.map((t) => (
+              <span key={t} style={{
+                fontSize: 11,
+                fontFamily: "var(--font-mono)",
+                padding: "3px 8px",
+                background: "var(--surface-2)",
+                border: "1px solid var(--border)",
+                borderRadius: 4,
+                color: "var(--text-muted)",
+              }}>
+                {t}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Summary */}
+      <div style={{ marginBottom: 20 }}>
+        <div className="section-label" style={{ marginBottom: 8 }}>Summary</div>
+        <div style={{
+          fontSize: 13,
+          color: "var(--text)",
+          lineHeight: 1.6,
+          padding: "12px 14px",
+          background: "var(--surface-2)",
+          border: "1px solid var(--border)",
+          borderRadius: 4,
+        }}>
+          {findings.summary}
+        </div>
+      </div>
+
+      {/* Per-target findings */}
+      {findings.findings.length > 0 && (
+        <div style={{ marginBottom: 20 }}>
+          <div className="section-label" style={{ marginBottom: 10 }}>Findings</div>
+          {findings.findings.map((f, i) => (
+            <div key={i} style={{
+              marginBottom: 10,
+              padding: "12px 14px",
+              background: "var(--surface-2)",
+              border: "1px solid var(--border)",
+              borderRadius: 4,
+            }}>
+              <div style={{ fontSize: 12, fontWeight: 600, fontFamily: "var(--font-mono)", color: "var(--text-muted)", marginBottom: 6 }}>
+                {f.target}
+              </div>
+              <ul style={{ margin: 0, paddingLeft: 18 }}>
+                {f.observations.map((obs, j) => (
+                  <li key={j} style={{ fontSize: 13, color: "var(--text)", marginBottom: 3, lineHeight: 1.5 }}>
+                    {obs}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Investigation-specific: root cause */}
+      {isInvestigation && deployment.investigationFindings?.rootCause && (
+        <div style={{ marginBottom: 20 }}>
+          <div className="section-label" style={{ marginBottom: 8 }}>Root cause</div>
+          <div style={{
+            fontSize: 13,
+            color: "var(--text)",
+            lineHeight: 1.6,
+            padding: "12px 14px",
+            background: "var(--surface-2)",
+            border: "1px solid var(--border-warning, var(--border))",
+            borderRadius: 4,
+          }}>
+            {deployment.investigationFindings.rootCause}
+          </div>
+        </div>
+      )}
+
+      {/* Investigation-specific: proposed resolution */}
+      {isInvestigation && deployment.investigationFindings?.proposedResolution && (
+        <div style={{ marginBottom: 20 }}>
+          <div className="section-label" style={{ marginBottom: 8 }}>Proposed resolution</div>
+          <div style={{
+            padding: "14px 16px",
+            background: "var(--surface-2)",
+            border: "1px solid var(--accent)",
+            borderRadius: 4,
+          }}>
+            <div style={{ fontSize: 13, color: "var(--text)", marginBottom: 10, lineHeight: 1.5 }}>
+              {deployment.investigationFindings.proposedResolution.intent}
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ fontSize: 11, fontFamily: "var(--font-mono)", color: "var(--text-muted)" }}>
+                Type: {deployment.investigationFindings.proposedResolution.operationType}
+              </span>
+              <button
+                onClick={onLaunchResolution}
+                style={{
+                  padding: "6px 14px",
+                  fontSize: 12,
+                  fontWeight: 600,
+                  fontFamily: "var(--font-mono)",
+                  background: "var(--accent)",
+                  color: "var(--bg)",
+                  border: "none",
+                  borderRadius: 4,
+                  cursor: "pointer",
+                }}
+              >
+                Launch Resolution
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 interface Props {
   deploymentId: string;
@@ -172,7 +338,7 @@ function PlanModal({ children }: { onClose: () => void; children: React.ReactNod
 }
 
 export default function PlanReviewPanel({ deploymentId }: Props) {
-  const { replacePanel, popPanel, minimizeDeployment } = useCanvas();
+  const { replacePanel, popPanel, minimizeDeployment, pushPanel } = useCanvas();
 
   const { data: result, loading: l1 } = useQuery(`deployment:${deploymentId}`, () => getDeployment(deploymentId));
   const { data: enrichCtx, loading: l2 } = useQuery(
@@ -257,6 +423,47 @@ export default function PlanReviewPanel({ deploymentId }: Props) {
       <PlanModal onClose={popPanel}>
         <div className="error-msg">Deployment not found</div>
       </PlanModal>
+    );
+  }
+
+  // Query / investigate operations — show findings or loading state
+  const isFindings =
+    deployment.input?.type === "query" || deployment.input?.type === "investigate";
+  const opType = deployment.input?.type;
+
+  if (isFindings && deployment.status === "pending") {
+    return (
+      <CanvasPanelHost title={opType === "query" ? "Running Query…" : "Investigating…"}>
+        <div className="loading">Envoy is probing the environment…</div>
+      </CanvasPanelHost>
+    );
+  }
+
+  if (isFindings && deployment.status === "succeeded") {
+    const handleLaunchResolution = async () => {
+      const res = deployment.investigationFindings?.proposedResolution;
+      if (!res) return;
+      try {
+        const result = await createDeployment({
+          type: res.operationType,
+          intent: res.intent,
+          environmentId: deployment.environmentId,
+          partitionId: deployment.partitionId,
+        } as any);
+        pushPanel({
+          type: "plan-review",
+          title: "Review Resolution Plan",
+          params: { id: result.deployment.id },
+        });
+      } catch (e) {
+        console.error("Failed to launch resolution:", e);
+      }
+    };
+
+    return (
+      <CanvasPanelHost title="Query Results">
+        <FindingsView deployment={deployment} onLaunchResolution={handleLaunchResolution} />
+      </CanvasPanelHost>
     );
   }
 

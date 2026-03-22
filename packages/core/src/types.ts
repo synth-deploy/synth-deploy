@@ -125,6 +125,27 @@ export interface OperationRecommendation {
 /** @deprecated Use OperationRecommendation */
 export type DeploymentRecommendation = OperationRecommendation;
 
+export interface QueryFindings {
+  /** Envoy IDs or hostnames that were probed */
+  targetsSurveyed: string[];
+  /** LLM narrative summary of what was found */
+  summary: string;
+  /** Per-target observations */
+  findings: Array<{
+    target: string;
+    observations: string[];
+  }>;
+}
+
+export interface InvestigationFindings extends QueryFindings {
+  rootCause?: string;
+  proposedResolution?: {
+    intent: string;
+    operationType: "maintain" | "deploy";
+    parameters?: Record<string, unknown>;
+  };
+}
+
 // --- Operation (unified lifecycle) ---
 
 export interface Operation {
@@ -136,6 +157,8 @@ export interface Operation {
   lineage?: OperationId;
   /** Structured findings — populated by investigate operations */
   findings?: string;
+  queryFindings?: QueryFindings;
+  investigationFindings?: InvestigationFindings;
   envoyId?: EnvoyId;
   environmentId?: EnvironmentId;
   partitionId?: PartitionId;
@@ -186,6 +209,8 @@ export const DecisionType = z.enum([
   "plan-modification",
   "pre-flight-llm-failure",
   "environment-probe",
+  "query-findings",
+  "investigation-findings",
 ]);
 export type DecisionType = z.infer<typeof DecisionType>;
 

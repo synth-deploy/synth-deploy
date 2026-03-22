@@ -18,6 +18,8 @@ const DECISION_TYPES: { value: DecisionType; label: string }[] = [
   { value: "deployment-failure", label: "Failure" },
   { value: "diagnostic-investigation", label: "Diagnostic" },
   { value: "environment-scan", label: "Scan" },
+  { value: "query-findings", label: "Query" },
+  { value: "investigation-findings", label: "Investigation" },
   { value: "system", label: "System" },
 ];
 

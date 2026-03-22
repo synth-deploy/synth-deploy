@@ -47,7 +47,7 @@ export function registerOperationRoutes(
       return reply.status(400).send({ error: parsed.error.message });
     }
 
-    const { artifactId, environmentId, partitionId, envoyId, version, type: operationType, intent } = parsed.data;
+    const { artifactId, environmentId, partitionId, envoyId, version, type: operationType, intent, allowWrite } = parsed.data;
 
     // Validate artifact exists (required for deploy operations)
     if (operationType === "deploy" && !artifactId) {
@@ -87,7 +87,9 @@ export function registerOperationRoutes(
         ? { type: "trigger" as const, condition: intent ?? "", responseIntent: intent ?? "" }
         : operationType === "composite"
           ? { type: "composite" as const, operations: [] }
-          : { type: operationType as "maintain" | "query" | "investigate", intent: intent ?? "" };
+          : operationType === "investigate"
+            ? { type: "investigate" as const, intent: intent ?? "", ...(allowWrite !== undefined ? { allowWrite } : {}) }
+            : { type: operationType as "maintain" | "query", intent: intent ?? "" };
 
     const deployment = {
       id: crypto.randomUUID(),
@@ -115,39 +117,70 @@ export function registerOperationRoutes(
         ?? (environment ? envoyRegistry.findForEnvironment(environment.name) : undefined)
         ?? envoyRegistry.list()[0];
 
-      if (planningEnvoy && artifact) {
+      const needsArtifact = deployment.input.type === "deploy";
+      if (planningEnvoy && (!needsArtifact || artifact)) {
         const planningClient = new EnvoyClient(planningEnvoy.url);
         const environmentForPlanning = environment
           ? { id: environment.id, name: environment.name, variables: environment.variables }
           : { id: `direct:${planningEnvoy.id}`, name: planningEnvoy.name, variables: {} };
 
-        planningClient.requestPlan({
+        (planningClient.requestPlan as (params: any) => Promise<any>)({
           operationId: deployment.id,
-          artifact: {
-            id: artifact.id,
-            name: artifact.name,
-            type: artifact.type,
-            analysis: {
-              summary: artifact.analysis.summary,
-              dependencies: artifact.analysis.dependencies,
-              configurationExpectations: artifact.analysis.configurationExpectations,
-              deploymentIntent: artifact.analysis.deploymentIntent,
-              confidence: artifact.analysis.confidence,
+          operationType: deployment.input.type as "deploy" | "query" | "investigate",
+          intent: deployment.intent,
+          ...(artifact ? {
+            artifact: {
+              id: artifact.id,
+              name: artifact.name,
+              type: artifact.type,
+              analysis: {
+                summary: artifact.analysis.summary,
+                dependencies: artifact.analysis.dependencies,
+                configurationExpectations: artifact.analysis.configurationExpectations,
+                deploymentIntent: artifact.analysis.deploymentIntent,
+                confidence: artifact.analysis.confidence,
+              },
             },
-          },
+          } : {}),
+          ...(deployment.input.type === "investigate" ? { allowWrite: (deployment.input as any).allowWrite } : {}),
           environment: environmentForPlanning,
           partition: partition
             ? { id: partition.id, name: partition.name, variables: partition.variables }
             : undefined,
           version: deployment.version ?? "",
           resolvedVariables: resolved,
-        }).then((result) => {
+        }).then((result: any) => {
           const dep = deployments.get(deployment.id);
           if (!dep || dep.status !== "pending") return;
 
           dep.plan = result.plan;
           dep.rollbackPlan = result.rollbackPlan;
           dep.envoyId = planningEnvoy.id;
+
+          // Auto-approve read-only operations — findings are the deliverable
+          if ((dep.input.type === "query" || dep.input.type === "investigate") &&
+              (result.queryFindings || result.investigationFindings)) {
+            if (result.queryFindings) dep.queryFindings = result.queryFindings;
+            if (result.investigationFindings) dep.investigationFindings = result.investigationFindings;
+            dep.status = "succeeded" as typeof dep.status;
+            dep.completedAt = new Date();
+            deployments.save(dep);
+
+            const decisionType = dep.input.type === "query"
+              ? "query-findings" as Parameters<typeof debrief.record>[0]["decisionType"]
+              : "investigation-findings" as Parameters<typeof debrief.record>[0]["decisionType"];
+            const findings = result.queryFindings ?? result.investigationFindings!;
+            debrief.record({
+              partitionId: dep.partitionId ?? null,
+              operationId: dep.id,
+              agent: "envoy",
+              decisionType,
+              decision: `${dep.input.type === "query" ? "Query" : "Investigation"} complete — ${findings.targetsSurveyed.length} target(s) surveyed`,
+              reasoning: findings.summary,
+              context: { targetsSurveyed: findings.targetsSurveyed, findingCount: findings.findings.length },
+            });
+            return;
+          }
 
           if (result.blocked) {
             // Unrecoverable precondition failures — block execution, do not present for approval

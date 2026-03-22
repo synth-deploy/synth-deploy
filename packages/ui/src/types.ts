@@ -285,6 +285,14 @@ export interface Deployment {
   rejectionReason?: string;
   enrichment?: DeploymentEnrichment;
   recommendation?: DeploymentRecommendation;
+  /** Discriminated union describing what triggered this operation */
+  input?: OperationInput;
+  /** Natural language objective */
+  intent?: string;
+  /** Findings from a query operation */
+  queryFindings?: QueryFindings;
+  /** Findings from an investigation operation */
+  investigationFindings?: InvestigationFindings;
   retryOf?: string;
   debriefEntryIds: string[];
   createdAt: string;
@@ -299,6 +307,35 @@ export interface DeploymentRecommendation {
   summary: string;
   factors: string[];
 }
+
+export interface QueryFindings {
+  /** Envoy IDs or hostnames that were probed */
+  targetsSurveyed: string[];
+  /** LLM narrative summary of what was found */
+  summary: string;
+  /** Per-target observations */
+  findings: Array<{
+    target: string;
+    observations: string[];
+  }>;
+}
+
+export interface InvestigationFindings extends QueryFindings {
+  rootCause?: string;
+  proposedResolution?: {
+    intent: string;
+    operationType: "maintain" | "deploy";
+    parameters?: Record<string, unknown>;
+  };
+}
+
+export type OperationInput =
+  | { type: "deploy"; artifactId: string; artifactVersionId?: string }
+  | { type: "maintain"; intent: string; parameters?: Record<string, unknown> }
+  | { type: "query"; intent: string }
+  | { type: "investigate"; intent: string; allowWrite?: boolean }
+  | { type: "trigger"; condition: string; responseIntent: string; parameters?: Record<string, unknown> }
+  | { type: "composite"; operations: OperationInput[] };
 
 // --- Debrief ---
 
@@ -323,7 +360,9 @@ export type DecisionType =
   | "cross-system-context"
   | "plan-modification"
   | "environment-probe"
-  | "pre-flight-llm-failure";
+  | "pre-flight-llm-failure"
+  | "query-findings"
+  | "investigation-findings";
 
 export type AgentType = "server" | "envoy";
 

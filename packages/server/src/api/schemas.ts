@@ -242,6 +242,7 @@ export const CreateOperationSchema = z.object({
   version: z.string().optional(),
   type: z.enum(["deploy", "maintain", "query", "investigate", "trigger", "composite"]).default("deploy"),
   intent: z.string().optional(),
+  allowWrite: z.boolean().optional(),
 });
 
 export const ApproveDeploymentSchema = z.object({

@@ -11,6 +11,7 @@ import type {
   SecurityBoundary,
   ArtifactAnalysis,
   DeploymentPlan,
+  OperationPlan,
 } from "@synth-deploy/core";
 import { LlmClient, sanitizeForPrompt, maskIfSecret } from "@synth-deploy/core";
 import type { EnvoyKnowledgeStore, LocalDeploymentRecord } from "../state/knowledge-store.js";
@@ -116,7 +117,13 @@ export interface DeploymentResult {
  */
 export interface PlanningInstruction {
   operationId: string;
-  artifact: {
+  /** Operation type — determines which planning path to use. Defaults to "deploy". */
+  operationType?: "deploy" | "query" | "investigate";
+  /** Natural language objective for non-deploy operations */
+  intent?: string;
+  /** Whether the investigation is allowed to run write probes (default false) */
+  allowWrite?: boolean;
+  artifact?: {
     id: string;
     name: string;
     type: string;
@@ -159,6 +166,8 @@ export interface PlanningInstruction {
 export interface PlanningResult {
   plan: DeploymentPlan;
   rollbackPlan: DeploymentPlan;
+  queryFindings?: QueryFindings;
+  investigationFindings?: InvestigationFindings;
   delta?: string;
   /** LLM-generated 1-2 sentence assessment specific to this deployment */
   assessmentSummary?: string;
@@ -166,6 +175,27 @@ export interface PlanningResult {
   blocked?: boolean;
   /** Human-readable explanation of what must be fixed before proceeding */
   blockReason?: string;
+}
+
+export interface QueryFindings {
+  /** Envoy IDs or hostnames that were probed */
+  targetsSurveyed: string[];
+  /** LLM narrative summary of what was found */
+  summary: string;
+  /** Per-target observations */
+  findings: Array<{
+    target: string;
+    observations: string[];
+  }>;
+}
+
+export interface InvestigationFindings extends QueryFindings {
+  rootCause?: string;
+  proposedResolution?: {
+    intent: string;
+    operationType: "maintain" | "deploy";
+    parameters?: Record<string, unknown>;
+  };
 }
 
 /**
@@ -1256,6 +1286,21 @@ export class EnvoyAgent {
    * 5. Record the planning decision to the debrief
    */
   async planDeployment(instruction: PlanningInstruction): Promise<PlanningResult> {
+    // --- Route non-deploy operation types ------------------------------------
+    const opType = instruction.operationType ?? "deploy";
+    if (opType === "query") {
+      return this.planQuery(instruction);
+    }
+    if (opType === "investigate") {
+      return this.planInvestigation(instruction);
+    }
+
+    // Deploy path: artifact is required
+    if (!instruction.artifact) {
+      throw new Error("PlanningInstruction.artifact is required for deploy operations");
+    }
+    const artifact = instruction.artifact;
+
     const debriefEntries: DebriefEntry[] = [];
 
     const recordEntry = (params: Parameters<DebriefWriter["record"]>[0]): DebriefEntry => {
@@ -1267,16 +1312,16 @@ export class EnvoyAgent {
     // --- 1. Load context from knowledge store --------------------------------
 
     const successfulPlans = this.state.getSuccessfulPlans(
-      instruction.artifact.type,
+      artifact.type,
       instruction.environment.id,
     );
     const failedPlans = this.state.getFailedPlans(
-      instruction.artifact.type,
+      artifact.type,
       instruction.environment.id,
     );
     const systemKnowledge = this.state.getAllSystemKnowledge();
     const latestPlan = this.state.getLatestPlan(
-      instruction.artifact.type,
+      artifact.type,
       instruction.environment.id,
     );
 
@@ -1316,16 +1361,16 @@ export class EnvoyAgent {
       agent: "envoy",
       decisionType: "plan-generation",
       decision:
-        `Generated basic deployment plan for ${instruction.artifact.name} ` +
+        `Generated basic deployment plan for ${artifact.name} ` +
         `v${instruction.version} → "${instruction.environment.name}" (LLM unavailable)`,
       reasoning:
         `LLM connection is not available. Falling back to a basic plan based on ` +
-        `artifact type "${instruction.artifact.type}": copy artifact to workspace, ` +
+        `artifact type "${artifact.type}": copy artifact to workspace, ` +
         `write configuration, restart service. This plan lacks intelligent reasoning ` +
         `about the target environment and previous deployment history. ` +
         `Configure an LLM provider in Settings for intelligent plan generation.`,
       context: {
-        artifactType: instruction.artifact.type,
+        artifactType: artifact.type,
         environmentName: instruction.environment.name,
         llmAvailable: false,
         previousSuccessfulPlans: successfulPlans.length,
@@ -1334,6 +1379,247 @@ export class EnvoyAgent {
     });
 
     return this.buildFallbackPlan(instruction);
+  }
+
+  /**
+   * Plan a read-only query operation: probe the target environment and produce
+   * a structured findings report. No deployment steps are generated.
+   */
+  private async planQuery(instruction: PlanningInstruction): Promise<PlanningResult> {
+    const intent = instruction.intent ?? "Query the target environment";
+    const envName = instruction.environment.name;
+
+    if (!this.llmClient) {
+      throw new Error("LLM client not initialized — cannot run query operation");
+    }
+
+    // Apply forwarded API key
+    if (instruction.llmApiKey) {
+      process.env.SYNTH_LLM_API_KEY = instruction.llmApiKey;
+    }
+
+    const probeLog: string[] = [];
+
+    const systemPrompt =
+      `You are Synth's envoy agent performing a read-only query operation.\n\n` +
+      `Your job: probe the target environment and produce a structured findings report. ` +
+      `You are NOT planning deployment steps.\n\n` +
+      `Environment: ${envName}\n` +
+      (instruction.partition ? `Partition: ${instruction.partition.name}\n` : "") +
+      `Objective: ${intent}\n\n` +
+      `Available variables: ${JSON.stringify(instruction.resolvedVariables)}\n\n` +
+      `Use the probe tool to run read-only shell commands and gather information. ` +
+      `Then summarize your findings.\n\n` +
+      `When you have enough information, respond with ONLY a JSON object matching this schema:\n` +
+      `{\n` +
+      `  "targetsSurveyed": ["string"],\n` +
+      `  "summary": "string",\n` +
+      `  "findings": [\n` +
+      `    {\n` +
+      `      "target": "string",\n` +
+      `      "observations": ["string"]\n` +
+      `    }\n` +
+      `  ]\n` +
+      `}`;
+
+    let queryFindings: QueryFindings | null = null;
+
+    try {
+      const result = await this.llmClient.callWithProbeLoop({
+        systemPrompt,
+        prompt: intent,
+        promptSummary: `Query: ${intent}`,
+        partitionId: instruction.partition?.id ?? null,
+        operationId: instruction.operationId,
+        onProbe: async (command: string) => {
+          const probeResult = await this.probeExecutor.execute(command);
+          const logEntry = probeResult.blocked
+            ? `Probe blocked: ${command} — ${probeResult.blockedReason}`
+            : `Probe: ${command}\n${probeResult.output}`;
+          probeLog.push(logEntry);
+
+          this.debrief.record({
+            partitionId: instruction.partition?.id ?? null,
+            operationId: instruction.operationId,
+            agent: "envoy",
+            decisionType: "environment-probe",
+            decision: probeResult.blocked ? `Probe blocked: ${command}` : `Probe executed: ${command}`,
+            reasoning: probeResult.blocked ? (probeResult.blockedReason ?? "blocked") : probeResult.output ?? "(no output)",
+            context: { command, blocked: probeResult.blocked, exitCode: probeResult.exitCode },
+          });
+
+          return probeResult.blocked
+            ? (probeResult.blockedReason ?? "Command blocked")
+            : (probeResult.output ?? "(no output)");
+        },
+      });
+
+      if (result.ok) {
+        const jsonMatch = result.text?.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          queryFindings = JSON.parse(jsonMatch[0]) as QueryFindings;
+        }
+      }
+    } catch (err) {
+      this.debrief.record({
+        partitionId: instruction.partition?.id ?? null,
+        operationId: instruction.operationId,
+        agent: "envoy",
+        decisionType: "query-findings" as Parameters<DebriefWriter["record"]>[0]["decisionType"],
+        decision: "Query failed",
+        reasoning: err instanceof Error ? err.message : String(err),
+        context: { error: true },
+      });
+      throw err;
+    }
+
+    if (!queryFindings) {
+      queryFindings = {
+        targetsSurveyed: [instruction.environment.name],
+        summary: `Query completed for objective: ${intent}. ${probeLog.length} probe(s) executed.`,
+        findings: [{
+          target: instruction.environment.name,
+          observations: probeLog.slice(0, 10),
+        }],
+      };
+    }
+
+    const stubPlan: OperationPlan = {
+      steps: [],
+      reasoning: queryFindings.summary,
+    };
+
+    return {
+      plan: stubPlan,
+      rollbackPlan: stubPlan,
+      queryFindings,
+    };
+  }
+
+  /**
+   * Plan a diagnostic investigation: iteratively probe the target environment
+   * to identify root causes and propose resolutions.
+   */
+  private async planInvestigation(instruction: PlanningInstruction): Promise<PlanningResult> {
+    const intent = instruction.intent ?? "Investigate the target environment";
+    const envName = instruction.environment.name;
+
+    if (!this.llmClient) {
+      throw new Error("LLM client not initialized — cannot run investigation operation");
+    }
+
+    // Apply forwarded API key
+    if (instruction.llmApiKey) {
+      process.env.SYNTH_LLM_API_KEY = instruction.llmApiKey;
+    }
+
+    const probeLog: string[] = [];
+
+    const systemPrompt =
+      `You are Synth's envoy agent performing a diagnostic investigation.\n\n` +
+      `Your job: iteratively probe the target environment to diagnose issues. ` +
+      `Use each finding to determine what to check next. ` +
+      `You are NOT planning deployment steps.\n\n` +
+      `Environment: ${envName}\n` +
+      (instruction.partition ? `Partition: ${instruction.partition.name}\n` : "") +
+      `Objective: ${intent}\n` +
+      (instruction.allowWrite
+        ? `Write access: authorized (you may suggest write operations in proposed resolution)\n`
+        : `Write access: not authorized (read-only investigation)\n`) +
+      `\nAvailable variables: ${JSON.stringify(instruction.resolvedVariables)}\n\n` +
+      `Use the probe tool to run read-only shell commands. Probe iteratively — let each ` +
+      `finding guide your next probe. Correlate findings to identify root causes.\n\n` +
+      `When you have completed your investigation, respond with ONLY a JSON object matching this schema:\n` +
+      `{\n` +
+      `  "targetsSurveyed": ["string"],\n` +
+      `  "summary": "string",\n` +
+      `  "findings": [\n` +
+      `    {\n` +
+      `      "target": "string",\n` +
+      `      "observations": ["string"]\n` +
+      `    }\n` +
+      `  ],\n` +
+      `  "rootCause": "string or null",\n` +
+      `  "proposedResolution": {\n` +
+      `    "intent": "string",\n` +
+      `    "operationType": "maintain or deploy",\n` +
+      `    "parameters": {}\n` +
+      `  }\n` +
+      `}\n\n` +
+      `If no root cause is found, set "rootCause" to null and omit "proposedResolution".`;
+
+    let investigationFindings: InvestigationFindings | null = null;
+
+    try {
+      const result = await this.llmClient.callWithProbeLoop({
+        systemPrompt,
+        prompt: intent,
+        promptSummary: `Investigate: ${intent}`,
+        partitionId: instruction.partition?.id ?? null,
+        operationId: instruction.operationId,
+        onProbe: async (command: string) => {
+          const probeResult = await this.probeExecutor.execute(command);
+          const logEntry = probeResult.blocked
+            ? `Probe blocked: ${command} — ${probeResult.blockedReason}`
+            : `Probe: ${command}\n${probeResult.output}`;
+          probeLog.push(logEntry);
+
+          this.debrief.record({
+            partitionId: instruction.partition?.id ?? null,
+            operationId: instruction.operationId,
+            agent: "envoy",
+            decisionType: "environment-probe",
+            decision: probeResult.blocked ? `Probe blocked: ${command}` : `Probe executed: ${command}`,
+            reasoning: probeResult.blocked ? (probeResult.blockedReason ?? "blocked") : probeResult.output ?? "(no output)",
+            context: { command, blocked: probeResult.blocked, exitCode: probeResult.exitCode },
+          });
+
+          return probeResult.blocked
+            ? (probeResult.blockedReason ?? "Command blocked")
+            : (probeResult.output ?? "(no output)");
+        },
+      });
+
+      if (result.ok) {
+        const jsonMatch = result.text?.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          investigationFindings = JSON.parse(jsonMatch[0]) as InvestigationFindings;
+        }
+      }
+    } catch (err) {
+      this.debrief.record({
+        partitionId: instruction.partition?.id ?? null,
+        operationId: instruction.operationId,
+        agent: "envoy",
+        decisionType: "investigation-findings" as Parameters<DebriefWriter["record"]>[0]["decisionType"],
+        decision: "Investigation failed",
+        reasoning: err instanceof Error ? err.message : String(err),
+        context: { error: true },
+      });
+      throw err;
+    }
+
+    if (!investigationFindings) {
+      investigationFindings = {
+        targetsSurveyed: [instruction.environment.name],
+        summary: `Investigation completed for objective: ${intent}. ${probeLog.length} probe(s) executed. Unable to parse structured findings.`,
+        findings: [{
+          target: instruction.environment.name,
+          observations: probeLog.slice(0, 10),
+        }],
+      };
+    }
+
+    const stubPlan: OperationPlan = {
+      steps: [],
+      reasoning: investigationFindings.summary,
+    };
+
+    return {
+      plan: stubPlan,
+      rollbackPlan: stubPlan,
+      investigationFindings,
+    };
   }
 
   /**
@@ -1348,10 +1634,13 @@ export class EnvoyAgent {
     latestPlan: ReturnType<EnvoyKnowledgeStore["getLatestPlan"]>,
     recordEntry: (params: Parameters<DebriefWriter["record"]>[0]) => DebriefEntry,
   ): Promise<PlanningResult> {
+    // artifact is guaranteed non-null here — planDeployment asserts it before calling planWithLlm
+    const artifact = instruction.artifact!;
+
     const reqId = instruction.operationId ?? crypto.randomUUID().slice(0, 8);
     this.planLog.startRequest(
       reqId,
-      instruction.artifact.name,
+      artifact.name,
       instruction.version,
       instruction.environment.name,
     );
@@ -1360,14 +1649,14 @@ export class EnvoyAgent {
     const sections: string[] = [];
 
     sections.push(`## Artifact
-Name: ${sanitizeForPrompt(instruction.artifact.name)}
-Type: ${sanitizeForPrompt(instruction.artifact.type)}
+Name: ${sanitizeForPrompt(artifact.name)}
+Type: ${sanitizeForPrompt(artifact.type)}
 Version: ${instruction.version}
-Analysis summary: ${sanitizeForPrompt(instruction.artifact.analysis.summary)}
-Dependencies: ${sanitizeForPrompt(instruction.artifact.analysis.dependencies.join(", ") || "none")}
-Configuration expectations: ${sanitizeForPrompt(JSON.stringify(instruction.artifact.analysis.configurationExpectations))}
-Deployment intent: ${sanitizeForPrompt(instruction.artifact.analysis.deploymentIntent ?? "not specified")}
-Confidence: ${instruction.artifact.analysis.confidence}`);
+Analysis summary: ${sanitizeForPrompt(artifact.analysis.summary)}
+Dependencies: ${sanitizeForPrompt(artifact.analysis.dependencies.join(", ") || "none")}
+Configuration expectations: ${sanitizeForPrompt(JSON.stringify(artifact.analysis.configurationExpectations))}
+Deployment intent: ${sanitizeForPrompt(artifact.analysis.deploymentIntent ?? "not specified")}
+Confidence: ${artifact.analysis.confidence}`);
 
     sections.push(`## Target Environment
 Name: ${sanitizeForPrompt(instruction.environment.name)}
@@ -1547,7 +1836,7 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
       }
 
       const promptSummary =
-        `Plan deployment of ${instruction.artifact.name} v${instruction.version} ` +
+        `Plan deployment of ${artifact.name} v${instruction.version} ` +
         `to "${instruction.environment.name}"` +
         (attempt > 1 ? ` (attempt ${attempt} — revising for dry-run observations)` : "");
 
@@ -1730,7 +2019,7 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
           decisionType: "plan-generation",
           decision:
             `Generated deployment plan (dry-run skipped — executor not initialized): ` +
-            `${plan.steps.length} step(s) for ${instruction.artifact.name} v${instruction.version}`,
+            `${plan.steps.length} step(s) for ${artifact.name} v${instruction.version}`,
           reasoning: currentParsed.reasoning,
           context: { dryRunSkipped: true },
         });
@@ -1774,11 +2063,11 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
           decisionType: "plan-generation",
           decision:
             `Generated and validated deployment plan: ${plan.steps.length} step(s) for ` +
-            `${instruction.artifact.name} v${instruction.version} → "${instruction.environment.name}" ` +
+            `${artifact.name} v${instruction.version} → "${instruction.environment.name}" ` +
             `(dry-run passed on attempt ${attempt})`,
           reasoning: currentParsed.reasoning,
           context: {
-            artifactType: instruction.artifact.type,
+            artifactType: artifact.type,
             environmentName: instruction.environment.name,
             llmAvailable: true,
             stepCount: plan.steps.length,
@@ -1917,7 +2206,7 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
           reversible: false,
         })),
       reasoning:
-        `Rollback plan for ${instruction.artifact.name} v${instruction.version}: ` +
+        `Rollback plan for ${instruction.artifact?.name ?? "artifact"} v${instruction.version}: ` +
         `undo ${plan.steps.filter((s) => s.reversible).length} reversible step(s) ` +
         `in reverse order.`,
     };
@@ -1928,12 +2217,13 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
    * configure + restart pattern based on artifact type.
    */
   private buildFallbackPlan(instruction: PlanningInstruction): PlanningResult {
+    const artifact = instruction.artifact!;
     const workspacePath = `${this.baseDir}/deployments/${instruction.operationId}`;
 
     const plan: DeploymentPlan = {
       steps: [
         {
-          description: `Create workspace directory for ${instruction.artifact.name} v${instruction.version}`,
+          description: `Create workspace directory for ${artifact.name} v${instruction.version}`,
           action: "mkdir",
           target: workspacePath,
           reversible: true,
@@ -1945,9 +2235,9 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
           target: `${workspacePath}/artifact.json`,
           params: {
             content: JSON.stringify({
-              id: instruction.artifact.id,
-              name: instruction.artifact.name,
-              type: instruction.artifact.type,
+              id: artifact.id,
+              name: artifact.name,
+              type: artifact.type,
               version: instruction.version,
               operationId: instruction.operationId,
             }, null, 2),
@@ -1974,7 +2264,7 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
           params: {
             content: JSON.stringify({
               operationId: instruction.operationId,
-              artifact: instruction.artifact.name,
+              artifact: artifact.name,
               version: instruction.version,
               environment: instruction.environment.name,
               deployedAt: new Date().toISOString(),
@@ -1995,7 +2285,7 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
         },
       ],
       reasoning:
-        `Basic deployment plan for artifact type "${instruction.artifact.type}". ` +
+        `Basic deployment plan for artifact type "${artifact.type}". ` +
         `LLM was unavailable so this plan uses a standard copy + configure pattern ` +
         `without intelligent reasoning about the target environment or previous history.`,
     };

@@ -136,7 +136,7 @@ async function testDeploy(
     ...(opts.variables ? { variables: opts.variables } : {}),
   };
 
-  return agent.triggerDeployment(trigger);
+  return agent.triggerOperation(trigger);
 }
 
 // ---------------------------------------------------------------------------
@@ -169,7 +169,7 @@ describe("Decision Diary — entry specificity", () => {
       variables: { LOG_LEVEL: "error" },
     });
 
-    const entries = diary.getByDeployment(result.id);
+    const entries = diary.getByOperation(result.id);
     expect(entries.length).toBeGreaterThanOrEqual(5);
 
     for (const entry of entries) {
@@ -191,7 +191,7 @@ describe("Decision Diary — entry specificity", () => {
       variables: { LOG_LEVEL: "error" },
     });
 
-    const entries = diary.getByDeployment(result.id);
+    const entries = diary.getByOperation(result.id);
 
     // Reasoning must contain at least one concrete reference
     const genericPhrases = [
@@ -222,7 +222,7 @@ describe("Decision Diary — entry specificity", () => {
 
     expect(result.status).toBe("failed");
 
-    const entries = diary.getByDeployment(result.id);
+    const entries = diary.getByOperation(result.id);
     const failEntry = findDecisions(entries, "Deployment failed")[0];
 
     // Failure reasoning must contain recommended action
@@ -239,7 +239,7 @@ describe("Decision Diary — entry specificity", () => {
       variables: { LOG_LEVEL: "debug" },
     });
 
-    const entries = diary.getByDeployment(result.id);
+    const entries = diary.getByOperation(result.id);
     const conflictEntries = findDecisions(entries, "conflict");
     expect(conflictEntries.length).toBeGreaterThanOrEqual(1);
 
@@ -280,7 +280,7 @@ describe("Decision Diary — orchestration completeness", () => {
 
     const result = await testDeploy(agent, artifactStore, environmentStore, partitionStore);
 
-    const entries = diary.getByDeployment(result.id);
+    const entries = diary.getByOperation(result.id);
     const types = entries.map((e) => e.decisionType);
 
     expect(types).toContain("artifact-analysis");
@@ -297,7 +297,7 @@ describe("Decision Diary — orchestration completeness", () => {
 
     const result = await testDeploy(agent, artifactStore, environmentStore, partitionStore);
 
-    const entries = diary.getByDeployment(result.id);
+    const entries = diary.getByOperation(result.id);
     const types = entries.map((e) => e.decisionType);
 
     // Should have artifact analysis, plan, config, health check (retry), and failure
@@ -325,9 +325,9 @@ describe("Decision Diary — orchestration completeness", () => {
       environmentId: env.id,
       triggeredBy: "user" as const,
     };
-    const result = await agent.triggerDeployment(trigger);
+    const result = await agent.triggerOperation(trigger);
 
-    const entries = diary.getByDeployment(result.id);
+    const entries = diary.getByOperation(result.id);
     const types = entries.map((e) => e.decisionType);
 
     expect(types).toContain("variable-conflict");
@@ -394,8 +394,8 @@ describe("Decision Diary — retrieval dimensions", () => {
     const result1 = await testDeploy(agent, artifactStore, environmentStore, partitionStore, { version: "1.0.0" });
     const result2 = await testDeploy(agent, artifactStore, environmentStore, partitionStore, { version: "2.0.0" });
 
-    const entries1 = diary.getByDeployment(result1.id);
-    const entries2 = diary.getByDeployment(result2.id);
+    const entries1 = diary.getByOperation(result1.id);
+    const entries2 = diary.getByOperation(result2.id);
 
     // Each deployment has its own entries
     expect(entries1.length).toBeGreaterThanOrEqual(5);
@@ -403,10 +403,10 @@ describe("Decision Diary — retrieval dimensions", () => {
 
     // No cross-contamination
     for (const e of entries1) {
-      expect(e.deploymentId).toBe(result1.id);
+      expect(e.operationId).toBe(result1.id);
     }
     for (const e of entries2) {
-      expect(e.deploymentId).toBe(result2.id);
+      expect(e.operationId).toBe(result2.id);
     }
   });
 
@@ -421,11 +421,11 @@ describe("Decision Diary — retrieval dimensions", () => {
     const artifactA = seedArtifact(artifactStore, "app-a");
     const artifactB = seedArtifact(artifactStore, "app-b");
 
-    await agent.triggerDeployment({
+    await agent.triggerOperation({
       artifactId: artifactA.id, artifactVersionId: "1.0.0",
       partitionId: partA.id, environmentId: envA.id, triggeredBy: "user",
     });
-    await agent.triggerDeployment({
+    await agent.triggerOperation({
       artifactId: artifactB.id, artifactVersionId: "1.0.0",
       partitionId: partB.id, environmentId: envB.id, triggeredBy: "user",
     });
@@ -550,7 +550,7 @@ describe("PersistentDecisionDebrief — SQLite backing store", () => {
   it("persists entries across close and reopen", () => {
     const entry = diary.record({
       partitionId: "partition-1",
-      deploymentId: "deploy-1",
+      operationId: "deploy-1",
       agent: "command",
       decisionType: "pipeline-plan",
       decision: "Planned deployment pipeline: resolve → execute → verify",
@@ -567,7 +567,7 @@ describe("PersistentDecisionDebrief — SQLite backing store", () => {
     expect(retrieved!.decision).toBe(entry.decision);
     expect(retrieved!.reasoning).toBe(entry.reasoning);
     expect(retrieved!.partitionId).toBe("partition-1");
-    expect(retrieved!.deploymentId).toBe("deploy-1");
+    expect(retrieved!.operationId).toBe("deploy-1");
     expect(retrieved!.decisionType).toBe("pipeline-plan");
     expect(retrieved!.context).toEqual({ artifactId: "web-app", version: "1.0.0" });
     diary2.close();
@@ -576,7 +576,7 @@ describe("PersistentDecisionDebrief — SQLite backing store", () => {
   it("retrieval by deployment returns correct entries", () => {
     diary.record({
       partitionId: "t1",
-      deploymentId: "d1",
+      operationId: "d1",
       agent: "command",
       decisionType: "pipeline-plan",
       decision: "Planned pipeline for d1",
@@ -584,7 +584,7 @@ describe("PersistentDecisionDebrief — SQLite backing store", () => {
     });
     diary.record({
       partitionId: "t1",
-      deploymentId: "d2",
+      operationId: "d2",
       agent: "command",
       decisionType: "pipeline-plan",
       decision: "Planned pipeline for d2",
@@ -592,28 +592,28 @@ describe("PersistentDecisionDebrief — SQLite backing store", () => {
     });
     diary.record({
       partitionId: "t1",
-      deploymentId: "d1",
+      operationId: "d1",
       agent: "command",
       decisionType: "deployment-completion",
       decision: "Deployment d1 completed",
       reasoning: "All steps passed.",
     });
 
-    const d1Entries = diary.getByDeployment("d1");
+    const d1Entries = diary.getByOperation("d1");
     expect(d1Entries).toHaveLength(2);
     for (const e of d1Entries) {
-      expect(e.deploymentId).toBe("d1");
+      expect(e.operationId).toBe("d1");
     }
 
-    const d2Entries = diary.getByDeployment("d2");
+    const d2Entries = diary.getByOperation("d2");
     expect(d2Entries).toHaveLength(1);
-    expect(d2Entries[0].deploymentId).toBe("d2");
+    expect(d2Entries[0].operationId).toBe("d2");
   });
 
   it("retrieval by partition returns correct entries", () => {
     diary.record({
       partitionId: "acme",
-      deploymentId: "d1",
+      operationId: "d1",
       agent: "command",
       decisionType: "pipeline-plan",
       decision: "Acme deployment plan",
@@ -621,7 +621,7 @@ describe("PersistentDecisionDebrief — SQLite backing store", () => {
     });
     diary.record({
       partitionId: "beta",
-      deploymentId: "d2",
+      operationId: "d2",
       agent: "command",
       decisionType: "pipeline-plan",
       decision: "Beta deployment plan",

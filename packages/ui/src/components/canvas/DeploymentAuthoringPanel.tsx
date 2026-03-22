@@ -58,6 +58,8 @@ export default function OperationAuthoringPanel({ title, preselectedArtifactId, 
   const [selectedEnvoyId, setSelectedEnvoyId] = useState<string>("");
   const [preFlightRec, setPreFlightRec] = useState<PreFlightContext["recommendation"] | null>(null);
 
+  const [allowWrite, setAllowWrite] = useState(false);
+
   const [askQuestion, setAskQuestion] = useState("");
   const [askTyping, setAskTyping] = useState(false);
   const [askResponse, setAskResponse] = useState<string | null>(null);
@@ -96,6 +98,7 @@ export default function OperationAuthoringPanel({ title, preselectedArtifactId, 
         envoyId: deployScope === "envoy" ? (selectedEnvoyId || undefined) : undefined,
         type: opType,
         intent: intent.trim() || undefined,
+        ...(opType === "investigate" ? { allowWrite } : {}),
       } as Parameters<typeof createDeployment>[0]);
 
       pushPanel({
@@ -203,7 +206,7 @@ export default function OperationAuthoringPanel({ title, preselectedArtifactId, 
           <div className="section-label" style={{ marginBottom: 8 }}>Operation type</div>
           <div style={{ display: "flex", gap: 4 }}>
             {(["deploy", "maintain", "query", "investigate", "trigger"] as OpType[]).map((t) => {
-              const isAvailable = t === "deploy";
+              const isAvailable = t === "deploy" || t === "query" || t === "investigate";
               return (
                 <button
                   key={t}
@@ -229,11 +232,6 @@ export default function OperationAuthoringPanel({ title, preselectedArtifactId, 
               );
             })}
           </div>
-          {opType !== "deploy" && (
-            <div style={{ marginTop: 8, fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
-              Coming soon — only Deploy is fully supported today.
-            </div>
-          )}
         </div>
 
         {/* Intent / objective field */}
@@ -261,95 +259,25 @@ export default function OperationAuthoringPanel({ title, preselectedArtifactId, 
           />
         </div>
 
-        {/* Two-column layout — only shown for deploy operations */}
-        {opType !== "deploy" ? null : <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 3fr) minmax(0, 2fr)", gap: 22 }}>
-          {/* WHAT column */}
-          <div>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                marginBottom: 10,
-              }}
-            >
-              <div className="section-label">What</div>
-              {selectedArtifactIds.length > 1 && (
-                <span
-                  style={{
-                    fontSize: 11,
-                    color: "var(--accent)",
-                    fontFamily: "var(--font-mono)",
-                    fontWeight: 600,
-                  }}
-                >
-                  {selectedArtifactIds.length} artifacts · coordinated deploy
-                </span>
-              )}
-            </div>
-
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              {artList.map((art) => {
-                const isSelected = selectedArtifactIds.includes(art.id);
-                return (
-                  <div
-                    key={art.id}
-                    onClick={() => toggleArtifact(art.id)}
-                    className={`nd-artifact-card${isSelected ? " nd-artifact-card-selected" : ""}`}
-                  >
-                    <span
-                      className={`nd-artifact-check${isSelected ? " nd-artifact-check-selected" : ""}`}
-                    >
-                      {isSelected ? "✓" : ""}
-                    </span>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-                        <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>
-                          {art.name}
-                        </span>
-                        <span
-                          style={{
-                            fontSize: 11,
-                            color: "var(--text-muted)",
-                            fontFamily: "var(--font-mono)",
-                          }}
-                        >
-                          {art.type}
-                        </span>
-                      </div>
-                      {art.analysis.summary && (
-                        <div
-                          style={{
-                            fontSize: 11,
-                            color: "var(--text-muted)",
-                            marginTop: 2,
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          {art.analysis.summary}
-                        </div>
-                      )}
-                      <div style={{ marginTop: 3 }}>
-                        <ConfidenceIndicator
-                          value={art.analysis.confidence}
-                          qualifier="understanding"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-
-              {artList.length === 0 && (
-                <div className="nd-empty">No artifacts registered</div>
-              )}
-            </div>
+        {/* Allow write toggle — investigate only */}
+        {opType === "investigate" && (
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "var(--text-muted)", fontFamily: "var(--font-mono)", cursor: "pointer" }}>
+              <input
+                type="checkbox"
+                checked={allowWrite}
+                onChange={(e) => setAllowWrite(e.target.checked)}
+                style={{ accentColor: "var(--accent)" }}
+              />
+              Allow write access during investigation
+            </label>
           </div>
+        )}
 
-          {/* WHERE column */}
-          {environmentsEnabled && (
+        {/* Two-column layout for deploy; single-column Where for query/investigate */}
+        {opType === "deploy" ? (
+          <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 3fr) minmax(0, 2fr)", gap: 22 }}>
+            {/* WHAT column */}
             <div>
               <div
                 style={{
@@ -359,170 +287,395 @@ export default function OperationAuthoringPanel({ title, preselectedArtifactId, 
                   marginBottom: 10,
                 }}
               >
-                <div className="section-label">Where</div>
-              </div>
-
-              {/* Scope tabs */}
-              <div
-                className="segmented-control"
-                style={{ width: "100%", marginBottom: 10 }}
-              >
-                {(
-                  [
-                    { id: "environment" as DeployScope, label: "Environment" },
-                    { id: "envoy" as DeployScope, label: "Envoy" },
-                    { id: "partition" as DeployScope, label: "Partition" },
-                  ]
-                ).map((s) => (
-                  <button
-                    key={s.id}
-                    className={`segmented-control-btn${deployScope === s.id ? " segmented-control-btn-active" : ""}`}
-                    style={{ flex: 1, justifyContent: "center" }}
-                    onClick={() => {
-                      setDeployScope(s.id);
-                      setSelectedEnvironmentId("");
-                      setSelectedPartitionId("");
-                      setSelectedEnvoyId("");
+                <div className="section-label">What</div>
+                {selectedArtifactIds.length > 1 && (
+                  <span
+                    style={{
+                      fontSize: 11,
+                      color: "var(--accent)",
+                      fontFamily: "var(--font-mono)",
+                      fontWeight: 600,
                     }}
                   >
-                    {s.label}
-                  </button>
-                ))}
+                    {selectedArtifactIds.length} artifacts · coordinated deploy
+                  </span>
+                )}
               </div>
 
-              {/* Target list */}
-              <div className="nd-target-list">
-                {/* Environment scope */}
-                {deployScope === "environment" &&
-                  envList.map((env) => {
-                    const active = selectedEnvironmentId === env.id;
-                    return (
-                      <div
-                        key={env.id}
-                        onClick={() => {
-                          setSelectedEnvironmentId(active ? "" : env.id);
-                          setSelectedPartitionId("");
-                          setSelectedEnvoyId("");
-                        }}
-                        className={`nd-target-row${active ? " nd-target-row-selected" : ""}`}
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {artList.map((art) => {
+                  const isSelected = selectedArtifactIds.includes(art.id);
+                  return (
+                    <div
+                      key={art.id}
+                      onClick={() => toggleArtifact(art.id)}
+                      className={`nd-artifact-card${isSelected ? " nd-artifact-card-selected" : ""}`}
+                    >
+                      <span
+                        className={`nd-artifact-check${isSelected ? " nd-artifact-check-selected" : ""}`}
                       >
-                        <span className={`status-pip status-pip-${getOverallHealth()}`} />
-                        <div style={{ flex: 1 }}>
-                          <span style={{ fontSize: 13, fontWeight: 500, color: "var(--text)" }}>
-                            {env.name}
+                        {isSelected ? "✓" : ""}
+                      </span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+                          <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>
+                            {art.name}
                           </span>
-                          <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 1 }}>
-                            {envoyList.length} envoy{envoyList.length !== 1 ? "s" : ""}
-                          </div>
-                        </div>
-                        <span
-                          style={{
-                            fontSize: 11,
-                            color: "var(--text-muted)",
-                            fontFamily: "var(--font-mono)",
-                          }}
-                        >
-                          {envoyList.length} target{envoyList.length !== 1 ? "s" : ""}
-                        </span>
-                      </div>
-                    );
-                  })}
-
-                {/* Envoy scope */}
-                {deployScope === "envoy" &&
-                  envoyList.map((envoy) => {
-                    const active = selectedEnvoyId === envoy.id;
-                    const health =
-                      envoy.health === "OK"
-                        ? "healthy"
-                        : envoy.health === "Degraded"
-                          ? "degraded"
-                          : "unhealthy";
-                    return (
-                      <div
-                        key={envoy.id}
-                        onClick={() => {
-                          setSelectedEnvoyId(active ? "" : envoy.id);
-                          setSelectedEnvironmentId("");
-                          setSelectedPartitionId("");
-                        }}
-                        className={`nd-target-row${active ? " nd-target-row-selected" : ""}`}
-                      >
-                        <span className={`status-pip status-pip-${health}`} />
-                        <div style={{ flex: 1, minWidth: 0 }}>
                           <span
                             style={{
-                              fontSize: 13,
-                              fontWeight: 500,
-                              color: "var(--text)",
+                              fontSize: 11,
+                              color: "var(--text-muted)",
                               fontFamily: "var(--font-mono)",
                             }}
                           >
-                            {envoy.hostname ?? envoy.url}
+                            {art.type}
                           </span>
-                          {envoy.lastSeen && (
-                            <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 1 }}>
-                              {envoy.lastSeen}
-                            </div>
-                          )}
                         </div>
-                      </div>
-                    );
-                  })}
-
-                {/* Partition scope */}
-                {deployScope === "partition" &&
-                  partList.map((part) => {
-                    const active = selectedPartitionId === part.id;
-                    const varCount = Object.keys(part.variables).length;
-                    return (
-                      <div
-                        key={part.id}
-                        onClick={() => {
-                          setSelectedPartitionId(active ? "" : part.id);
-                          setSelectedEnvironmentId("");
-                          setSelectedEnvoyId("");
-                        }}
-                        className={`nd-target-row${active ? " nd-target-row-selected" : ""}`}
-                      >
-                        <span className="status-pip status-pip-healthy" />
-                        <div style={{ flex: 1 }}>
-                          <span style={{ fontSize: 13, fontWeight: 500, color: "var(--text)" }}>
-                            {part.name}
-                          </span>
-                          <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 1 }}>
-                            {varCount} scoped variable{varCount !== 1 ? "s" : ""}
+                        {art.analysis.summary && (
+                          <div
+                            style={{
+                              fontSize: 11,
+                              color: "var(--text-muted)",
+                              marginTop: 2,
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {art.analysis.summary}
                           </div>
+                        )}
+                        <div style={{ marginTop: 3 }}>
+                          <ConfidenceIndicator
+                            value={art.analysis.confidence}
+                            qualifier="understanding"
+                          />
                         </div>
-                        <span
-                          style={{
-                            fontSize: 11,
-                            color: "var(--text-muted)",
-                            fontFamily: "var(--font-mono)",
-                          }}
-                        >
-                          {envoyList.length} envoy{envoyList.length !== 1 ? "s" : ""}
-                        </span>
                       </div>
-                    );
-                  })}
+                    </div>
+                  );
+                })}
 
-                {deployScope === "environment" && envList.length === 0 && (
-                  <div className="nd-empty">No environments configured</div>
-                )}
-                {deployScope === "envoy" && envoyList.length === 0 && (
-                  <div className="nd-empty">No envoys connected</div>
-                )}
-                {deployScope === "partition" && partList.length === 0 && (
-                  <div className="nd-empty">No partitions configured</div>
+                {artList.length === 0 && (
+                  <div className="nd-empty">No artifacts registered</div>
                 )}
               </div>
-
-              {/* Context hint */}
-              {contextHint && <div className="nd-context-hint">{contextHint}</div>}
             </div>
-          )}
-        </div>}
+
+            {/* WHERE column */}
+            {environmentsEnabled && (
+              <div>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    marginBottom: 10,
+                  }}
+                >
+                  <div className="section-label">Where</div>
+                </div>
+
+                {/* Scope tabs */}
+                <div
+                  className="segmented-control"
+                  style={{ width: "100%", marginBottom: 10 }}
+                >
+                  {(
+                    [
+                      { id: "environment" as DeployScope, label: "Environment" },
+                      { id: "envoy" as DeployScope, label: "Envoy" },
+                      { id: "partition" as DeployScope, label: "Partition" },
+                    ]
+                  ).map((s) => (
+                    <button
+                      key={s.id}
+                      className={`segmented-control-btn${deployScope === s.id ? " segmented-control-btn-active" : ""}`}
+                      style={{ flex: 1, justifyContent: "center" }}
+                      onClick={() => {
+                        setDeployScope(s.id);
+                        setSelectedEnvironmentId("");
+                        setSelectedPartitionId("");
+                        setSelectedEnvoyId("");
+                      }}
+                    >
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Target list */}
+                <div className="nd-target-list">
+                  {/* Environment scope */}
+                  {deployScope === "environment" &&
+                    envList.map((env) => {
+                      const active = selectedEnvironmentId === env.id;
+                      return (
+                        <div
+                          key={env.id}
+                          onClick={() => {
+                            setSelectedEnvironmentId(active ? "" : env.id);
+                            setSelectedPartitionId("");
+                            setSelectedEnvoyId("");
+                          }}
+                          className={`nd-target-row${active ? " nd-target-row-selected" : ""}`}
+                        >
+                          <span className={`status-pip status-pip-${getOverallHealth()}`} />
+                          <div style={{ flex: 1 }}>
+                            <span style={{ fontSize: 13, fontWeight: 500, color: "var(--text)" }}>
+                              {env.name}
+                            </span>
+                            <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 1 }}>
+                              {envoyList.length} envoy{envoyList.length !== 1 ? "s" : ""}
+                            </div>
+                          </div>
+                          <span
+                            style={{
+                              fontSize: 11,
+                              color: "var(--text-muted)",
+                              fontFamily: "var(--font-mono)",
+                            }}
+                          >
+                            {envoyList.length} target{envoyList.length !== 1 ? "s" : ""}
+                          </span>
+                        </div>
+                      );
+                    })}
+
+                  {/* Envoy scope */}
+                  {deployScope === "envoy" &&
+                    envoyList.map((envoy) => {
+                      const active = selectedEnvoyId === envoy.id;
+                      const health =
+                        envoy.health === "OK"
+                          ? "healthy"
+                          : envoy.health === "Degraded"
+                            ? "degraded"
+                            : "unhealthy";
+                      return (
+                        <div
+                          key={envoy.id}
+                          onClick={() => {
+                            setSelectedEnvoyId(active ? "" : envoy.id);
+                            setSelectedEnvironmentId("");
+                            setSelectedPartitionId("");
+                          }}
+                          className={`nd-target-row${active ? " nd-target-row-selected" : ""}`}
+                        >
+                          <span className={`status-pip status-pip-${health}`} />
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <span
+                              style={{
+                                fontSize: 13,
+                                fontWeight: 500,
+                                color: "var(--text)",
+                                fontFamily: "var(--font-mono)",
+                              }}
+                            >
+                              {envoy.hostname ?? envoy.url}
+                            </span>
+                            {envoy.lastSeen && (
+                              <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 1 }}>
+                                {envoy.lastSeen}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                  {/* Partition scope */}
+                  {deployScope === "partition" &&
+                    partList.map((part) => {
+                      const active = selectedPartitionId === part.id;
+                      const varCount = Object.keys(part.variables).length;
+                      return (
+                        <div
+                          key={part.id}
+                          onClick={() => {
+                            setSelectedPartitionId(active ? "" : part.id);
+                            setSelectedEnvironmentId("");
+                            setSelectedEnvoyId("");
+                          }}
+                          className={`nd-target-row${active ? " nd-target-row-selected" : ""}`}
+                        >
+                          <span className="status-pip status-pip-healthy" />
+                          <div style={{ flex: 1 }}>
+                            <span style={{ fontSize: 13, fontWeight: 500, color: "var(--text)" }}>
+                              {part.name}
+                            </span>
+                            <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 1 }}>
+                              {varCount} scoped variable{varCount !== 1 ? "s" : ""}
+                            </div>
+                          </div>
+                          <span
+                            style={{
+                              fontSize: 11,
+                              color: "var(--text-muted)",
+                              fontFamily: "var(--font-mono)",
+                            }}
+                          >
+                            {envoyList.length} envoy{envoyList.length !== 1 ? "s" : ""}
+                          </span>
+                        </div>
+                      );
+                    })}
+
+                  {deployScope === "environment" && envList.length === 0 && (
+                    <div className="nd-empty">No environments configured</div>
+                  )}
+                  {deployScope === "envoy" && envoyList.length === 0 && (
+                    <div className="nd-empty">No envoys connected</div>
+                  )}
+                  {deployScope === "partition" && partList.length === 0 && (
+                    <div className="nd-empty">No partitions configured</div>
+                  )}
+                </div>
+
+                {/* Context hint */}
+                {contextHint && <div className="nd-context-hint">{contextHint}</div>}
+              </div>
+            )}
+          </div>
+        ) : (opType === "query" || opType === "investigate") ? (
+          /* Single-column Where section for query/investigate */
+          <div style={{ marginBottom: 20 }}>
+            <div className="section-label" style={{ marginBottom: 10 }}>Where</div>
+
+            {/* Scope tabs */}
+            <div className="segmented-control" style={{ width: "100%", marginBottom: 10 }}>
+              {(
+                [
+                  { id: "environment" as DeployScope, label: "Environment" },
+                  { id: "envoy" as DeployScope, label: "Envoy" },
+                  { id: "partition" as DeployScope, label: "Partition" },
+                ]
+              ).map((s) => (
+                <button
+                  key={s.id}
+                  className={`segmented-control-btn${deployScope === s.id ? " segmented-control-btn-active" : ""}`}
+                  style={{ flex: 1, justifyContent: "center" }}
+                  onClick={() => {
+                    setDeployScope(s.id);
+                    setSelectedEnvironmentId("");
+                    setSelectedPartitionId("");
+                    setSelectedEnvoyId("");
+                  }}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Target list */}
+            <div className="nd-target-list">
+              {deployScope === "environment" &&
+                envList.map((env) => {
+                  const active = selectedEnvironmentId === env.id;
+                  return (
+                    <div
+                      key={env.id}
+                      onClick={() => {
+                        setSelectedEnvironmentId(active ? "" : env.id);
+                        setSelectedPartitionId("");
+                        setSelectedEnvoyId("");
+                      }}
+                      className={`nd-target-row${active ? " nd-target-row-selected" : ""}`}
+                    >
+                      <span className={`status-pip status-pip-${getOverallHealth()}`} />
+                      <div style={{ flex: 1 }}>
+                        <span style={{ fontSize: 13, fontWeight: 500, color: "var(--text)" }}>
+                          {env.name}
+                        </span>
+                        <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 1 }}>
+                          {envoyList.length} envoy{envoyList.length !== 1 ? "s" : ""}
+                        </div>
+                      </div>
+                      <span style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
+                        {envoyList.length} target{envoyList.length !== 1 ? "s" : ""}
+                      </span>
+                    </div>
+                  );
+                })}
+
+              {deployScope === "envoy" &&
+                envoyList.map((envoy) => {
+                  const active = selectedEnvoyId === envoy.id;
+                  const health =
+                    envoy.health === "OK"
+                      ? "healthy"
+                      : envoy.health === "Degraded"
+                        ? "degraded"
+                        : "unhealthy";
+                  return (
+                    <div
+                      key={envoy.id}
+                      onClick={() => {
+                        setSelectedEnvoyId(active ? "" : envoy.id);
+                        setSelectedEnvironmentId("");
+                        setSelectedPartitionId("");
+                      }}
+                      className={`nd-target-row${active ? " nd-target-row-selected" : ""}`}
+                    >
+                      <span className={`status-pip status-pip-${health}`} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <span style={{ fontSize: 13, fontWeight: 500, color: "var(--text)", fontFamily: "var(--font-mono)" }}>
+                          {envoy.hostname ?? envoy.url}
+                        </span>
+                        {envoy.lastSeen && (
+                          <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 1 }}>
+                            {envoy.lastSeen}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+
+              {deployScope === "partition" &&
+                partList.map((part) => {
+                  const active = selectedPartitionId === part.id;
+                  const varCount = Object.keys(part.variables).length;
+                  return (
+                    <div
+                      key={part.id}
+                      onClick={() => {
+                        setSelectedPartitionId(active ? "" : part.id);
+                        setSelectedEnvironmentId("");
+                        setSelectedEnvoyId("");
+                      }}
+                      className={`nd-target-row${active ? " nd-target-row-selected" : ""}`}
+                    >
+                      <span className="status-pip status-pip-healthy" />
+                      <div style={{ flex: 1 }}>
+                        <span style={{ fontSize: 13, fontWeight: 500, color: "var(--text)" }}>
+                          {part.name}
+                        </span>
+                        <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 1 }}>
+                          {varCount} scoped variable{varCount !== 1 ? "s" : ""}
+                        </div>
+                      </div>
+                      <span style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
+                        {envoyList.length} envoy{envoyList.length !== 1 ? "s" : ""}
+                      </span>
+                    </div>
+                  );
+                })}
+
+              {deployScope === "environment" && envList.length === 0 && (
+                <div className="nd-empty">No environments configured</div>
+              )}
+              {deployScope === "envoy" && envoyList.length === 0 && (
+                <div className="nd-empty">No envoys connected</div>
+              )}
+              {deployScope === "partition" && partList.length === 0 && (
+                <div className="nd-empty">No partitions configured</div>
+              )}
+            </div>
+
+            {contextHint && <div className="nd-context-hint">{contextHint}</div>}
+          </div>
+        ) : null}
 
         {/* Low-confidence artifact warning */}
         {lowConfidenceArtifacts.length > 0 && (
@@ -561,7 +714,7 @@ export default function OperationAuthoringPanel({ title, preselectedArtifactId, 
         )}
 
         {/* Deploy action bar */}
-        {canDeploy && (
+        {canDeploy && opType === "deploy" && (
           <div className="nd-action-bar">
             <div
               style={{
@@ -632,6 +785,35 @@ export default function OperationAuthoringPanel({ title, preselectedArtifactId, 
                 ))}
               </div>
             )}
+          </div>
+        )}
+
+        {/* Non-deploy action bar — for query and investigate */}
+        {canDeploy && (opType === "query" || opType === "investigate") && (
+          <div className="nd-action-bar">
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>
+                  {intent.trim() || "No objective specified"}
+                </div>
+                <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>
+                  {hasTarget
+                    ? `→ ${getTargetName()}`
+                    : "Select a target below"}
+                </div>
+              </div>
+              <button
+                className="nd-request-plan-btn"
+                disabled={submitting || !hasTarget}
+                onClick={handleRequestPlan}
+              >
+                {submitting
+                  ? "Running…"
+                  : opType === "query"
+                  ? "Run Query"
+                  : "Begin Investigation"}
+              </button>
+            </div>
           </div>
         )}
 
