@@ -25,7 +25,7 @@ function tmpDbPath(): string {
 function makeDeployment(overrides: Partial<Deployment> = {}): Deployment {
   return {
     id: crypto.randomUUID(),
-    artifactId: crypto.randomUUID(),
+    input: { type: "deploy", artifactId: crypto.randomUUID() },
     partitionId: crypto.randomUUID(),
     environmentId: crypto.randomUUID(),
     version: "1.0.0",
@@ -252,12 +252,12 @@ describe("PersistentDeploymentStore", () => {
     const d = makeDeployment({
       status: "failed",
       failureReason: "disk full",
-      artifactVersionId: "ver-1",
+      input: { type: "deploy", artifactId: crypto.randomUUID(), artifactVersionId: "ver-1" },
     });
     store.save(d);
     const fetched = store.get(d.id)!;
     expect(fetched.failureReason).toBe("disk full");
-    expect(fetched.artifactVersionId).toBe("ver-1");
+    expect((fetched.input as { type: "deploy"; artifactId: string; artifactVersionId?: string }).artifactVersionId).toBe("ver-1");
   });
 
   it("stores and retrieves debrief entry IDs", () => {

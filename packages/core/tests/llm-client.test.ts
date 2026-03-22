@@ -23,25 +23,25 @@ function makeParams(overrides: Partial<LlmCallParams> = {}): LlmCallParams {
 describe("LlmClient — initialization", () => {
   it("isAvailable returns false when no API key is provided", () => {
     const debrief = new DecisionDebrief();
-    const client = new LlmClient(debrief, "command", { apiKey: undefined });
+    const client = new LlmClient(debrief, "server", { apiKey: undefined });
     expect(client.isAvailable()).toBe(false);
   });
 
   it("isAvailable returns false when API key is empty string", () => {
     const debrief = new DecisionDebrief();
-    const client = new LlmClient(debrief, "command", { apiKey: "" });
+    const client = new LlmClient(debrief, "server", { apiKey: "" });
     expect(client.isAvailable()).toBe(false);
   });
 
   it("isAvailable returns true when API key is provided", () => {
     const debrief = new DecisionDebrief();
-    const client = new LlmClient(debrief, "command", { apiKey: "sk-test-key" });
+    const client = new LlmClient(debrief, "server", { apiKey: "sk-test-key" });
     expect(client.isAvailable()).toBe(true);
   });
 
   it("accepts custom model configuration", () => {
     const debrief = new DecisionDebrief();
-    const client = new LlmClient(debrief, "command", {
+    const client = new LlmClient(debrief, "server", {
       apiKey: "sk-test",
       reasoningModel: "custom-model",
       classificationModel: "custom-classifier",
@@ -51,7 +51,7 @@ describe("LlmClient — initialization", () => {
 
   it("accepts both command and envoy agent types", () => {
     const debrief = new DecisionDebrief();
-    const commandClient = new LlmClient(debrief, "command");
+    const commandClient = new LlmClient(debrief, "server");
     const envoyClient = new LlmClient(debrief, "envoy");
     expect(commandClient).toBeDefined();
     expect(envoyClient).toBeDefined();
@@ -68,7 +68,7 @@ describe("LlmClient — fallback behavior", () => {
 
   beforeEach(() => {
     debrief = new DecisionDebrief();
-    client = new LlmClient(debrief, "command", { apiKey: undefined });
+    client = new LlmClient(debrief, "server", { apiKey: undefined });
   });
 
   it("reason() returns fallback result when no API key", async () => {
@@ -101,7 +101,7 @@ describe("LlmClient — fallback behavior", () => {
       makeParams({
         promptSummary: "Risk assessment for deployment",
         partitionId: "partition-1",
-        deploymentId: "deploy-1",
+        operationId: "deploy-1",
       }),
     );
 
@@ -120,13 +120,13 @@ describe("LlmClient — fallback behavior", () => {
 describe("LlmClient — debrief recording", () => {
   it("records debrief entry for fallback calls", async () => {
     const debrief = new DecisionDebrief();
-    const client = new LlmClient(debrief, "command", { apiKey: undefined });
+    const client = new LlmClient(debrief, "server", { apiKey: undefined });
 
     await client.reason(
       makeParams({
         promptSummary: "Postmortem generation",
         partitionId: "partition-1",
-        deploymentId: "deploy-1",
+        operationId: "deploy-1",
       }),
     );
 
@@ -135,9 +135,9 @@ describe("LlmClient — debrief recording", () => {
 
     const entry = entries[0];
     expect(entry.decisionType).toBe("llm-call");
-    expect(entry.agent).toBe("command");
+    expect(entry.agent).toBe("server");
     expect(entry.partitionId).toBe("partition-1");
-    expect(entry.deploymentId).toBe("deploy-1");
+    expect(entry.operationId).toBe("deploy-1");
     expect(entry.decision).toContain("Postmortem generation");
     expect(entry.decision).toContain("falling back");
     expect(entry.context.fallbackUsed).toBe(true);
@@ -156,7 +156,7 @@ describe("LlmClient — debrief recording", () => {
 
   it("debrief entry contains model information", async () => {
     const debrief = new DecisionDebrief();
-    const client = new LlmClient(debrief, "command", { apiKey: undefined });
+    const client = new LlmClient(debrief, "server", { apiKey: undefined });
 
     await client.reason(makeParams());
 
@@ -167,7 +167,7 @@ describe("LlmClient — debrief recording", () => {
 
   it("records separate entries for each call", async () => {
     const debrief = new DecisionDebrief();
-    const client = new LlmClient(debrief, "command", { apiKey: undefined });
+    const client = new LlmClient(debrief, "server", { apiKey: undefined });
 
     await client.reason(makeParams({ promptSummary: "Call 1" }));
     await client.classify(makeParams({ promptSummary: "Call 2" }));
@@ -180,7 +180,7 @@ describe("LlmClient — debrief recording", () => {
 
   it("debrief reasoning explains fallback in plain language", async () => {
     const debrief = new DecisionDebrief();
-    const client = new LlmClient(debrief, "command", { apiKey: undefined });
+    const client = new LlmClient(debrief, "server", { apiKey: undefined });
 
     await client.reason(makeParams());
 
@@ -194,7 +194,7 @@ describe("LlmClient — debrief recording", () => {
 
   it("reason() uses default reasoning model in debrief context", async () => {
     const debrief = new DecisionDebrief();
-    const client = new LlmClient(debrief, "command", { apiKey: undefined });
+    const client = new LlmClient(debrief, "server", { apiKey: undefined });
 
     await client.reason(makeParams());
 
@@ -204,7 +204,7 @@ describe("LlmClient — debrief recording", () => {
 
   it("classify() uses default classification model in debrief context", async () => {
     const debrief = new DecisionDebrief();
-    const client = new LlmClient(debrief, "command", { apiKey: undefined });
+    const client = new LlmClient(debrief, "server", { apiKey: undefined });
 
     await client.classify(makeParams());
 
@@ -225,54 +225,54 @@ describe("LlmClient — timeout and rate limiting", () => {
 
   it("stores timeout from config", () => {
     const debrief = new DecisionDebrief();
-    const client = new LlmClient(debrief, "command", { timeoutMs: 5000 });
+    const client = new LlmClient(debrief, "server", { timeoutMs: 5000 });
     // Access private field via type cast for testing
     expect((client as unknown as { _timeoutMs: number })._timeoutMs).toBe(5000);
   });
 
   it("uses default timeout when not configured", () => {
     const debrief = new DecisionDebrief();
-    const client = new LlmClient(debrief, "command");
+    const client = new LlmClient(debrief, "server");
     expect((client as unknown as { _timeoutMs: number })._timeoutMs).toBe(DEFAULT_TIMEOUT_MS);
   });
 
   it("reads timeout from environment variable", () => {
     process.env.SYNTH_LLM_TIMEOUT_MS = "10000";
     const debrief = new DecisionDebrief();
-    const client = new LlmClient(debrief, "command");
+    const client = new LlmClient(debrief, "server");
     expect((client as unknown as { _timeoutMs: number })._timeoutMs).toBe(10000);
   });
 
   it("config timeoutMs takes precedence over environment variable", () => {
     process.env.SYNTH_LLM_TIMEOUT_MS = "10000";
     const debrief = new DecisionDebrief();
-    const client = new LlmClient(debrief, "command", { timeoutMs: 5000 });
+    const client = new LlmClient(debrief, "server", { timeoutMs: 5000 });
     expect((client as unknown as { _timeoutMs: number })._timeoutMs).toBe(5000);
   });
 
   it("stores rate limit from config", () => {
     const debrief = new DecisionDebrief();
-    const client = new LlmClient(debrief, "command", { rateLimitPerMinute: 10 });
+    const client = new LlmClient(debrief, "server", { rateLimitPerMinute: 10 });
     expect((client as unknown as { _rateLimitPerMinute: number })._rateLimitPerMinute).toBe(10);
   });
 
   it("uses default rate limit when not configured", () => {
     const debrief = new DecisionDebrief();
-    const client = new LlmClient(debrief, "command");
+    const client = new LlmClient(debrief, "server");
     expect((client as unknown as { _rateLimitPerMinute: number })._rateLimitPerMinute).toBe(DEFAULT_RATE_LIMIT_PER_MINUTE);
   });
 
   it("reads rate limit from environment variable", () => {
     process.env.SYNTH_LLM_RATE_LIMIT = "5";
     const debrief = new DecisionDebrief();
-    const client = new LlmClient(debrief, "command");
+    const client = new LlmClient(debrief, "server");
     expect((client as unknown as { _rateLimitPerMinute: number })._rateLimitPerMinute).toBe(5);
   });
 
   it("config rateLimitPerMinute takes precedence over environment variable", () => {
     process.env.SYNTH_LLM_RATE_LIMIT = "5";
     const debrief = new DecisionDebrief();
-    const client = new LlmClient(debrief, "command", { rateLimitPerMinute: 15 });
+    const client = new LlmClient(debrief, "server", { rateLimitPerMinute: 15 });
     expect((client as unknown as { _rateLimitPerMinute: number })._rateLimitPerMinute).toBe(15);
   });
 
@@ -294,7 +294,7 @@ describe("LlmClient — rate limit behavior", () => {
     const debrief = new DecisionDebrief();
     // Set rate limit to 2 calls/min; no API key so calls fail before rate limit check
     // We test the rate limiter by accessing _checkRateLimit directly
-    const client = new LlmClient(debrief, "command", {
+    const client = new LlmClient(debrief, "server", {
       apiKey: "sk-test-key",
       rateLimitPerMinute: 2,
     });
@@ -315,7 +315,7 @@ describe("LlmClient — rate limit behavior", () => {
 
   it("allows calls when under rate limit", () => {
     const debrief = new DecisionDebrief();
-    const client = new LlmClient(debrief, "command", {
+    const client = new LlmClient(debrief, "server", {
       apiKey: "sk-test-key",
       rateLimitPerMinute: 5,
     });
@@ -334,7 +334,7 @@ describe("LlmClient — rate limit behavior", () => {
 
   it("prunes timestamps older than 60 seconds from the sliding window", () => {
     const debrief = new DecisionDebrief();
-    const client = new LlmClient(debrief, "command", {
+    const client = new LlmClient(debrief, "server", {
       rateLimitPerMinute: 2,
     });
 
@@ -355,7 +355,7 @@ describe("LlmClient — rate limit behavior", () => {
 
   it("records rate-limit fallback in debrief with plain-language explanation", async () => {
     const debrief = new DecisionDebrief();
-    const client = new LlmClient(debrief, "command", {
+    const client = new LlmClient(debrief, "server", {
       apiKey: "sk-test-key",
       rateLimitPerMinute: 1,
     });
@@ -403,7 +403,7 @@ describe("LlmClient — error scenarios", () => {
     debrief: DecisionDebrief,
     mockClient: { messages: { create: (...args: unknown[]) => Promise<unknown> } },
   ): LlmClient {
-    const client = new LlmClient(debrief, "command", {
+    const client = new LlmClient(debrief, "server", {
       apiKey: "sk-test-key",
       timeoutMs: 500, // short timeout for tests
     });
@@ -595,7 +595,7 @@ describe("LlmClient — provider detection", () => {
 
   it("defaults to anthropic provider when no config or env var", () => {
     const debrief = new DecisionDebrief();
-    const client = new LlmClient(debrief, "command");
+    const client = new LlmClient(debrief, "server");
     const internal = client as unknown as { _provider: LlmSdkProvider };
     expect(internal._provider).toBe("anthropic");
   });
@@ -603,7 +603,7 @@ describe("LlmClient — provider detection", () => {
   it("reads provider from SYNTH_LLM_PROVIDER env var", () => {
     process.env.SYNTH_LLM_PROVIDER = "bedrock";
     const debrief = new DecisionDebrief();
-    const client = new LlmClient(debrief, "command");
+    const client = new LlmClient(debrief, "server");
     const internal = client as unknown as { _provider: LlmSdkProvider };
     expect(internal._provider).toBe("bedrock");
   });
@@ -611,7 +611,7 @@ describe("LlmClient — provider detection", () => {
   it("explicit config.provider takes precedence over env var", () => {
     process.env.SYNTH_LLM_PROVIDER = "bedrock";
     const debrief = new DecisionDebrief();
-    const client = new LlmClient(debrief, "command", { provider: "vertex" });
+    const client = new LlmClient(debrief, "server", { provider: "vertex" });
     const internal = client as unknown as { _provider: LlmSdkProvider };
     expect(internal._provider).toBe("vertex");
   });
@@ -619,7 +619,7 @@ describe("LlmClient — provider detection", () => {
   it("reads base URL from SYNTH_LLM_BASE_URL env var", () => {
     process.env.SYNTH_LLM_BASE_URL = "http://my-ollama:11434/v1";
     const debrief = new DecisionDebrief();
-    const client = new LlmClient(debrief, "command");
+    const client = new LlmClient(debrief, "server");
     const internal = client as unknown as { _baseUrl: string | undefined };
     expect(internal._baseUrl).toBe("http://my-ollama:11434/v1");
   });
@@ -627,7 +627,7 @@ describe("LlmClient — provider detection", () => {
   it("explicit config.baseUrl takes precedence over env var", () => {
     process.env.SYNTH_LLM_BASE_URL = "http://env-url/v1";
     const debrief = new DecisionDebrief();
-    const client = new LlmClient(debrief, "command", {
+    const client = new LlmClient(debrief, "server", {
       baseUrl: "http://config-url/v1",
     });
     const internal = client as unknown as { _baseUrl: string | undefined };
@@ -636,7 +636,7 @@ describe("LlmClient — provider detection", () => {
 
   it("config.model overrides reasoning model (but not classification)", () => {
     const debrief = new DecisionDebrief();
-    const client = new LlmClient(debrief, "command", {
+    const client = new LlmClient(debrief, "server", {
       model: "llama3.2",
     });
     const internal = client as unknown as {
@@ -650,7 +650,7 @@ describe("LlmClient — provider detection", () => {
 
   it("config.reasoningModel takes precedence over config.model", () => {
     const debrief = new DecisionDebrief();
-    const client = new LlmClient(debrief, "command", {
+    const client = new LlmClient(debrief, "server", {
       model: "llama3.2",
       reasoningModel: "custom-sonnet",
     });
@@ -662,7 +662,7 @@ describe("LlmClient — provider detection", () => {
     const debrief = new DecisionDebrief();
     const providers: LlmSdkProvider[] = ["anthropic", "bedrock", "vertex", "openai-compatible"];
     for (const p of providers) {
-      const client = new LlmClient(debrief, "command", { provider: p });
+      const client = new LlmClient(debrief, "server", { provider: p });
       const internal = client as unknown as { _provider: LlmSdkProvider };
       expect(internal._provider).toBe(p);
     }
@@ -686,7 +686,7 @@ describe("LlmClient — isAvailable per provider", () => {
   // --- anthropic ---
   it("anthropic: available when API key is set", () => {
     const debrief = new DecisionDebrief();
-    const client = new LlmClient(debrief, "command", {
+    const client = new LlmClient(debrief, "server", {
       provider: "anthropic",
       apiKey: "sk-test-key",
     });
@@ -695,7 +695,7 @@ describe("LlmClient — isAvailable per provider", () => {
 
   it("anthropic: not available when API key is missing", () => {
     const debrief = new DecisionDebrief();
-    const client = new LlmClient(debrief, "command", {
+    const client = new LlmClient(debrief, "server", {
       provider: "anthropic",
       apiKey: undefined,
     });
@@ -706,21 +706,21 @@ describe("LlmClient — isAvailable per provider", () => {
   it("bedrock: available when AWS_REGION is set", () => {
     process.env.AWS_REGION = "us-east-1";
     const debrief = new DecisionDebrief();
-    const client = new LlmClient(debrief, "command", { provider: "bedrock" });
+    const client = new LlmClient(debrief, "server", { provider: "bedrock" });
     expect(client.isAvailable()).toBe(true);
   });
 
   it("bedrock: not available when AWS_REGION is missing", () => {
     delete process.env.AWS_REGION;
     const debrief = new DecisionDebrief();
-    const client = new LlmClient(debrief, "command", { provider: "bedrock" });
+    const client = new LlmClient(debrief, "server", { provider: "bedrock" });
     expect(client.isAvailable()).toBe(false);
   });
 
   it("bedrock: not available when AWS_REGION is empty string", () => {
     process.env.AWS_REGION = "";
     const debrief = new DecisionDebrief();
-    const client = new LlmClient(debrief, "command", { provider: "bedrock" });
+    const client = new LlmClient(debrief, "server", { provider: "bedrock" });
     expect(client.isAvailable()).toBe(false);
   });
 
@@ -729,7 +729,7 @@ describe("LlmClient — isAvailable per provider", () => {
     process.env.CLOUD_ML_REGION = "us-central1";
     process.env.ANTHROPIC_VERTEX_PROJECT_ID = "my-project";
     const debrief = new DecisionDebrief();
-    const client = new LlmClient(debrief, "command", { provider: "vertex" });
+    const client = new LlmClient(debrief, "server", { provider: "vertex" });
     expect(client.isAvailable()).toBe(true);
   });
 
@@ -737,7 +737,7 @@ describe("LlmClient — isAvailable per provider", () => {
     delete process.env.CLOUD_ML_REGION;
     process.env.ANTHROPIC_VERTEX_PROJECT_ID = "my-project";
     const debrief = new DecisionDebrief();
-    const client = new LlmClient(debrief, "command", { provider: "vertex" });
+    const client = new LlmClient(debrief, "server", { provider: "vertex" });
     expect(client.isAvailable()).toBe(false);
   });
 
@@ -745,7 +745,7 @@ describe("LlmClient — isAvailable per provider", () => {
     process.env.CLOUD_ML_REGION = "us-central1";
     delete process.env.ANTHROPIC_VERTEX_PROJECT_ID;
     const debrief = new DecisionDebrief();
-    const client = new LlmClient(debrief, "command", { provider: "vertex" });
+    const client = new LlmClient(debrief, "server", { provider: "vertex" });
     expect(client.isAvailable()).toBe(false);
   });
 
@@ -753,14 +753,14 @@ describe("LlmClient — isAvailable per provider", () => {
     delete process.env.CLOUD_ML_REGION;
     delete process.env.ANTHROPIC_VERTEX_PROJECT_ID;
     const debrief = new DecisionDebrief();
-    const client = new LlmClient(debrief, "command", { provider: "vertex" });
+    const client = new LlmClient(debrief, "server", { provider: "vertex" });
     expect(client.isAvailable()).toBe(false);
   });
 
   // --- openai-compatible ---
   it("openai-compatible: available when baseUrl is set via config", () => {
     const debrief = new DecisionDebrief();
-    const client = new LlmClient(debrief, "command", {
+    const client = new LlmClient(debrief, "server", {
       provider: "openai-compatible",
       baseUrl: "http://localhost:11434/v1",
     });
@@ -770,7 +770,7 @@ describe("LlmClient — isAvailable per provider", () => {
   it("openai-compatible: available when SYNTH_LLM_BASE_URL env var is set", () => {
     process.env.SYNTH_LLM_BASE_URL = "http://localhost:11434/v1";
     const debrief = new DecisionDebrief();
-    const client = new LlmClient(debrief, "command", {
+    const client = new LlmClient(debrief, "server", {
       provider: "openai-compatible",
     });
     expect(client.isAvailable()).toBe(true);
@@ -779,7 +779,7 @@ describe("LlmClient — isAvailable per provider", () => {
   it("openai-compatible: not available when baseUrl is missing", () => {
     delete process.env.SYNTH_LLM_BASE_URL;
     const debrief = new DecisionDebrief();
-    const client = new LlmClient(debrief, "command", {
+    const client = new LlmClient(debrief, "server", {
       provider: "openai-compatible",
     });
     expect(client.isAvailable()).toBe(false);
@@ -787,7 +787,7 @@ describe("LlmClient — isAvailable per provider", () => {
 
   it("openai-compatible: not available when baseUrl is empty string", () => {
     const debrief = new DecisionDebrief();
-    const client = new LlmClient(debrief, "command", {
+    const client = new LlmClient(debrief, "server", {
       provider: "openai-compatible",
       baseUrl: "",
     });
@@ -802,7 +802,7 @@ describe("LlmClient — isAvailable per provider", () => {
 describe("LlmClient — provider in debrief", () => {
   it("records provider in debrief context for anthropic", async () => {
     const debrief = new DecisionDebrief();
-    const client = new LlmClient(debrief, "command", {
+    const client = new LlmClient(debrief, "server", {
       provider: "anthropic",
       apiKey: undefined,
     });
@@ -815,7 +815,7 @@ describe("LlmClient — provider in debrief", () => {
 
   it("records provider in debrief context for bedrock", async () => {
     const debrief = new DecisionDebrief();
-    const client = new LlmClient(debrief, "command", { provider: "bedrock" });
+    const client = new LlmClient(debrief, "server", { provider: "bedrock" });
 
     await client.reason(makeParams());
 
@@ -825,7 +825,7 @@ describe("LlmClient — provider in debrief", () => {
 
   it("records provider in debrief context for openai-compatible", async () => {
     const debrief = new DecisionDebrief();
-    const client = new LlmClient(debrief, "command", {
+    const client = new LlmClient(debrief, "server", {
       provider: "openai-compatible",
     });
 
@@ -1050,7 +1050,7 @@ describe("LlmClient — missing provider SDK", () => {
   it("bedrock: initialization fails with helpful message when SDK not installed", async () => {
     process.env.AWS_REGION = "us-east-1";
     const debrief = new DecisionDebrief();
-    const client = new LlmClient(debrief, "command", { provider: "bedrock" });
+    const client = new LlmClient(debrief, "server", { provider: "bedrock" });
 
     // The client is available (env vars set) but initialization will fail
     // because @anthropic-ai/bedrock-sdk is not installed
@@ -1070,7 +1070,7 @@ describe("LlmClient — missing provider SDK", () => {
     process.env.CLOUD_ML_REGION = "us-central1";
     process.env.ANTHROPIC_VERTEX_PROJECT_ID = "my-project";
     const debrief = new DecisionDebrief();
-    const client = new LlmClient(debrief, "command", { provider: "vertex" });
+    const client = new LlmClient(debrief, "server", { provider: "vertex" });
 
     expect(client.isAvailable()).toBe(true);
 
@@ -1093,7 +1093,7 @@ describe("LlmClient — missing provider SDK", () => {
 describe("LlmClient — fallback messages per provider", () => {
   it("anthropic: fallback mentions SYNTH_LLM_API_KEY", async () => {
     const debrief = new DecisionDebrief();
-    const client = new LlmClient(debrief, "command", {
+    const client = new LlmClient(debrief, "server", {
       provider: "anthropic",
       apiKey: undefined,
     });
@@ -1107,7 +1107,7 @@ describe("LlmClient — fallback messages per provider", () => {
   it("bedrock: fallback mentions AWS_REGION", async () => {
     delete process.env.AWS_REGION;
     const debrief = new DecisionDebrief();
-    const client = new LlmClient(debrief, "command", { provider: "bedrock" });
+    const client = new LlmClient(debrief, "server", { provider: "bedrock" });
     const result = await client.reason(makeParams());
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -1119,7 +1119,7 @@ describe("LlmClient — fallback messages per provider", () => {
     delete process.env.CLOUD_ML_REGION;
     delete process.env.ANTHROPIC_VERTEX_PROJECT_ID;
     const debrief = new DecisionDebrief();
-    const client = new LlmClient(debrief, "command", { provider: "vertex" });
+    const client = new LlmClient(debrief, "server", { provider: "vertex" });
     const result = await client.reason(makeParams());
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -1131,7 +1131,7 @@ describe("LlmClient — fallback messages per provider", () => {
   it("openai-compatible: fallback mentions SYNTH_LLM_BASE_URL", async () => {
     delete process.env.SYNTH_LLM_BASE_URL;
     const debrief = new DecisionDebrief();
-    const client = new LlmClient(debrief, "command", {
+    const client = new LlmClient(debrief, "server", {
       provider: "openai-compatible",
     });
     const result = await client.reason(makeParams());

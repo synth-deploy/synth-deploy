@@ -38,7 +38,7 @@ function makeEntries(): DebriefEntry[] {
       id: "entry-1",
       timestamp: new Date("2026-03-01T10:00:00Z"),
       partitionId: "partition-1",
-      deploymentId: "deploy-1",
+      operationId: "deploy-1",
       agent: "command",
       decisionType: "pipeline-plan",
       decision: "Deploy op-1 v1.2.3 to staging for partition-1",
@@ -54,7 +54,7 @@ function makeEntries(): DebriefEntry[] {
       id: "entry-2",
       timestamp: new Date("2026-03-01T10:01:00Z"),
       partitionId: "partition-1",
-      deploymentId: "deploy-1",
+      operationId: "deploy-1",
       agent: "command",
       decisionType: "configuration-resolved",
       decision: "Resolved 5 variables with 0 conflicts",
@@ -65,7 +65,7 @@ function makeEntries(): DebriefEntry[] {
       id: "entry-3",
       timestamp: new Date("2026-03-01T10:03:00Z"),
       partitionId: "partition-1",
-      deploymentId: "deploy-1",
+      operationId: "deploy-1",
       agent: "command",
       decisionType: "deployment-failure",
       decision: "Deployment failed: health check returned 503 after 3 retries",
@@ -83,7 +83,7 @@ function makeSuccessEntries(): DebriefEntry[] {
       id: "entry-s1",
       timestamp: new Date("2026-03-01T10:00:00Z"),
       partitionId: "partition-1",
-      deploymentId: "deploy-s1",
+      operationId: "deploy-s1",
       agent: "command",
       decisionType: "pipeline-plan",
       decision: "Deploy op-1 v2.0.0 to production",
@@ -99,7 +99,7 @@ function makeSuccessEntries(): DebriefEntry[] {
       id: "entry-s2",
       timestamp: new Date("2026-03-01T10:02:00Z"),
       partitionId: "partition-1",
-      deploymentId: "deploy-s1",
+      operationId: "deploy-s1",
       agent: "command",
       decisionType: "deployment-completion",
       decision: "Deployment completed successfully",
@@ -275,7 +275,7 @@ describe("generatePostmortemAsync — LLM-powered postmortem", () => {
 
     // Partition and deployment context are set for debrief recording
     expect(callArgs.partitionId).toBe("partition-1");
-    expect(callArgs.deploymentId).toBe("deploy-1");
+    expect(callArgs.operationId).toBe("deploy-1");
 
     // Max tokens is large enough for a full postmortem
     expect(callArgs.maxTokens).toBe(4096);

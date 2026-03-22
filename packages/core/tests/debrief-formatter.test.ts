@@ -11,8 +11,8 @@ function makeEntry(overrides: Partial<DebriefEntry> = {}): DebriefEntry {
     id: "entry-1",
     timestamp: new Date("2026-03-01T14:30:45.123Z"),
     partitionId: "partition-acme",
-    deploymentId: "deploy-abcdef1234567890",
-    agent: "command",
+    operationId: "deploy-abcdef1234567890",
+    agent: "server",
     decisionType: "pipeline-plan",
     decision: "Deploy web-app v2.1.0 to production",
     reasoning: "All preconditions met. Health check passed.",
@@ -73,13 +73,13 @@ describe("formatDebriefEntry — null/missing fields", () => {
     expect(output).toContain("Partition: system");
   });
 
-  it("shows 'n/a' when deploymentId is null", () => {
-    const output = formatDebriefEntry(makeEntry({ deploymentId: null }));
+  it("shows 'n/a' when operationId is null", () => {
+    const output = formatDebriefEntry(makeEntry({ operationId: null }));
     expect(output).toContain("Deployment: n/a");
   });
 
-  it("handles both partitionId and deploymentId being null", () => {
-    const output = formatDebriefEntry(makeEntry({ partitionId: null, deploymentId: null }));
+  it("handles both partitionId and operationId being null", () => {
+    const output = formatDebriefEntry(makeEntry({ partitionId: null, operationId: null }));
     expect(output).toContain("Partition: system");
     expect(output).toContain("Deployment: n/a");
   });

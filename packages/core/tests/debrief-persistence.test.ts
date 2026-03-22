@@ -21,8 +21,8 @@ function createTestDebrief(): PersistentDecisionDebrief {
 function makeParams(overrides: Partial<DebriefRecordParams> = {}): DebriefRecordParams {
   return {
     partitionId: "partition-1",
-    deploymentId: "deploy-1",
-    agent: "command",
+    operationId: "deploy-1",
+    agent: "server",
     decisionType: "pipeline-plan",
     decision: "Deploy web-app v1.0.0 to production",
     reasoning: "All preconditions met.",
@@ -72,18 +72,18 @@ describe("PersistentDecisionDebrief — write/read cycle", () => {
     debrief.close();
   });
 
-  it("records entries with null partitionId and deploymentId", () => {
+  it("records entries with null partitionId and operationId", () => {
     const debrief = createTestDebrief();
     const entry = debrief.record(makeParams({
       partitionId: null,
-      deploymentId: null,
+      operationId: null,
       decisionType: "system",
     }));
 
     const fetched = debrief.getById(entry.id);
     expect(fetched).toBeDefined();
     expect(fetched!.partitionId).toBeNull();
-    expect(fetched!.deploymentId).toBeNull();
+    expect(fetched!.operationId).toBeNull();
 
     debrief.close();
   });
@@ -92,8 +92,8 @@ describe("PersistentDecisionDebrief — write/read cycle", () => {
     const debrief = createTestDebrief();
     const entry = debrief.record({
       partitionId: "p1",
-      deploymentId: null,
-      agent: "command",
+      operationId: null,
+      agent: "server",
       decisionType: "system",
       decision: "test",
       reasoning: "test",
@@ -124,15 +124,15 @@ describe("PersistentDecisionDebrief — write/read cycle", () => {
 // ---------------------------------------------------------------------------
 
 describe("PersistentDecisionDebrief — query methods", () => {
-  it("getByDeployment returns entries for a specific deployment", () => {
+  it("getByOperation returns entries for a specific deployment", () => {
     const debrief = createTestDebrief();
-    debrief.record(makeParams({ deploymentId: "deploy-A" }));
-    debrief.record(makeParams({ deploymentId: "deploy-A" }));
-    debrief.record(makeParams({ deploymentId: "deploy-B" }));
+    debrief.record(makeParams({ operationId: "deploy-A" }));
+    debrief.record(makeParams({ operationId: "deploy-A" }));
+    debrief.record(makeParams({ operationId: "deploy-B" }));
 
-    const results = debrief.getByDeployment("deploy-A");
+    const results = debrief.getByOperation("deploy-A");
     expect(results).toHaveLength(2);
-    expect(results.every(e => e.deploymentId === "deploy-A")).toBe(true);
+    expect(results.every(e => e.operationId === "deploy-A")).toBe(true);
 
     debrief.close();
   });
@@ -231,9 +231,9 @@ describe("PersistentDecisionDebrief — query methods", () => {
     debrief.close();
   });
 
-  it("getByDeployment returns empty array for nonexistent deployment", () => {
+  it("getByOperation returns empty array for nonexistent deployment", () => {
     const debrief = createTestDebrief();
-    expect(debrief.getByDeployment("nonexistent")).toEqual([]);
+    expect(debrief.getByOperation("nonexistent")).toEqual([]);
     debrief.close();
   });
 });
@@ -307,7 +307,7 @@ describe("PersistentDecisionDebrief — error propagation", () => {
 
     // Read methods catch errors and return safe defaults
     expect(debrief.getById(entry.id)).toBeUndefined();
-    expect(debrief.getByDeployment("deploy-1")).toEqual([]);
+    expect(debrief.getByOperation("deploy-1")).toEqual([]);
     expect(debrief.getByPartition("partition-1")).toEqual([]);
     expect(debrief.getByType("pipeline-plan")).toEqual([]);
     expect(debrief.getByTimeRange(new Date(), new Date())).toEqual([]);
