@@ -41,7 +41,7 @@ export type OperationInput =
   | { type: "query"; intent: string }
   | { type: "investigate"; intent: string; allowWrite?: boolean }
   | { type: "trigger"; condition: string; responseIntent: string; parameters?: Record<string, unknown> }
-  | { type: "composite"; operations: OperationInput[] };
+  | { type: "composite"; operations: OperationInput[] }; // not yet implemented
 
 export type OperationType = OperationInput["type"];
 

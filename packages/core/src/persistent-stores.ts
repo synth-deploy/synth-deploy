@@ -785,7 +785,8 @@ export class PersistentDeploymentStore {
            completed_at = excluded.completed_at,
            failure_reason = excluded.failure_reason,
            intent = excluded.intent,
-           findings = excluded.findings`,
+           findings = excluded.findings`
+      // lineage and retry_of are immutable after creation; not included in ON CONFLICT UPDATE
       ),
       getById: db.prepare(`SELECT * FROM deployments WHERE id = ?`),
       getByPartition: db.prepare(
@@ -926,8 +927,9 @@ function rowToOperation(row: DeploymentRow): Operation {
   } else if (row.input_json) {
     input = JSON.parse(row.input_json) as OperationInput;
   } else {
-    // Fallback: treat as deploy with empty artifactId (should not occur for well-formed rows)
-    input = { type: 'deploy', artifactId: '' };
+    // Should never occur: non-deploy row missing input_json indicates data corruption
+    console.warn(`[Synth] rowToOperation: row ${row.id} has operation_type="${opType}" but no input_json — data may be corrupt`);
+    throw new Error(`Operation ${row.id} has type "${opType}" but missing input_json`);
   }
 
   const operation: Operation = {
