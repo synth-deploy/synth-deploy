@@ -573,23 +573,6 @@ export async function recordPreFlightResponse(params: {
   });
 }
 
-// --- Canvas Query ---
-
-export interface CanvasQueryResult {
-  action: "navigate" | "data" | "create" | "answer";
-  view: string;
-  params: Record<string, string>;
-  title?: string;
-  content?: string;
-}
-
-export async function queryAgent(query: string, conversationId?: string): Promise<CanvasQueryResult> {
-  return fetchJson("/api/agent/query", {
-    method: "POST",
-    body: JSON.stringify({ query, conversationId }),
-  });
-}
-
 // --- Settings ---
 
 export async function getSettings(): Promise<AppSettings> {

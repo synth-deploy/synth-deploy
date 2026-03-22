@@ -338,13 +338,6 @@ export const TelemetryQuerySchema = z.object({
   offset: z.coerce.number().int().nonnegative().optional(),
 });
 
-// --- Agent ---
-
-export const QueryRequestSchema = z.object({
-  query: z.string().min(1),
-  conversationId: z.string().optional(),
-});
-
 // --- Auth ---
 
 export const LoginSchema = z.object({

@@ -1,9 +1,6 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useRef } from "react";
 import { useCanvas } from "../context/CanvasContext.js";
-import type { CanvasQueryResult } from "../api.js";
-import SynthChannel from "./SynthChannel.js";
 import SynthMark from "./SynthMark.js";
-import StructuredOutputPanel from "./StructuredOutputPanel.js";
 import OperationalOverview from "./canvas/OperationalOverview.js";
 import PartitionDetailPanel from "./canvas/PartitionDetailPanel.js";
 import EnvironmentDetailPanel from "./canvas/EnvironmentDetailPanel.js";
@@ -25,15 +22,11 @@ import DeploymentGraphPanel from "./canvas/DeploymentGraphPanel.js";
 import TopologyPanel from "./canvas/TopologyPanel.js";
 import ErrorBoundary from "./ErrorBoundary.js";
 
-const MIN_CHAT_WIDTH = 220;
-const MAX_CHAT_WIDTH = 640;
-const DEFAULT_CHAT_WIDTH = 340;
-
 const TAB_ORDER = ["operation-authoring", "artifact-catalog", "topology", "debrief"] as const;
 type TabType = typeof TAB_ORDER[number];
 
 export default function AgentCanvas() {
-  const { currentPanel, pushPanel, minimizedDeployment, restoreDeployment } = useCanvas();
+  const { currentPanel, minimizedDeployment, restoreDeployment } = useCanvas();
 
   // Compute directional slide for tab transitions during render (no effect delay)
   const prevPanelTypeRef = useRef<string>(currentPanel.type);
@@ -45,62 +38,6 @@ export default function AgentCanvas() {
       slideDir = nextIdx > prevIdx ? "right" : "left";
     }
     prevPanelTypeRef.current = currentPanel.type;
-  }
-
-  // chatOpen drives the layout: false = strip bar at bottom, true = side panel
-  const [chatOpen, setChatOpen] = useState(false);
-
-  // For answer-type responses, right panel shows structured output instead of canvas panel
-  const [answerContent, setAnswerContent] = useState<string | null>(null);
-  const [answerTitle, setAnswerTitle] = useState<string | undefined>(undefined);
-
-  // Resizable split
-  const [splitWidth, setSplitWidth] = useState(DEFAULT_CHAT_WIDTH);
-  const isDragging = useRef(false);
-  const dragStartX = useRef(0);
-  const dragStartWidth = useRef(0);
-
-  const handleDragStart = useCallback((e: React.MouseEvent) => {
-    isDragging.current = true;
-    dragStartX.current = e.clientX;
-    dragStartWidth.current = splitWidth;
-    e.preventDefault();
-  }, [splitWidth]);
-
-  useEffect(() => {
-    function onMouseMove(e: MouseEvent) {
-      if (!isDragging.current) return;
-      const delta = e.clientX - dragStartX.current;
-      setSplitWidth(Math.max(MIN_CHAT_WIDTH, Math.min(MAX_CHAT_WIDTH, dragStartWidth.current + delta)));
-    }
-    function onMouseUp() { isDragging.current = false; }
-    document.addEventListener("mousemove", onMouseMove);
-    document.addEventListener("mouseup", onMouseUp);
-    return () => {
-      document.removeEventListener("mousemove", onMouseMove);
-      document.removeEventListener("mouseup", onMouseUp);
-    };
-  }, []);
-
-  function handleAgentResult(result: CanvasQueryResult) {
-    setAnswerContent(null);
-    setAnswerTitle(undefined);
-    switch (result.action) {
-      case "navigate":
-      case "data":
-        pushPanel({
-          type: result.view,
-          title: result.title ?? result.view,
-          params: result.params ?? {},
-        });
-        break;
-    }
-  }
-
-  function handleDismissChat() {
-    setChatOpen(false);
-    setAnswerContent(null);
-    setAnswerTitle(undefined);
   }
 
   function renderPanel() {
@@ -260,16 +197,8 @@ export default function AgentCanvas() {
     }
   }
 
-  const scope = currentPanel.type === "partition-detail" ? currentPanel.title : undefined;
-  const hideChannel = currentPanel.type === "operation-authoring";
-
-  // SynthChannel is always rendered as a sibling of the canvas-main-content div
-  // so React preserves its internal state (messages) when chatOpen switches.
-  // In split mode: channel (order:1) | drag-handle (order:2) | content (order:3)
-  // In column mode: content (default) above, strip bar below
   return (
-    <div className={chatOpen ? "canvas-split-layout" : "canvas-column-layout"}>
-      {/* Canvas content — always DOM-first so React identity is stable */}
+    <div className="canvas-column-layout">
       <div className="canvas-main-content">
         <ErrorBoundary key={currentPanel.id}>
           <div
@@ -277,19 +206,7 @@ export default function AgentCanvas() {
             className={slideDir ? `panel-enter-from-${slideDir}` : undefined}
             style={{ height: "100%", width: "100%" }}
           >
-            {answerContent && chatOpen
-              ? <StructuredOutputPanel
-                  content={answerContent}
-                  title={answerTitle}
-                  onDismiss={() => { setAnswerContent(null); setAnswerTitle(undefined); }}
-                  onNavigate={(view, params) => {
-                    setAnswerContent(null);
-                    setAnswerTitle(undefined);
-                    pushPanel({ type: view, title: params.id ?? view, params });
-                  }}
-                />
-              : renderPanel()
-            }
+            {renderPanel()}
           </div>
         </ErrorBoundary>
         {minimizedDeployment && (
@@ -332,24 +249,6 @@ export default function AgentCanvas() {
           </div>
         )}
       </div>
-
-      {/* Drag handle — only visible in split mode, between channel and content */}
-      {chatOpen && !hideChannel && (
-        <div className="canvas-split-handle" onMouseDown={handleDragStart} />
-      )}
-
-      {/* SynthChannel — always DOM-last; CSS order puts it left in split, bottom in column */}
-      {!hideChannel && (
-        <SynthChannel
-          scope={scope}
-          mode={chatOpen ? "panel" : "strip"}
-          onQuerySubmit={() => setChatOpen(true)}
-          onAgentResult={handleAgentResult}
-          onStructuredContent={(text, title) => { setAnswerContent(text); setAnswerTitle(title); }}
-          onDismiss={handleDismissChat}
-          style={chatOpen ? { width: splitWidth, flexShrink: 0 } : undefined}
-        />
-      )}
     </div>
   );
 }

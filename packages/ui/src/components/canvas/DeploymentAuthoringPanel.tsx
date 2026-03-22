@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState } from "react";
 import {
   listArtifacts,
   listPartitions,
@@ -7,7 +7,6 @@ import {
   listDeployments,
   createDeployment,
   recordPreFlightResponse,
-  queryAgent,
 } from "../../api.js";
 import type { Artifact, Partition, Environment, Deployment } from "../../types.js";
 import type { EnvoyRegistryEntry, PreFlightContext } from "../../api.js";
@@ -60,11 +59,6 @@ export default function OperationAuthoringPanel({ title, preselectedArtifactId, 
 
   const [allowWrite, setAllowWrite] = useState(false);
 
-  const [askQuestion, setAskQuestion] = useState("");
-  const [askTyping, setAskTyping] = useState(false);
-  const [askResponse, setAskResponse] = useState<string | null>(null);
-  const askConvId = useRef(crypto.randomUUID());
-
   function toggleArtifact(id: string) {
     setSelectedArtifactIds((prev) =>
       prev.includes(id) ? prev.filter((a) => a !== id) : [...prev, id],
@@ -110,22 +104,6 @@ export default function OperationAuthoringPanel({ title, preselectedArtifactId, 
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setSubmitting(false);
-    }
-  }
-
-  async function handleAsk() {
-    if (!askQuestion.trim()) return;
-    const q = askQuestion.trim();
-    setAskTyping(true);
-    setAskResponse(null);
-    setAskQuestion("");
-    try {
-      const result = await queryAgent(q, askConvId.current);
-      setAskResponse(result.title ?? "Let me look into that.");
-    } catch {
-      setAskResponse("Unable to reach the agent right now.");
-    } finally {
-      setAskTyping(false);
     }
   }
 
@@ -883,49 +861,6 @@ export default function OperationAuthoringPanel({ title, preselectedArtifactId, 
           </div>
         )}
 
-        {/* Ask bar */}
-        <div className="nd-ask-bar">
-          <div style={{ display: "flex", gap: 8 }}>
-            <input
-              className="nd-ask-input"
-              value={askQuestion}
-              onChange={(e) => setAskQuestion(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") handleAsk();
-              }}
-              placeholder="Ask Synth about your systems…"
-            />
-            <button
-              className="nd-ask-btn"
-              onClick={handleAsk}
-              disabled={!askQuestion.trim()}
-            >
-              <svg
-                width="13"
-                height="13"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <line x1="22" y1="2" x2="11" y2="13" />
-                <polygon points="22 2 15 22 11 13 2 9 22 2" />
-              </svg>
-              Ask
-            </button>
-          </div>
-          {askTyping && (
-            <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 8 }}>
-              <SynthMark size={14} active />
-              <span style={{ fontSize: 13, color: "var(--text-muted)", fontStyle: "italic" }}>
-                Reasoning…
-              </span>
-            </div>
-          )}
-          {askResponse && <div className="nd-ask-response">{askResponse}</div>}
-        </div>
       </div>
     </CanvasPanelHost>
   );
