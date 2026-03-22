@@ -146,6 +146,24 @@ export interface InvestigationFindings extends QueryFindings {
   };
 }
 
+export const QueryFindingsSchema = z.object({
+  targetsSurveyed: z.array(z.string()),
+  summary: z.string(),
+  findings: z.array(z.object({
+    target: z.string(),
+    observations: z.array(z.string()),
+  })),
+});
+
+export const InvestigationFindingsSchema = QueryFindingsSchema.extend({
+  rootCause: z.string().nullable().optional(),
+  proposedResolution: z.object({
+    intent: z.string(),
+    operationType: z.enum(["maintain", "deploy"]),
+    parameters: z.record(z.unknown()).optional(),
+  }).optional(),
+});
+
 // --- Operation (unified lifecycle) ---
 
 export interface Operation {

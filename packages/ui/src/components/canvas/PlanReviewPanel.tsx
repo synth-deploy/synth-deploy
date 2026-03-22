@@ -17,8 +17,6 @@ import type {
   DeploymentEnrichment,
   DeploymentRecommendation,
   PlannedStep,
-  QueryFindings,
-  InvestigationFindings,
 } from "../../types.js";
 import { useCanvas } from "../../context/CanvasContext.js";
 import { useQuery } from "../../hooks/useQuery.js";
@@ -148,6 +146,11 @@ function FindingsView({
       )}
 
       {/* Investigation-specific: proposed resolution */}
+      {isInvestigation && !deployment.investigationFindings?.proposedResolution && (
+        <div style={{ marginTop: 16, padding: "12px 14px", background: "var(--surface-2)", borderRadius: 6, fontSize: 13, color: "var(--text-muted)" }}>
+          No resolution proposed — investigation found no actionable root cause.
+        </div>
+      )}
       {isInvestigation && deployment.investigationFindings?.proposedResolution && (
         <div style={{ marginBottom: 20 }}>
           <div className="section-label" style={{ marginBottom: 8 }}>Proposed resolution</div>
@@ -449,7 +452,7 @@ export default function PlanReviewPanel({ deploymentId }: Props) {
           intent: res.intent,
           environmentId: deployment.environmentId,
           partitionId: deployment.partitionId,
-        } as any);
+        });
         pushPanel({
           type: "plan-review",
           title: "Review Resolution Plan",
@@ -461,7 +464,7 @@ export default function PlanReviewPanel({ deploymentId }: Props) {
     };
 
     return (
-      <CanvasPanelHost title="Query Results">
+      <CanvasPanelHost title={deployment.investigationFindings ? "Investigation Results" : "Query Results"}>
         <FindingsView deployment={deployment} onLaunchResolution={handleLaunchResolution} />
       </CanvasPanelHost>
     );

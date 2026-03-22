@@ -106,7 +106,7 @@ export class ProbeExecutor {
     return result;
   }
 
-  async execute(command: string): Promise<ProbeResult> {
+  async execute(command: string, opts?: { allowWrite?: boolean }): Promise<ProbeResult> {
     // -----------------------------------------------------------------------
     // Layer 0: Cache lookup
     // -----------------------------------------------------------------------
@@ -116,24 +116,26 @@ export class ProbeExecutor {
     }
     if (cached) this._cache.delete(command);
 
-    const result = await this._executeUncached(command);
+    const result = await this._executeUncached(command, opts);
     // Cache all results (including blocked/failed) — the outcome won't change
     // within the TTL window.
     return this._cacheResult(command, result);
   }
 
-  private async _executeUncached(command: string): Promise<ProbeResult> {
+  private async _executeUncached(command: string, opts?: { allowWrite?: boolean }): Promise<ProbeResult> {
     // -----------------------------------------------------------------------
-    // Layer 1: Pattern rejection
+    // Layer 1: Pattern rejection (skipped when write access is authorized)
     // -----------------------------------------------------------------------
-    for (const { pattern, reason } of BLOCKED_PATTERNS) {
-      if (pattern.test(command)) {
-        return {
-          blocked: true,
-          blockedReason:
-            `Command blocked: ${reason} is not permitted during the planning phase. ` +
-            `Try a read-only equivalent (e.g. ls, stat, cat, which, ps, df, id, uname).`,
-        };
+    if (!opts?.allowWrite) {
+      for (const { pattern, reason } of BLOCKED_PATTERNS) {
+        if (pattern.test(command)) {
+          return {
+            blocked: true,
+            blockedReason:
+              `Command blocked: ${reason} is not permitted during the planning phase. ` +
+              `Try a read-only equivalent (e.g. ls, stat, cat, which, ps, df, id, uname).`,
+          };
+        }
       }
     }
 

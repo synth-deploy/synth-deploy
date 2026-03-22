@@ -295,7 +295,10 @@ export async function getWhatsNew(deploymentId: string): Promise<WhatsNewResult>
 }
 
 export async function createDeployment(trigger: {
-  artifactId: string;
+  artifactId?: string;
+  type?: string;
+  intent?: string;
+  allowWrite?: boolean;
   environmentId?: string;
   partitionId?: string;
   envoyId?: string;

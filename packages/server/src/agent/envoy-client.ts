@@ -238,7 +238,10 @@ export class EnvoyClient {
    */
   async requestPlan(params: {
     operationId: string;
-    artifact: {
+    operationType?: "deploy" | "query" | "investigate";
+    intent?: string;
+    allowWrite?: boolean;
+    artifact?: {
       id: string;
       name: string;
       type: string;
@@ -263,10 +266,19 @@ export class EnvoyClient {
     version: string;
     resolvedVariables: Record<string, string>;
     refinementFeedback?: string;
-  }): Promise<{ plan: DeploymentPlan; rollbackPlan: DeploymentPlan; delta?: string; assessmentSummary?: string; blocked?: boolean; blockReason?: string }> {
+  }): Promise<{
+    plan: DeploymentPlan;
+    rollbackPlan: DeploymentPlan;
+    delta?: string;
+    assessmentSummary?: string;
+    blocked?: boolean;
+    blockReason?: string;
+    queryFindings?: { targetsSurveyed: string[]; summary: string; findings: Array<{ target: string; observations: string[] }> };
+    investigationFindings?: { targetsSurveyed: string[]; summary: string; findings: Array<{ target: string; observations: string[] }>; rootCause?: string; proposedResolution?: { intent: string; operationType: string; parameters?: Record<string, unknown> } };
+  }> {
     // Forward the LLM API key so the Envoy can use it if it started without one.
     // Sent in the request body (not headers) over the trusted server↔envoy channel.
-    serverLog("ENVOY-PLAN-REQUEST", { operationId: params.operationId, envoyUrl: this.baseUrl, artifact: params.artifact.name, version: params.version, environment: params.environment.name });
+    serverLog("ENVOY-PLAN-REQUEST", { operationId: params.operationId, envoyUrl: this.baseUrl, artifact: params.artifact?.name, version: params.version, environment: params.environment.name });
     const llmApiKey = process.env.SYNTH_LLM_API_KEY;
     const planStart = Date.now();
     const response = await fetchWithRetry(
@@ -285,7 +297,7 @@ export class EnvoyClient {
       throw new Error(`Envoy planning failed (HTTP ${response.status}): ${body}`);
     }
 
-    const planResult = (await response.json()) as { plan: DeploymentPlan; rollbackPlan: DeploymentPlan; delta?: string; assessmentSummary?: string; blocked?: boolean; blockReason?: string };
+    const planResult = (await response.json()) as Awaited<ReturnType<typeof this.requestPlan>>;
     serverLog("ENVOY-PLAN-RECEIVED", { operationId: params.operationId, steps: planResult.plan?.steps?.length ?? 0, blocked: planResult.blocked ?? false, durationMs: Date.now() - planStart });
     return planResult;
   }

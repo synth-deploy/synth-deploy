@@ -124,7 +124,7 @@ export function registerOperationRoutes(
           ? { id: environment.id, name: environment.name, variables: environment.variables }
           : { id: `direct:${planningEnvoy.id}`, name: planningEnvoy.name, variables: {} };
 
-        (planningClient.requestPlan as (params: any) => Promise<any>)({
+        planningClient.requestPlan({
           operationId: deployment.id,
           operationType: deployment.input.type as "deploy" | "query" | "investigate",
           intent: deployment.intent,
@@ -142,14 +142,16 @@ export function registerOperationRoutes(
               },
             },
           } : {}),
-          ...(deployment.input.type === "investigate" ? { allowWrite: (deployment.input as any).allowWrite } : {}),
+          ...(deployment.input.type === "investigate" && "allowWrite" in deployment.input
+            ? { allowWrite: deployment.input.allowWrite }
+            : {}),
           environment: environmentForPlanning,
           partition: partition
             ? { id: partition.id, name: partition.name, variables: partition.variables }
             : undefined,
           version: deployment.version ?? "",
           resolvedVariables: resolved,
-        }).then((result: any) => {
+        }).then((result) => {
           const dep = deployments.get(deployment.id);
           if (!dep || dep.status !== "pending") return;
 
@@ -167,8 +169,8 @@ export function registerOperationRoutes(
             deployments.save(dep);
 
             const decisionType = dep.input.type === "query"
-              ? "query-findings" as Parameters<typeof debrief.record>[0]["decisionType"]
-              : "investigation-findings" as Parameters<typeof debrief.record>[0]["decisionType"];
+              ? "query-findings" as const
+              : "investigation-findings" as const;
             const findings = result.queryFindings ?? result.investigationFindings!;
             debrief.record({
               partitionId: dep.partitionId ?? null,

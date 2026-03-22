@@ -88,6 +88,8 @@ export type {
   InputBinding,
   ApiKey,
   ApiKeyId,
+  QueryFindings,
+  InvestigationFindings,
 } from "./types.js";
 
 export {
@@ -97,6 +99,8 @@ export {
   DecisionType as DecisionTypeEnum,
   DEFAULT_APP_SETTINGS,
   TASK_MODEL_META,
+  QueryFindingsSchema,
+  InvestigationFindingsSchema,
 } from "./types.js";
 export { DecisionDebrief } from "./debrief.js";
 export type { DebriefWriter, DebriefReader, DebriefRecordParams } from "./debrief.js";

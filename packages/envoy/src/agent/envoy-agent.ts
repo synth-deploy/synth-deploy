@@ -13,7 +13,8 @@ import type {
   DeploymentPlan,
   OperationPlan,
 } from "@synth-deploy/core";
-import { LlmClient, sanitizeForPrompt, maskIfSecret } from "@synth-deploy/core";
+import { LlmClient, sanitizeForPrompt, maskIfSecret, QueryFindingsSchema, InvestigationFindingsSchema } from "@synth-deploy/core";
+import type { QueryFindings, InvestigationFindings } from "@synth-deploy/core";
 import type { EnvoyKnowledgeStore, LocalDeploymentRecord } from "../state/knowledge-store.js";
 import { EnvironmentScanner } from "./environment-scanner.js";
 import type { ServerReporter } from "./server-reporter.js";
@@ -177,26 +178,7 @@ export interface PlanningResult {
   blockReason?: string;
 }
 
-export interface QueryFindings {
-  /** Envoy IDs or hostnames that were probed */
-  targetsSurveyed: string[];
-  /** LLM narrative summary of what was found */
-  summary: string;
-  /** Per-target observations */
-  findings: Array<{
-    target: string;
-    observations: string[];
-  }>;
-}
-
-export interface InvestigationFindings extends QueryFindings {
-  rootCause?: string;
-  proposedResolution?: {
-    intent: string;
-    operationType: "maintain" | "deploy";
-    parameters?: Record<string, unknown>;
-  };
-}
+export type { QueryFindings, InvestigationFindings } from "@synth-deploy/core";
 
 /**
  * Input for post-hoc rollback plan generation — used when the user requests
@@ -1382,6 +1364,53 @@ export class EnvoyAgent {
   }
 
   /**
+   * Shared probe loop for read-only operations (query and investigation).
+   * Runs the LLM probe loop, records debrief entries, and returns the final
+   * LLM text and the full probe log.
+   */
+  private async executeProbeLoop(
+    instruction: PlanningInstruction,
+    opts: {
+      systemPrompt: string;
+      promptSummary: string;
+      allowWrite?: boolean;
+    },
+  ): Promise<{ text: string | null; probeLog: string[] }> {
+    const probeLog: string[] = [];
+
+    const result = await this.llmClient!.callWithProbeLoop({
+      systemPrompt: opts.systemPrompt,
+      prompt: instruction.intent ?? "",
+      promptSummary: opts.promptSummary,
+      partitionId: instruction.partition?.id ?? null,
+      operationId: instruction.operationId,
+      onProbe: async (command: string) => {
+        const probeResult = await this.probeExecutor.execute(command, { allowWrite: opts.allowWrite });
+        const logEntry = probeResult.blocked
+          ? `Probe blocked: ${command} — ${probeResult.blockedReason}`
+          : `Probe: ${command}\n${probeResult.output}`;
+        probeLog.push(logEntry);
+
+        this.debrief.record({
+          partitionId: instruction.partition?.id ?? null,
+          operationId: instruction.operationId,
+          agent: "envoy",
+          decisionType: "environment-probe",
+          decision: probeResult.blocked ? `Probe blocked: ${command}` : `Probe executed: ${command}`,
+          reasoning: probeResult.blocked ? (probeResult.blockedReason ?? "blocked") : probeResult.output ?? "(no output)",
+          context: { command, blocked: probeResult.blocked, exitCode: probeResult.exitCode },
+        });
+
+        return probeResult.blocked
+          ? (probeResult.blockedReason ?? "Command blocked")
+          : (probeResult.output ?? "(no output)");
+      },
+    });
+
+    return { text: result.ok ? (result.text ?? null) : null, probeLog };
+  }
+
+  /**
    * Plan a read-only query operation: probe the target environment and produce
    * a structured findings report. No deployment steps are generated.
    */
@@ -1397,8 +1426,6 @@ export class EnvoyAgent {
     if (instruction.llmApiKey) {
       process.env.SYNTH_LLM_API_KEY = instruction.llmApiKey;
     }
-
-    const probeLog: string[] = [];
 
     const systemPrompt =
       `You are Synth's envoy agent performing a read-only query operation.\n\n` +
@@ -1423,41 +1450,21 @@ export class EnvoyAgent {
       `}`;
 
     let queryFindings: QueryFindings | null = null;
+    let probeLog: string[] = [];
 
     try {
-      const result = await this.llmClient.callWithProbeLoop({
+      const loopResult = await this.executeProbeLoop(instruction, {
         systemPrompt,
-        prompt: intent,
         promptSummary: `Query: ${intent}`,
-        partitionId: instruction.partition?.id ?? null,
-        operationId: instruction.operationId,
-        onProbe: async (command: string) => {
-          const probeResult = await this.probeExecutor.execute(command);
-          const logEntry = probeResult.blocked
-            ? `Probe blocked: ${command} — ${probeResult.blockedReason}`
-            : `Probe: ${command}\n${probeResult.output}`;
-          probeLog.push(logEntry);
-
-          this.debrief.record({
-            partitionId: instruction.partition?.id ?? null,
-            operationId: instruction.operationId,
-            agent: "envoy",
-            decisionType: "environment-probe",
-            decision: probeResult.blocked ? `Probe blocked: ${command}` : `Probe executed: ${command}`,
-            reasoning: probeResult.blocked ? (probeResult.blockedReason ?? "blocked") : probeResult.output ?? "(no output)",
-            context: { command, blocked: probeResult.blocked, exitCode: probeResult.exitCode },
-          });
-
-          return probeResult.blocked
-            ? (probeResult.blockedReason ?? "Command blocked")
-            : (probeResult.output ?? "(no output)");
-        },
+        allowWrite: false,
       });
+      probeLog = loopResult.probeLog;
 
-      if (result.ok) {
-        const jsonMatch = result.text?.match(/\{[\s\S]*\}/);
+      if (loopResult.text) {
+        const jsonMatch = loopResult.text.match(/\{[\s\S]*\}/);
         if (jsonMatch) {
-          queryFindings = JSON.parse(jsonMatch[0]) as QueryFindings;
+          const parsed = QueryFindingsSchema.safeParse(JSON.parse(jsonMatch[0]));
+          if (parsed.success) queryFindings = parsed.data;
         }
       }
     } catch (err) {
@@ -1465,7 +1472,7 @@ export class EnvoyAgent {
         partitionId: instruction.partition?.id ?? null,
         operationId: instruction.operationId,
         agent: "envoy",
-        decisionType: "query-findings" as Parameters<DebriefWriter["record"]>[0]["decisionType"],
+        decisionType: "query-findings",
         decision: "Query failed",
         reasoning: err instanceof Error ? err.message : String(err),
         context: { error: true },
@@ -1513,8 +1520,6 @@ export class EnvoyAgent {
       process.env.SYNTH_LLM_API_KEY = instruction.llmApiKey;
     }
 
-    const probeLog: string[] = [];
-
     const systemPrompt =
       `You are Synth's envoy agent performing a diagnostic investigation.\n\n` +
       `Your job: iteratively probe the target environment to diagnose issues. ` +
@@ -1549,41 +1554,24 @@ export class EnvoyAgent {
       `If no root cause is found, set "rootCause" to null and omit "proposedResolution".`;
 
     let investigationFindings: InvestigationFindings | null = null;
+    let probeLog: string[] = [];
 
     try {
-      const result = await this.llmClient.callWithProbeLoop({
+      const loopResult = await this.executeProbeLoop(instruction, {
         systemPrompt,
-        prompt: intent,
         promptSummary: `Investigate: ${intent}`,
-        partitionId: instruction.partition?.id ?? null,
-        operationId: instruction.operationId,
-        onProbe: async (command: string) => {
-          const probeResult = await this.probeExecutor.execute(command);
-          const logEntry = probeResult.blocked
-            ? `Probe blocked: ${command} — ${probeResult.blockedReason}`
-            : `Probe: ${command}\n${probeResult.output}`;
-          probeLog.push(logEntry);
-
-          this.debrief.record({
-            partitionId: instruction.partition?.id ?? null,
-            operationId: instruction.operationId,
-            agent: "envoy",
-            decisionType: "environment-probe",
-            decision: probeResult.blocked ? `Probe blocked: ${command}` : `Probe executed: ${command}`,
-            reasoning: probeResult.blocked ? (probeResult.blockedReason ?? "blocked") : probeResult.output ?? "(no output)",
-            context: { command, blocked: probeResult.blocked, exitCode: probeResult.exitCode },
-          });
-
-          return probeResult.blocked
-            ? (probeResult.blockedReason ?? "Command blocked")
-            : (probeResult.output ?? "(no output)");
-        },
+        allowWrite: instruction.allowWrite,
       });
+      probeLog = loopResult.probeLog;
 
-      if (result.ok) {
-        const jsonMatch = result.text?.match(/\{[\s\S]*\}/);
+      if (loopResult.text) {
+        const jsonMatch = loopResult.text.match(/\{[\s\S]*\}/);
         if (jsonMatch) {
-          investigationFindings = JSON.parse(jsonMatch[0]) as InvestigationFindings;
+          const parsed = InvestigationFindingsSchema.safeParse(JSON.parse(jsonMatch[0]));
+          if (parsed.success) {
+            const { rootCause, ...rest } = parsed.data;
+            investigationFindings = { ...rest, rootCause: rootCause ?? undefined };
+          }
         }
       }
     } catch (err) {
@@ -1591,7 +1579,7 @@ export class EnvoyAgent {
         partitionId: instruction.partition?.id ?? null,
         operationId: instruction.operationId,
         agent: "envoy",
-        decisionType: "investigation-findings" as Parameters<DebriefWriter["record"]>[0]["decisionType"],
+        decisionType: "investigation-findings",
         decision: "Investigation failed",
         reasoning: err instanceof Error ? err.message : String(err),
         context: { error: true },
