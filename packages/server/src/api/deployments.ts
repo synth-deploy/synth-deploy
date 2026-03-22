@@ -75,7 +75,7 @@ export function registerDeploymentRoutes(
 
     const deployment = {
       id: crypto.randomUUID(),
-      artifactId,
+      input: { type: "deploy" as const, artifactId, ...(version ? { artifactVersionId: version } : {}) },
       environmentId,
       partitionId,
       envoyId: targetEnvoy?.id,

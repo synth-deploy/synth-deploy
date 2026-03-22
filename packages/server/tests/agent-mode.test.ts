@@ -272,7 +272,7 @@ describe("Agent mode — LLM query classification", () => {
       undefined, { healthCheckBackoffMs: 1, executionDelayMs: 1 },
     );
 
-    qMockLlm = new LlmClient(qDiary, "command", { apiKey: "test-key" });
+    qMockLlm = new LlmClient(qDiary, "server", { apiKey: "test-key" });
     qMockLlm.classify = async () => qClassifyResponse;
     qMockLlm.isAvailable = () => true;
 

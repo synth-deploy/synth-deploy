@@ -781,7 +781,7 @@ describe("Deployment Routes", () => {
       expect(res.statusCode).toBe(201);
       const body = JSON.parse(res.payload);
       expect(body.deployment).toBeDefined();
-      expect(body.deployment.artifactId).toBe(artifactId);
+      expect((body.deployment.input as any).artifactId).toBe(artifactId);
       expect(body.deployment.partitionId).toBe(partition.id);
       expect(body.deployment.version).toBe("1.0.0");
     });
@@ -940,7 +940,7 @@ describe("Deployment Routes", () => {
       expect(res.statusCode).toBe(200);
       const body = JSON.parse(res.payload);
       expect(body.deployments).toHaveLength(1);
-      expect(body.deployments[0].artifactId).toBe(art1);
+      expect((body.deployments[0].input as any).artifactId).toBe(art1);
     });
   });
 
