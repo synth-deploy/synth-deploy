@@ -37,6 +37,8 @@ import type {
   IntakeChannel,
   IntakeChannelType,
   IntakeEvent,
+  AlertWebhookChannel,
+  AlertWebhookSource,
   FleetDeployment,
   FleetDeploymentStatus,
   FleetProgress,
@@ -342,6 +344,21 @@ export function openEntityDatabase(dbPath: string): Database.Database {
     CREATE INDEX IF NOT EXISTS idx_intake_events_channel ON intake_events(channel_id);
     CREATE INDEX IF NOT EXISTS idx_intake_events_created ON intake_events(created_at);
 
+    CREATE TABLE IF NOT EXISTS alert_webhook_channels (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      source TEXT NOT NULL,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      auth_token TEXT NOT NULL,
+      default_operation_type TEXT NOT NULL DEFAULT 'maintain',
+      default_intent TEXT,
+      environment_id TEXT,
+      partition_id TEXT,
+      envoy_id TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS registry_poller_versions (
       channel_id TEXT NOT NULL,
       version_key TEXT NOT NULL,
@@ -473,6 +490,21 @@ export function openEntityDatabase(dbPath: string): Database.Database {
       );
       CREATE INDEX IF NOT EXISTS idx_intake_events_channel ON intake_events(channel_id);
       CREATE INDEX IF NOT EXISTS idx_intake_events_created ON intake_events(created_at);
+
+      CREATE TABLE IF NOT EXISTS alert_webhook_channels (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        source TEXT NOT NULL,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        auth_token TEXT NOT NULL,
+        default_operation_type TEXT NOT NULL DEFAULT 'maintain',
+        default_intent TEXT,
+        environment_id TEXT,
+        partition_id TEXT,
+        envoy_id TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
 
       CREATE TABLE IF NOT EXISTS registry_poller_versions (
         channel_id TEXT NOT NULL,
@@ -2823,6 +2855,130 @@ export class PersistentFleetDeploymentStore {
   list(): FleetDeployment[] {
     const rows = this.stmts.list.all() as FleetDeploymentRow[];
     return rows.map(rowToFleetDeployment);
+  }
+
+  delete(id: string): boolean {
+    const result = this.stmts.deleteById.run(id);
+    return result.changes > 0;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// PersistentAlertWebhookStore — external monitoring webhook channels
+// ---------------------------------------------------------------------------
+
+interface AlertWebhookRow {
+  id: string;
+  name: string;
+  source: string;
+  enabled: number;
+  auth_token: string;
+  default_operation_type: string;
+  default_intent: string | null;
+  environment_id: string | null;
+  partition_id: string | null;
+  envoy_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+function rowToAlertWebhookChannel(row: AlertWebhookRow): AlertWebhookChannel {
+  return {
+    id: row.id,
+    name: row.name,
+    source: row.source as AlertWebhookSource,
+    enabled: row.enabled === 1,
+    authToken: row.auth_token,
+    defaultOperationType: row.default_operation_type as AlertWebhookChannel["defaultOperationType"],
+    defaultIntent: row.default_intent ?? undefined,
+    environmentId: row.environment_id ?? undefined,
+    partitionId: row.partition_id ?? undefined,
+    envoyId: row.envoy_id ?? undefined,
+    createdAt: new Date(row.created_at),
+    updatedAt: new Date(row.updated_at),
+  };
+}
+
+export class PersistentAlertWebhookStore {
+  private stmts: {
+    insert: Database.Statement;
+    getById: Database.Statement;
+    getByToken: Database.Statement;
+    list: Database.Statement;
+    update: Database.Statement;
+    deleteById: Database.Statement;
+  };
+
+  constructor(private db: Database.Database) {
+    this.stmts = {
+      insert: db.prepare(
+        `INSERT INTO alert_webhook_channels (id, name, source, enabled, auth_token, default_operation_type, default_intent, environment_id, partition_id, envoy_id, created_at, updated_at)
+         VALUES (@id, @name, @source, @enabled, @auth_token, @default_operation_type, @default_intent, @environment_id, @partition_id, @envoy_id, @created_at, @updated_at)`,
+      ),
+      getById: db.prepare(`SELECT * FROM alert_webhook_channels WHERE id = ?`),
+      getByToken: db.prepare(`SELECT * FROM alert_webhook_channels WHERE auth_token = ?`),
+      list: db.prepare(`SELECT * FROM alert_webhook_channels ORDER BY created_at ASC`),
+      update: db.prepare(
+        `UPDATE alert_webhook_channels SET name = @name, source = @source, enabled = @enabled, default_operation_type = @default_operation_type, default_intent = @default_intent, environment_id = @environment_id, partition_id = @partition_id, envoy_id = @envoy_id, updated_at = @updated_at WHERE id = @id`,
+      ),
+      deleteById: db.prepare(`DELETE FROM alert_webhook_channels WHERE id = ?`),
+    };
+  }
+
+  create(channel: Omit<AlertWebhookChannel, "id" | "createdAt" | "updatedAt">): AlertWebhookChannel {
+    const id = crypto.randomUUID();
+    const now = new Date();
+    const full: AlertWebhookChannel = { ...channel, id, createdAt: now, updatedAt: now };
+    this.stmts.insert.run({
+      id: full.id,
+      name: full.name,
+      source: full.source,
+      enabled: full.enabled ? 1 : 0,
+      auth_token: full.authToken,
+      default_operation_type: full.defaultOperationType,
+      default_intent: full.defaultIntent ?? null,
+      environment_id: full.environmentId ?? null,
+      partition_id: full.partitionId ?? null,
+      envoy_id: full.envoyId ?? null,
+      created_at: full.createdAt.toISOString(),
+      updated_at: full.updatedAt.toISOString(),
+    });
+    return full;
+  }
+
+  get(id: string): AlertWebhookChannel | undefined {
+    const row = this.stmts.getById.get(id) as AlertWebhookRow | undefined;
+    return row ? rowToAlertWebhookChannel(row) : undefined;
+  }
+
+  getByToken(token: string): AlertWebhookChannel | undefined {
+    const row = this.stmts.getByToken.get(token) as AlertWebhookRow | undefined;
+    return row ? rowToAlertWebhookChannel(row) : undefined;
+  }
+
+  list(): AlertWebhookChannel[] {
+    const rows = this.stmts.list.all() as AlertWebhookRow[];
+    return rows.map(rowToAlertWebhookChannel);
+  }
+
+  update(id: string, updates: Partial<Omit<AlertWebhookChannel, "id" | "authToken" | "createdAt" | "updatedAt">>): AlertWebhookChannel {
+    const existing = this.get(id);
+    if (!existing) throw new Error(`Alert webhook channel ${id} not found`);
+
+    const updated: AlertWebhookChannel = { ...existing, ...updates, updatedAt: new Date() };
+    this.stmts.update.run({
+      id,
+      name: updated.name,
+      source: updated.source,
+      enabled: updated.enabled ? 1 : 0,
+      default_operation_type: updated.defaultOperationType,
+      default_intent: updated.defaultIntent ?? null,
+      environment_id: updated.environmentId ?? null,
+      partition_id: updated.partitionId ?? null,
+      envoy_id: updated.envoyId ?? null,
+      updated_at: updated.updatedAt.toISOString(),
+    });
+    return updated;
   }
 
   delete(id: string): boolean {

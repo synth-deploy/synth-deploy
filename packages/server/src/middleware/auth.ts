@@ -16,7 +16,7 @@ declare module "fastify" {
 }
 
 const EXEMPT_ROUTES = ["/health", "/api/health", "/api/auth/login", "/api/auth/register", "/api/auth/refresh", "/api/auth/status", "/api/auth/providers", "/api/envoy/report"];
-const EXEMPT_PREFIXES = ["/api/auth/oidc/", "/api/auth/callback/oidc/", "/api/auth/saml/", "/api/auth/callback/saml/", "/api/auth/ldap/", "/api/intake/webhook/"];
+const EXEMPT_PREFIXES = ["/api/auth/oidc/", "/api/auth/callback/oidc/", "/api/auth/saml/", "/api/auth/callback/saml/", "/api/auth/ldap/", "/api/intake/webhook/", "/api/alert-webhooks/receive/"];
 // Envoy callback endpoints — validated by envoy token, not user JWT
 const EXEMPT_PATTERNS = [/^\/api\/deployments\/[^/]+\/progress$/];
 

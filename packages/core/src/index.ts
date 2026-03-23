@@ -94,6 +94,9 @@ export type {
   MonitoringDirective,
   MonitoringProbe,
   HealthReport,
+  AlertWebhookSource,
+  AlertWebhookChannel,
+  NormalizedAlert,
 } from "./types.js";
 
 export {
@@ -153,6 +156,7 @@ export {
   PersistentIntakeEventStore,
   PersistentRegistryPollerVersionStore,
   PersistentFleetDeploymentStore,
+  PersistentAlertWebhookStore,
 } from "./persistent-stores.js";
 export type { PersistedEnvoyRegistration } from "./persistent-stores.js";
 export { ArtifactStore } from "./artifact-store.js";

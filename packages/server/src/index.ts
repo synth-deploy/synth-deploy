@@ -9,7 +9,7 @@ import fastifyStatic from "@fastify/static";
 import fastifyFormBody from "@fastify/formbody";
 import fastifyMultipart from "@fastify/multipart";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { PersistentDecisionDebrief, openEntityDatabase, PersistentPartitionStore, PersistentEnvironmentStore, PersistentSettingsStore, PersistentDeploymentStore, PersistentArtifactStore, PersistentSecurityBoundaryStore, PersistentTelemetryStore, PersistentUserStore, PersistentRoleStore, PersistentUserRoleStore, PersistentSessionStore, PersistentIdpProviderStore, PersistentRoleMappingStore, PersistentApiKeyStore, PersistentEnvoyRegistryStore, PersistentRegistryPollerVersionStore, LlmClient, buildLlmConfigFromSettings, initEdition, EditionError } from "@synth-deploy/core";
+import { PersistentDecisionDebrief, openEntityDatabase, PersistentPartitionStore, PersistentEnvironmentStore, PersistentSettingsStore, PersistentDeploymentStore, PersistentArtifactStore, PersistentSecurityBoundaryStore, PersistentTelemetryStore, PersistentUserStore, PersistentRoleStore, PersistentUserRoleStore, PersistentSessionStore, PersistentIdpProviderStore, PersistentRoleMappingStore, PersistentApiKeyStore, PersistentEnvoyRegistryStore, PersistentRegistryPollerVersionStore, PersistentAlertWebhookStore, LlmClient, buildLlmConfigFromSettings, initEdition, EditionError } from "@synth-deploy/core";
 import type { Deployment, Artifact, ArtifactVersion, SecurityBoundary, Permission, RoleId } from "@synth-deploy/core";
 import { SynthAgent } from "./agent/synth-agent.js";
 import { EnvoyHealthChecker } from "./agent/health-checker.js";
@@ -41,6 +41,7 @@ import { registerFleetRoutes } from "./api/fleet.js";
 import { FleetDeploymentStore, FleetExecutor } from "./fleet/index.js";
 import { IntakeChannelStore, IntakeEventStore, IntakeProcessor, RegistryPoller } from "./intake/index.js";
 import { registerIntakeRoutes } from "./api/intake.js";
+import { registerAlertWebhookRoutes } from "./api/alert-webhooks.js";
 import { ArtifactAnalyzer } from "./artifact-analyzer.js";
 import { DeploymentGraphStore, GraphInferenceEngine } from "./graph/index.js";
 import { registerGraphRoutes } from "./api/graph.js";
@@ -756,6 +757,11 @@ for (const ch of intakeChannelStore.list()) {
     registryPoller.startPolling(ch);
   }
 }
+
+// --- Alert Webhooks (external monitoring triggers) ---
+
+const alertWebhookStore = new PersistentAlertWebhookStore(entityDb);
+registerAlertWebhookRoutes(app, alertWebhookStore, deployments, debrief, environments, partitions, telemetryStore, envoyRegistry);
 
 // --- Serve UI static files if built ---
 

@@ -856,6 +856,51 @@ export interface IntakeEvent {
   processedAt?: Date;
 }
 
+// --- Alert Webhooks (external monitoring triggers) ---
+
+export type AlertWebhookSource = "prometheus" | "pagerduty" | "datadog" | "grafana" | "generic";
+
+export interface AlertWebhookChannel {
+  id: string;
+  name: string;
+  source: AlertWebhookSource;
+  enabled: boolean;
+  authToken: string;
+  /** Default operation type for spawned operations */
+  defaultOperationType: "maintain" | "deploy" | "query" | "investigate";
+  /** Default intent template — {{alert.name}}, {{alert.summary}} are interpolated */
+  defaultIntent?: string;
+  /** Default target environment */
+  environmentId?: string;
+  /** Default target partition */
+  partitionId?: string;
+  /** Default target envoy */
+  envoyId?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface NormalizedAlert {
+  /** Alert name/rule (e.g. "HighDiskUsage") */
+  name: string;
+  /** Human-readable summary */
+  summary: string;
+  /** Severity level */
+  severity: "critical" | "warning" | "info";
+  /** Alert status */
+  status: "firing" | "resolved";
+  /** Labels/tags from the alerting system */
+  labels: Record<string, string>;
+  /** Additional annotations/details */
+  annotations: Record<string, string>;
+  /** Source system identifier */
+  source: string;
+  /** When the alert started firing */
+  startsAt?: Date;
+  /** Raw payload for debrief context */
+  rawPayload: Record<string, unknown>;
+}
+
 // --- Deployment Graphs ---
 
 export interface DeploymentGraph {
