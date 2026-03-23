@@ -230,74 +230,91 @@ export class HealthCheckScheduler {
     }
   }
 
-  /**
-   * Evaluate a condition string against probe results.
-   *
-   * Supported condition formats:
-   * - `{label} > {threshold}` — numeric comparison (>, <, >=, <=, ==, !=)
-   * - `{label} contains {substring}` — string match
-   * - `exitCode != 0` — exit code check
-   * - `any failed` — any probe returned non-zero exit code
-   *
-   * The condition is evaluated left-to-right. Multiple conditions
-   * can be joined with `&&` (all must pass) or `||` (any must pass).
-   */
-  _evaluateCondition(
+  // -------------------------------------------------------------------------
+  // Condition evaluation — delegates to standalone function
+  // -------------------------------------------------------------------------
+
+  private _evaluateCondition(
     condition: string,
     probeResults: Array<{ label: string; output: string; exitCode?: number; parsedValue?: number }>,
   ): boolean {
-    // Handle OR clauses
-    if (condition.includes("||")) {
-      return condition.split("||").some((clause) =>
-        this._evaluateCondition(clause.trim(), probeResults),
-      );
-    }
-
-    // Handle AND clauses
-    if (condition.includes("&&")) {
-      return condition.split("&&").every((clause) =>
-        this._evaluateCondition(clause.trim(), probeResults),
-      );
-    }
-
-    // Special: "any failed"
-    if (condition.trim().toLowerCase() === "any failed") {
-      return probeResults.some((r) => r.exitCode !== undefined && r.exitCode !== 0);
-    }
-
-    // "contains" check: {label} contains {substring}
-    const containsMatch = condition.match(/^(.+?)\s+contains\s+(.+)$/i);
-    if (containsMatch) {
-      const [, labelPart, substring] = containsMatch;
-      const label = labelPart.trim();
-      const probe = probeResults.find((r) => r.label.toLowerCase() === label.toLowerCase());
-      if (!probe) return false;
-      return probe.output.includes(substring.trim().replace(/^["']|["']$/g, ""));
-    }
-
-    // Numeric comparison: {label} {op} {threshold}
-    const comparisonMatch = condition.match(/^(.+?)\s*(>=|<=|!=|==|>|<)\s*(.+)$/);
-    if (comparisonMatch) {
-      const [, labelPart, op, thresholdPart] = comparisonMatch;
-      const label = labelPart.trim();
-      const threshold = parseFloat(thresholdPart.trim());
-      if (isNaN(threshold)) return false;
-
-      const probe = probeResults.find((r) => r.label.toLowerCase() === label.toLowerCase());
-      if (!probe || probe.parsedValue === undefined) return false;
-
-      const val = probe.parsedValue;
-      switch (op) {
-        case ">": return val > threshold;
-        case "<": return val < threshold;
-        case ">=": return val >= threshold;
-        case "<=": return val <= threshold;
-        case "==": return val === threshold;
-        case "!=": return val !== threshold;
-        default: return false;
-      }
-    }
-
-    return false;
+    return evaluateCondition(condition, probeResults);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Standalone condition evaluator (exported for direct testing)
+// ---------------------------------------------------------------------------
+
+export type ProbeResultInput = { label: string; output: string; exitCode?: number; parsedValue?: number };
+
+/**
+ * Evaluate a condition string against probe results.
+ *
+ * Supported condition formats:
+ * - `{label} > {threshold}` — numeric comparison (>, <, >=, <=, ==, !=)
+ * - `{label} contains {substring}` — string match
+ * - `exitCode != 0` — exit code check
+ * - `any failed` — any probe returned non-zero exit code
+ *
+ * The condition is evaluated left-to-right. Multiple conditions
+ * can be joined with `&&` (all must pass) or `||` (any must pass).
+ */
+export function evaluateCondition(
+  condition: string,
+  probeResults: ProbeResultInput[],
+): boolean {
+  // Handle OR clauses
+  if (condition.includes("||")) {
+    return condition.split("||").some((clause) =>
+      evaluateCondition(clause.trim(), probeResults),
+    );
+  }
+
+  // Handle AND clauses
+  if (condition.includes("&&")) {
+    return condition.split("&&").every((clause) =>
+      evaluateCondition(clause.trim(), probeResults),
+    );
+  }
+
+  // Special: "any failed"
+  if (condition.trim().toLowerCase() === "any failed") {
+    return probeResults.some((r) => r.exitCode !== undefined && r.exitCode !== 0);
+  }
+
+  // "contains" check: {label} contains {substring}
+  const containsMatch = condition.match(/^(.+?)\s+contains\s+(.+)$/i);
+  if (containsMatch) {
+    const [, labelPart, substring] = containsMatch;
+    const label = labelPart.trim();
+    const probe = probeResults.find((r) => r.label.toLowerCase() === label.toLowerCase());
+    if (!probe) return false;
+    return probe.output.includes(substring.trim().replace(/^["']|["']$/g, ""));
+  }
+
+  // Numeric comparison: {label} {op} {threshold}
+  const comparisonMatch = condition.match(/^(.+?)\s*(>=|<=|!=|==|>|<)\s*(.+)$/);
+  if (comparisonMatch) {
+    const [, labelPart, op, thresholdPart] = comparisonMatch;
+    const label = labelPart.trim();
+    const threshold = parseFloat(thresholdPart.trim());
+    if (isNaN(threshold)) return false;
+
+    const probe = probeResults.find((r) => r.label.toLowerCase() === label.toLowerCase());
+    if (!probe || probe.parsedValue === undefined) return false;
+
+    const val = probe.parsedValue;
+    switch (op) {
+      case ">": return val > threshold;
+      case "<": return val < threshold;
+      case ">=": return val >= threshold;
+      case "<=": return val <= threshold;
+      case "==": return val === threshold;
+      case "!=": return val !== threshold;
+      default: return false;
+    }
+  }
+
+  return false;
 }

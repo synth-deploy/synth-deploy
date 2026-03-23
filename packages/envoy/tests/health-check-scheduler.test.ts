@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { HealthCheckScheduler } from "../src/agent/health-check-scheduler.js";
+import { HealthCheckScheduler, evaluateCondition } from "../src/agent/health-check-scheduler.js";
 import type { MonitoringDirective, HealthReport } from "@synth-deploy/core";
 
 // ---------------------------------------------------------------------------
@@ -162,61 +162,51 @@ describe("HealthCheckScheduler", () => {
   });
 
   describe("condition evaluation", () => {
-    let probe: ReturnType<typeof makeProbeExecutor>;
-
-    beforeEach(() => {
-      probe = makeProbeExecutor({});
-      scheduler = new HealthCheckScheduler(probe, "envoy-test", {
-        onTriggerFired: (r) => firedReports.push(r),
-        minIntervalMs: 100,
-      });
-    });
-
     const testProbeResults = [
-      { label: "disk_usage", command: "df", output: "92", exitCode: 0, parsedValue: 92 },
-      { label: "memory", command: "free", output: "75", exitCode: 0, parsedValue: 75 },
+      { label: "disk_usage", output: "92", exitCode: 0, parsedValue: 92 },
+      { label: "memory", output: "75", exitCode: 0, parsedValue: 75 },
     ];
 
     it("evaluates > correctly", () => {
-      expect(scheduler._evaluateCondition("disk_usage > 85", testProbeResults)).toBe(true);
-      expect(scheduler._evaluateCondition("disk_usage > 95", testProbeResults)).toBe(false);
+      expect(evaluateCondition("disk_usage > 85", testProbeResults)).toBe(true);
+      expect(evaluateCondition("disk_usage > 95", testProbeResults)).toBe(false);
     });
 
     it("evaluates < correctly", () => {
-      expect(scheduler._evaluateCondition("memory < 80", testProbeResults)).toBe(true);
-      expect(scheduler._evaluateCondition("memory < 70", testProbeResults)).toBe(false);
+      expect(evaluateCondition("memory < 80", testProbeResults)).toBe(true);
+      expect(evaluateCondition("memory < 70", testProbeResults)).toBe(false);
     });
 
     it("evaluates == correctly", () => {
-      expect(scheduler._evaluateCondition("disk_usage == 92", testProbeResults)).toBe(true);
-      expect(scheduler._evaluateCondition("disk_usage == 91", testProbeResults)).toBe(false);
+      expect(evaluateCondition("disk_usage == 92", testProbeResults)).toBe(true);
+      expect(evaluateCondition("disk_usage == 91", testProbeResults)).toBe(false);
     });
 
     it("evaluates != correctly", () => {
-      expect(scheduler._evaluateCondition("disk_usage != 91", testProbeResults)).toBe(true);
-      expect(scheduler._evaluateCondition("disk_usage != 92", testProbeResults)).toBe(false);
+      expect(evaluateCondition("disk_usage != 91", testProbeResults)).toBe(true);
+      expect(evaluateCondition("disk_usage != 92", testProbeResults)).toBe(false);
     });
 
     it("evaluates && (AND)", () => {
-      expect(scheduler._evaluateCondition("disk_usage > 85 && memory < 80", testProbeResults)).toBe(true);
-      expect(scheduler._evaluateCondition("disk_usage > 95 && memory < 80", testProbeResults)).toBe(false);
+      expect(evaluateCondition("disk_usage > 85 && memory < 80", testProbeResults)).toBe(true);
+      expect(evaluateCondition("disk_usage > 95 && memory < 80", testProbeResults)).toBe(false);
     });
 
     it("evaluates || (OR)", () => {
-      expect(scheduler._evaluateCondition("disk_usage > 95 || memory < 80", testProbeResults)).toBe(true);
-      expect(scheduler._evaluateCondition("disk_usage > 95 || memory > 80", testProbeResults)).toBe(false);
+      expect(evaluateCondition("disk_usage > 95 || memory < 80", testProbeResults)).toBe(true);
+      expect(evaluateCondition("disk_usage > 95 || memory > 80", testProbeResults)).toBe(false);
     });
 
     it("evaluates 'any failed'", () => {
-      expect(scheduler._evaluateCondition("any failed", [
-        { label: "check", command: "echo", output: "", exitCode: 1 },
+      expect(evaluateCondition("any failed", [
+        { label: "check", output: "", exitCode: 1 },
       ])).toBe(true);
-      expect(scheduler._evaluateCondition("any failed", testProbeResults)).toBe(false);
+      expect(evaluateCondition("any failed", testProbeResults)).toBe(false);
     });
 
     it("evaluates 'contains'", () => {
-      expect(scheduler._evaluateCondition("disk_usage contains 9", [
-        { label: "disk_usage", command: "df", output: "92%", exitCode: 0 },
+      expect(evaluateCondition("disk_usage contains 9", [
+        { label: "disk_usage", output: "92%", exitCode: 0 },
       ])).toBe(true);
     });
   });

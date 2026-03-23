@@ -283,8 +283,8 @@ export { createEnvoyServer } from "./server.js";
 export { ServerReporter } from "./agent/server-reporter.js";
 export type { EnvoyReport, SerializedDebriefEntry } from "./agent/server-reporter.js";
 export { DiagnosticInvestigator } from "./agent/diagnostic-investigator.js";
-export { HealthCheckScheduler } from "./agent/health-check-scheduler.js";
-export type { HealthCheckSchedulerOptions } from "./agent/health-check-scheduler.js";
+export { HealthCheckScheduler, evaluateCondition } from "./agent/health-check-scheduler.js";
+export type { HealthCheckSchedulerOptions, ProbeResultInput } from "./agent/health-check-scheduler.js";
 export type {
   DiagnosticReport,
   DiagnosticEvidence,

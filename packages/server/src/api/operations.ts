@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { generatePostmortem, generatePostmortemAsync } from "@synth-deploy/core";
-import type { LlmClient, IPartitionStore, IEnvironmentStore, IArtifactStore, ISettingsStore, IDeploymentStore, ITelemetryStore, DebriefWriter, DebriefReader, DebriefPinStore, DeploymentEnrichment, RecommendationVerdict } from "@synth-deploy/core";
+import type { LlmClient, IPartitionStore, IEnvironmentStore, IArtifactStore, ISettingsStore, IDeploymentStore, ITelemetryStore, DebriefWriter, DebriefReader, DebriefPinStore, DeploymentEnrichment, RecommendationVerdict, TelemetryAction } from "@synth-deploy/core";
 import { requirePermission } from "../middleware/permissions.js";
 import {
   CreateOperationSchema,
@@ -445,12 +445,15 @@ export function registerOperationRoutes(
 
         if (targetEnvoyForTrigger) {
           const triggerClient = new EnvoyClient(targetEnvoyForTrigger.url);
-          deployment.status = "succeeded" as typeof deployment.status;
+          deployment.status = "running" as typeof deployment.status;
           deployment.triggerStatus = "active";
-          deployment.completedAt = new Date();
           deployments.save(deployment);
 
           triggerClient.installMonitoringDirective(deployment.monitoringDirective).then(() => {
+            deployment.status = "succeeded" as typeof deployment.status;
+            deployment.completedAt = new Date();
+            deployments.save(deployment);
+
             debrief.record({
               partitionId: deployment.partitionId ?? null,
               operationId: deployment.id,
@@ -460,7 +463,7 @@ export function registerOperationRoutes(
               reasoning: `Trigger activated: monitoring "${deployment.monitoringDirective!.condition}" every ${deployment.monitoringDirective!.intervalMs / 1000}s with ${deployment.monitoringDirective!.cooldownMs / 1000}s cooldown`,
               context: { envoyId: targetEnvoyForTrigger.id, directiveId: deployment.monitoringDirective!.id },
             });
-            telemetry.record({ actor, action: "trigger.activated" as import("@synth-deploy/core").TelemetryAction, target: { type: "trigger", id: deployment.id }, details: { envoyId: targetEnvoyForTrigger.id } });
+            telemetry.record({ actor, action: "trigger.activated" as TelemetryAction, target: { type: "trigger", id: deployment.id }, details: { envoyId: targetEnvoyForTrigger.id } });
           }).catch((err) => {
             deployment.status = "failed" as typeof deployment.status;
             deployment.triggerStatus = "disabled";
@@ -1446,6 +1449,15 @@ export function registerOperationRoutes(
   // -- Health reports from envoys (trigger system) ---------------------------
 
   app.post("/api/health-reports", async (request, reply) => {
+    // Validate envoy token — same pattern as /api/envoy/report
+    if (envoyRegistry) {
+      const authHeader = (request.headers.authorization ?? "") as string;
+      const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
+      if (!token || !envoyRegistry.validateToken(token)) {
+        return reply.status(401).send({ error: "Invalid or missing envoy token" });
+      }
+    }
+
     const { HealthReportSchema } = await import("@synth-deploy/core");
     const parsed = HealthReportSchema.safeParse(request.body);
     if (!parsed.success) {
@@ -1498,9 +1510,12 @@ export function registerOperationRoutes(
 
     // Spawn child operation
     const triggerInput = triggerOp.input as { type: "trigger"; condition: string; responseIntent: string; parameters?: Record<string, unknown> };
+    const responseType = triggerOp.monitoringDirective?.responseType ?? "maintain";
     const childOp = {
       id: crypto.randomUUID(),
-      input: { type: "maintain" as const, intent: triggerInput.responseIntent, parameters: triggerInput.parameters },
+      input: responseType === "deploy"
+        ? { type: "deploy" as const, artifactId: "" }
+        : { type: "maintain" as const, intent: triggerInput.responseIntent, parameters: triggerInput.parameters },
       intent: triggerInput.responseIntent,
       lineage: triggerOp.id,
       environmentId: report.environmentId ?? triggerOp.environmentId,
@@ -1529,7 +1544,7 @@ export function registerOperationRoutes(
       reasoning: `Condition "${triggerInput.condition}" met. Response: "${triggerInput.responseIntent}". Fire count: ${triggerOp.triggerFireCount}.`,
       context: { triggerId: triggerOp.id, envoyId: report.envoyId, fireCount: triggerOp.triggerFireCount },
     });
-    telemetry.record({ actor: "agent", action: "trigger.fired" as import("@synth-deploy/core").TelemetryAction, target: { type: "trigger", id: triggerOp.id }, details: { childOperationId: childOp.id } });
+    telemetry.record({ actor: "agent", action: "trigger.fired" as TelemetryAction, target: { type: "trigger", id: triggerOp.id }, details: { childOperationId: childOp.id } });
 
     // Dispatch planning for the child operation (same as new operation flow)
     if (envoyRegistry) {
@@ -1546,7 +1561,7 @@ export function registerOperationRoutes(
 
         planningClient.requestPlan({
           operationId: childOp.id,
-          operationType: "deploy",
+          operationType: responseType as "deploy" | "query" | "investigate" | "trigger",
           intent: childOp.intent,
           environment: environmentForPlanning,
           version: "",
@@ -1619,7 +1634,7 @@ export function registerOperationRoutes(
         context: {},
         actor: request.user?.email,
       });
-      telemetry.record({ actor, action: "trigger.paused" as import("@synth-deploy/core").TelemetryAction, target: { type: "trigger", id: op.id }, details: {} });
+      telemetry.record({ actor, action: "trigger.paused" as TelemetryAction, target: { type: "trigger", id: op.id }, details: {} });
 
       return { operation: op, paused: true };
     },
@@ -1661,7 +1676,7 @@ export function registerOperationRoutes(
         context: {},
         actor: request.user?.email,
       });
-      telemetry.record({ actor, action: "trigger.resumed" as import("@synth-deploy/core").TelemetryAction, target: { type: "trigger", id: op.id }, details: {} });
+      telemetry.record({ actor, action: "trigger.resumed" as TelemetryAction, target: { type: "trigger", id: op.id }, details: {} });
 
       return { operation: op, resumed: true };
     },
@@ -1700,7 +1715,7 @@ export function registerOperationRoutes(
         context: {},
         actor: request.user?.email,
       });
-      telemetry.record({ actor, action: "trigger.disabled" as import("@synth-deploy/core").TelemetryAction, target: { type: "trigger", id: op.id }, details: {} });
+      telemetry.record({ actor, action: "trigger.disabled" as TelemetryAction, target: { type: "trigger", id: op.id }, details: {} });
 
       return { operation: op, disabled: true };
     },

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { getRecentDebrief, getDeployment, listDeployments, listPartitions, listArtifacts, listEnvironments, getWhatsNew, requestRollbackPlan, executeRollback, retryDeployment, getPostmortem, pinOperation, unpinOperation, getPinnedOperations } from "../../api.js";
+import { getRecentDebrief, getDeployment, listDeployments, listPartitions, listArtifacts, listEnvironments, getWhatsNew, requestRollbackPlan, executeRollback, retryDeployment, getPostmortem, pinOperation, unpinOperation, getPinnedOperations, pauseTrigger, resumeTrigger, disableTrigger } from "../../api.js";
 import type { WhatsNewResult, LlmPostmortem } from "../../api.js";
 import type { DebriefEntry, Partition, Deployment, Artifact, Environment, DecisionType } from "../../types.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
@@ -428,9 +428,7 @@ function DeploymentDebriefDetail({ deploymentId, onBack, onNavigate }: { deploym
                   className="btn-secondary"
                   style={{ fontSize: 11, padding: "3px 10px" }}
                   onClick={() => {
-                    import("../../api.js").then(({ pauseTrigger }) =>
-                      pauseTrigger(deployment.id).then(({ operation }) => setDeployment(operation))
-                    );
+                    pauseTrigger(deployment.id).then(({ operation }) => setDeployment(operation));
                   }}
                 >
                   Pause
@@ -441,9 +439,7 @@ function DeploymentDebriefDetail({ deploymentId, onBack, onNavigate }: { deploym
                   className="btn-secondary"
                   style={{ fontSize: 11, padding: "3px 10px" }}
                   onClick={() => {
-                    import("../../api.js").then(({ resumeTrigger }) =>
-                      resumeTrigger(deployment.id).then(({ operation }) => setDeployment(operation))
-                    );
+                    resumeTrigger(deployment.id).then(({ operation }) => setDeployment(operation));
                   }}
                 >
                   Resume
@@ -454,9 +450,7 @@ function DeploymentDebriefDetail({ deploymentId, onBack, onNavigate }: { deploym
                   className="btn-secondary"
                   style={{ fontSize: 11, padding: "3px 10px", color: "var(--status-failed)" }}
                   onClick={() => {
-                    import("../../api.js").then(({ disableTrigger }) =>
-                      disableTrigger(deployment.id).then(({ operation }) => setDeployment(operation))
-                    );
+                    disableTrigger(deployment.id).then(({ operation }) => setDeployment(operation));
                   }}
                 >
                   Disable
