@@ -47,7 +47,7 @@ export function registerOperationRoutes(
       return reply.status(400).send({ error: parsed.error.message });
     }
 
-    const { artifactId, environmentId, partitionId, envoyId, version, type: operationType, intent, allowWrite } = parsed.data;
+    const { artifactId, environmentId, partitionId, envoyId, version, type: operationType, intent, allowWrite, condition, responseIntent } = parsed.data;
 
     // Validate artifact exists (required for deploy operations)
     if (operationType === "deploy" && !artifactId) {
@@ -84,7 +84,7 @@ export function registerOperationRoutes(
     const operationInput = operationType === "deploy"
       ? { type: "deploy" as const, artifactId: artifactId!, ...(version ? { artifactVersionId: version } : {}) }
       : operationType === "trigger"
-        ? { type: "trigger" as const, condition: intent ?? "", responseIntent: intent ?? "" }
+        ? { type: "trigger" as const, condition: condition ?? intent ?? "", responseIntent: responseIntent ?? intent ?? "" }
         : operationType === "composite"
           ? { type: "composite" as const, operations: [] }
           : operationType === "investigate"
@@ -126,8 +126,10 @@ export function registerOperationRoutes(
 
         planningClient.requestPlan({
           operationId: deployment.id,
-          operationType: deployment.input.type as "deploy" | "query" | "investigate",
-          intent: deployment.intent,
+          operationType: deployment.input.type as "deploy" | "query" | "investigate" | "trigger",
+          intent: deployment.intent ?? (deployment.input.type === "trigger"
+            ? `Monitor: ${(deployment.input as { condition: string }).condition}. When triggered: ${(deployment.input as { responseIntent: string }).responseIntent}`
+            : undefined),
           ...(artifact ? {
             artifact: {
               id: artifact.id,
@@ -158,6 +160,51 @@ export function registerOperationRoutes(
           dep.plan = result.plan;
           dep.rollbackPlan = result.rollbackPlan;
           dep.envoyId = planningEnvoy.id;
+
+          // Trigger operations: construct MonitoringDirective from plan, present for approval
+          if (dep.input.type === "trigger" && !result.blocked) {
+            const triggerInput = dep.input as { type: "trigger"; condition: string; responseIntent: string; parameters?: Record<string, unknown> };
+            // Convert plan steps to monitoring probes
+            const probes = result.plan.steps.map((step) => ({
+              command: step.action,
+              label: step.description,
+              parseAs: "numeric" as const,
+            }));
+            const directive: import("@synth-deploy/core").MonitoringDirective = {
+              id: dep.id,
+              operationId: dep.id,
+              probes: probes.length > 0 ? probes : [{
+                command: "echo 0",
+                label: "default-probe",
+                parseAs: "numeric" as const,
+              }],
+              intervalMs: 60_000, // default: check every minute
+              cooldownMs: 300_000, // default: 5-minute cooldown
+              condition: triggerInput.condition,
+              responseIntent: triggerInput.responseIntent,
+              responseType: "maintain",
+              responseParameters: triggerInput.parameters,
+              environmentId: dep.environmentId,
+              partitionId: dep.partitionId,
+              status: "active",
+            };
+            dep.monitoringDirective = directive;
+            dep.triggerStatus = "active";
+            dep.status = "awaiting_approval" as typeof dep.status;
+            dep.recommendation = computeRecommendation(dep, deployments, result.assessmentSummary);
+            deployments.save(dep);
+
+            debrief.record({
+              partitionId: dep.partitionId ?? null,
+              operationId: dep.id,
+              agent: "envoy",
+              decisionType: "plan-generation" as Parameters<typeof debrief.record>[0]["decisionType"],
+              decision: `Monitoring plan generated with ${probes.length} probe(s): ${triggerInput.condition}`,
+              reasoning: result.plan.reasoning,
+              context: { probeCount: probes.length, condition: triggerInput.condition, responseIntent: triggerInput.responseIntent, envoyId: planningEnvoy.id },
+            });
+            return;
+          }
 
           // Auto-approve read-only operations — findings are the deliverable
           if ((dep.input.type === "query" || dep.input.type === "investigate") &&
@@ -390,8 +437,50 @@ export function registerOperationRoutes(
           : { planStepCount: deployment.plan?.steps.length ?? 0 },
       });
 
-      // Dispatch approved plan to envoy for execution
-      if (envoyClient && deployment.plan && deployment.rollbackPlan) {
+      // Trigger operations: install monitoring directive on envoy
+      if (deployment.input.type === "trigger" && deployment.monitoringDirective && envoyRegistry) {
+        const targetEnvoyForTrigger = deployment.envoyId
+          ? envoyRegistry.get(deployment.envoyId)
+          : envoyRegistry.list()[0];
+
+        if (targetEnvoyForTrigger) {
+          const triggerClient = new EnvoyClient(targetEnvoyForTrigger.url);
+          deployment.status = "succeeded" as typeof deployment.status;
+          deployment.triggerStatus = "active";
+          deployment.completedAt = new Date();
+          deployments.save(deployment);
+
+          triggerClient.installMonitoringDirective(deployment.monitoringDirective).then(() => {
+            debrief.record({
+              partitionId: deployment.partitionId ?? null,
+              operationId: deployment.id,
+              agent: "server",
+              decisionType: "trigger-activated" as Parameters<typeof debrief.record>[0]["decisionType"],
+              decision: `Monitoring directive installed on ${targetEnvoyForTrigger.name}`,
+              reasoning: `Trigger activated: monitoring "${deployment.monitoringDirective!.condition}" every ${deployment.monitoringDirective!.intervalMs / 1000}s with ${deployment.monitoringDirective!.cooldownMs / 1000}s cooldown`,
+              context: { envoyId: targetEnvoyForTrigger.id, directiveId: deployment.monitoringDirective!.id },
+            });
+            telemetry.record({ actor, action: "trigger.activated" as import("@synth-deploy/core").TelemetryAction, target: { type: "trigger", id: deployment.id }, details: { envoyId: targetEnvoyForTrigger.id } });
+          }).catch((err) => {
+            deployment.status = "failed" as typeof deployment.status;
+            deployment.triggerStatus = "disabled";
+            deployment.failureReason = err instanceof Error ? err.message : "Failed to install monitoring directive";
+            deployments.save(deployment);
+
+            debrief.record({
+              partitionId: deployment.partitionId ?? null,
+              operationId: deployment.id,
+              agent: "server",
+              decisionType: "deployment-failure" as Parameters<typeof debrief.record>[0]["decisionType"],
+              decision: "Failed to install monitoring directive on envoy",
+              reasoning: deployment.failureReason!,
+              context: { error: deployment.failureReason },
+            });
+          });
+        }
+      }
+      // Normal operations: dispatch approved plan to envoy for execution
+      else if (envoyClient && deployment.plan && deployment.rollbackPlan) {
         const artifact = artifactStore.get(getArtifactId(deployment) ?? "");
         const serverPort = process.env.PORT ?? "9410";
         const serverUrl = process.env.SYNTH_SERVER_URL ?? `http://localhost:${serverPort}`;
@@ -1351,6 +1440,269 @@ export function registerOperationRoutes(
       request.raw.on("close", () => {
         progressStore!.removeListener(deploymentId, listener);
       });
+    },
+  );
+
+  // -- Health reports from envoys (trigger system) ---------------------------
+
+  app.post("/api/health-reports", async (request, reply) => {
+    const { HealthReportSchema } = await import("@synth-deploy/core");
+    const parsed = HealthReportSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: "Invalid health report", details: parsed.error.format() });
+    }
+
+    const report = parsed.data;
+
+    // Find the trigger operation
+    const triggerOp = deployments.get(report.triggerOperationId);
+    if (!triggerOp || triggerOp.input.type !== "trigger") {
+      return reply.status(404).send({ error: `Trigger operation not found: ${report.triggerOperationId}` });
+    }
+
+    // Record the health report
+    debrief.record({
+      partitionId: report.partitionId ?? null,
+      operationId: triggerOp.id,
+      agent: "envoy",
+      decisionType: "health-report-received" as Parameters<typeof debrief.record>[0]["decisionType"],
+      decision: `Health report: ${report.summary}`,
+      reasoning: `Trigger condition met on ${report.envoyId}. Probes: ${report.probeResults.map(p => `${p.label}=${p.parsedValue ?? p.output}`).join(", ")}`,
+      context: { directiveId: report.directiveId, envoyId: report.envoyId, probeResults: report.probeResults },
+    });
+
+    // Deduplication: check for active child operations from this trigger
+    const allOps = deployments.list();
+    const activeChild = allOps.find(
+      (op) => op.lineage === triggerOp.id &&
+        ["pending", "planning", "awaiting_approval", "approved", "running"].includes(op.status),
+    );
+
+    if (activeChild) {
+      // Suppress — record that we suppressed
+      triggerOp.triggerSuppressedCount = (triggerOp.triggerSuppressedCount ?? 0) + 1;
+      deployments.save(triggerOp);
+
+      debrief.record({
+        partitionId: report.partitionId ?? null,
+        operationId: triggerOp.id,
+        agent: "server",
+        decisionType: "trigger-suppressed" as Parameters<typeof debrief.record>[0]["decisionType"],
+        decision: `Trigger suppressed — child operation ${activeChild.id} is still in progress (${activeChild.status})`,
+        reasoning: `Deduplication: an operation spawned by this trigger is already active. Suppressed ${triggerOp.triggerSuppressedCount} time(s) total.`,
+        context: { activeChildId: activeChild.id, activeChildStatus: activeChild.status, suppressedCount: triggerOp.triggerSuppressedCount },
+      });
+
+      return reply.status(200).send({ spawned: false, reason: "deduplicated", activeChildId: activeChild.id });
+    }
+
+    // Spawn child operation
+    const triggerInput = triggerOp.input as { type: "trigger"; condition: string; responseIntent: string; parameters?: Record<string, unknown> };
+    const childOp = {
+      id: crypto.randomUUID(),
+      input: { type: "maintain" as const, intent: triggerInput.responseIntent, parameters: triggerInput.parameters },
+      intent: triggerInput.responseIntent,
+      lineage: triggerOp.id,
+      environmentId: report.environmentId ?? triggerOp.environmentId,
+      partitionId: report.partitionId ?? triggerOp.partitionId,
+      envoyId: report.envoyId,
+      version: "",
+      status: "pending" as const,
+      variables: triggerOp.variables,
+      debriefEntryIds: [] as string[],
+      createdAt: new Date(),
+    };
+
+    deployments.save(childOp);
+
+    // Update trigger stats
+    triggerOp.triggerFireCount = (triggerOp.triggerFireCount ?? 0) + 1;
+    triggerOp.triggerLastFiredAt = new Date();
+    deployments.save(triggerOp);
+
+    debrief.record({
+      partitionId: childOp.partitionId ?? null,
+      operationId: childOp.id,
+      agent: "server",
+      decisionType: "trigger-fired" as Parameters<typeof debrief.record>[0]["decisionType"],
+      decision: `Trigger fired — spawned child operation ${childOp.id}`,
+      reasoning: `Condition "${triggerInput.condition}" met. Response: "${triggerInput.responseIntent}". Fire count: ${triggerOp.triggerFireCount}.`,
+      context: { triggerId: triggerOp.id, envoyId: report.envoyId, fireCount: triggerOp.triggerFireCount },
+    });
+    telemetry.record({ actor: "agent", action: "trigger.fired" as import("@synth-deploy/core").TelemetryAction, target: { type: "trigger", id: triggerOp.id }, details: { childOperationId: childOp.id } });
+
+    // Dispatch planning for the child operation (same as new operation flow)
+    if (envoyRegistry) {
+      const childEnvoy = report.envoyId
+        ? envoyRegistry.get(report.envoyId)
+        : envoyRegistry.list()[0];
+
+      if (childEnvoy) {
+        const planningClient = new EnvoyClient(childEnvoy.url);
+        const environment = childOp.environmentId ? environments.get(childOp.environmentId) : undefined;
+        const environmentForPlanning = environment
+          ? { id: environment.id, name: environment.name, variables: environment.variables }
+          : { id: `direct:${childEnvoy.id}`, name: childEnvoy.name, variables: {} };
+
+        planningClient.requestPlan({
+          operationId: childOp.id,
+          operationType: "deploy",
+          intent: childOp.intent,
+          environment: environmentForPlanning,
+          version: "",
+          resolvedVariables: childOp.variables,
+        }).then((result) => {
+          const dep = deployments.get(childOp.id);
+          if (!dep || dep.status !== "pending") return;
+
+          dep.plan = result.plan;
+          dep.rollbackPlan = result.rollbackPlan;
+          dep.envoyId = childEnvoy.id;
+
+          if (result.blocked) {
+            dep.status = "failed" as typeof dep.status;
+            dep.failureReason = result.blockReason ?? "Plan blocked";
+            deployments.save(dep);
+          } else {
+            dep.status = "awaiting_approval" as typeof dep.status;
+            dep.recommendation = computeRecommendation(dep, deployments, result.assessmentSummary);
+            deployments.save(dep);
+          }
+        }).catch((err) => {
+          const dep = deployments.get(childOp.id);
+          if (!dep || dep.status !== "pending") return;
+          dep.status = "failed" as typeof dep.status;
+          dep.failureReason = err instanceof Error ? err.message : "Planning failed";
+          deployments.save(dep);
+        });
+      }
+    }
+
+    return reply.status(201).send({ spawned: true, childOperationId: childOp.id });
+  });
+
+  // -- Trigger management (pause/resume/disable) ----------------------------
+
+  app.post<{ Params: { id: string } }>(
+    "/api/operations/:id/trigger/pause",
+    { preHandler: [requirePermission("deployment.approve")] },
+    async (request, reply) => {
+      const op = deployments.get(request.params.id);
+      if (!op || op.input.type !== "trigger") {
+        return reply.status(404).send({ error: "Trigger operation not found" });
+      }
+      if (op.triggerStatus !== "active") {
+        return reply.status(409).send({ error: `Cannot pause trigger in "${op.triggerStatus}" status` });
+      }
+
+      // Pause on envoy
+      if (op.envoyId && envoyRegistry) {
+        const envoy = envoyRegistry.get(op.envoyId);
+        if (envoy) {
+          const client = new EnvoyClient(envoy.url);
+          await client.pauseMonitoringDirective(op.id);
+        }
+      }
+
+      op.triggerStatus = "paused";
+      if (op.monitoringDirective) op.monitoringDirective.status = "paused";
+      deployments.save(op);
+
+      const actor = (request.user?.email) ?? "anonymous";
+      debrief.record({
+        partitionId: op.partitionId ?? null,
+        operationId: op.id,
+        agent: "server",
+        decisionType: "trigger-paused" as Parameters<typeof debrief.record>[0]["decisionType"],
+        decision: `Trigger paused by ${actor}`,
+        reasoning: "User requested trigger pause",
+        context: {},
+        actor: request.user?.email,
+      });
+      telemetry.record({ actor, action: "trigger.paused" as import("@synth-deploy/core").TelemetryAction, target: { type: "trigger", id: op.id }, details: {} });
+
+      return { operation: op, paused: true };
+    },
+  );
+
+  app.post<{ Params: { id: string } }>(
+    "/api/operations/:id/trigger/resume",
+    { preHandler: [requirePermission("deployment.approve")] },
+    async (request, reply) => {
+      const op = deployments.get(request.params.id);
+      if (!op || op.input.type !== "trigger") {
+        return reply.status(404).send({ error: "Trigger operation not found" });
+      }
+      if (op.triggerStatus !== "paused") {
+        return reply.status(409).send({ error: `Cannot resume trigger in "${op.triggerStatus}" status` });
+      }
+
+      // Resume on envoy
+      if (op.envoyId && envoyRegistry) {
+        const envoy = envoyRegistry.get(op.envoyId);
+        if (envoy) {
+          const client = new EnvoyClient(envoy.url);
+          await client.resumeMonitoringDirective(op.id);
+        }
+      }
+
+      op.triggerStatus = "active";
+      if (op.monitoringDirective) op.monitoringDirective.status = "active";
+      deployments.save(op);
+
+      const actor = (request.user?.email) ?? "anonymous";
+      debrief.record({
+        partitionId: op.partitionId ?? null,
+        operationId: op.id,
+        agent: "server",
+        decisionType: "trigger-resumed" as Parameters<typeof debrief.record>[0]["decisionType"],
+        decision: `Trigger resumed by ${actor}`,
+        reasoning: "User requested trigger resume",
+        context: {},
+        actor: request.user?.email,
+      });
+      telemetry.record({ actor, action: "trigger.resumed" as import("@synth-deploy/core").TelemetryAction, target: { type: "trigger", id: op.id }, details: {} });
+
+      return { operation: op, resumed: true };
+    },
+  );
+
+  app.post<{ Params: { id: string } }>(
+    "/api/operations/:id/trigger/disable",
+    { preHandler: [requirePermission("deployment.approve")] },
+    async (request, reply) => {
+      const op = deployments.get(request.params.id);
+      if (!op || op.input.type !== "trigger") {
+        return reply.status(404).send({ error: "Trigger operation not found" });
+      }
+
+      // Remove from envoy
+      if (op.envoyId && envoyRegistry) {
+        const envoy = envoyRegistry.get(op.envoyId);
+        if (envoy) {
+          const client = new EnvoyClient(envoy.url);
+          await client.removeMonitoringDirective(op.id).catch(() => {});
+        }
+      }
+
+      op.triggerStatus = "disabled";
+      if (op.monitoringDirective) op.monitoringDirective.status = "disabled";
+      deployments.save(op);
+
+      const actor = (request.user?.email) ?? "anonymous";
+      debrief.record({
+        partitionId: op.partitionId ?? null,
+        operationId: op.id,
+        agent: "server",
+        decisionType: "trigger-disabled" as Parameters<typeof debrief.record>[0]["decisionType"],
+        decision: `Trigger disabled by ${actor}`,
+        reasoning: "User requested trigger disable",
+        context: {},
+        actor: request.user?.email,
+      });
+      telemetry.record({ actor, action: "trigger.disabled" as import("@synth-deploy/core").TelemetryAction, target: { type: "trigger", id: op.id }, details: {} });
+
+      return { operation: op, disabled: true };
     },
   );
 }

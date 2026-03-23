@@ -90,6 +90,10 @@ export type {
   ApiKeyId,
   QueryFindings,
   InvestigationFindings,
+  TriggerStatus,
+  MonitoringDirective,
+  MonitoringProbe,
+  HealthReport,
 } from "./types.js";
 
 export {
@@ -101,6 +105,9 @@ export {
   TASK_MODEL_META,
   QueryFindingsSchema,
   InvestigationFindingsSchema,
+  HealthReportSchema,
+  MonitoringDirectiveSchema,
+  MonitoringProbeSchema,
 } from "./types.js";
 export { DecisionDebrief } from "./debrief.js";
 export type { DebriefWriter, DebriefReader, DebriefRecordParams, DebriefPinStore } from "./debrief.js";

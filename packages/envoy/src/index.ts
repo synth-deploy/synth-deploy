@@ -3,9 +3,12 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import fs from "node:fs";
 import { DecisionDebrief, LlmClient } from "@synth-deploy/core";
+import type { HealthReport } from "@synth-deploy/core";
 import { EnvoyAgent } from "./agent/envoy-agent.js";
 import { EnvironmentScanner } from "./agent/environment-scanner.js";
 import { QueryEngine } from "./agent/query-engine.js";
+import { ProbeExecutor } from "./agent/probe-executor.js";
+import { HealthCheckScheduler } from "./agent/health-check-scheduler.js";
 import { PersistentEnvoyKnowledgeStore } from "./state/persistent-knowledge-store.js";
 import { LocalStateStore } from "./state/local-state.js";
 import type { EnvoyKnowledgeStore } from "./state/knowledge-store.js";
@@ -47,11 +50,13 @@ try {
   state = new LocalStateStore();
 }
 
+// Stable envoy identifier used by reporters and scheduler
+const envoyId = `envoy-${HOST}:${PORT}`;
+
 // Connect the ServerReporter if a server URL is configured
 let reporter: import("./agent/server-reporter.js").ServerReporter | undefined;
 if (COMMAND_URL) {
   const { ServerReporter } = await import("./agent/server-reporter.js");
-  const envoyId = `envoy-${HOST}:${PORT}`;
   const envoyToken = process.env.SYNTH_ENVOY_TOKEN;
   reporter = new ServerReporter(COMMAND_URL, envoyId, 5_000, envoyToken);
 }
@@ -172,6 +177,29 @@ if (process.env.SYNTH_SEED_DEMO !== 'false') {
   });
 }
 
+// --- Health check scheduler ---
+
+const monitorProbeExecutor = new ProbeExecutor({ cacheTtlMs: 30_000 }); // shorter TTL for monitoring
+
+function reportHealthToServer(report: HealthReport): void {
+  if (!COMMAND_URL) return;
+  const url = `${COMMAND_URL}/api/health-reports`;
+  const token = process.env.SYNTH_ENVOY_TOKEN;
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  fetch(url, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ ...report, detectedAt: report.detectedAt.toISOString() }),
+  }).catch((err) => {
+    console.error(`[envoy] Failed to report health event to server: ${err instanceof Error ? err.message : err}`);
+  });
+}
+
+const healthScheduler = new HealthCheckScheduler(monitorProbeExecutor, envoyId, {
+  onTriggerFired: reportHealthToServer,
+});
+
 // --- Query engine with optional LLM ---
 
 const scanner = new EnvironmentScanner(BASE_DIR, state);
@@ -179,7 +207,7 @@ const queryEngine = new QueryEngine(debrief, state, scanner, llm);
 
 // --- Start server ---
 
-const app = createEnvoyServer(agent, state, queryEngine);
+const app = createEnvoyServer(agent, state, queryEngine, undefined, healthScheduler);
 
 // Periodic workspace cleanup (every 10 minutes): keep last 50 or 30 days
 const WORKSPACE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
@@ -194,6 +222,7 @@ const workspaceCleanupInterval = setInterval(() => {
 
 app.addHook("onClose", async () => {
   clearInterval(workspaceCleanupInterval);
+  healthScheduler.shutdown();
   // Close persistent store database connection on shutdown
   if (persistentStore) {
     persistentStore.close();
@@ -254,6 +283,8 @@ export { createEnvoyServer } from "./server.js";
 export { ServerReporter } from "./agent/server-reporter.js";
 export type { EnvoyReport, SerializedDebriefEntry } from "./agent/server-reporter.js";
 export { DiagnosticInvestigator } from "./agent/diagnostic-investigator.js";
+export { HealthCheckScheduler } from "./agent/health-check-scheduler.js";
+export type { HealthCheckSchedulerOptions } from "./agent/health-check-scheduler.js";
 export type {
   DiagnosticReport,
   DiagnosticEvidence,

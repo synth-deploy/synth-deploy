@@ -1,10 +1,12 @@
 import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { MonitoringDirectiveSchema } from "@synth-deploy/core";
 import type { EnvoyAgent, DeploymentInstruction, PlanningInstruction, LifecycleState, RollbackPlanningInstruction } from "./agent/envoy-agent.js";
 import type { EnvoyKnowledgeStore } from "./state/knowledge-store.js";
 import type { QueryEngine } from "./agent/query-engine.js";
 import type { EscalationPackager } from "./agent/escalation-packager.js";
+import type { HealthCheckScheduler } from "./agent/health-check-scheduler.js";
 
 // ---------------------------------------------------------------------------
 // Request schemas
@@ -120,6 +122,7 @@ export function createEnvoyServer(
   state: EnvoyKnowledgeStore,
   queryEngine?: QueryEngine,
   escalationPackager?: EscalationPackager,
+  healthScheduler?: HealthCheckScheduler,
 ): FastifyInstance {
   const app = Fastify({ logger: true });
 
@@ -478,6 +481,53 @@ export function createEnvoyServer(
       state: agent.lifecycleState,
       inFlightDeployments: status.summary.executing,
     };
+  });
+
+  // -- Monitoring directives ---------------------------------------------------
+
+  app.post("/monitor", async (request, reply) => {
+    if (!healthScheduler) {
+      return reply.status(501).send({ error: "Health monitoring not configured on this Envoy" });
+    }
+    const parsed = MonitoringDirectiveSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: "Invalid monitoring directive", details: parsed.error.format() });
+    }
+    healthScheduler.install(parsed.data);
+    return reply.status(201).send({ installed: true, id: parsed.data.id });
+  });
+
+  app.delete<{ Params: { id: string } }>("/monitor/:id", async (request, reply) => {
+    if (!healthScheduler) {
+      return reply.status(501).send({ error: "Health monitoring not configured on this Envoy" });
+    }
+    healthScheduler.remove(request.params.id);
+    return reply.status(200).send({ removed: true, id: request.params.id });
+  });
+
+  app.post<{ Params: { id: string } }>("/monitor/:id/pause", async (request, reply) => {
+    if (!healthScheduler) {
+      return reply.status(501).send({ error: "Health monitoring not configured on this Envoy" });
+    }
+    const ok = healthScheduler.pause(request.params.id);
+    if (!ok) return reply.status(404).send({ error: `Directive ${request.params.id} not found or not pausable` });
+    return reply.status(200).send({ paused: true, id: request.params.id });
+  });
+
+  app.post<{ Params: { id: string } }>("/monitor/:id/resume", async (request, reply) => {
+    if (!healthScheduler) {
+      return reply.status(501).send({ error: "Health monitoring not configured on this Envoy" });
+    }
+    const ok = healthScheduler.resume(request.params.id);
+    if (!ok) return reply.status(404).send({ error: `Directive ${request.params.id} not found or not resumable` });
+    return reply.status(200).send({ resumed: true, id: request.params.id });
+  });
+
+  app.get("/monitor", async (_request, reply) => {
+    if (!healthScheduler) {
+      return reply.status(200).send({ directives: [] });
+    }
+    return reply.status(200).send({ directives: healthScheduler.list() });
   });
 
   return app;

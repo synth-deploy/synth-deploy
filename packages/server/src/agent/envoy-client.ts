@@ -3,7 +3,7 @@ import type {
   HealthCheckResult,
 } from "./health-checker.js";
 import { serverLog, serverWarn, serverError } from "../logger.js";
-import type { DecisionType, DeploymentPlan, PlannedStep, SecurityBoundary } from "@synth-deploy/core";
+import type { DecisionType, DeploymentPlan, PlannedStep, SecurityBoundary, MonitoringDirective } from "@synth-deploy/core";
 
 // ---------------------------------------------------------------------------
 // Types — Envoy API responses
@@ -240,7 +240,7 @@ export class EnvoyClient {
    */
   async requestPlan(params: {
     operationId: string;
-    operationType?: "deploy" | "query" | "investigate";
+    operationType?: "deploy" | "query" | "investigate" | "trigger";
     intent?: string;
     allowWrite?: boolean;
     artifact?: {
@@ -393,6 +393,81 @@ export class EnvoyClient {
       this.timeoutMs * 3,
     );
     return (await response.json()) as { mode: "replan" | "rejection" | "response"; message: string };
+  }
+
+  /**
+   * Install a monitoring directive on the Envoy for health-based triggering.
+   */
+  async installMonitoringDirective(directive: MonitoringDirective): Promise<void> {
+    serverLog("ENVOY-MONITOR-INSTALL", { directiveId: directive.id, envoyUrl: this.baseUrl });
+    const response = await fetchWithRetry(
+      `${this.baseUrl}/monitor`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(directive),
+      },
+      this.timeoutMs,
+    );
+    if (!response.ok) {
+      const body = await response.text().catch(() => "");
+      throw new Error(`Failed to install monitoring directive (HTTP ${response.status}): ${body}`);
+    }
+  }
+
+  /**
+   * Pause a monitoring directive on the Envoy.
+   */
+  async pauseMonitoringDirective(directiveId: string): Promise<void> {
+    const response = await fetchWithRetry(
+      `${this.baseUrl}/monitor/${directiveId}/pause`,
+      { method: "POST", headers: { "Content-Type": "application/json" } },
+      this.timeoutMs,
+    );
+    if (!response.ok) {
+      throw new Error(`Failed to pause monitoring directive (HTTP ${response.status})`);
+    }
+  }
+
+  /**
+   * Resume a monitoring directive on the Envoy.
+   */
+  async resumeMonitoringDirective(directiveId: string): Promise<void> {
+    const response = await fetchWithRetry(
+      `${this.baseUrl}/monitor/${directiveId}/resume`,
+      { method: "POST", headers: { "Content-Type": "application/json" } },
+      this.timeoutMs,
+    );
+    if (!response.ok) {
+      throw new Error(`Failed to resume monitoring directive (HTTP ${response.status})`);
+    }
+  }
+
+  /**
+   * Remove a monitoring directive from the Envoy.
+   */
+  async removeMonitoringDirective(directiveId: string): Promise<void> {
+    const response = await fetchWithRetry(
+      `${this.baseUrl}/monitor/${directiveId}`,
+      { method: "DELETE", headers: { "Content-Type": "application/json" } },
+      this.timeoutMs,
+    );
+    if (!response.ok) {
+      throw new Error(`Failed to remove monitoring directive (HTTP ${response.status})`);
+    }
+  }
+
+  /**
+   * List active monitoring directives on the Envoy.
+   */
+  async listMonitoringDirectives(): Promise<Array<{ directive: MonitoringDirective; lastFiredAt: number; fireCount: number; suppressedCount: number }>> {
+    const response = await fetchWithRetry(
+      `${this.baseUrl}/monitor`,
+      {},
+      this.timeoutMs,
+    );
+    const data = (await response.json()) as { directives: Array<{ directive: MonitoringDirective; lastFiredAt: number; fireCount: number; suppressedCount: number }> };
+    return data.directives;
   }
 }
 

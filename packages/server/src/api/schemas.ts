@@ -243,6 +243,10 @@ export const CreateOperationSchema = z.object({
   type: z.enum(["deploy", "maintain", "query", "investigate", "trigger", "composite"]).default("deploy"),
   intent: z.string().optional(),
   allowWrite: z.boolean().optional(),
+  /** Trigger-specific: condition expression (e.g. "disk_usage > 85") */
+  condition: z.string().optional(),
+  /** Trigger-specific: what to do when the condition fires */
+  responseIntent: z.string().optional(),
 });
 
 export const ApproveDeploymentSchema = z.object({

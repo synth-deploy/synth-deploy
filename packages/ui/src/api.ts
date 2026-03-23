@@ -299,6 +299,8 @@ export async function createDeployment(trigger: {
   type?: string;
   intent?: string;
   allowWrite?: boolean;
+  condition?: string;
+  responseIntent?: string;
   environmentId?: string;
   partitionId?: string;
   envoyId?: string;
@@ -308,6 +310,20 @@ export async function createDeployment(trigger: {
     method: "POST",
     body: JSON.stringify(trigger),
   });
+}
+
+// --- Trigger management ---
+
+export async function pauseTrigger(id: string): Promise<{ operation: Deployment; paused: boolean }> {
+  return fetchJson(`/api/operations/${id}/trigger/pause`, { method: "POST" });
+}
+
+export async function resumeTrigger(id: string): Promise<{ operation: Deployment; resumed: boolean }> {
+  return fetchJson(`/api/operations/${id}/trigger/resume`, { method: "POST" });
+}
+
+export async function disableTrigger(id: string): Promise<{ operation: Deployment; disabled: boolean }> {
+  return fetchJson(`/api/operations/${id}/trigger/disable`, { method: "POST" });
 }
 
 export async function approveDeployment(

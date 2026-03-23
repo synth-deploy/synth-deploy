@@ -164,6 +164,109 @@ export const InvestigationFindingsSchema = QueryFindingsSchema.extend({
   }).optional(),
 });
 
+// --- Trigger / Health Monitoring ---
+
+export type TriggerStatus = "active" | "paused" | "disabled";
+
+/** A monitoring directive installed on an envoy by an approved trigger operation. */
+export interface MonitoringDirective {
+  /** Unique ID for this directive (usually the trigger operation ID) */
+  id: string;
+  /** The trigger operation that produced this directive */
+  operationId: OperationId;
+  /** Probes to run — shell commands executed via ProbeExecutor */
+  probes: MonitoringProbe[];
+  /** How often to run the probes (milliseconds) */
+  intervalMs: number;
+  /** Cooldown after firing before the trigger can fire again (milliseconds) */
+  cooldownMs: number;
+  /** Condition expression — evaluated against probe results */
+  condition: string;
+  /** What to do when the condition fires — becomes the intent for the child operation */
+  responseIntent: string;
+  /** Operation type for the spawned child operation */
+  responseType: "deploy" | "maintain";
+  /** Optional parameters for the spawned child operation */
+  responseParameters?: Record<string, unknown>;
+  /** Target scope */
+  environmentId?: string;
+  partitionId?: string;
+  /** Current status */
+  status: TriggerStatus;
+}
+
+export interface MonitoringProbe {
+  /** Shell command to execute (read-only, via ProbeExecutor) */
+  command: string;
+  /** Human-readable label for this probe */
+  label: string;
+  /** What to extract from the output — "exitCode", "numeric" (parse number), or "raw" */
+  parseAs: "exitCode" | "numeric" | "raw";
+}
+
+/** Health report sent from envoy to server when a trigger condition fires. */
+export interface HealthReport {
+  /** The monitoring directive that fired */
+  directiveId: string;
+  /** The trigger operation that owns the directive */
+  triggerOperationId: OperationId;
+  /** Envoy that detected the condition */
+  envoyId: EnvoyId;
+  /** Probe results that caused the trigger to fire */
+  probeResults: Array<{
+    label: string;
+    command: string;
+    output: string;
+    exitCode?: number;
+    parsedValue?: number;
+  }>;
+  /** Human-readable summary of what was detected */
+  summary: string;
+  /** When the condition was detected */
+  detectedAt: Date;
+  /** Target scope from the directive */
+  environmentId?: string;
+  partitionId?: string;
+}
+
+export const HealthReportSchema = z.object({
+  directiveId: z.string(),
+  triggerOperationId: z.string(),
+  envoyId: z.string(),
+  probeResults: z.array(z.object({
+    label: z.string(),
+    command: z.string(),
+    output: z.string(),
+    exitCode: z.number().optional(),
+    parsedValue: z.number().optional(),
+  })),
+  summary: z.string(),
+  detectedAt: z.string().transform((s) => new Date(s)),
+  environmentId: z.string().optional(),
+  partitionId: z.string().optional(),
+});
+
+export const MonitoringProbeSchema = z.object({
+  command: z.string(),
+  label: z.string(),
+  parseAs: z.enum(["exitCode", "numeric", "raw"]),
+});
+
+export const MonitoringDirectiveSchema = z.object({
+  id: z.string(),
+  operationId: z.string(),
+  probes: z.array(MonitoringProbeSchema),
+  intervalMs: z.number().int().positive(),
+  cooldownMs: z.number().int().nonnegative(),
+  condition: z.string(),
+  responseIntent: z.string(),
+  responseType: z.enum(["deploy", "maintain"]),
+  responseParameters: z.record(z.unknown()).optional(),
+  environmentId: z.string().optional(),
+  partitionId: z.string().optional(),
+  status: z.enum(["active", "paused", "disabled"]),
+});
+
 // --- Operation (unified lifecycle) ---
 
 export interface Operation {
@@ -192,6 +295,16 @@ export interface Operation {
   enrichment?: OperationEnrichment;
   recommendation?: OperationRecommendation;
   retryOf?: OperationId;
+  /** Trigger-specific: installed monitoring directive (populated after approval) */
+  monitoringDirective?: MonitoringDirective;
+  /** Trigger-specific: current trigger status */
+  triggerStatus?: TriggerStatus;
+  /** Trigger-specific: last time the trigger fired */
+  triggerLastFiredAt?: Date;
+  /** Trigger-specific: total number of times the trigger has fired */
+  triggerFireCount?: number;
+  /** Trigger-specific: number of times firing was suppressed by deduplication */
+  triggerSuppressedCount?: number;
   debriefEntryIds: DebriefEntryId[];
   createdAt: Date;
   completedAt?: Date;
@@ -229,6 +342,13 @@ export const DecisionType = z.enum([
   "environment-probe",
   "query-findings",
   "investigation-findings",
+  "trigger-activated",
+  "trigger-fired",
+  "trigger-suppressed",
+  "trigger-paused",
+  "trigger-resumed",
+  "trigger-disabled",
+  "health-report-received",
 ]);
 export type DecisionType = z.infer<typeof DecisionType>;
 
@@ -510,7 +630,13 @@ export type TelemetryAction =
   | "security-boundary.updated"
   | "agent.pre-flight.generated"
   | "agent.recommendation.followed"
-  | "agent.recommendation.overridden";
+  | "agent.recommendation.overridden"
+  | "trigger.activated"
+  | "trigger.fired"
+  | "trigger.suppressed"
+  | "trigger.paused"
+  | "trigger.resumed"
+  | "trigger.disabled";
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
   environmentsEnabled: true,

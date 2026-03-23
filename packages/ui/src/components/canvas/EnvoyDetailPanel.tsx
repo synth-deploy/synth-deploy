@@ -256,10 +256,16 @@ export default function EnvoyDetailPanel({ envoyId, title }: Props) {
     (a, b) => new Date(b.completedAt ?? b.createdAt).getTime() - new Date(a.completedAt ?? a.createdAt).getTime()
   );
 
-  // Recent plans: all deployments sorted newest first
-  const recentPlans = [...allDeployments].sort(
-    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-  ).slice(0, 10);
+  // Recent plans: non-trigger deployments sorted newest first
+  const recentPlans = [...allDeployments]
+    .filter((d) => d.input?.type !== "trigger")
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .slice(0, 10);
+
+  // Active triggers on this envoy
+  const activeTriggers = allDeployments.filter(
+    (d) => d.input?.type === "trigger" && d.triggerStatus && d.triggerStatus !== "disabled",
+  );
 
   return (
     <CanvasPanelHost title={title} hideRootCrumb>
@@ -522,6 +528,47 @@ export default function EnvoyDetailPanel({ envoyId, title }: Props) {
                 </div>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {/* ── Active Triggers ── */}
+      {activeTriggers.length > 0 && (
+        <div style={{ marginBottom: 24 }}>
+          <div className="section-label">Active Triggers</div>
+          <div style={{ borderRadius: 10, overflow: "hidden", border: "1px solid var(--border)", background: "var(--surface)" }}>
+            {activeTriggers.map((t, i) => (
+              <div
+                key={t.id}
+                onClick={() => pushPanel({ type: "debrief", title: "Debriefs", params: { deploymentId: t.id } })}
+                style={{
+                  padding: "12px 16px",
+                  borderBottom: i < activeTriggers.length - 1 ? "1px solid var(--border)" : "none",
+                  cursor: "pointer",
+                  transition: "background 0.15s",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>
+                    {t.monitoringDirective?.condition ?? t.intent ?? "Trigger"}
+                  </span>
+                  <span style={{
+                    fontSize: 10,
+                    padding: "2px 8px",
+                    borderRadius: 3,
+                    fontWeight: 600,
+                    background: t.triggerStatus === "active" ? "var(--status-healthy)" : "var(--status-warning)",
+                    color: "var(--bg)",
+                  }}>
+                    {t.triggerStatus}
+                  </span>
+                </div>
+                <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                  Response: {t.monitoringDirective?.responseIntent ?? "—"}
+                  {t.triggerFireCount ? ` · Fired ${t.triggerFireCount}x` : ""}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}

@@ -60,6 +60,8 @@ export default function OperationAuthoringPanel({ title, preselectedArtifactId, 
   const [preFlightRec, setPreFlightRec] = useState<PreFlightContext["recommendation"] | null>(null);
 
   const [allowWrite, setAllowWrite] = useState(false);
+  const [triggerCondition, setTriggerCondition] = useState("");
+  const [triggerResponseIntent, setTriggerResponseIntent] = useState("");
 
   function toggleArtifact(id: string) {
     setSelectedArtifactIds((prev) =>
@@ -72,7 +74,8 @@ export default function OperationAuthoringPanel({ title, preselectedArtifactId, 
 
   async function handleRequestPlan() {
     if (opType === "deploy" && (!primaryArtifactId || (environmentsEnabled && !hasTarget))) return;
-    if (opType !== "deploy" && !intent.trim()) return;
+    if (opType === "trigger" && (!triggerCondition.trim() || !triggerResponseIntent.trim())) return;
+    if (opType !== "deploy" && opType !== "trigger" && !intent.trim()) return;
     setSubmitting(true);
     setError(null);
 
@@ -88,13 +91,17 @@ export default function OperationAuthoringPanel({ title, preselectedArtifactId, 
       }
 
       const result = await createDeployment({
-        artifactId: primaryArtifactId,
+        artifactId: primaryArtifactId || undefined,
         environmentId: selectedEnvironmentId || undefined,
         partitionId: selectedPartitionId || undefined,
         envoyId: deployScope === "envoy" ? (selectedEnvoyId || undefined) : undefined,
         type: opType,
-        intent: intent.trim() || undefined,
+        intent: opType === "trigger" ? undefined : (intent.trim() || undefined),
         ...(opType === "investigate" ? { allowWrite } : {}),
+        ...(opType === "trigger" ? {
+          condition: triggerCondition.trim(),
+          responseIntent: triggerResponseIntent.trim(),
+        } : {}),
       } as Parameters<typeof createDeployment>[0]);
 
       pushPanel({
@@ -165,7 +172,9 @@ export default function OperationAuthoringPanel({ title, preselectedArtifactId, 
   const lowConfidenceArtifacts = selectedArtifactObjects.filter((a) => a.analysis.confidence < 0.5);
   const canDeploy = opType === "deploy"
     ? selectedArtifactIds.length > 0 && hasTarget
-    : intent.trim().length > 0;
+    : opType === "trigger"
+      ? triggerCondition.trim().length > 0 && triggerResponseIntent.trim().length > 0
+      : intent.trim().length > 0;
   const contextHint = getContextHint();
 
   return (
@@ -186,7 +195,7 @@ export default function OperationAuthoringPanel({ title, preselectedArtifactId, 
           <div className="section-label" style={{ marginBottom: 8 }}>Operation type</div>
           <div style={{ display: "flex", gap: 4 }}>
             {(["deploy", "maintain", "query", "investigate", "trigger"] as OpType[]).map((t) => {
-              const isAvailable = t === "deploy" || t === "query" || t === "investigate";
+              const isAvailable = t === "deploy" || t === "query" || t === "investigate" || t === "trigger";
               return (
                 <button
                   key={t}
@@ -214,30 +223,75 @@ export default function OperationAuthoringPanel({ title, preselectedArtifactId, 
           </div>
         </div>
 
-        {/* Intent / objective field */}
-        <div style={{ marginBottom: 20 }}>
-          <div className="section-label" style={{ marginBottom: 8 }}>
-            {opType === "deploy" ? "Objective (optional)" : "Objective"}
+        {/* Trigger-specific: condition + response intent */}
+        {opType === "trigger" ? (
+          <div style={{ marginBottom: 20 }}>
+            <div className="section-label" style={{ marginBottom: 8 }}>Condition</div>
+            <textarea
+              value={triggerCondition}
+              onChange={(e) => setTriggerCondition(e.target.value)}
+              placeholder="When disk_usage > 85"
+              rows={2}
+              style={{
+                width: "100%",
+                padding: "8px 10px",
+                fontSize: 13,
+                fontFamily: "var(--font-mono)",
+                background: "var(--surface-2)",
+                color: "var(--text)",
+                border: "1px solid var(--border)",
+                borderRadius: 4,
+                resize: "vertical",
+                boxSizing: "border-box",
+                marginBottom: 12,
+              }}
+            />
+            <div className="section-label" style={{ marginBottom: 8 }}>Response</div>
+            <textarea
+              value={triggerResponseIntent}
+              onChange={(e) => setTriggerResponseIntent(e.target.value)}
+              placeholder="Run log cleanup on /var/log"
+              rows={2}
+              style={{
+                width: "100%",
+                padding: "8px 10px",
+                fontSize: 13,
+                fontFamily: "var(--font-mono)",
+                background: "var(--surface-2)",
+                color: "var(--text)",
+                border: "1px solid var(--border)",
+                borderRadius: 4,
+                resize: "vertical",
+                boxSizing: "border-box",
+              }}
+            />
           </div>
-          <textarea
-            value={intent}
-            onChange={(e) => setIntent(e.target.value)}
-            placeholder={opType === "deploy" ? "Describe the goal of this deployment…" : "Describe what you want Synth to do…"}
-            rows={2}
-            style={{
-              width: "100%",
-              padding: "8px 10px",
-              fontSize: 13,
-              fontFamily: "var(--font-mono)",
-              background: "var(--surface-2)",
-              color: "var(--text)",
-              border: "1px solid var(--border)",
-              borderRadius: 4,
-              resize: "vertical",
-              boxSizing: "border-box",
-            }}
-          />
-        </div>
+        ) : (
+          /* Intent / objective field */
+          <div style={{ marginBottom: 20 }}>
+            <div className="section-label" style={{ marginBottom: 8 }}>
+              {opType === "deploy" ? "Objective (optional)" : "Objective"}
+            </div>
+            <textarea
+              value={intent}
+              onChange={(e) => setIntent(e.target.value)}
+              placeholder={opType === "deploy" ? "Describe the goal of this deployment…" : "Describe what you want Synth to do…"}
+              rows={2}
+              style={{
+                width: "100%",
+                padding: "8px 10px",
+                fontSize: 13,
+                fontFamily: "var(--font-mono)",
+                background: "var(--surface-2)",
+                color: "var(--text)",
+                border: "1px solid var(--border)",
+                borderRadius: 4,
+                resize: "vertical",
+                boxSizing: "border-box",
+              }}
+            />
+          </div>
+        )}
 
         {/* Allow write toggle — investigate only */}
         {opType === "investigate" && (
@@ -517,8 +571,8 @@ export default function OperationAuthoringPanel({ title, preselectedArtifactId, 
               </div>
             )}
           </div>
-        ) : (opType === "query" || opType === "investigate") ? (
-          /* Single-column Where section for query/investigate */
+        ) : (opType === "query" || opType === "investigate" || opType === "trigger") ? (
+          /* Single-column Where section for query/investigate/trigger */
           <div style={{ marginBottom: 20 }}>
             <div className="section-label" style={{ marginBottom: 10 }}>Where</div>
 
@@ -792,6 +846,30 @@ export default function OperationAuthoringPanel({ title, preselectedArtifactId, 
                   : opType === "query"
                   ? "Run Query"
                   : "Begin Investigation"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Trigger action bar */}
+        {canDeploy && opType === "trigger" && (
+          <div className="nd-action-bar">
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>
+                  When: {triggerCondition.trim()}
+                </div>
+                <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>
+                  Then: {triggerResponseIntent.trim()}
+                  {hasTarget ? ` → ${getTargetName()}` : ""}
+                </div>
+              </div>
+              <button
+                className="nd-request-plan-btn"
+                disabled={submitting}
+                onClick={handleRequestPlan}
+              >
+                {submitting ? "Creating…" : "Create Trigger"}
               </button>
             </div>
           </div>

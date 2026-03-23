@@ -294,6 +294,19 @@ export interface Deployment {
   /** Findings from an investigation operation */
   investigationFindings?: InvestigationFindings;
   retryOf?: string;
+  /** Trigger-specific fields */
+  triggerStatus?: "active" | "paused" | "disabled";
+  triggerLastFiredAt?: string;
+  triggerFireCount?: number;
+  triggerSuppressedCount?: number;
+  monitoringDirective?: {
+    id: string;
+    condition: string;
+    responseIntent: string;
+    intervalMs: number;
+    cooldownMs: number;
+    status: "active" | "paused" | "disabled";
+  };
   debriefEntryIds: string[];
   createdAt: string;
   completedAt: string | null;
@@ -362,7 +375,14 @@ export type DecisionType =
   | "environment-probe"
   | "pre-flight-llm-failure"
   | "query-findings"
-  | "investigation-findings";
+  | "investigation-findings"
+  | "trigger-activated"
+  | "trigger-fired"
+  | "trigger-suppressed"
+  | "trigger-paused"
+  | "trigger-resumed"
+  | "trigger-disabled"
+  | "health-report-received";
 
 export type AgentType = "server" | "envoy";
 

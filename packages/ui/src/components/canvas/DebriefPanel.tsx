@@ -20,6 +20,10 @@ const DECISION_TYPES: { value: DecisionType; label: string }[] = [
   { value: "environment-scan", label: "Scan" },
   { value: "query-findings", label: "Query" },
   { value: "investigation-findings", label: "Investigation" },
+  { value: "trigger-activated", label: "Trigger" },
+  { value: "trigger-fired", label: "Fired" },
+  { value: "trigger-suppressed", label: "Suppressed" },
+  { value: "health-report-received", label: "Health" },
   { value: "system", label: "System" },
 ];
 
@@ -141,6 +145,20 @@ function DeploymentDebriefDetail({ deploymentId, onBack, onNavigate }: { deploym
     pushPanel({
       type: "operation-authoring",
       title: "Run Again",
+      params,
+    });
+  }
+
+  function handleCreateTrigger() {
+    if (!deployment) return;
+    const params: Record<string, string> = { opType: "trigger" };
+    if (deployment.environmentId) params.environmentId = deployment.environmentId;
+    if (deployment.partitionId) params.partitionId = deployment.partitionId;
+    // Pre-fill the response intent from this operation's outcome
+    if (deployment.intent) params.intent = deployment.intent;
+    pushPanel({
+      type: "operation-authoring",
+      title: "Create Trigger",
       params,
     });
   }
@@ -353,6 +371,15 @@ function DeploymentDebriefDetail({ deploymentId, onBack, onNavigate }: { deploym
               Run Again
             </button>
           )}
+          {isFinished && deployment.input?.type !== "trigger" && (
+            <button
+              className="btn-secondary"
+              style={{ fontSize: 12, padding: "4px 12px" }}
+              onClick={handleCreateTrigger}
+            >
+              Create Trigger
+            </button>
+          )}
           {isFinished && (
             <button
               className="btn-secondary"
@@ -368,6 +395,77 @@ function DeploymentDebriefDetail({ deploymentId, onBack, onNavigate }: { deploym
           </div>
         </div>
       </div>
+
+      {/* Trigger status & management */}
+      {deployment.input?.type === "trigger" && deployment.triggerStatus && (
+        <div style={{
+          padding: "10px 14px",
+          marginBottom: 16,
+          background: "var(--surface-2)",
+          borderRadius: 6,
+          border: "1px solid var(--border)",
+        }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>
+                Trigger: {deployment.triggerStatus === "active" ? "Active" : deployment.triggerStatus === "paused" ? "Paused" : "Disabled"}
+              </div>
+              {deployment.monitoringDirective && (
+                <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>
+                  Condition: {deployment.monitoringDirective.condition}
+                  {" · "}Response: {deployment.monitoringDirective.responseIntent}
+                </div>
+              )}
+              <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>
+                Fired {deployment.triggerFireCount ?? 0} time(s)
+                {(deployment.triggerSuppressedCount ?? 0) > 0 && ` · ${deployment.triggerSuppressedCount} suppressed`}
+                {deployment.triggerLastFiredAt && ` · Last: ${timeAgo(deployment.triggerLastFiredAt)}`}
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 6 }}>
+              {deployment.triggerStatus === "active" && (
+                <button
+                  className="btn-secondary"
+                  style={{ fontSize: 11, padding: "3px 10px" }}
+                  onClick={() => {
+                    import("../../api.js").then(({ pauseTrigger }) =>
+                      pauseTrigger(deployment.id).then(({ operation }) => setDeployment(operation))
+                    );
+                  }}
+                >
+                  Pause
+                </button>
+              )}
+              {deployment.triggerStatus === "paused" && (
+                <button
+                  className="btn-secondary"
+                  style={{ fontSize: 11, padding: "3px 10px" }}
+                  onClick={() => {
+                    import("../../api.js").then(({ resumeTrigger }) =>
+                      resumeTrigger(deployment.id).then(({ operation }) => setDeployment(operation))
+                    );
+                  }}
+                >
+                  Resume
+                </button>
+              )}
+              {deployment.triggerStatus !== "disabled" && (
+                <button
+                  className="btn-secondary"
+                  style={{ fontSize: 11, padding: "3px 10px", color: "var(--status-failed)" }}
+                  onClick={() => {
+                    import("../../api.js").then(({ disableTrigger }) =>
+                      disableTrigger(deployment.id).then(({ operation }) => setDeployment(operation))
+                    );
+                  }}
+                >
+                  Disable
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* What's New */}
       {whatsNew && (
@@ -909,7 +1007,11 @@ export default function DebriefPanel({ title, filterPartitionId, filterDecisionT
   const FINISHED_STATUSES = new Set(["succeeded", "failed", "rolled_back"]);
 
   function renderDeploymentRow(dep: Deployment) {
-    const artName = (artifacts ?? []).find((a) => a.id === dep.artifactId)?.name ?? dep.artifactId.slice(0, 8);
+    const artName = dep.input?.type === "trigger"
+      ? (dep.monitoringDirective?.condition ?? dep.intent ?? "Trigger")
+      : dep.input?.type && dep.input.type !== "deploy"
+        ? (dep.intent ?? dep.input.type)
+        : ((artifacts ?? []).find((a) => a.id === dep.artifactId)?.name ?? dep.artifactId?.slice(0, 8) ?? "—");
     const envName = (environments ?? []).find((e) => e.id === dep.environmentId)?.name ?? dep.environmentId?.slice(0, 8) ?? "—";
     const duration = formatDuration(dep.createdAt, dep.completedAt);
     const isFinished = FINISHED_STATUSES.has(dep.status);
@@ -951,6 +1053,18 @@ export default function DebriefPanel({ title, filterPartitionId, filterDecisionT
           {duration && <span>Duration: {duration}</span>}
           {dep.input?.type && dep.input.type !== "deploy" && (
             <span className="debrief-op-type-tag">{dep.input.type}</span>
+          )}
+          {dep.input?.type === "trigger" && dep.triggerStatus && (
+            <span style={{
+              fontSize: 10,
+              padding: "1px 6px",
+              borderRadius: 3,
+              fontWeight: 600,
+              background: dep.triggerStatus === "active" ? "var(--status-healthy)" : dep.triggerStatus === "paused" ? "var(--status-warning)" : "var(--surface-3)",
+              color: dep.triggerStatus === "disabled" ? "var(--text-muted)" : "var(--bg)",
+            }}>
+              {dep.triggerStatus}{dep.triggerFireCount ? ` · ${dep.triggerFireCount}x` : ""}
+            </span>
           )}
           {isFinished && (
             <span style={{ color: "var(--accent)", fontWeight: 500 }}>View full debrief →</span>
