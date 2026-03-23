@@ -9,6 +9,7 @@ import {
   recordPreFlightResponse,
 } from "../../api.js";
 import type { Artifact, Partition, Environment, Deployment, ApprovalMode } from "../../types.js";
+import { DEFAULT_APPROVAL_DEFAULTS } from "../../types.js";
 import type { EnvoyRegistryEntry, PreFlightContext } from "../../api.js";
 import { useSettings } from "../../context/SettingsContext.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
@@ -154,8 +155,8 @@ export default function OperationAuthoringPanel({ title, preselectedArtifactId, 
       const typeDefault = defaults[opType as keyof typeof defaults];
       if (typeDefault === "auto" || typeDefault === "required") return typeDefault;
     }
-    // Hardcoded defaults (mirrors DEFAULT_APPROVAL_DEFAULTS in core)
-    return opType === "query" || opType === "investigate" ? "auto" : "required";
+    // Fall back to canonical defaults from core
+    return DEFAULT_APPROVAL_DEFAULTS[opType as keyof typeof DEFAULT_APPROVAL_DEFAULTS] ?? "required";
   }
 
   const resolvedApprovalMode = getResolvedApprovalMode();
