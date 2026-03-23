@@ -637,7 +637,7 @@ describe("Settings Routes", () => {
       expect(body.settings.environmentsEnabled).toBe(true);
       expect(body.settings.agent).toBeDefined();
       expect(body.settings.agent.conflictPolicy).toBe("permissive");
-      expect(body.settings.deploymentDefaults).toBeDefined();
+      expect(body.settings.operationDefaults).toBeDefined();
       expect(body.settings.envoy).toBeDefined();
     });
   });

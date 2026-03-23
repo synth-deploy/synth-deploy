@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { generatePostmortem, generatePostmortemAsync } from "@synth-deploy/core";
+import { generatePostmortem, generatePostmortemAsync, resolveApprovalMode } from "@synth-deploy/core";
 import type { LlmClient, IPartitionStore, IEnvironmentStore, IArtifactStore, ISettingsStore, IDeploymentStore, ITelemetryStore, DebriefWriter, DebriefReader, DebriefPinStore, DeploymentEnrichment, RecommendationVerdict, TelemetryAction } from "@synth-deploy/core";
 import { requirePermission } from "../middleware/permissions.js";
 import {
@@ -206,29 +206,38 @@ export function registerOperationRoutes(
             return;
           }
 
-          // Auto-approve read-only operations — findings are the deliverable
+          // Check approval mode for query/investigate operations with findings
           if ((dep.input.type === "query" || dep.input.type === "investigate") &&
               (result.queryFindings || result.investigationFindings)) {
             if (result.queryFindings) dep.queryFindings = result.queryFindings;
             if (result.investigationFindings) dep.investigationFindings = result.investigationFindings;
-            dep.status = "succeeded" as typeof dep.status;
-            dep.completedAt = new Date();
-            deployments.save(dep);
 
-            const decisionType = dep.input.type === "query"
-              ? "query-findings" as const
-              : "investigation-findings" as const;
-            const findings = result.queryFindings ?? result.investigationFindings!;
-            debrief.record({
-              partitionId: dep.partitionId ?? null,
-              operationId: dep.id,
-              agent: "envoy",
-              decisionType,
-              decision: `${dep.input.type === "query" ? "Query" : "Investigation"} complete — ${findings.targetsSurveyed.length} target(s) surveyed`,
-              reasoning: findings.summary,
-              context: { targetsSurveyed: findings.targetsSurveyed, findingCount: findings.findings.length },
-            });
-            return;
+            const currentSettings = settings.get();
+            const envLookup = (id: string) => environments.get(id)?.name;
+            const approvalMode = resolveApprovalMode(dep.input.type, dep.environmentId, currentSettings, envLookup);
+
+            if (approvalMode === "auto") {
+              // Auto-approve — findings are the deliverable
+              dep.status = "succeeded" as typeof dep.status;
+              dep.completedAt = new Date();
+              deployments.save(dep);
+
+              const decisionType = dep.input.type === "query"
+                ? "query-findings" as const
+                : "investigation-findings" as const;
+              const findings = result.queryFindings ?? result.investigationFindings!;
+              debrief.record({
+                partitionId: dep.partitionId ?? null,
+                operationId: dep.id,
+                agent: "envoy",
+                decisionType,
+                decision: `${dep.input.type === "query" ? "Query" : "Investigation"} complete — ${findings.targetsSurveyed.length} target(s) surveyed`,
+                reasoning: findings.summary,
+                context: { targetsSurveyed: findings.targetsSurveyed, findingCount: findings.findings.length },
+              });
+              return;
+            }
+            // approvalMode === "required" — fall through to standard approval gate
           }
 
           if (result.blocked) {
