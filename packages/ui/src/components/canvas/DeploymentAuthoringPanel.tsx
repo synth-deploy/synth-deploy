@@ -225,7 +225,7 @@ export default function OperationAuthoringPanel({ title, preselectedArtifactId, 
                 <button
                   key={t}
                   disabled={!isAvailable}
-                  onClick={() => isAvailable && setOpType(t)}
+                  onClick={() => { if (isAvailable) { setOpType(t); setForceManualApproval(false); } }}
                   title={isAvailable ? undefined : "Coming soon"}
                   style={{
                     padding: "5px 12px",
