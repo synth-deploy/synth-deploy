@@ -72,6 +72,10 @@ const PlanRequestSchema = z.object({
   /** Forwarded from Server runtime config — never logged or persisted */
   llmApiKey: z.string().optional(),
   refinementFeedback: z.string().optional(),
+  /** Trigger-specific: the condition expression (e.g. "disk_usage > 85") */
+  triggerCondition: z.string().optional(),
+  /** Trigger-specific: what to do when the condition fires */
+  triggerResponseIntent: z.string().optional(),
 });
 
 const PlanStepSchema = z.object({

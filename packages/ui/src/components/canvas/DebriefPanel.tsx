@@ -141,7 +141,12 @@ function DeploymentDebriefDetail({ deploymentId, onBack, onNavigate }: { deploym
     if (deployment.environmentId) params.environmentId = deployment.environmentId;
     if (deployment.partitionId) params.partitionId = deployment.partitionId;
     if (opType !== "deploy") params.opType = opType;
-    if (intent) params.intent = intent;
+    if (opType === "trigger" && deployment.input?.type === "trigger") {
+      params.triggerCondition = deployment.input.condition;
+      params.triggerResponseIntent = deployment.input.responseIntent;
+    } else if (intent) {
+      params.intent = intent;
+    }
     pushPanel({
       type: "operation-authoring",
       title: "Run Again",
@@ -155,7 +160,7 @@ function DeploymentDebriefDetail({ deploymentId, onBack, onNavigate }: { deploym
     if (deployment.environmentId) params.environmentId = deployment.environmentId;
     if (deployment.partitionId) params.partitionId = deployment.partitionId;
     // Pre-fill the response intent from this operation's outcome
-    if (deployment.intent) params.intent = deployment.intent;
+    if (deployment.intent) params.triggerResponseIntent = deployment.intent;
     pushPanel({
       type: "operation-authoring",
       title: "Create Trigger",

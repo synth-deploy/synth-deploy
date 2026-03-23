@@ -25,12 +25,14 @@ interface Props {
   preselectedPartitionId?: string;
   preselectedOpType?: OpType;
   preselectedIntent?: string;
+  preselectedTriggerCondition?: string;
+  preselectedTriggerResponseIntent?: string;
 }
 
 type DeployScope = "environment" | "envoy" | "partition";
 type OpType = "deploy" | "maintain" | "query" | "investigate" | "trigger";
 
-export default function OperationAuthoringPanel({ title, preselectedArtifactId, preselectedEnvironmentId, preselectedPartitionId, preselectedOpType, preselectedIntent }: Props) {
+export default function OperationAuthoringPanel({ title, preselectedArtifactId, preselectedEnvironmentId, preselectedPartitionId, preselectedOpType, preselectedIntent, preselectedTriggerCondition, preselectedTriggerResponseIntent }: Props) {
   const { pushPanel } = useCanvas();
   const { settings: appSettings } = useSettings();
   const environmentsEnabled = appSettings?.environmentsEnabled ?? true;
@@ -60,8 +62,8 @@ export default function OperationAuthoringPanel({ title, preselectedArtifactId, 
   const [preFlightRec, setPreFlightRec] = useState<PreFlightContext["recommendation"] | null>(null);
 
   const [allowWrite, setAllowWrite] = useState(false);
-  const [triggerCondition, setTriggerCondition] = useState("");
-  const [triggerResponseIntent, setTriggerResponseIntent] = useState("");
+  const [triggerCondition, setTriggerCondition] = useState(preselectedTriggerCondition ?? "");
+  const [triggerResponseIntent, setTriggerResponseIntent] = useState(preselectedTriggerResponseIntent ?? "");
 
   function toggleArtifact(id: string) {
     setSelectedArtifactIds((prev) =>

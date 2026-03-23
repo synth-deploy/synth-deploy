@@ -130,6 +130,10 @@ export function registerOperationRoutes(
           intent: deployment.intent ?? (deployment.input.type === "trigger"
             ? `Monitor: ${(deployment.input as { condition: string }).condition}. When triggered: ${(deployment.input as { responseIntent: string }).responseIntent}`
             : undefined),
+          ...(deployment.input.type === "trigger" ? {
+            triggerCondition: (deployment.input as { condition: string }).condition,
+            triggerResponseIntent: (deployment.input as { responseIntent: string }).responseIntent,
+          } : {}),
           ...(artifact ? {
             artifact: {
               id: artifact.id,
@@ -168,7 +172,7 @@ export function registerOperationRoutes(
             const probes = result.plan.steps.map((step) => ({
               command: step.action,
               label: step.description,
-              parseAs: "numeric" as const,
+              parseAs: (step.params?.parseAs === "exitCode" ? "exitCode" : "numeric") as "numeric" | "exitCode",
             }));
             const directive: import("@synth-deploy/core").MonitoringDirective = {
               id: dep.id,
@@ -178,8 +182,8 @@ export function registerOperationRoutes(
                 label: "default-probe",
                 parseAs: "numeric" as const,
               }],
-              intervalMs: 60_000, // default: check every minute
-              cooldownMs: 300_000, // default: 5-minute cooldown
+              intervalMs: result.intervalMs ?? 60_000,
+              cooldownMs: result.cooldownMs ?? 300_000,
               condition: triggerInput.condition,
               responseIntent: triggerInput.responseIntent,
               responseType: "maintain",
