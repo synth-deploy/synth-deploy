@@ -5,7 +5,7 @@ import {
   listArtifacts,
   listEnvoys,
   createArtifact,
-  createDeployment,
+  createOperation,
   getArtifact,
   getDeployment,
   getSystemState,
@@ -204,7 +204,7 @@ function EmptyState({ onComplete }: { onComplete: () => void }) {
     setStep3Submitting(true);
     setStep3Error(null);
     try {
-      const result = await createDeployment({
+      const result = await createOperation({
         artifactId: createdArtifact.id,
         environmentId: environmentsEnabled ? selectedEnvId : undefined,
         version: version.trim() || "1.0.0",

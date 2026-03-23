@@ -276,6 +276,8 @@ export interface Operation {
   intent?: string;
   /** Parent operation that spawned this one (e.g. trigger → child operation) */
   lineage?: OperationId;
+  /** Who/what initiated this operation */
+  triggeredBy?: "user" | "agent" | "webhook" | "trigger";
   /** Structured findings — populated by investigate operations */
   findings?: string;
   queryFindings?: QueryFindings;

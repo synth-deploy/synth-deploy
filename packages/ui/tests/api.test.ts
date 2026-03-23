@@ -9,7 +9,7 @@ import {
   createPartition,
   listDeployments,
   getDeployment,
-  createDeployment,
+  createOperation,
   getRecentDebrief,
   getHealth,
   listEnvironments,
@@ -189,7 +189,7 @@ describe("API client — deployments", () => {
     expect(result).toEqual(data);
   });
 
-  it("createDeployment sends POST with deployment params", async () => {
+  it("createOperation sends POST with deployment params", async () => {
     const params = {
       artifactId: "art-1",
       environmentId: "env-1",
@@ -198,7 +198,7 @@ describe("API client — deployments", () => {
     };
     mockFetchResponse({ deployment: { id: "d-new" } });
 
-    await createDeployment(params);
+    await createOperation(params);
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe("/api/operations");
     expect(init.method).toBe("POST");

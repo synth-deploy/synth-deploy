@@ -817,8 +817,8 @@ export function registerOperationRoutes(
       const now = new Date();
       const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
-      // Count recent deployments to the same environment (only meaningful when environmentId is set)
-      const recentDeploymentsToEnv = deployment.environmentId
+      // Count recent operations to the same environment (only meaningful when environmentId is set)
+      const recentOperationsToEnv = deployment.environmentId
         ? deployments.countByEnvironment(deployment.environmentId, twentyFourHoursAgo)
         : 0;
 
@@ -831,8 +831,8 @@ export function registerOperationRoutes(
           ).length > 0
         : false;
 
-      // Check for other in-progress deployments to the same environment
-      const conflictingDeployments = deployment.environmentId
+      // Check for other in-progress operations to the same environment
+      const conflictingOperations = deployment.environmentId
         ? deployments.list()
             .filter(
               (d) =>
@@ -843,11 +843,11 @@ export function registerOperationRoutes(
             .map((d) => d.id)
         : [];
 
-      // Find last deployment to the same environment
+      // Find last operation to the same environment
       const lastDeploy = deployment.environmentId
         ? deployments.findLatestByEnvironment(deployment.environmentId)
         : undefined;
-      const lastDeploymentToEnv = lastDeploy && lastDeploy.id !== deployment.id
+      const lastOperationToEnv = lastDeploy && lastDeploy.id !== deployment.id
         ? {
             id: lastDeploy.id,
             status: lastDeploy.status,
@@ -857,10 +857,10 @@ export function registerOperationRoutes(
         : undefined;
 
       const enrichment: DeploymentEnrichment = {
-        recentDeploymentsToEnv,
+        recentOperationsToEnv,
         previouslyRolledBack,
-        conflictingDeployments,
-        lastDeploymentToEnv,
+        conflictingOperations,
+        lastOperationToEnv,
       };
 
       return {
@@ -1527,6 +1527,7 @@ export function registerOperationRoutes(
         : { type: "maintain" as const, intent: triggerInput.responseIntent, parameters: triggerInput.parameters },
       intent: triggerInput.responseIntent,
       lineage: triggerOp.id,
+      triggeredBy: "trigger" as const,
       environmentId: report.environmentId ?? triggerOp.environmentId,
       partitionId: report.partitionId ?? triggerOp.partitionId,
       envoyId: report.envoyId,

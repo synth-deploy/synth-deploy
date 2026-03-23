@@ -9,7 +9,7 @@ import {
   listEnvironments,
   listArtifacts,
   listPartitions,
-  createDeployment,
+  createOperation,
 } from "../../api.js";
 import { invalidateExact } from "../../hooks/useQuery.js";
 import type {
@@ -205,24 +205,24 @@ function verdictToConfidence(verdict: string): number {
 function buildContextText(enrichment: DeploymentEnrichment | null, envName: string): string {
   if (!enrichment) return `Deploying to ${envName}`;
   const parts: string[] = [];
-  if (enrichment.recentDeploymentsToEnv > 0) {
+  if (enrichment.recentOperationsToEnv > 0) {
     parts.push(
-      `${enrichment.recentDeploymentsToEnv} deployment${enrichment.recentDeploymentsToEnv !== 1 ? "s" : ""} to ${envName} in last 24h`
+      `${enrichment.recentOperationsToEnv} operation${enrichment.recentOperationsToEnv !== 1 ? "s" : ""} to ${envName} in last 24h`
     );
   } else {
-    parts.push(`First deployment to ${envName} today`);
+    parts.push(`First operation to ${envName} today`);
   }
-  if (enrichment.lastDeploymentToEnv) {
+  if (enrichment.lastOperationToEnv) {
     parts.push(
-      `Previous version (${enrichment.lastDeploymentToEnv.version}) ${enrichment.lastDeploymentToEnv.status}`
+      `Previous version (${enrichment.lastOperationToEnv.version}) ${enrichment.lastOperationToEnv.status}`
     );
   }
   if (enrichment.previouslyRolledBack) {
     parts.push("This version was previously rolled back");
   }
-  if (enrichment.conflictingDeployments.length > 0) {
+  if (enrichment.conflictingOperations.length > 0) {
     parts.push(
-      `${enrichment.conflictingDeployments.length} other deployment${enrichment.conflictingDeployments.length !== 1 ? "s" : ""} in progress`
+      `${enrichment.conflictingOperations.length} other operation${enrichment.conflictingOperations.length !== 1 ? "s" : ""} in progress`
     );
   }
   return parts.join(" · ");
@@ -447,7 +447,7 @@ export default function PlanReviewPanel({ deploymentId }: Props) {
       const res = deployment.investigationFindings?.proposedResolution;
       if (!res) return;
       try {
-        const result = await createDeployment({
+        const result = await createOperation({
           type: res.operationType,
           intent: res.intent,
           environmentId: deployment.environmentId,

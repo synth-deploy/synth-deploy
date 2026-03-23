@@ -294,7 +294,7 @@ export async function getWhatsNew(deploymentId: string): Promise<WhatsNewResult>
   return fetchJson(`/api/operations/${deploymentId}/whats-new`);
 }
 
-export async function createDeployment(trigger: {
+export async function createOperation(trigger: {
   artifactId?: string;
   type?: string;
   intent?: string;
