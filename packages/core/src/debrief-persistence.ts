@@ -189,19 +189,13 @@ export class PersistentDecisionDebrief implements DebriefWriter, DebriefReader, 
 
   private backfillFts(): void {
     try {
-      const count = this.db.prepare(
-        `SELECT COUNT(*) as c FROM diary_fts`,
-      ).get() as { c: number };
-      const total = this.db.prepare(
-        `SELECT COUNT(*) as c FROM diary_entries`,
-      ).get() as { c: number };
-      if (count.c < total.c) {
-        this.db.exec(`
-          DELETE FROM diary_fts;
-          INSERT INTO diary_fts (rowid, id, decision, reasoning, context)
-          SELECT rowid, id, decision, reasoning, context FROM diary_entries;
-        `);
-      }
+      // Incremental: only insert entries missing from FTS
+      this.db.exec(`
+        INSERT INTO diary_fts (rowid, id, decision, reasoning, context)
+        SELECT e.rowid, e.id, e.decision, e.reasoning, e.context
+        FROM diary_entries e
+        WHERE e.id NOT IN (SELECT id FROM diary_fts)
+      `);
     } catch {
       // FTS backfill is best-effort
     }
@@ -337,8 +331,11 @@ export class PersistentDecisionDebrief implements DebriefWriter, DebriefReader, 
       const countRow = this.stmts.countOlderThan.get(cutoff.toISOString()) as { count: number };
       if (countRow.count === 0) return 0;
 
-      this.stmts.purgeFts.run(cutoff.toISOString());
-      this.stmts.purgeOlderThan.run(cutoff.toISOString());
+      const purge = this.db.transaction(() => {
+        this.stmts.purgeFts.run(cutoff.toISOString());
+        this.stmts.purgeOlderThan.run(cutoff.toISOString());
+      });
+      purge();
       return countRow.count;
     } catch (error) {
       console.error('Debrief purge failed', { operation: 'purgeOlderThan', cutoff, error });

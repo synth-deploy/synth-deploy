@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { getRecentDebrief, getDeployment, listDeployments, listPartitions, listArtifacts, listEnvironments, getWhatsNew, requestRollbackPlan, executeRollback, retryDeployment, getPostmortem, pinOperation, unpinOperation, getPinnedOperations } from "../../api.js";
 import type { WhatsNewResult, LlmPostmortem } from "../../api.js";
 import type { DebriefEntry, Partition, Deployment, Artifact, Environment, DecisionType } from "../../types.js";
@@ -360,7 +360,7 @@ function DeploymentDebriefDetail({ deploymentId, onBack, onNavigate }: { deploym
               disabled={retrying}
               onClick={handleRetry}
             >
-              {retrying ? "Retrying…" : "Retry"}
+              {retrying ? "Retrying…" : "Retry Deployment"}
             </button>
           )}
           <div className={`v2-deploy-status-pill v2-pill-${deployment.status}`}>
@@ -818,13 +818,23 @@ export default function DebriefPanel({ title, filterPartitionId, filterDecisionT
   const [filterPartition, setFilterPartition] = useState(filterPartitionId ?? "");
   const [filterType, setFilterType] = useState(filterDecisionType ?? "");
   const [selectedDeploymentId, setSelectedDeploymentId] = useState<string | null>(initialDeploymentId ?? null);
+  const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [pinnedIds, setPinnedIds] = useState<Set<string>>(new Set());
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  function handleSearchChange(value: string) {
+    setSearchInput(value);
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => setSearchQuery(value), 300);
+  }
+
+  useEffect(() => () => clearTimeout(debounceRef.current), []);
 
   const debriefKey = `debrief:${filterPartition}:${filterType}:${searchQuery}`;
   const { data: entries, loading: l1, error } = useQuery<DebriefEntry[]>(debriefKey, () =>
     getRecentDebrief({
-      limit: 200,
+      limit: 100,
       partitionId: filterPartition || undefined,
       decisionType: filterType || undefined,
       q: searchQuery || undefined,
@@ -844,14 +854,16 @@ export default function DebriefPanel({ title, filterPartitionId, filterDecisionT
 
   const handleTogglePin = useCallback(async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (pinnedIds.has(id)) {
-      await unpinOperation(id).catch(() => {});
-      setPinnedIds((prev) => { const next = new Set(prev); next.delete(id); return next; });
-    } else {
-      await pinOperation(id).catch(() => {});
-      setPinnedIds((prev) => new Set(prev).add(id));
-    }
-  }, [pinnedIds]);
+    setPinnedIds((prev) => {
+      if (prev.has(id)) {
+        unpinOperation(id).catch(() => {});
+        const next = new Set(prev); next.delete(id); return next;
+      } else {
+        pinOperation(id).catch(() => {});
+        return new Set(prev).add(id);
+      }
+    });
+  }, []);
 
   const { pushPanel } = useCanvas();
   const loading = l1 || l2;
@@ -974,8 +986,8 @@ export default function DebriefPanel({ title, filterPartitionId, filterDecisionT
                 className="debrief-search-input"
                 type="text"
                 placeholder="Search debriefs..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                value={searchInput}
+                onChange={(e) => handleSearchChange(e.target.value)}
               />
             </div>
 
@@ -1011,7 +1023,7 @@ export default function DebriefPanel({ title, filterPartitionId, filterDecisionT
                 )}
                 {unpinnedDeployments.length === 0 && pinnedDeployments.length === 0 && (
                   <div style={{ fontSize: 13, color: "var(--text-muted)", padding: "12px 0" }}>
-                    {searchQuery ? "No matching operations." : "No operations recorded."}
+                    {searchInput ? "No matching operations." : "No operations recorded."}
                   </div>
                 )}
                 {unpinnedDeployments.map(renderDeploymentRow)}
@@ -1021,14 +1033,14 @@ export default function DebriefPanel({ title, filterPartitionId, filterDecisionT
             {/* ── Diagnostics tab ─────────────────────────────────────────── */}
             {tab === "diagnostics" && !loading && (
               diagnosticEntries.length === 0
-                ? <div style={{ fontSize: 13, color: "var(--text-muted)", padding: "12px 0" }}>No diagnostic investigations recorded.</div>
+                ? <div style={{ fontSize: 13, color: "var(--text-muted)", padding: "12px 0" }}>{searchInput ? "No matching diagnostics." : "No diagnostic investigations recorded."}</div>
                 : <DebriefTimeline entries={diagnosticEntries} />
             )}
 
             {/* ── Health tab ───────────────────────────────────────────────── */}
             {tab === "health" && !loading && (
               healthEntries.length === 0
-                ? <div style={{ fontSize: 13, color: "var(--text-muted)", padding: "12px 0" }}>No health or scan events recorded.</div>
+                ? <div style={{ fontSize: 13, color: "var(--text-muted)", padding: "12px 0" }}>{searchInput ? "No matching health events." : "No health or scan events recorded."}</div>
                 : <DebriefTimeline entries={healthEntries} />
             )}
 

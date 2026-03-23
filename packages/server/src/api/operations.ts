@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { generatePostmortem, generatePostmortemAsync } from "@synth-deploy/core";
-import type { LlmClient, IPartitionStore, IEnvironmentStore, IArtifactStore, ISettingsStore, IDeploymentStore, ITelemetryStore, DebriefWriter, DebriefReader, DeploymentEnrichment, RecommendationVerdict } from "@synth-deploy/core";
+import type { LlmClient, IPartitionStore, IEnvironmentStore, IArtifactStore, ISettingsStore, IDeploymentStore, ITelemetryStore, DebriefWriter, DebriefReader, DebriefPinStore, DeploymentEnrichment, RecommendationVerdict } from "@synth-deploy/core";
 import { requirePermission } from "../middleware/permissions.js";
 import {
   CreateOperationSchema,
@@ -28,7 +28,7 @@ function getArtifactId(op: { input: import("@synth-deploy/core").OperationInput 
 export function registerOperationRoutes(
   app: FastifyInstance,
   deployments: IDeploymentStore,
-  debrief: DebriefWriter & DebriefReader,
+  debrief: DebriefWriter & DebriefReader & DebriefPinStore,
   partitions: IPartitionStore,
   environments: IEnvironmentStore,
   artifactStore: IArtifactStore,
@@ -1224,14 +1224,18 @@ export function registerOperationRoutes(
   });
 
   // Pin/unpin an operation for quick-access
-  const pinStore = 'pinOperation' in debrief ? debrief as unknown as import("@synth-deploy/core").DebriefPinStore : null;
+  // Static route registered before parameterized :id routes to avoid shadowing
+  app.get("/api/operations/pinned", { preHandler: [requirePermission("deployment.view")] }, async () => {
+    const ids = debrief.getPinnedOperationIds();
+    const operations = ids.map((id) => deployments.get(id)).filter(Boolean);
+    return { operations, pinnedIds: ids };
+  });
 
   app.post<{ Params: { id: string } }>(
     "/api/operations/:id/pin",
     { preHandler: [requirePermission("deployment.view")] },
-    async (request, reply) => {
-      if (!pinStore) return reply.status(501).send({ error: "Pin support not available" });
-      pinStore.pinOperation(request.params.id);
+    async (request) => {
+      debrief.pinOperation(request.params.id);
       return { pinned: true };
     },
   );
@@ -1239,19 +1243,11 @@ export function registerOperationRoutes(
   app.delete<{ Params: { id: string } }>(
     "/api/operations/:id/pin",
     { preHandler: [requirePermission("deployment.view")] },
-    async (request, reply) => {
-      if (!pinStore) return reply.status(501).send({ error: "Pin support not available" });
-      pinStore.unpinOperation(request.params.id);
+    async (request) => {
+      debrief.unpinOperation(request.params.id);
       return { pinned: false };
     },
   );
-
-  app.get("/api/operations/pinned", { preHandler: [requirePermission("deployment.view")] }, async (_request, reply) => {
-    if (!pinStore) return reply.status(501).send({ error: "Pin support not available" });
-    const ids = pinStore.getPinnedOperationIds();
-    const operations = ids.map((id) => deployments.get(id)).filter(Boolean);
-    return { operations, pinnedIds: ids };
-  });
 
   // ---------------------------------------------------------------------------
   // Progress streaming — envoy callback and SSE endpoints
