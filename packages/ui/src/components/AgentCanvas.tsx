@@ -88,11 +88,13 @@ export default function AgentCanvas() {
       case "operation-authoring":
         return (
           <DeploymentAuthoringPanel
-            key={`operation-authoring:${params.artifactId ?? ""}:${params.environmentId ?? ""}:${params.partitionId ?? ""}`}
+            key={`operation-authoring:${params.artifactId ?? ""}:${params.environmentId ?? ""}:${params.partitionId ?? ""}:${params.opType ?? ""}:${params.intent ?? ""}`}
             title={panel.title}
             preselectedArtifactId={params.artifactId}
             preselectedEnvironmentId={params.environmentId}
             preselectedPartitionId={params.partitionId}
+            preselectedOpType={params.opType as "deploy" | "maintain" | "query" | "investigate" | "trigger" | undefined}
+            preselectedIntent={params.intent}
           />
         );
 

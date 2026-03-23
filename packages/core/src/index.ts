@@ -103,7 +103,7 @@ export {
   InvestigationFindingsSchema,
 } from "./types.js";
 export { DecisionDebrief } from "./debrief.js";
-export type { DebriefWriter, DebriefReader, DebriefRecordParams } from "./debrief.js";
+export type { DebriefWriter, DebriefReader, DebriefRecordParams, DebriefPinStore } from "./debrief.js";
 export { PersistentDecisionDebrief } from "./debrief-persistence.js";
 export { formatDebriefEntry, formatDebriefEntries } from "./debrief-formatter.js";
 export { PartitionStore } from "./partition.js";

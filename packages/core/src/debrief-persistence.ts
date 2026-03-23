@@ -8,7 +8,7 @@ import type {
   DebriefEntryId,
   PartitionId,
 } from "./types.js";
-import type { DebriefRecordParams, DebriefWriter, DebriefReader } from "./debrief.js";
+import type { DebriefRecordParams, DebriefWriter, DebriefReader, DebriefPinStore } from "./debrief.js";
 
 interface DebriefRow {
   id: string;
@@ -50,19 +50,29 @@ function rowToEntry(row: DebriefRow): DebriefEntry {
  *   - by partition (idx_diary_partition)
  *   - by decision type (idx_diary_decision_type)
  *   - by time range (idx_diary_timestamp)
+ *
+ * Full-text search via FTS5 virtual table on decision + reasoning + context.
+ * Pin/bookmark via pinned_operations table.
  */
-export class PersistentDecisionDebrief implements DebriefWriter, DebriefReader {
+export class PersistentDecisionDebrief implements DebriefWriter, DebriefReader, DebriefPinStore {
   private db: Database.Database;
   private stmts: {
     insert: Database.Statement;
+    insertFts: Database.Statement;
     getById: Database.Statement;
     getByOperation: Database.Statement;
     getByPartition: Database.Statement;
     getByType: Database.Statement;
     getByTimeRange: Database.Statement;
     getRecent: Database.Statement;
+    search: Database.Statement;
     purgeOlderThan: Database.Statement;
+    purgeFts: Database.Statement;
     countOlderThan: Database.Statement;
+    pin: Database.Statement;
+    unpin: Database.Statement;
+    isPinned: Database.Statement;
+    getPinned: Database.Statement;
   };
 
   constructor(dbPath: string) {
@@ -98,10 +108,37 @@ export class PersistentDecisionDebrief implements DebriefWriter, DebriefReader {
       // Column already exists — safe to ignore
     }
 
+    // FTS5 virtual table for full-text search across decision, reasoning, context
+    this.db.exec(`
+      CREATE VIRTUAL TABLE IF NOT EXISTS diary_fts USING fts5(
+        id UNINDEXED,
+        decision,
+        reasoning,
+        context,
+        content='diary_entries',
+        content_rowid='rowid'
+      );
+    `);
+
+    // Backfill FTS for existing entries that haven't been indexed yet
+    this.backfillFts();
+
+    // Pinned operations table
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS pinned_operations (
+        operation_id TEXT PRIMARY KEY,
+        pinned_at TEXT NOT NULL
+      );
+    `);
+
     this.stmts = {
       insert: this.db.prepare(`
         INSERT INTO diary_entries (id, timestamp, partition_id, deployment_id, agent, decision_type, decision, reasoning, context, actor)
         VALUES (@id, @timestamp, @partition_id, @deployment_id, @agent, @decision_type, @decision, @reasoning, @context, @actor)
+      `),
+      insertFts: this.db.prepare(`
+        INSERT INTO diary_fts (rowid, id, decision, reasoning, context)
+        SELECT rowid, id, decision, reasoning, context FROM diary_entries WHERE id = ?
       `),
       getById: this.db.prepare(`SELECT * FROM diary_entries WHERE id = ?`),
       getByOperation: this.db.prepare(
@@ -119,13 +156,55 @@ export class PersistentDecisionDebrief implements DebriefWriter, DebriefReader {
       getRecent: this.db.prepare(
         `SELECT * FROM diary_entries ORDER BY timestamp DESC LIMIT ?`,
       ),
+      search: this.db.prepare(`
+        SELECT d.* FROM diary_entries d
+        JOIN diary_fts f ON d.id = f.id
+        WHERE diary_fts MATCH ?
+        ORDER BY d.timestamp DESC
+        LIMIT ?
+      `),
       purgeOlderThan: this.db.prepare(
         `DELETE FROM diary_entries WHERE timestamp < ?`,
+      ),
+      purgeFts: this.db.prepare(
+        `DELETE FROM diary_fts WHERE id IN (SELECT id FROM diary_entries WHERE timestamp < ?)`,
       ),
       countOlderThan: this.db.prepare(
         `SELECT COUNT(*) as count FROM diary_entries WHERE timestamp < ?`,
       ),
+      pin: this.db.prepare(
+        `INSERT OR IGNORE INTO pinned_operations (operation_id, pinned_at) VALUES (?, ?)`,
+      ),
+      unpin: this.db.prepare(
+        `DELETE FROM pinned_operations WHERE operation_id = ?`,
+      ),
+      isPinned: this.db.prepare(
+        `SELECT 1 FROM pinned_operations WHERE operation_id = ?`,
+      ),
+      getPinned: this.db.prepare(
+        `SELECT operation_id FROM pinned_operations ORDER BY pinned_at DESC`,
+      ),
     };
+  }
+
+  private backfillFts(): void {
+    try {
+      const count = this.db.prepare(
+        `SELECT COUNT(*) as c FROM diary_fts`,
+      ).get() as { c: number };
+      const total = this.db.prepare(
+        `SELECT COUNT(*) as c FROM diary_entries`,
+      ).get() as { c: number };
+      if (count.c < total.c) {
+        this.db.exec(`
+          DELETE FROM diary_fts;
+          INSERT INTO diary_fts (rowid, id, decision, reasoning, context)
+          SELECT rowid, id, decision, reasoning, context FROM diary_entries;
+        `);
+      }
+    } catch {
+      // FTS backfill is best-effort
+    }
   }
 
   record(params: DebriefRecordParams): DebriefEntry {
@@ -160,6 +239,7 @@ export class PersistentDecisionDebrief implements DebriefWriter, DebriefReader {
         context: JSON.stringify(entry.context),
         actor: entry.actor ?? null,
       });
+      this.stmts.insertFts.run(entry.id);
     } catch (error) {
       console.error('Debrief persistence failed', { operation: 'record', entryId: entry.id, error });
       throw new Error(`Failed to persist debrief entry ${entry.id}: ${(error as Error).message}`);
@@ -231,6 +311,23 @@ export class PersistentDecisionDebrief implements DebriefWriter, DebriefReader {
     }
   }
 
+  search(query: string, limit = 50): DebriefEntry[] {
+    try {
+      // Sanitize query for FTS5: wrap each token in double quotes to treat as literal
+      const sanitized = query
+        .split(/\s+/)
+        .filter(Boolean)
+        .map((token) => `"${token.replace(/"/g, '""')}"`)
+        .join(" ");
+      if (!sanitized) return [];
+      const rows = this.stmts.search.all(sanitized, limit) as DebriefRow[];
+      return rows.map(rowToEntry);
+    } catch (error) {
+      console.warn('Debrief search failed', { operation: 'search', query, error });
+      return [];
+    }
+  }
+
   /**
    * Purge debrief entries older than the given date.
    * Returns the number of entries removed.
@@ -240,12 +337,32 @@ export class PersistentDecisionDebrief implements DebriefWriter, DebriefReader {
       const countRow = this.stmts.countOlderThan.get(cutoff.toISOString()) as { count: number };
       if (countRow.count === 0) return 0;
 
+      this.stmts.purgeFts.run(cutoff.toISOString());
       this.stmts.purgeOlderThan.run(cutoff.toISOString());
       return countRow.count;
     } catch (error) {
       console.error('Debrief purge failed', { operation: 'purgeOlderThan', cutoff, error });
       return 0;
     }
+  }
+
+  // --- Pin/Bookmark ---
+
+  pinOperation(operationId: OperationId): void {
+    this.stmts.pin.run(operationId, new Date().toISOString());
+  }
+
+  unpinOperation(operationId: OperationId): void {
+    this.stmts.unpin.run(operationId);
+  }
+
+  isPinned(operationId: OperationId): boolean {
+    return this.stmts.isPinned.get(operationId) != null;
+  }
+
+  getPinnedOperationIds(): OperationId[] {
+    const rows = this.stmts.getPinned.all() as Array<{ operation_id: string }>;
+    return rows.map((r) => r.operation_id);
   }
 
   close(): void {

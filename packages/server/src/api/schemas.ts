@@ -304,6 +304,7 @@ export const DebriefQuerySchema = z.object({
   limit: z.coerce.number().int().positive().optional(),
   partitionId: z.string().optional(),
   decisionType: z.string().optional(),
+  q: z.string().optional(),
 });
 
 // --- Progress Events (from envoy callback) ---

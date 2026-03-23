@@ -36,6 +36,15 @@ export interface DebriefReader {
   getByType(decisionType: DecisionType): DebriefEntry[];
   getByTimeRange(from: Date, to: Date): DebriefEntry[];
   getRecent(limit?: number): DebriefEntry[];
+  /** Full-text search across decision, reasoning, and context fields */
+  search(query: string, limit?: number): DebriefEntry[];
+}
+
+export interface DebriefPinStore {
+  pinOperation(operationId: OperationId): void;
+  unpinOperation(operationId: OperationId): void;
+  isPinned(operationId: OperationId): boolean;
+  getPinnedOperationIds(): OperationId[];
 }
 
 /**
@@ -99,6 +108,18 @@ export class DecisionDebrief implements DebriefWriter, DebriefReader {
 
   getRecent(limit = 50): DebriefEntry[] {
     return [...this.entries.values()]
+      .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
+      .slice(0, limit);
+  }
+
+  search(query: string, limit = 50): DebriefEntry[] {
+    const lower = query.toLowerCase();
+    return [...this.entries.values()]
+      .filter((e) =>
+        e.decision.toLowerCase().includes(lower) ||
+        e.reasoning.toLowerCase().includes(lower) ||
+        JSON.stringify(e.context).toLowerCase().includes(lower),
+      )
       .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
       .slice(0, limit);
   }

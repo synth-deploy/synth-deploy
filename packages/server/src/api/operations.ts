@@ -1187,12 +1187,20 @@ export function registerOperationRoutes(
     },
   );
 
-  // Get recent debrief entries (supports filtering by partition and decision type)
+  // Get recent debrief entries (supports filtering by partition, decision type, and full-text search)
   app.get("/api/debrief", { preHandler: [requirePermission("deployment.view")] }, async (request) => {
     const qParsed = DebriefQuerySchema.safeParse(request.query);
-    const { limit, partitionId, decisionType } = qParsed.success ? qParsed.data : {};
+    const { limit, partitionId, decisionType, q: searchQuery } = qParsed.success ? qParsed.data : {};
 
     const max = limit ?? 50;
+
+    // Full-text search — takes priority over filters
+    if (searchQuery) {
+      let entries = debrief.search(searchQuery, max);
+      if (partitionId) entries = entries.filter((e) => e.partitionId === partitionId);
+      if (decisionType) entries = entries.filter((e) => e.decisionType === decisionType);
+      return { entries };
+    }
 
     // No filters — fast path
     if (!partitionId && !decisionType) {
@@ -1213,6 +1221,36 @@ export function registerOperationRoutes(
 
     entries.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
     return { entries: entries.slice(0, max) };
+  });
+
+  // Pin/unpin an operation for quick-access
+  const pinStore = 'pinOperation' in debrief ? debrief as unknown as import("@synth-deploy/core").DebriefPinStore : null;
+
+  app.post<{ Params: { id: string } }>(
+    "/api/operations/:id/pin",
+    { preHandler: [requirePermission("deployment.view")] },
+    async (request, reply) => {
+      if (!pinStore) return reply.status(501).send({ error: "Pin support not available" });
+      pinStore.pinOperation(request.params.id);
+      return { pinned: true };
+    },
+  );
+
+  app.delete<{ Params: { id: string } }>(
+    "/api/operations/:id/pin",
+    { preHandler: [requirePermission("deployment.view")] },
+    async (request, reply) => {
+      if (!pinStore) return reply.status(501).send({ error: "Pin support not available" });
+      pinStore.unpinOperation(request.params.id);
+      return { pinned: false };
+    },
+  );
+
+  app.get("/api/operations/pinned", { preHandler: [requirePermission("deployment.view")] }, async (_request, reply) => {
+    if (!pinStore) return reply.status(501).send({ error: "Pin support not available" });
+    const ids = pinStore.getPinnedOperationIds();
+    const operations = ids.map((id) => deployments.get(id)).filter(Boolean);
+    return { operations, pinnedIds: ids };
   });
 
   // ---------------------------------------------------------------------------

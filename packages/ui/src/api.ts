@@ -388,15 +388,29 @@ export async function getRecentDebrief(filters?: {
   limit?: number;
   partitionId?: string;
   decisionType?: string;
+  q?: string;
 }): Promise<DebriefEntry[]> {
   const params = new URLSearchParams();
   if (filters?.limit) params.set("limit", String(filters.limit));
   if (filters?.partitionId) params.set("partitionId", filters.partitionId);
   if (filters?.decisionType) params.set("decisionType", filters.decisionType);
+  if (filters?.q) params.set("q", filters.q);
   const qs = params.toString();
   const url = qs ? `/api/debrief?${qs}` : "/api/debrief";
   const data = await fetchJson<{ entries: DebriefEntry[] }>(url);
   return data.entries;
+}
+
+export async function pinOperation(id: string): Promise<void> {
+  await fetchJson(`/api/operations/${id}/pin`, { method: "POST", body: JSON.stringify({}) });
+}
+
+export async function unpinOperation(id: string): Promise<void> {
+  await fetchJson(`/api/operations/${id}/pin`, { method: "DELETE" });
+}
+
+export async function getPinnedOperations(): Promise<{ operations: Deployment[]; pinnedIds: string[] }> {
+  return fetchJson(`/api/operations/pinned`);
 }
 
 export async function getPostmortem(deploymentId: string): Promise<{ postmortem: PostmortemReport; llmPostmortem?: LlmPostmortem }> {

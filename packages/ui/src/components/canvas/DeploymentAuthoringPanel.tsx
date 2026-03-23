@@ -23,12 +23,14 @@ interface Props {
   preselectedArtifactId?: string;
   preselectedEnvironmentId?: string;
   preselectedPartitionId?: string;
+  preselectedOpType?: OpType;
+  preselectedIntent?: string;
 }
 
 type DeployScope = "environment" | "envoy" | "partition";
 type OpType = "deploy" | "maintain" | "query" | "investigate" | "trigger";
 
-export default function OperationAuthoringPanel({ title, preselectedArtifactId, preselectedEnvironmentId, preselectedPartitionId }: Props) {
+export default function OperationAuthoringPanel({ title, preselectedArtifactId, preselectedEnvironmentId, preselectedPartitionId, preselectedOpType, preselectedIntent }: Props) {
   const { pushPanel } = useCanvas();
   const { settings: appSettings } = useSettings();
   const environmentsEnabled = appSettings?.environmentsEnabled ?? true;
@@ -40,8 +42,8 @@ export default function OperationAuthoringPanel({ title, preselectedArtifactId, 
   const { data: recentDeployments } = useQuery<Deployment[]>("list:deployments", listDeployments);
   const loading = l1 || l2 || l3 || l4;
 
-  const [opType, setOpType] = useState<OpType>("deploy");
-  const [intent, setIntent] = useState("");
+  const [opType, setOpType] = useState<OpType>(preselectedOpType ?? "deploy");
+  const [intent, setIntent] = useState(preselectedIntent ?? "");
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);

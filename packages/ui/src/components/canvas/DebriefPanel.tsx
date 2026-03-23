@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { getRecentDebrief, getDeployment, listDeployments, listPartitions, listArtifacts, listEnvironments, getWhatsNew, requestRollbackPlan, executeRollback, retryDeployment, getPostmortem } from "../../api.js";
+import { useState, useEffect, useCallback } from "react";
+import { getRecentDebrief, getDeployment, listDeployments, listPartitions, listArtifacts, listEnvironments, getWhatsNew, requestRollbackPlan, executeRollback, retryDeployment, getPostmortem, pinOperation, unpinOperation, getPinnedOperations } from "../../api.js";
 import type { WhatsNewResult, LlmPostmortem } from "../../api.js";
 import type { DebriefEntry, Partition, Deployment, Artifact, Environment, DecisionType } from "../../types.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
@@ -126,6 +126,23 @@ function DeploymentDebriefDetail({ deploymentId, onBack, onNavigate }: { deploym
     } finally {
       setRetrying(false);
     }
+  }
+
+  function handleRunAgain() {
+    if (!deployment) return;
+    const opType = deployment.input?.type ?? "deploy";
+    const intent = deployment.intent ?? "";
+    const params: Record<string, string> = {};
+    if (opType === "deploy" && deployment.artifactId) params.artifactId = deployment.artifactId;
+    if (deployment.environmentId) params.environmentId = deployment.environmentId;
+    if (deployment.partitionId) params.partitionId = deployment.partitionId;
+    if (opType !== "deploy") params.opType = opType;
+    if (intent) params.intent = intent;
+    pushPanel({
+      type: "operation-authoring",
+      title: "Run Again",
+      params,
+    });
   }
 
   useEffect(() => {
@@ -331,10 +348,19 @@ function DeploymentDebriefDetail({ deploymentId, onBack, onNavigate }: { deploym
             <button
               className="btn-secondary"
               style={{ fontSize: 12, padding: "4px 12px" }}
+              onClick={handleRunAgain}
+            >
+              Run Again
+            </button>
+          )}
+          {isFinished && (
+            <button
+              className="btn-secondary"
+              style={{ fontSize: 12, padding: "4px 12px" }}
               disabled={retrying}
               onClick={handleRetry}
             >
-              {retrying ? "Retrying…" : "Retry Deployment"}
+              {retrying ? "Retrying…" : "Retry"}
             </button>
           )}
           <div className={`v2-deploy-status-pill v2-pill-${deployment.status}`}>
@@ -792,15 +818,40 @@ export default function DebriefPanel({ title, filterPartitionId, filterDecisionT
   const [filterPartition, setFilterPartition] = useState(filterPartitionId ?? "");
   const [filterType, setFilterType] = useState(filterDecisionType ?? "");
   const [selectedDeploymentId, setSelectedDeploymentId] = useState<string | null>(initialDeploymentId ?? null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [pinnedIds, setPinnedIds] = useState<Set<string>>(new Set());
 
-  const debriefKey = `debrief:${filterPartition}:${filterType}`;
+  const debriefKey = `debrief:${filterPartition}:${filterType}:${searchQuery}`;
   const { data: entries, loading: l1, error } = useQuery<DebriefEntry[]>(debriefKey, () =>
-    getRecentDebrief({ limit: 100, partitionId: filterPartition || undefined, decisionType: filterType || undefined }),
+    getRecentDebrief({
+      limit: 200,
+      partitionId: filterPartition || undefined,
+      decisionType: filterType || undefined,
+      q: searchQuery || undefined,
+    }),
   );
   const { data: deployments, loading: l2 } = useQuery<Deployment[]>("list:deployments", listDeployments);
   const { data: partitions } = useQuery<Partition[]>("list:partitions", listPartitions);
   const { data: artifacts } = useQuery<Artifact[]>("list:artifacts", listArtifacts);
   const { data: environments } = useQuery<Environment[]>("list:environments", listEnvironments);
+
+  // Load pinned operations
+  useEffect(() => {
+    getPinnedOperations()
+      .then(({ pinnedIds: ids }) => setPinnedIds(new Set(ids)))
+      .catch(() => {});
+  }, []);
+
+  const handleTogglePin = useCallback(async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (pinnedIds.has(id)) {
+      await unpinOperation(id).catch(() => {});
+      setPinnedIds((prev) => { const next = new Set(prev); next.delete(id); return next; });
+    } else {
+      await pinOperation(id).catch(() => {});
+      setPinnedIds((prev) => new Set(prev).add(id));
+    }
+  }, [pinnedIds]);
 
   const { pushPanel } = useCanvas();
   const loading = l1 || l2;
@@ -808,6 +859,26 @@ export default function DebriefPanel({ title, filterPartitionId, filterDecisionT
   const safeDeployments = (deployments ?? []).slice().sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
   );
+
+  // Client-side search filtering for the Deployments tab
+  const filteredDeployments = searchQuery
+    ? safeDeployments.filter((dep) => {
+        const q = searchQuery.toLowerCase();
+        const artName = (artifacts ?? []).find((a) => a.id === dep.artifactId)?.name ?? "";
+        const envName = (environments ?? []).find((e) => e.id === dep.environmentId)?.name ?? "";
+        return (
+          artName.toLowerCase().includes(q) ||
+          envName.toLowerCase().includes(q) ||
+          (dep.version ?? "").toLowerCase().includes(q) ||
+          (dep.intent ?? "").toLowerCase().includes(q) ||
+          dep.status.toLowerCase().includes(q)
+        );
+      })
+    : safeDeployments;
+
+  // Split pinned vs unpinned
+  const pinnedDeployments = filteredDeployments.filter((d) => pinnedIds.has(d.id));
+  const unpinnedDeployments = filteredDeployments.filter((d) => !pinnedIds.has(d.id));
 
   const diagnosticEntries = safeEntries.filter((e) =>
     !e.deploymentId && ["diagnostic-investigation", "variable-conflict"].includes(e.decisionType),
@@ -817,13 +888,73 @@ export default function DebriefPanel({ title, filterPartitionId, filterDecisionT
   );
 
   const tabCounts: Record<TabId, number> = {
-    deployments: safeDeployments.length,
+    deployments: filteredDeployments.length,
     diagnostics: diagnosticEntries.length,
     health: healthEntries.length,
     fulllog: safeEntries.length,
   };
 
   const FINISHED_STATUSES = new Set(["succeeded", "failed", "rolled_back"]);
+
+  function renderDeploymentRow(dep: Deployment) {
+    const artName = (artifacts ?? []).find((a) => a.id === dep.artifactId)?.name ?? dep.artifactId.slice(0, 8);
+    const envName = (environments ?? []).find((e) => e.id === dep.environmentId)?.name ?? dep.environmentId?.slice(0, 8) ?? "—";
+    const duration = formatDuration(dep.createdAt, dep.completedAt);
+    const isFinished = FINISHED_STATUSES.has(dep.status);
+    const isAwaiting = dep.status === "awaiting_approval";
+    const isPinned = pinnedIds.has(dep.id);
+    function handleRowClick() {
+      if (isAwaiting) {
+        pushPanel({ type: "plan-review", title: "Review Plan", params: { id: dep.id } });
+      } else {
+        setSelectedDeploymentId(dep.id);
+      }
+    }
+    return (
+      <div
+        key={dep.id}
+        onClick={handleRowClick}
+        className="debrief-op-row"
+      >
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+            <button
+              className={`debrief-pin-btn${isPinned ? " pinned" : ""}`}
+              title={isPinned ? "Unpin" : "Pin for quick access"}
+              onClick={(e) => handleTogglePin(dep.id, e)}
+            >
+              {isPinned ? "\u2605" : "\u2606"}
+            </button>
+            <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{artName}</span>
+            <span style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>{dep.version}</span>
+            <span style={{ color: "var(--text-muted)" }}>→</span>
+            <span style={{ fontSize: 12, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>{envName}</span>
+          </div>
+          <div className={`v2-deploy-status-pill v2-pill-${dep.status}`}>
+            {statusLabel(dep.status)}
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 20, fontSize: 12, color: "var(--text-muted)" }}>
+          <span>{timeAgo(dep.createdAt)}</span>
+          {duration && <span>Duration: {duration}</span>}
+          {dep.input?.type && dep.input.type !== "deploy" && (
+            <span className="debrief-op-type-tag">{dep.input.type}</span>
+          )}
+          {isFinished && (
+            <span style={{ color: "var(--accent)", fontWeight: 500 }}>View full debrief →</span>
+          )}
+          {isAwaiting && (
+            <span style={{ color: "var(--status-warning)", fontWeight: 500 }}>
+              Review Plan →
+            </span>
+          )}
+          {!isFinished && !isAwaiting && (
+            <span style={{ color: "var(--text-muted)", fontWeight: 500 }}>View debrief →</span>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <CanvasPanelHost title={title} noBreadcrumb>
@@ -835,6 +966,17 @@ export default function DebriefPanel({ title, filterPartitionId, filterDecisionT
               <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0 }}>
                 Operational records of what was done, by whom, and what informed each decision.
               </p>
+            </div>
+
+            {/* Search bar */}
+            <div style={{ marginBottom: 16 }}>
+              <input
+                className="debrief-search-input"
+                type="text"
+                placeholder="Search debriefs..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
             </div>
 
             {/* Segmented tab control */}
@@ -857,64 +999,22 @@ export default function DebriefPanel({ title, filterPartitionId, filterDecisionT
             {/* ── Deployments tab ─────────────────────────────────────────── */}
             {tab === "deployments" && !loading && (
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {safeDeployments.length === 0 && (
-                  <div style={{ fontSize: 13, color: "var(--text-muted)", padding: "12px 0" }}>No deployments recorded.</div>
+                {/* Pinned section */}
+                {pinnedDeployments.length > 0 && (
+                  <>
+                    <div className="debrief-pinned-header">Pinned</div>
+                    {pinnedDeployments.map(renderDeploymentRow)}
+                    {unpinnedDeployments.length > 0 && (
+                      <div className="debrief-section-divider" />
+                    )}
+                  </>
                 )}
-                {safeDeployments.map((dep) => {
-                  const artName = (artifacts ?? []).find((a) => a.id === dep.artifactId)?.name ?? dep.artifactId.slice(0, 8);
-                  const envName = (environments ?? []).find((e) => e.id === dep.environmentId)?.name ?? dep.environmentId?.slice(0, 8) ?? "—";
-                  const duration = formatDuration(dep.createdAt, dep.completedAt);
-                  const isFinished = FINISHED_STATUSES.has(dep.status);
-                  const isAwaiting = dep.status === "awaiting_approval";
-                  function handleRowClick() {
-                    if (isAwaiting) {
-                      pushPanel({ type: "plan-review", title: "Review Plan", params: { id: dep.id } });
-                    } else {
-                      setSelectedDeploymentId(dep.id);
-                    }
-                  }
-                  return (
-                    <div
-                      key={dep.id}
-                      onClick={handleRowClick}
-                      style={{
-                        padding: "16px 20px",
-                        borderRadius: 10,
-                        background: "var(--surface)",
-                        border: "1px solid var(--border)",
-                        cursor: "pointer",
-                        transition: "background 0.15s",
-                      }}
-                    >
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-                        <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-                          <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{artName}</span>
-                          <span style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>{dep.version}</span>
-                          <span style={{ color: "var(--text-muted)" }}>→</span>
-                          <span style={{ fontSize: 12, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>{envName}</span>
-                        </div>
-                        <div className={`v2-deploy-status-pill v2-pill-${dep.status}`}>
-                          {statusLabel(dep.status)}
-                        </div>
-                      </div>
-                      <div style={{ display: "flex", gap: 20, fontSize: 12, color: "var(--text-muted)" }}>
-                        <span>{timeAgo(dep.createdAt)}</span>
-                        {duration && <span>Duration: {duration}</span>}
-                        {isFinished && (
-                          <span style={{ color: "var(--accent)", fontWeight: 500 }}>View full debrief →</span>
-                        )}
-                        {isAwaiting && (
-                          <span style={{ color: "var(--status-warning)", fontWeight: 500 }}>
-                            Review Plan →
-                          </span>
-                        )}
-                        {!isFinished && !isAwaiting && (
-                          <span style={{ color: "var(--text-muted)", fontWeight: 500 }}>View debrief →</span>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
+                {unpinnedDeployments.length === 0 && pinnedDeployments.length === 0 && (
+                  <div style={{ fontSize: 13, color: "var(--text-muted)", padding: "12px 0" }}>
+                    {searchQuery ? "No matching operations." : "No operations recorded."}
+                  </div>
+                )}
+                {unpinnedDeployments.map(renderDeploymentRow)}
               </div>
             )}
 
