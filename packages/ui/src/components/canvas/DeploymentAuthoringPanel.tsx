@@ -70,7 +70,7 @@ export default function OperationAuthoringPanel({ title, preselectedArtifactId, 
   // Composite: child operation list
   const [compositeChildren, setCompositeChildren] = useState<Array<{
     id: string;
-    type: "deploy" | "query" | "investigate";
+    type: "deploy" | "maintain" | "query" | "investigate";
     intent: string;
     artifactId?: string;
   }>>([]);
@@ -136,7 +136,7 @@ export default function OperationAuthoringPanel({ title, preselectedArtifactId, 
           operations: compositeChildren.map((c) =>
             c.type === "deploy"
               ? { type: "deploy" as const, artifactId: c.artifactId ?? "" }
-              : { type: c.type as "query" | "investigate", intent: c.intent }
+              : { type: c.type as "maintain" | "query" | "investigate", intent: c.intent }
           ),
         } : {}),
       } as Parameters<typeof createOperation>[0]);
@@ -371,7 +371,7 @@ export default function OperationAuthoringPanel({ title, preselectedArtifactId, 
                   </span>
                   <select
                     value={child.type}
-                    onChange={(e) => updateCompositeChild(child.id, { type: e.target.value as "deploy" | "query" | "investigate", intent: "" })}
+                    onChange={(e) => updateCompositeChild(child.id, { type: e.target.value as "deploy" | "maintain" | "query" | "investigate", intent: "" })}
                     style={{
                       padding: "4px 8px",
                       fontSize: 12,
@@ -383,6 +383,7 @@ export default function OperationAuthoringPanel({ title, preselectedArtifactId, 
                     }}
                   >
                     <option value="deploy">deploy</option>
+                    <option value="maintain">maintain</option>
                     <option value="query">query</option>
                     <option value="investigate">investigate</option>
                   </select>
@@ -421,6 +422,7 @@ export default function OperationAuthoringPanel({ title, preselectedArtifactId, 
                     onChange={(e) => updateCompositeChild(child.id, { intent: e.target.value })}
                     placeholder={
                       child.type === "query" ? "What to check…" :
+                      child.type === "maintain" ? "What to do…" :
                       "What to investigate…"
                     }
                     style={{
