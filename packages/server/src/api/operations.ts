@@ -126,7 +126,14 @@ export function registerOperationRoutes(
 
         // Composite: orchestrate child planning separately — do not send composite to envoy directly
         if (deployment.input.type === "composite") {
-          planCompositeChildren(deployment, envoyRegistry, planningEnvoy);
+          planCompositeChildren(deployment, envoyRegistry, planningEnvoy).catch((err) => {
+            const dep = deployments.get(deployment.id);
+            if (dep && (dep.status === "pending" || dep.status === "planning")) {
+              dep.status = "failed" as typeof dep.status;
+              dep.failureReason = `Composite planning failed unexpectedly: ${err instanceof Error ? err.message : String(err)}`;
+              deployments.save(dep);
+            }
+          });
           return;
         }
 
@@ -469,7 +476,15 @@ export function registerOperationRoutes(
           deployments.save(child);
         }
 
-        executeCompositeSequentially(deployment.id, compositeChildren.map((c) => c.id));
+        executeCompositeSequentially(deployment.id, compositeChildren.map((c) => c.id)).catch((err) => {
+          const dep = deployments.get(deployment.id);
+          if (dep && dep.status === "running") {
+            dep.status = "failed" as typeof dep.status;
+            dep.failureReason = `Composite execution failed unexpectedly: ${err instanceof Error ? err.message : String(err)}`;
+            dep.completedAt = new Date();
+            deployments.save(dep);
+          }
+        });
 
         return { deployment, approved: true };
       }
