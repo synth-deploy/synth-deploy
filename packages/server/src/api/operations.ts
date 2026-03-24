@@ -2100,8 +2100,13 @@ export function registerOperationRoutes(
           childSucceeded = true;
           break;
         }
-        if (updated?.status === "failed" || updated?.status === "rolled_back") {
+        if (updated?.status === "failed" || updated?.status === "rolled_back" || updated?.status === "cancelled") {
           break;
+        }
+        // Stop if the parent was externally cancelled or failed while we were waiting
+        const parentNow = deployments.get(parentId);
+        if (!parentNow || parentNow.status === "failed" || parentNow.status === "cancelled") {
+          return;
         }
       }
 
