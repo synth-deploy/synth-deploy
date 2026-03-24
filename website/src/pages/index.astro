@@ -64,11 +64,11 @@ import Layout from "../layouts/Layout.astro";
               <div id="artifact-card" class="artifact-dragging absolute rounded-lg border border-ds-accent-border bg-ds-surface px-4 py-3" style="right: -200px; top: 80px;">
                 <div class="flex items-center gap-2.5">
                   <div class="w-8 h-8 rounded-md bg-ds-accent/15 flex items-center justify-center">
-                    <span class="text-ds-accent text-xs font-bold">C</span>
+                    <span class="text-ds-accent text-sm">◉</span>
                   </div>
                   <div>
                     <p class="text-sm font-semibold text-ds-text">payments-api</p>
-                    <p class="text-[11px] text-ds-text-muted font-mono">v2.4.1 · container</p>
+                    <p class="text-[11px] text-ds-text-muted font-mono">v3.2.1 · container image</p>
                   </div>
                 </div>
               </div>
@@ -80,19 +80,23 @@ import Layout from "../layouts/Layout.astro";
               <div class="rounded-lg border border-ds-accent-border bg-ds-accent/5 px-4 py-3 mb-4">
                 <div class="flex items-center gap-2.5">
                   <div class="w-8 h-8 rounded-md bg-ds-accent/15 flex items-center justify-center">
-                    <span class="text-ds-accent text-xs font-bold">C</span>
+                    <span class="text-ds-accent text-sm">◉</span>
                   </div>
-                  <div>
-                    <p class="text-sm font-semibold text-ds-text">payments-api</p>
-                    <p class="text-[11px] text-ds-text-muted font-mono">v2.4.1 · container</p>
+                  <div class="flex-1">
+                    <p class="text-sm font-semibold text-ds-text">payments-api <span class="text-ds-text-muted font-normal">v3.2.1</span></p>
+                    <div class="flex items-center gap-2 mt-0.5">
+                      <span class="text-[10px] font-mono text-ds-text-muted px-1.5 py-0.5 rounded bg-ds-bg/50 border border-ds-border/50">node</span>
+                      <span class="text-[10px] font-mono text-ds-text-muted px-1.5 py-0.5 rounded bg-ds-bg/50 border border-ds-border/50">express</span>
+                      <span class="text-[10px] font-mono text-ds-text-muted px-1.5 py-0.5 rounded bg-ds-bg/50 border border-ds-border/50">postgres</span>
+                    </div>
                   </div>
                 </div>
               </div>
               <div id="analysis-lines" class="space-y-2 font-mono text-xs">
-                <p class="analysis-line text-ds-text-muted opacity-0"><span class="text-ds-dt-scan">■</span> Detected: Docker container image</p>
-                <p class="analysis-line text-ds-text-muted opacity-0"><span class="text-ds-dt-config">■</span> Base: node:20-alpine · 3 layers</p>
-                <p class="analysis-line text-ds-text-muted opacity-0"><span class="text-ds-dt-plan">■</span> Ports: 3000/tcp · Health: /health</p>
-                <p class="analysis-line text-ds-text-muted opacity-0"><span class="text-ds-succeeded">■</span> Checksum verified · No CVEs found</p>
+                <p class="analysis-line text-ds-text-muted opacity-0"><span class="text-ds-dt-scan">■</span> Type: Docker container image (node:20-alpine)</p>
+                <p class="analysis-line text-ds-text-muted opacity-0"><span class="text-ds-dt-config">■</span> Ports: 3000/tcp · Health endpoint: /health</p>
+                <p class="analysis-line text-ds-text-muted opacity-0"><span class="text-ds-dt-plan">■</span> Env: API_ENDPOINT, DB_CONNECTION, LOG_LEVEL</p>
+                <p class="analysis-line text-ds-text-muted opacity-0"><span class="text-ds-succeeded">■</span> Checksum verified · Confidence: 96%</p>
               </div>
               <div id="analysis-bar" class="mt-4 h-1 rounded-full bg-ds-border overflow-hidden">
                 <div class="analysis-progress h-full rounded-full bg-ds-accent" style="width: 0%"></div>
@@ -101,27 +105,39 @@ import Layout from "../layouts/Layout.astro";
 
             <!-- Stage 3: Select envoy/target -->
             <div id="stage-select" class="demo-stage px-5 pt-5 pb-5 hidden">
-              <p class="text-[10px] font-semibold uppercase tracking-widest text-ds-text-muted mb-4">Select Target</p>
-              <div class="rounded-lg border border-ds-accent-border bg-ds-accent/5 px-4 py-2.5 mb-4">
-                <p class="text-sm font-semibold text-ds-text">payments-api <span class="text-ds-text-muted font-normal">v2.4.1</span></p>
+              <p class="text-[10px] font-semibold uppercase tracking-widest text-ds-text-muted mb-3">Select Target</p>
+              <div class="rounded-lg border border-ds-accent-border bg-ds-accent/5 px-4 py-2 mb-3">
+                <p class="text-sm font-semibold text-ds-text">payments-api <span class="text-ds-text-muted font-normal">v3.2.1</span></p>
               </div>
-              <div class="space-y-2">
-                <div id="envoy-row-1" class="envoy-row flex items-center gap-3 rounded-lg border border-ds-border px-4 py-3 transition-all duration-300 cursor-default">
+              <div class="space-y-1.5">
+                <div id="envoy-row-1" class="envoy-row flex items-center gap-3 rounded-lg border border-ds-border px-3 py-2.5 transition-all duration-300 cursor-default">
                   <div class="entity-badge border-ds-envoy/30 bg-ds-envoy/10 text-ds-envoy text-[10px] py-0.5">Envoy</div>
-                  <div class="flex-1">
-                    <p class="text-sm text-ds-text">prod-us-east</p>
-                    <p class="text-[11px] text-ds-text-muted">3 containers · healthy</p>
+                  <div class="flex-1 min-w-0">
+                    <p class="text-sm text-ds-text font-medium">prd-web-01</p>
+                    <p class="text-[10px] text-ds-text-muted font-mono">Ubuntu 22.04 · 112 KB entries · 3s ago</p>
                   </div>
-                  <span class="w-2 h-2 rounded-full bg-ds-succeeded"></span>
+                  <span class="w-2 h-2 rounded-full bg-ds-succeeded flex-shrink-0"></span>
                 </div>
-                <div id="envoy-row-2" class="envoy-row flex items-center gap-3 rounded-lg border border-ds-border px-4 py-3 opacity-50 cursor-default">
+                <div id="envoy-row-2" class="envoy-row flex items-center gap-3 rounded-lg border border-ds-border px-3 py-2.5 opacity-40 cursor-default">
                   <div class="entity-badge border-ds-envoy/30 bg-ds-envoy/10 text-ds-envoy text-[10px] py-0.5">Envoy</div>
-                  <div class="flex-1">
-                    <p class="text-sm text-ds-text">staging-eu-west</p>
-                    <p class="text-[11px] text-ds-text-muted">1 container · healthy</p>
+                  <div class="flex-1 min-w-0">
+                    <p class="text-sm text-ds-text font-medium">prd-web-02</p>
+                    <p class="text-[10px] text-ds-text-muted font-mono">Ubuntu 20.04 · 108 KB entries · 45s ago</p>
                   </div>
-                  <span class="w-2 h-2 rounded-full bg-ds-succeeded"></span>
+                  <span class="w-2 h-2 rounded-full bg-ds-warning flex-shrink-0"></span>
                 </div>
+                <div class="envoy-row flex items-center gap-3 rounded-lg border border-ds-border px-3 py-2.5 opacity-40 cursor-default">
+                  <div class="entity-badge border-ds-envoy/30 bg-ds-envoy/10 text-ds-envoy text-[10px] py-0.5">Envoy</div>
+                  <div class="flex-1 min-w-0">
+                    <p class="text-sm text-ds-text font-medium">prd-batch-01</p>
+                    <p class="text-[10px] text-ds-text-muted font-mono">Win Server 2022 · 23 KB entries · 6s ago</p>
+                  </div>
+                  <span class="w-2 h-2 rounded-full bg-ds-succeeded flex-shrink-0"></span>
+                </div>
+              </div>
+              <!-- Context hint -->
+              <div id="select-hint" class="mt-3 rounded-md bg-ds-bg/50 border border-ds-border/50 px-3 py-2 opacity-0 transition-opacity duration-300">
+                <p class="text-[10px] text-ds-text-muted leading-snug">Deploying directly to <span class="text-ds-envoy font-medium">prd-web-01</span>. The envoy will produce a plan based on its knowledge of the target host.</p>
               </div>
             </div>
 
@@ -129,121 +145,161 @@ import Layout from "../layouts/Layout.astro";
             <div id="stage-plan" class="demo-stage px-5 pt-5 pb-5 hidden">
               <div class="mb-3">
                 <p class="text-[10px] font-semibold uppercase tracking-widest text-ds-text-muted mb-1">Deployment Plan</p>
-                <p class="text-lg font-bold text-ds-text leading-tight">payments-api <span class="text-sm font-normal text-ds-text-muted">&rarr; prod-us-east</span></p>
+                <p class="text-base font-bold text-ds-text leading-tight">payments-api <span class="text-sm font-normal text-ds-text-muted">&rarr; prd-web-01</span></p>
               </div>
               <!-- Assessment -->
-              <div id="plan-assessment" class="rounded-lg border border-ds-border bg-ds-bg/60 px-4 py-3 mb-4 opacity-0">
-                <div class="flex items-center gap-2.5 mb-1">
+              <div id="plan-assessment" class="rounded-lg border border-ds-succeeded/20 bg-ds-succeeded/5 px-3 py-2.5 mb-3 opacity-0">
+                <div class="flex items-center gap-2 mb-1.5">
                   <span class="text-[10px] font-semibold uppercase tracking-widest text-ds-text-muted">Synth Assessment</span>
-                  <span class="flex-1 h-0.5 rounded-full bg-ds-succeeded/60"></span>
-                  <span class="text-xs font-semibold text-ds-succeeded">High</span>
+                  <span class="flex-1 h-px bg-ds-succeeded/30"></span>
+                  <span class="text-[10px] font-bold text-ds-succeeded px-1.5 py-0.5 rounded bg-ds-succeeded/10">96%</span>
                 </div>
-                <p class="text-xs text-ds-text-secondary leading-snug">Proceed — target is stable, no conflicts</p>
+                <p class="text-[11px] text-ds-text-secondary leading-snug">Identical artifact type deployed 11 times prior with 100% success rate. Target host is stable — last deploy 2h ago succeeded. No variable conflicts detected.</p>
               </div>
               <!-- Steps -->
               <div class="space-y-0">
-                <div class="plan-step flex items-start gap-3 py-2 border-b border-ds-border/50 opacity-0">
+                <div class="plan-step flex items-start gap-2.5 py-1.5 border-b border-ds-border/50 opacity-0">
                   <span class="flex-shrink-0 w-5 h-5 rounded-full bg-ds-succeeded/15 text-ds-succeeded text-[10px] font-semibold flex items-center justify-center mt-0.5">1</span>
-                  <p class="text-xs text-ds-text leading-snug flex-1">Pull image &amp; verify checksum</p>
-                  <span class="text-[10px] text-ds-succeeded/70 font-medium">low</span>
+                  <div class="flex-1 min-w-0">
+                    <p class="text-[11px] text-ds-text leading-snug">Stop service <span class="font-mono text-ds-text-muted">payments-api</span> via systemd</p>
+                  </div>
+                  <span class="text-[10px] text-ds-text-muted font-mono flex-shrink-0">~2s</span>
                 </div>
-                <div class="plan-step flex items-start gap-3 py-2 border-b border-ds-border/50 opacity-0">
+                <div class="plan-step flex items-start gap-2.5 py-1.5 border-b border-ds-border/50 opacity-0">
                   <span class="flex-shrink-0 w-5 h-5 rounded-full bg-ds-succeeded/15 text-ds-succeeded text-[10px] font-semibold flex items-center justify-center mt-0.5">2</span>
-                  <p class="text-xs text-ds-text leading-snug flex-1">Stop existing container</p>
-                  <span class="text-[10px] text-ds-succeeded/70 font-medium">low</span>
+                  <div class="flex-1 min-w-0">
+                    <p class="text-[11px] text-ds-text leading-snug">Backup <span class="font-mono text-ds-text-muted">/opt/payments-api/</span> to rollback store</p>
+                  </div>
+                  <span class="text-[10px] text-ds-text-muted font-mono flex-shrink-0">~8s</span>
                 </div>
-                <div class="plan-step flex items-start gap-3 py-2 border-b border-ds-border/50 opacity-0">
-                  <span class="flex-shrink-0 w-5 h-5 rounded-full bg-ds-failed/15 text-ds-failed text-[10px] font-semibold flex items-center justify-center mt-0.5">3</span>
-                  <p class="text-xs text-ds-text leading-snug flex-1">Remove container &amp; free port</p>
-                  <span class="text-[10px] text-ds-failed/70 font-medium">high</span>
+                <div class="plan-step flex items-start gap-2.5 py-1.5 border-b border-ds-border/50 opacity-0">
+                  <span class="flex-shrink-0 w-5 h-5 rounded-full bg-ds-warning/15 text-ds-warning text-[10px] font-semibold flex items-center justify-center mt-0.5">3</span>
+                  <div class="flex-1 min-w-0">
+                    <p class="text-[11px] text-ds-text leading-snug">Extract container image to target path</p>
+                  </div>
+                  <span class="text-[10px] text-ds-text-muted font-mono flex-shrink-0">~34s</span>
                 </div>
-                <div class="plan-step flex items-start gap-3 py-2 opacity-0">
+                <div class="plan-step flex items-start gap-2.5 py-1.5 border-b border-ds-border/50 opacity-0">
                   <span class="flex-shrink-0 w-5 h-5 rounded-full bg-ds-succeeded/15 text-ds-succeeded text-[10px] font-semibold flex items-center justify-center mt-0.5">4</span>
-                  <p class="text-xs text-ds-text leading-snug flex-1">Run new container with env</p>
-                  <span class="text-[10px] text-ds-succeeded/70 font-medium">low</span>
+                  <div class="flex-1 min-w-0">
+                    <p class="text-[11px] text-ds-text leading-snug">Apply env config <span class="font-mono text-ds-text-muted">(1 variable changed)</span></p>
+                  </div>
+                  <span class="text-[10px] text-ds-text-muted font-mono flex-shrink-0">~1s</span>
+                </div>
+                <div class="plan-step flex items-start gap-2.5 py-1.5 opacity-0">
+                  <span class="flex-shrink-0 w-5 h-5 rounded-full bg-ds-succeeded/15 text-ds-succeeded text-[10px] font-semibold flex items-center justify-center mt-0.5">5</span>
+                  <div class="flex-1 min-w-0">
+                    <p class="text-[11px] text-ds-text leading-snug">Start service, verify health &rarr; 200 OK</p>
+                  </div>
+                  <span class="text-[10px] text-ds-text-muted font-mono flex-shrink-0">~12s</span>
                 </div>
               </div>
               <!-- Greenlight button -->
-              <div id="plan-actions" class="mt-3 pt-3 border-t border-ds-border/50 opacity-0">
+              <div id="plan-actions" class="mt-2.5 pt-2.5 border-t border-ds-border/50 opacity-0">
                 <button id="greenlight-btn" class="w-full rounded-md bg-ds-succeeded/15 border border-ds-succeeded/25 px-4 py-2 text-sm font-semibold text-ds-succeeded cursor-default">Greenlight</button>
               </div>
             </div>
 
             <!-- Stage 5: Execution -->
             <div id="stage-exec" class="demo-stage px-5 pt-5 pb-5 hidden">
-              <div class="flex items-center gap-2 mb-4">
+              <div class="flex items-center gap-2 mb-3">
                 <p class="text-[10px] font-semibold uppercase tracking-widest text-ds-text-muted">Executing</p>
                 <span class="exec-spinner w-3 h-3 rounded-full border-2 border-ds-accent border-t-transparent"></span>
+                <span class="text-[10px] text-ds-text-muted ml-auto font-mono" id="exec-elapsed">0.0s</span>
               </div>
               <div class="space-y-0">
-                <div class="exec-step flex items-center gap-3 py-2.5 border-b border-ds-border/50">
+                <div class="exec-step flex items-center gap-2.5 py-2 border-b border-ds-border/50">
                   <span class="exec-icon flex-shrink-0 w-5 h-5 rounded-full bg-ds-border text-ds-text-muted text-[10px] font-semibold flex items-center justify-center">1</span>
-                  <p class="text-xs text-ds-text-secondary flex-1">Pull image &amp; verify checksum</p>
+                  <p class="text-[11px] text-ds-text-secondary flex-1">Stop service via systemd</p>
+                  <span class="exec-duration text-[10px] text-ds-text-muted font-mono"></span>
                   <span class="exec-status text-[10px] text-ds-text-muted font-mono">waiting</span>
                 </div>
-                <div class="exec-step flex items-center gap-3 py-2.5 border-b border-ds-border/50">
+                <div class="exec-step flex items-center gap-2.5 py-2 border-b border-ds-border/50">
                   <span class="exec-icon flex-shrink-0 w-5 h-5 rounded-full bg-ds-border text-ds-text-muted text-[10px] font-semibold flex items-center justify-center">2</span>
-                  <p class="text-xs text-ds-text-secondary flex-1">Stop existing container</p>
+                  <p class="text-[11px] text-ds-text-secondary flex-1">Backup to rollback store</p>
+                  <span class="exec-duration text-[10px] text-ds-text-muted font-mono"></span>
                   <span class="exec-status text-[10px] text-ds-text-muted font-mono">waiting</span>
                 </div>
-                <div class="exec-step flex items-center gap-3 py-2.5 border-b border-ds-border/50">
+                <div class="exec-step flex items-center gap-2.5 py-2 border-b border-ds-border/50">
                   <span class="exec-icon flex-shrink-0 w-5 h-5 rounded-full bg-ds-border text-ds-text-muted text-[10px] font-semibold flex items-center justify-center">3</span>
-                  <p class="text-xs text-ds-text-secondary flex-1">Remove container &amp; free port</p>
+                  <p class="text-[11px] text-ds-text-secondary flex-1">Extract container image</p>
+                  <span class="exec-duration text-[10px] text-ds-text-muted font-mono"></span>
                   <span class="exec-status text-[10px] text-ds-text-muted font-mono">waiting</span>
                 </div>
-                <div class="exec-step flex items-center gap-3 py-2.5">
+                <div class="exec-step flex items-center gap-2.5 py-2 border-b border-ds-border/50">
                   <span class="exec-icon flex-shrink-0 w-5 h-5 rounded-full bg-ds-border text-ds-text-muted text-[10px] font-semibold flex items-center justify-center">4</span>
-                  <p class="text-xs text-ds-text-secondary flex-1">Run new container with env</p>
+                  <p class="text-[11px] text-ds-text-secondary flex-1">Apply env config</p>
+                  <span class="exec-duration text-[10px] text-ds-text-muted font-mono"></span>
                   <span class="exec-status text-[10px] text-ds-text-muted font-mono">waiting</span>
                 </div>
+                <div class="exec-step flex items-center gap-2.5 py-2">
+                  <span class="exec-icon flex-shrink-0 w-5 h-5 rounded-full bg-ds-border text-ds-text-muted text-[10px] font-semibold flex items-center justify-center">5</span>
+                  <p class="text-[11px] text-ds-text-secondary flex-1">Start &amp; verify health</p>
+                  <span class="exec-duration text-[10px] text-ds-text-muted font-mono"></span>
+                  <span class="exec-status text-[10px] text-ds-text-muted font-mono">waiting</span>
+                </div>
+              </div>
+              <!-- Health check result -->
+              <div id="exec-health" class="mt-2.5 rounded-md border border-ds-succeeded/20 bg-ds-succeeded/5 px-3 py-2 opacity-0 transition-opacity duration-300">
+                <p class="text-[10px] font-mono text-ds-succeeded">✓ Health endpoint responded 200 in 340ms — rollback plan verified</p>
               </div>
             </div>
 
             <!-- Stage 6: Debrief -->
             <div id="stage-debrief" class="demo-stage px-5 pt-5 pb-5 hidden">
-              <div class="flex items-center gap-2 mb-4">
+              <div class="flex items-center gap-2 mb-3">
                 <div class="entity-badge border-ds-debrief/30 bg-ds-debrief/10 text-ds-debrief text-[10px] py-0.5">Debrief</div>
-                <span class="text-xs text-ds-text-muted ml-auto">payments-api v2.4.1 &rarr; prod-us-east</span>
+                <span class="text-[10px] text-ds-text-muted ml-auto font-mono">1m 42s · prd-web-01</span>
               </div>
               <div class="space-y-0">
-                <div class="debrief-entry flex gap-2.5 pb-3 relative opacity-0">
+                <div class="debrief-entry flex gap-2.5 pb-2.5 relative opacity-0">
+                  <div class="flex flex-col items-center">
+                    <span class="dt-dot bg-ds-dt-scan mt-1"></span>
+                    <div class="w-px flex-1 bg-ds-border mt-1"></div>
+                  </div>
+                  <div>
+                    <p class="text-[10px] font-semibold text-ds-dt-scan uppercase tracking-wide">Artifact Analysis</p>
+                    <p class="text-[11px] text-ds-text-secondary mt-0.5">Identified container image, 96% confidence. Detected health endpoint at /health, 3 env vars required.</p>
+                  </div>
+                </div>
+                <div class="debrief-entry flex gap-2.5 pb-2.5 relative opacity-0">
+                  <div class="flex flex-col items-center">
+                    <span class="dt-dot bg-ds-dt-config mt-1"></span>
+                    <div class="w-px flex-1 bg-ds-border mt-1"></div>
+                  </div>
+                  <div>
+                    <p class="text-[10px] font-semibold text-ds-dt-config uppercase tracking-wide">Config Resolved</p>
+                    <p class="text-[11px] text-ds-text-secondary mt-0.5">Resolved API_ENDPOINT, DB_CONNECTION, LOG_LEVEL from partition scope. LOG_LEVEL changed: debug &rarr; info.</p>
+                  </div>
+                </div>
+                <div class="debrief-entry flex gap-2.5 pb-2.5 relative opacity-0">
                   <div class="flex flex-col items-center">
                     <span class="dt-dot bg-ds-dt-plan mt-1"></span>
                     <div class="w-px flex-1 bg-ds-border mt-1"></div>
                   </div>
                   <div>
                     <p class="text-[10px] font-semibold text-ds-dt-plan uppercase tracking-wide">Pipeline Plan</p>
-                    <p class="text-xs text-ds-text-secondary mt-0.5">Planned 4-step pipeline for container deployment</p>
+                    <p class="text-[11px] text-ds-text-secondary mt-0.5">5-step pipeline. Same artifact type deployed 11 times prior — 100% success rate on this host.</p>
                   </div>
                 </div>
-                <div class="debrief-entry flex gap-2.5 pb-3 relative opacity-0">
-                  <div class="flex flex-col items-center">
-                    <span class="dt-dot bg-ds-dt-config mt-1"></span>
-                    <div class="w-px flex-1 bg-ds-border mt-1"></div>
-                  </div>
-                  <div>
-                    <p class="text-[10px] font-semibold text-ds-dt-config uppercase tracking-wide">Configuration</p>
-                    <p class="text-xs text-ds-text-secondary mt-0.5">Resolved 3 variables — no conflicts detected</p>
-                  </div>
-                </div>
-                <div class="debrief-entry flex gap-2.5 pb-3 relative opacity-0">
+                <div class="debrief-entry flex gap-2.5 pb-2.5 relative opacity-0">
                   <div class="flex flex-col items-center">
                     <span class="dt-dot bg-ds-dt-execution mt-1"></span>
                     <div class="w-px flex-1 bg-ds-border mt-1"></div>
                   </div>
                   <div>
                     <p class="text-[10px] font-semibold text-ds-dt-execution uppercase tracking-wide">Execution</p>
-                    <p class="text-xs text-ds-text-secondary mt-0.5">All 4 steps completed in 12.3s</p>
+                    <p class="text-[11px] text-ds-text-secondary mt-0.5">All 5 steps completed in 57.4s. Image extraction was slowest at 34.2s (expected for 180MB image).</p>
                   </div>
                 </div>
-                <div class="debrief-entry flex gap-2.5 pb-3 relative opacity-0">
+                <div class="debrief-entry flex gap-2.5 pb-2.5 relative opacity-0">
                   <div class="flex flex-col items-center">
                     <span class="dt-dot bg-ds-dt-verification mt-1"></span>
                     <div class="w-px flex-1 bg-ds-border mt-1"></div>
                   </div>
                   <div>
                     <p class="text-[10px] font-semibold text-ds-dt-verification uppercase tracking-wide">Verification</p>
-                    <p class="text-xs text-ds-text-secondary mt-0.5">Health check passed — HTTP 200 on /health in 42ms</p>
+                    <p class="text-[11px] text-ds-text-secondary mt-0.5">Health endpoint returned 200 in 340ms. Rollback plan stored and verified against prior backup.</p>
                   </div>
                 </div>
                 <div class="debrief-entry flex gap-2.5 relative opacity-0">
@@ -252,7 +308,7 @@ import Layout from "../layouts/Layout.astro";
                   </div>
                   <div>
                     <p class="text-[10px] font-semibold text-ds-dt-completion uppercase tracking-wide">Completed</p>
-                    <p class="text-xs text-ds-text-secondary mt-0.5">Deployment succeeded — all checks passed</p>
+                    <p class="text-[11px] text-ds-text-secondary mt-0.5">Deployment succeeded — v3.2.0 &rarr; v3.2.1 on prd-web-01. No action required.</p>
                   </div>
                 </div>
               </div>
@@ -1041,6 +1097,9 @@ import Layout from "../layouts/Layout.astro";
   .exec-step .exec-status.active {
     color: #6b8aff !important;
   }
+  .exec-step .exec-duration.done {
+    color: #4cbe7a !important;
+  }
 
   /* Debrief entry reveal */
   .debrief-entry {
@@ -1159,11 +1218,16 @@ import Layout from "../layouts/Layout.astro";
   async function runSelect() {
     await fadeToStage("stage-select");
     const row1 = document.getElementById("envoy-row-1");
+    const hint = document.getElementById("select-hint");
     row1.classList.remove("selected");
+    if (hint) hint.style.opacity = "0";
 
     await wait(800);
     // Highlight first envoy
     row1.classList.add("selected");
+    await wait(400);
+    // Show context hint
+    if (hint) hint.style.opacity = "1";
     await wait(1000);
   }
 
@@ -1202,27 +1266,46 @@ import Layout from "../layouts/Layout.astro";
   async function runExec() {
     await fadeToStage("stage-exec");
     const steps = document.querySelectorAll(".exec-step");
+    const elapsed = document.getElementById("exec-elapsed");
+    const healthEl = document.getElementById("exec-health");
+    const stepDurations = ["2.1s", "8.4s", "34.2s", "0.8s", "12.6s"];
 
     // Reset all steps
     steps.forEach((s) => {
       s.querySelector(".exec-icon").className = "exec-icon flex-shrink-0 w-5 h-5 rounded-full bg-ds-border text-ds-text-muted text-[10px] font-semibold flex items-center justify-center";
       s.querySelector(".exec-status").className = "exec-status text-[10px] text-ds-text-muted font-mono";
       s.querySelector(".exec-status").textContent = "waiting";
+      const dur = s.querySelector(".exec-duration");
+      if (dur) dur.textContent = "";
     });
+    if (elapsed) elapsed.textContent = "0.0s";
+    if (healthEl) healthEl.style.opacity = "0";
+    const spinner = demo.querySelector(".exec-spinner");
+    if (spinner) spinner.style.opacity = "1";
+
+    // Elapsed timer
+    let elapsedMs = 0;
+    const timerInterval = setInterval(() => {
+      if (!paused) {
+        elapsedMs += 100;
+        if (elapsed) elapsed.textContent = (elapsedMs / 1000).toFixed(1) + "s";
+      }
+    }, 100);
 
     await wait(400);
 
     for (let i = 0; i < steps.length; i++) {
       const icon = steps[i].querySelector(".exec-icon");
       const status = steps[i].querySelector(".exec-status");
+      const dur = steps[i].querySelector(".exec-duration");
 
       // Mark active
       icon.classList.add("active");
       status.classList.add("active");
       status.textContent = "running";
 
-      // Simulate work
-      await wait(700 + Math.random() * 400);
+      // Simulate work (shorter animation durations than real)
+      await wait(500 + Math.random() * 400);
 
       // Mark done
       icon.classList.remove("active");
@@ -1230,13 +1313,19 @@ import Layout from "../layouts/Layout.astro";
       status.classList.remove("active");
       status.classList.add("done");
       status.textContent = "done";
+      if (dur) { dur.textContent = stepDurations[i]; dur.classList.add("done"); }
     }
 
+    clearInterval(timerInterval);
+    if (elapsed) elapsed.textContent = "57.4s";
+
+    // Show health check result
+    if (healthEl) healthEl.style.opacity = "1";
+
     // Hide spinner
-    const spinner = demo.querySelector(".exec-spinner");
     if (spinner) spinner.style.opacity = "0";
 
-    await wait(500);
+    await wait(800);
   }
 
   // ── Stage 6: Debrief ───────────────────────────────
