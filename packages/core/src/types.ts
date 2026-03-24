@@ -27,6 +27,7 @@ export const OperationStatus = z.enum([
   "succeeded",
   "failed",
   "rolled_back",
+  "cancelled",
 ]);
 export type OperationStatus = z.infer<typeof OperationStatus>;
 /** @deprecated Use OperationStatus */
