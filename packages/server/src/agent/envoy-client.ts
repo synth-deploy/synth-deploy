@@ -243,6 +243,8 @@ export class EnvoyClient {
     operationType?: "deploy" | "query" | "investigate" | "trigger";
     intent?: string;
     allowWrite?: boolean;
+    triggerCondition?: string;
+    triggerResponseIntent?: string;
     artifact?: {
       id: string;
       name: string;
@@ -277,6 +279,8 @@ export class EnvoyClient {
     blockReason?: string;
     queryFindings?: { targetsSurveyed: string[]; summary: string; findings: Array<{ target: string; observations: string[] }> };
     investigationFindings?: { targetsSurveyed: string[]; summary: string; findings: Array<{ target: string; observations: string[] }>; rootCause?: string; proposedResolution?: { intent: string; operationType: "deploy" | "maintain"; parameters?: Record<string, unknown> } };
+    intervalMs?: number;
+    cooldownMs?: number;
   }> {
     // Forward the LLM API key so the Envoy can use it if it started without one.
     // Sent in the request body (not headers) over the trusted server↔envoy channel.

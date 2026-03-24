@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { z } from "zod";
 import type {
   DebriefWriter,
   DebriefEntry,
@@ -156,6 +157,10 @@ export interface PlanningInstruction {
    * When set, the LLM incorporates this feedback into the new plan.
    */
   refinementFeedback?: string;
+  /** Trigger-specific: the condition expression (e.g. "disk_usage > 85") */
+  triggerCondition?: string;
+  /** Trigger-specific: what to do when the condition fires */
+  triggerResponseIntent?: string;
 }
 
 /**
@@ -179,6 +184,10 @@ export interface PlanningResult {
   blocked?: boolean;
   /** Human-readable explanation of what must be fixed before proceeding */
   blockReason?: string;
+  /** Trigger-specific: LLM-recommended polling interval in ms (overrides server default of 60000) */
+  intervalMs?: number;
+  /** Trigger-specific: LLM-recommended cooldown in ms between firings (overrides server default of 300000) */
+  cooldownMs?: number;
 }
 
 export type { QueryFindings, InvestigationFindings } from "@synth-deploy/core";
@@ -1287,6 +1296,9 @@ export class EnvoyAgent {
     if (opType === "investigate") {
       return this.planInvestigation(instruction);
     }
+    if (opType === "trigger") {
+      return this.planTrigger(instruction);
+    }
 
     // Deploy path: artifact is required
     if (!instruction.artifact) {
@@ -1419,6 +1431,166 @@ export class EnvoyAgent {
     });
 
     return { text: result.ok ? (result.text ?? null) : null, probeLog };
+  }
+
+  /**
+   * Plan a trigger operation: probe the environment to understand what
+   * monitoring commands are available, then generate a set of monitoring
+   * probes with LLM-recommended interval and cooldown.
+   */
+  private async planTrigger(instruction: PlanningInstruction): Promise<PlanningResult> {
+    const condition = instruction.triggerCondition ?? instruction.intent ?? "check environment";
+    const responseIntent = instruction.triggerResponseIntent ?? "";
+    const envName = instruction.environment.name;
+
+    const TriggerDirectiveSchema = z.object({
+      probes: z.array(z.object({
+        command: z.string(),
+        label: z.string(),
+        parseAs: z.enum(["numeric", "exitCode"]).default("numeric"),
+      })).min(1),
+      intervalMs: z.number().int().positive().default(60_000),
+      cooldownMs: z.number().int().positive().default(300_000),
+      reasoning: z.string(),
+    });
+    type TriggerDirective = z.infer<typeof TriggerDirectiveSchema>;
+
+    if (instruction.llmApiKey) {
+      process.env.SYNTH_LLM_API_KEY = instruction.llmApiKey;
+    }
+
+    // Trigger ops degrade softly when the LLM is unavailable: a default echo probe
+    // is installed so the monitoring directive is valid and the operation can proceed.
+    // This differs from query/investigate which hard-fail without the LLM — a trigger
+    // at least gets installed and can be updated later when an LLM key is configured.
+    if (!this.llmClient || !this.llmClient.isAvailable()) {
+      this.debrief.record({
+        partitionId: instruction.partition?.id ?? null,
+        operationId: instruction.operationId,
+        agent: "envoy",
+        decisionType: "plan-generation",
+        decision: `Generated basic monitoring plan for: ${condition} (LLM unavailable)`,
+        reasoning: `LLM unavailable — a default echo probe will be installed. Configure an LLM provider for intelligent monitoring probe generation that can detect the actual condition values.`,
+        context: { condition, envName, llmAvailable: false },
+      });
+
+      const plan: OperationPlan = {
+        steps: [{
+          description: "default",
+          action: "echo 0",
+          target: envName,
+          reversible: false,
+        }],
+        reasoning: `Basic monitoring plan for: ${condition}. LLM unavailable — configure an LLM provider for intelligent probe generation.`,
+      };
+      return { plan, rollbackPlan: { steps: [], reasoning: "Monitoring triggers do not require rollback." } };
+    }
+
+    const systemPrompt =
+      `You are Synth's envoy agent designing a monitoring trigger for a target system.\n\n` +
+      `Your job: produce shell commands that measure the values needed to evaluate the trigger condition.\n\n` +
+      `Environment: ${envName}\n` +
+      (instruction.partition ? `Partition: ${instruction.partition.name}\n` : "") +
+      `Condition to monitor: ${condition}\n` +
+      `Response when triggered: ${responseIntent || "(not specified)"}\n` +
+      `Available variables: ${JSON.stringify(instruction.resolvedVariables)}\n\n` +
+      `Use the probe tool to explore the target system and verify your monitoring commands work:\n` +
+      `- Identify what tools are available (df, free, ps, netstat, etc.)\n` +
+      `- Test commands that produce the values needed to evaluate the condition\n` +
+      `- Ensure each probe command outputs a single value (numeric preferred)\n\n` +
+      `The condition expression uses probe labels — match your probe labels to the identifiers ` +
+      `used in the condition: "${condition}"\n\n` +
+      `Choose intervalMs and cooldownMs appropriate to the condition type:\n` +
+      `- Fast-changing metrics (CPU, memory): interval 30000-60000ms\n` +
+      `- Slower metrics (disk, service health): interval 60000-300000ms\n` +
+      `- cooldownMs should be longer than intervalMs to prevent storm\n\n` +
+      `When ready, respond with ONLY a JSON object matching this schema:\n` +
+      `{\n` +
+      `  "probes": [\n` +
+      `    { "command": "shell command outputting a single value", "label": "probe_label", "parseAs": "numeric" }\n` +
+      `  ],\n` +
+      `  "intervalMs": <ms between checks>,\n` +
+      `  "cooldownMs": <ms before re-firing after trigger>,\n` +
+      `  "reasoning": "brief explanation of monitoring strategy"\n` +
+      `}`;
+
+    let directive: TriggerDirective | null = null;
+    let probeLog: string[] = [];
+
+    try {
+      const loopResult = await this.executeProbeLoop(instruction, {
+        systemPrompt,
+        promptSummary: `Trigger: ${condition}`,
+        allowWrite: false,
+      });
+      probeLog = loopResult.probeLog;
+
+      if (loopResult.text) {
+        const jsonMatch = loopResult.text.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          try {
+            const parsed = TriggerDirectiveSchema.safeParse(JSON.parse(jsonMatch[0]));
+            if (parsed.success) directive = parsed.data;
+          } catch {
+            // malformed JSON — fall through to default probe below
+          }
+        }
+      }
+    } catch (err) {
+      this.debrief.record({
+        partitionId: instruction.partition?.id ?? null,
+        operationId: instruction.operationId,
+        agent: "envoy",
+        decisionType: "plan-generation",
+        decision: "Trigger planning failed",
+        reasoning: err instanceof Error ? err.message : String(err),
+        context: { error: true },
+      });
+      throw err;
+    }
+
+    if (!directive) {
+      directive = {
+        probes: [{ command: "echo 0", label: "default", parseAs: "numeric" as const }],
+        intervalMs: 60_000,
+        cooldownMs: 300_000,
+        reasoning: `Could not parse structured monitoring probes from LLM response. Using a default probe. ${probeLog.length} probe(s) executed during planning.`,
+      };
+    }
+
+    this.debrief.record({
+      partitionId: instruction.partition?.id ?? null,
+      operationId: instruction.operationId,
+      agent: "envoy",
+      decisionType: "plan-generation",
+      decision: `Monitoring plan: ${directive.probes.length} probe(s) for "${condition}" — every ${Math.round(directive.intervalMs / 1000)}s, cooldown ${Math.round(directive.cooldownMs / 1000)}s`,
+      reasoning: directive.reasoning,
+      context: {
+        probeCount: directive.probes.length,
+        condition,
+        intervalMs: directive.intervalMs,
+        cooldownMs: directive.cooldownMs,
+        probeLabels: directive.probes.map((p) => p.label),
+      },
+    });
+
+    const plan: OperationPlan = {
+      steps: directive.probes.map((p) => ({
+        description: p.label,
+        action: p.command,
+        target: envName,
+        reversible: false,
+        params: { parseAs: p.parseAs },
+      })),
+      reasoning: directive.reasoning,
+    };
+
+    return {
+      plan,
+      rollbackPlan: { steps: [], reasoning: "Monitoring triggers do not require rollback." },
+      intervalMs: directive.intervalMs,
+      cooldownMs: directive.cooldownMs,
+    };
   }
 
   /**

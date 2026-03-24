@@ -133,6 +133,10 @@ export function registerOperationRoutes(
           intent: deployment.intent ?? (deployment.input.type === "trigger"
             ? `Monitor: ${(deployment.input as { condition: string }).condition}. When triggered: ${(deployment.input as { responseIntent: string }).responseIntent}`
             : undefined),
+          ...(deployment.input.type === "trigger" ? {
+            triggerCondition: (deployment.input as { condition: string }).condition,
+            triggerResponseIntent: (deployment.input as { responseIntent: string }).responseIntent,
+          } : {}),
           ...(artifact ? {
             artifact: {
               id: artifact.id,
@@ -171,7 +175,7 @@ export function registerOperationRoutes(
             const probes = result.plan.steps.map((step) => ({
               command: step.action,
               label: step.description,
-              parseAs: "numeric" as const,
+              parseAs: (step.params?.parseAs === "exitCode" ? "exitCode" : "numeric") as "numeric" | "exitCode",
             }));
             const directive: import("@synth-deploy/core").MonitoringDirective = {
               id: dep.id,
@@ -181,8 +185,8 @@ export function registerOperationRoutes(
                 label: "default-probe",
                 parseAs: "numeric" as const,
               }],
-              intervalMs: 60_000, // default: check every minute
-              cooldownMs: 300_000, // default: 5-minute cooldown
+              intervalMs: result.intervalMs ?? 60_000,
+              cooldownMs: result.cooldownMs ?? 300_000,
               condition: triggerInput.condition,
               responseIntent: triggerInput.responseIntent,
               responseType: "maintain",
@@ -196,16 +200,7 @@ export function registerOperationRoutes(
             dep.status = "awaiting_approval" as typeof dep.status;
             dep.recommendation = computeRecommendation(dep, deployments, result.assessmentSummary);
             deployments.save(dep);
-
-            debrief.record({
-              partitionId: dep.partitionId ?? null,
-              operationId: dep.id,
-              agent: "envoy",
-              decisionType: "plan-generation" as Parameters<typeof debrief.record>[0]["decisionType"],
-              decision: `Monitoring plan generated with ${probes.length} probe(s): ${triggerInput.condition}`,
-              reasoning: result.plan.reasoning,
-              context: { probeCount: probes.length, condition: triggerInput.condition, responseIntent: triggerInput.responseIntent, envoyId: planningEnvoy.id },
-            });
+            // Debrief plan-generation entry is recorded by the envoy's planTrigger — no duplicate here.
             return;
           }
 
