@@ -1459,6 +1459,10 @@ export class EnvoyAgent {
       process.env.SYNTH_LLM_API_KEY = instruction.llmApiKey;
     }
 
+    // Trigger ops degrade softly when the LLM is unavailable: a default echo probe
+    // is installed so the monitoring directive is valid and the operation can proceed.
+    // This differs from query/investigate which hard-fail without the LLM — a trigger
+    // at least gets installed and can be updated later when an LLM key is configured.
     if (!this.llmClient || !this.llmClient.isAvailable()) {
       this.debrief.record({
         partitionId: instruction.partition?.id ?? null,
