@@ -43,15 +43,15 @@ describe("SettingsStore", () => {
     );
   });
 
-  it("merges deploymentDefaults without overwriting other fields", () => {
+  it("merges operationDefaults without overwriting other fields", () => {
     store.update({
-      deploymentDefaults: { defaultHealthCheckRetries: 5 },
-    });
+      operationDefaults: { defaultHealthCheckRetries: 5 },
+    } as any);
     const settings = store.get();
-    expect(settings.deploymentDefaults.defaultHealthCheckRetries).toBe(5);
+    expect(settings.operationDefaults.defaultHealthCheckRetries).toBe(5);
     // Other defaults remain intact
-    expect(settings.deploymentDefaults.defaultHealthCheckEnabled).toBe(
-      DEFAULT_APP_SETTINGS.deploymentDefaults.defaultHealthCheckEnabled,
+    expect(settings.operationDefaults.defaultHealthCheckEnabled).toBe(
+      DEFAULT_APP_SETTINGS.operationDefaults.defaultHealthCheckEnabled,
     );
   });
 

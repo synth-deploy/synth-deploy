@@ -20,10 +20,10 @@ export class SettingsStore {
     if (partial.agent) {
       this.settings.agent = { ...this.settings.agent, ...partial.agent };
     }
-    if (partial.deploymentDefaults) {
-      this.settings.deploymentDefaults = {
-        ...this.settings.deploymentDefaults,
-        ...partial.deploymentDefaults,
+    if (partial.operationDefaults) {
+      this.settings.operationDefaults = {
+        ...this.settings.operationDefaults,
+        ...partial.operationDefaults,
       };
     }
     if (partial.envoy) {
@@ -37,6 +37,12 @@ export class SettingsStore {
     }
     if (partial.llm !== undefined) {
       this.settings.llm = partial.llm;
+    }
+    if (partial.approvalDefaults) {
+      this.settings.approvalDefaults = {
+        ...this.settings.approvalDefaults,
+        ...partial.approvalDefaults,
+      };
     }
     return structuredClone(this.settings);
   }

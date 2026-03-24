@@ -211,6 +211,17 @@ export const UpdateSettingsSchema = z.object({
     description: z.string().optional(),
   })).optional(),
   llm: LlmProviderConfigSchema.partial().optional(),
+  approvalDefaults: z.object({
+    query: z.enum(["auto", "required"]).optional(),
+    investigate: z.enum(["auto", "required"]).optional(),
+    trigger: z.enum(["auto", "required"]).optional(),
+    deploy: z.enum(["auto", "required"]).optional(),
+    maintain: z.enum(["auto", "required"]).optional(),
+    composite: z.enum(["auto", "required"]).optional(),
+    environmentOverrides: z.record(
+      z.record(z.enum(["auto", "required"])).optional(),
+    ).optional(),
+  }).optional(),
 });
 
 // --- Artifacts (update) ---

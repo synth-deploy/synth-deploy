@@ -97,6 +97,8 @@ export type {
   AlertWebhookSource,
   AlertWebhookChannel,
   NormalizedAlert,
+  ApprovalMode,
+  ApprovalDefaults,
 } from "./types.js";
 
 export {
@@ -105,6 +107,7 @@ export {
   AgentType as AgentTypeEnum,
   DecisionType as DecisionTypeEnum,
   DEFAULT_APP_SETTINGS,
+  DEFAULT_APPROVAL_DEFAULTS,
   TASK_MODEL_META,
   QueryFindingsSchema,
   InvestigationFindingsSchema,
@@ -112,6 +115,7 @@ export {
   MonitoringDirectiveSchema,
   MonitoringProbeSchema,
 } from "./types.js";
+export { resolveApprovalMode } from "./approval.js";
 export { DecisionDebrief } from "./debrief.js";
 export type { DebriefWriter, DebriefReader, DebriefRecordParams, DebriefPinStore } from "./debrief.js";
 export { PersistentDecisionDebrief } from "./debrief-persistence.js";

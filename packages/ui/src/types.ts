@@ -256,10 +256,10 @@ export interface ExecutedStep {
 }
 
 export interface DeploymentEnrichment {
-  recentDeploymentsToEnv: number;
+  recentOperationsToEnv: number;
   previouslyRolledBack: boolean;
-  conflictingDeployments: string[];
-  lastDeploymentToEnv?: {
+  conflictingOperations: string[];
+  lastOperationToEnv?: {
     id: string;
     status: string;
     version: string;
@@ -294,6 +294,8 @@ export interface Deployment {
   /** Findings from an investigation operation */
   investigationFindings?: InvestigationFindings;
   retryOf?: string;
+  /** Who/what initiated this operation */
+  triggeredBy?: "user" | "agent" | "webhook" | "trigger";
   /** Trigger-specific fields */
   triggerStatus?: "active" | "paused" | "disabled";
   triggerLastFiredAt?: string;

@@ -1049,10 +1049,10 @@ export class PersistentSettingsStore {
     if (partial.agent) {
       current.agent = { ...current.agent, ...partial.agent };
     }
-    if (partial.deploymentDefaults) {
-      current.deploymentDefaults = {
-        ...current.deploymentDefaults,
-        ...partial.deploymentDefaults,
+    if (partial.operationDefaults) {
+      current.operationDefaults = {
+        ...current.operationDefaults,
+        ...partial.operationDefaults,
       };
     }
     if (partial.envoy) {
@@ -1071,6 +1071,12 @@ export class PersistentSettingsStore {
     }
     if (partial.defaultTheme !== undefined) {
       current.defaultTheme = partial.defaultTheme;
+    }
+    if (partial.approvalDefaults) {
+      current.approvalDefaults = {
+        ...current.approvalDefaults,
+        ...partial.approvalDefaults,
+      };
     }
     this.stmts.upsert.run({ key: "app", value: JSON.stringify(current) });
     return structuredClone(current);

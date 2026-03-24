@@ -253,6 +253,7 @@ export function registerAlertWebhookRoutes(
           input: operationInput,
           intent,
           lineage: `alert-webhook:${channel.id}`,
+          triggeredBy: "webhook" as const,
           environmentId: channel.environmentId,
           partitionId: channel.partitionId,
           envoyId: channel.envoyId,

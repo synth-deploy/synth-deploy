@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { generatePostmortem, generatePostmortemAsync } from "@synth-deploy/core";
+import { generatePostmortem, generatePostmortemAsync, resolveApprovalMode } from "@synth-deploy/core";
 import type { LlmClient, IPartitionStore, IEnvironmentStore, IArtifactStore, ISettingsStore, IDeploymentStore, ITelemetryStore, DebriefWriter, DebriefReader, DebriefPinStore, DeploymentEnrichment, RecommendationVerdict, TelemetryAction } from "@synth-deploy/core";
 import { requirePermission } from "../middleware/permissions.js";
 import {
@@ -206,29 +206,38 @@ export function registerOperationRoutes(
             return;
           }
 
-          // Auto-approve read-only operations — findings are the deliverable
+          // Check approval mode for query/investigate operations with findings
           if ((dep.input.type === "query" || dep.input.type === "investigate") &&
               (result.queryFindings || result.investigationFindings)) {
             if (result.queryFindings) dep.queryFindings = result.queryFindings;
             if (result.investigationFindings) dep.investigationFindings = result.investigationFindings;
-            dep.status = "succeeded" as typeof dep.status;
-            dep.completedAt = new Date();
-            deployments.save(dep);
 
-            const decisionType = dep.input.type === "query"
-              ? "query-findings" as const
-              : "investigation-findings" as const;
-            const findings = result.queryFindings ?? result.investigationFindings!;
-            debrief.record({
-              partitionId: dep.partitionId ?? null,
-              operationId: dep.id,
-              agent: "envoy",
-              decisionType,
-              decision: `${dep.input.type === "query" ? "Query" : "Investigation"} complete — ${findings.targetsSurveyed.length} target(s) surveyed`,
-              reasoning: findings.summary,
-              context: { targetsSurveyed: findings.targetsSurveyed, findingCount: findings.findings.length },
-            });
-            return;
+            const currentSettings = settings.get();
+            const envLookup = (id: string) => environments.get(id)?.name;
+            const approvalMode = resolveApprovalMode(dep.input.type, dep.environmentId, currentSettings, envLookup);
+
+            if (approvalMode === "auto") {
+              // Auto-approve — findings are the deliverable
+              dep.status = "succeeded" as typeof dep.status;
+              dep.completedAt = new Date();
+              deployments.save(dep);
+
+              const decisionType = dep.input.type === "query"
+                ? "query-findings" as const
+                : "investigation-findings" as const;
+              const findings = result.queryFindings ?? result.investigationFindings!;
+              debrief.record({
+                partitionId: dep.partitionId ?? null,
+                operationId: dep.id,
+                agent: "envoy",
+                decisionType,
+                decision: `${dep.input.type === "query" ? "Query" : "Investigation"} complete — ${findings.targetsSurveyed.length} target(s) surveyed`,
+                reasoning: findings.summary,
+                context: { targetsSurveyed: findings.targetsSurveyed, findingCount: findings.findings.length },
+              });
+              return;
+            }
+            // approvalMode === "required" — fall through to standard approval gate
           }
 
           if (result.blocked) {
@@ -808,8 +817,8 @@ export function registerOperationRoutes(
       const now = new Date();
       const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
-      // Count recent deployments to the same environment (only meaningful when environmentId is set)
-      const recentDeploymentsToEnv = deployment.environmentId
+      // Count recent operations to the same environment (only meaningful when environmentId is set)
+      const recentOperationsToEnv = deployment.environmentId
         ? deployments.countByEnvironment(deployment.environmentId, twentyFourHoursAgo)
         : 0;
 
@@ -822,8 +831,8 @@ export function registerOperationRoutes(
           ).length > 0
         : false;
 
-      // Check for other in-progress deployments to the same environment
-      const conflictingDeployments = deployment.environmentId
+      // Check for other in-progress operations to the same environment
+      const conflictingOperations = deployment.environmentId
         ? deployments.list()
             .filter(
               (d) =>
@@ -834,11 +843,11 @@ export function registerOperationRoutes(
             .map((d) => d.id)
         : [];
 
-      // Find last deployment to the same environment
+      // Find last operation to the same environment
       const lastDeploy = deployment.environmentId
         ? deployments.findLatestByEnvironment(deployment.environmentId)
         : undefined;
-      const lastDeploymentToEnv = lastDeploy && lastDeploy.id !== deployment.id
+      const lastOperationToEnv = lastDeploy && lastDeploy.id !== deployment.id
         ? {
             id: lastDeploy.id,
             status: lastDeploy.status,
@@ -848,10 +857,10 @@ export function registerOperationRoutes(
         : undefined;
 
       const enrichment: DeploymentEnrichment = {
-        recentDeploymentsToEnv,
+        recentOperationsToEnv,
         previouslyRolledBack,
-        conflictingDeployments,
-        lastDeploymentToEnv,
+        conflictingOperations,
+        lastOperationToEnv,
       };
 
       return {
@@ -1518,6 +1527,7 @@ export function registerOperationRoutes(
         : { type: "maintain" as const, intent: triggerInput.responseIntent, parameters: triggerInput.parameters },
       intent: triggerInput.responseIntent,
       lineage: triggerOp.id,
+      triggeredBy: "trigger" as const,
       environmentId: report.environmentId ?? triggerOp.environmentId,
       partitionId: report.partitionId ?? triggerOp.partitionId,
       envoyId: report.envoyId,

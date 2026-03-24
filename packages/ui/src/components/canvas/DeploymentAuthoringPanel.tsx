@@ -5,7 +5,7 @@ import {
   listEnvironments,
   listEnvoys,
   listDeployments,
-  createDeployment,
+  createOperation,
   recordPreFlightResponse,
 } from "../../api.js";
 import type { Artifact, Partition, Environment, Deployment } from "../../types.js";
@@ -90,7 +90,7 @@ export default function OperationAuthoringPanel({ title, preselectedArtifactId, 
         }).catch(() => {});
       }
 
-      const result = await createDeployment({
+      const result = await createOperation({
         artifactId: primaryArtifactId || undefined,
         environmentId: selectedEnvironmentId || undefined,
         partitionId: selectedPartitionId || undefined,
@@ -102,7 +102,7 @@ export default function OperationAuthoringPanel({ title, preselectedArtifactId, 
           condition: triggerCondition.trim(),
           responseIntent: triggerResponseIntent.trim(),
         } : {}),
-      } as Parameters<typeof createDeployment>[0]);
+      } as Parameters<typeof createOperation>[0]);
 
       pushPanel({
         type: "plan-review",

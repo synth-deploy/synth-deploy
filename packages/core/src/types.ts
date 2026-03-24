@@ -49,7 +49,7 @@ export type OperationType = OperationInput["type"];
 export const OperationTriggerSchema = z.object({
   environmentId: z.string(),
   partitionId: z.string().optional(),
-  triggeredBy: z.enum(["user", "agent", "webhook"]).default("user"),
+  triggeredBy: z.enum(["user", "agent", "webhook", "trigger"]).default("user"),
   variables: z.record(z.string()).optional(),
 });
 export type OperationTrigger = z.infer<typeof OperationTriggerSchema>;
@@ -100,10 +100,10 @@ export interface ExecutedStep {
 // --- Operation Enrichment (cross-system context) ---
 
 export interface OperationEnrichment {
-  recentDeploymentsToEnv: number;
+  recentOperationsToEnv: number;
   previouslyRolledBack: boolean;
-  conflictingDeployments: string[];
-  lastDeploymentToEnv?: {
+  conflictingOperations: string[];
+  lastOperationToEnv?: {
     id: string;
     status: string;
     version: string;
@@ -276,6 +276,8 @@ export interface Operation {
   intent?: string;
   /** Parent operation that spawned this one (e.g. trigger → child operation) */
   lineage?: OperationId;
+  /** Who/what initiated this operation */
+  triggeredBy?: "user" | "agent" | "webhook" | "trigger";
   /** Structured findings — populated by investigate operations */
   findings?: string;
   queryFindings?: QueryFindings;
@@ -448,6 +450,30 @@ export interface SecurityBoundary {
   config: Record<string, unknown>;
 }
 
+// --- Approval Model ---
+
+export type ApprovalMode = 'auto' | 'required';
+
+export interface ApprovalDefaults {
+  query: ApprovalMode;
+  investigate: ApprovalMode;
+  trigger: ApprovalMode;
+  deploy: ApprovalMode;
+  maintain: ApprovalMode;
+  composite: ApprovalMode;
+  environmentOverrides: Record<string, Partial<Record<OperationType, ApprovalMode>>>;
+}
+
+export const DEFAULT_APPROVAL_DEFAULTS: ApprovalDefaults = {
+  query: 'auto',
+  investigate: 'auto',
+  trigger: 'required',
+  deploy: 'required',
+  maintain: 'required',
+  composite: 'required',
+  environmentOverrides: {},
+};
+
 // --- Settings ---
 
 export type ConflictPolicy = "strict" | "permissive";
@@ -568,12 +594,14 @@ export interface AgentSettings {
   taskModels?: TaskModelConfig;
 }
 
-export interface DeploymentDefaults {
+export interface OperationDefaults {
   defaultHealthCheckEnabled: boolean;
   defaultHealthCheckRetries: number;
   defaultTimeoutMs: number;
   defaultVerificationStrategy: "basic" | "full" | "none";
 }
+/** @deprecated Use OperationDefaults */
+export type DeploymentDefaults = OperationDefaults;
 
 export interface EnvoyEndpointConfig {
   url: string;
@@ -596,11 +624,12 @@ export interface AppSettings {
   environmentsEnabled: boolean;
   defaultTheme?: "dark" | "light" | "system";
   agent: AgentSettings;
-  deploymentDefaults: DeploymentDefaults;
+  operationDefaults: OperationDefaults;
   envoy: EnvoyEndpointConfig;
   coBranding?: CoBrandingConfig;
   mcpServers?: McpServerConfig[];
   llm?: LlmProviderConfig;
+  approvalDefaults?: ApprovalDefaults;
 }
 
 // --- Telemetry ---
@@ -651,7 +680,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     defaultVerificationStrategy: "basic",
     llmEntityExposure: "names",
   },
-  deploymentDefaults: {
+  operationDefaults: {
     defaultHealthCheckEnabled: true,
     defaultHealthCheckRetries: 1,
     defaultTimeoutMs: 30000,
@@ -662,6 +691,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
     timeoutMs: 10000,
   },
   mcpServers: [],
+  approvalDefaults: DEFAULT_APPROVAL_DEFAULTS,
 };
 
 // --- Auth types ---
