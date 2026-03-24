@@ -240,7 +240,7 @@ export class EnvoyClient {
    */
   async requestPlan(params: {
     operationId: string;
-    operationType?: "deploy" | "query" | "investigate" | "trigger";
+    operationType?: "deploy" | "query" | "investigate" | "maintain" | "trigger";
     intent?: string;
     allowWrite?: boolean;
     artifact?: {

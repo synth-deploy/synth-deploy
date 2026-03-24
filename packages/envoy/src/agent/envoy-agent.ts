@@ -1287,6 +1287,9 @@ export class EnvoyAgent {
     if (opType === "investigate") {
       return this.planInvestigation(instruction);
     }
+    if (opType === "maintain") {
+      return this.planMaintain(instruction);
+    }
 
     // Deploy path: artifact is required
     if (!instruction.artifact) {
@@ -1619,6 +1622,472 @@ export class EnvoyAgent {
       rollbackPlan: stubPlan,
       investigationFindings,
     };
+  }
+
+  /**
+   * Plan a maintenance operation: probe the target environment to understand
+   * current state, then produce a concrete maintenance plan (service restarts,
+   * config updates, cleanup, health fixes, etc.). No artifact is deployed —
+   * the intent is the sole driver.
+   */
+  private async planMaintain(instruction: PlanningInstruction): Promise<PlanningResult> {
+    const intent = instruction.intent ?? "Perform maintenance on the target environment";
+    const envName = instruction.environment.name;
+
+    if (!this.llmClient) {
+      throw new Error("LLM client not initialized — cannot run maintain operation");
+    }
+
+    // Apply forwarded API key
+    if (instruction.llmApiKey) {
+      process.env.SYNTH_LLM_API_KEY = instruction.llmApiKey;
+    }
+
+    if (!this.llmClient.isAvailable()) {
+      throw new Error(
+        "LLM is unavailable — maintain operations require intelligent reasoning. " +
+        "Configure an LLM provider in Settings to run maintenance operations.",
+      );
+    }
+
+    const debriefEntries: DebriefEntry[] = [];
+    const recordEntry = (params: Parameters<DebriefWriter["record"]>[0]): DebriefEntry => {
+      const entry = this.debrief.record(params);
+      debriefEntries.push(entry);
+      return entry;
+    };
+
+    const scanResult = this.scanner.scan();
+    const capabilities = this.getCapabilities();
+    const availableTools = capabilities.installedTools
+      .filter((t) => t.available)
+      .map((t) => `${t.name} (${t.version ?? "version unknown"})`)
+      .join(", ");
+    const unavailableTools = capabilities.installedTools
+      .filter((t) => !t.available)
+      .map((t) => t.name)
+      .join(", ");
+
+    const planOutputFormat =
+      `Each step must have a clear action, target, description, and whether it is ` +
+      `reversible (with rollback action if so). For steps that execute a shell command, ` +
+      `include the exact literal command string in execPreview — this is what the user ` +
+      `will see to verify what deterministically runs.\n\n` +
+      `IMPORTANT: Respond with valid JSON only. No markdown, no commentary.\n\n` +
+      `Response format:\n` +
+      `{\n` +
+      `  "reasoning": "Your reasoning about why this maintenance plan is appropriate",\n` +
+      `  "steps": [\n` +
+      `    {\n` +
+      `      "description": "Human-readable description of the step",\n` +
+      `      "action": "The action type (e.g. restart-service, run, execute, write-config, verify-health)",\n` +
+      `      "target": "What the action operates on (service name, file path, or command binary)",\n` +
+      `      "params": {\n` +
+      `        "args": ["full", "argument", "list"] — REQUIRED for service and run steps,\n` +
+      `        "cwd": "Working directory for command/script actions (if not current dir)",\n` +
+      `        "content": "For write-config: the content to write",\n` +
+      `        "outputPath": "For config actions: output path (if different from target)"\n` +
+      `      },\n` +
+      `      "reversible": true,\n` +
+      `      "rollbackAction": "How to undo this step (if reversible)",\n` +
+      `      "execPreview": "The exact literal command string that will execute"\n` +
+      `    }\n` +
+      `  ],\n` +
+      `  "assessmentSummary": "1-2 sentences specific to THIS maintenance task: what makes it risky or safe, what to watch for."\n` +
+      `}`;
+
+    const probeSystemPrompt =
+      `You are Synth's envoy agent performing a maintenance operation.\n\n` +
+      `Maintenance operations run tasks on EXISTING infrastructure: service restarts, ` +
+      `config updates, log rotation, package upgrades, cleanup tasks, health fixes. ` +
+      `No artifact is being deployed — work only with what is already on this machine.\n\n` +
+      `Environment: ${envName}\n` +
+      (instruction.partition ? `Partition: ${instruction.partition.name}\n` : "") +
+      `Objective: ${intent}\n\n` +
+      `Available variables: ${JSON.stringify(instruction.resolvedVariables)}\n\n` +
+      `Envoy capabilities — ONLY use actions and tools listed here:\n` +
+      `Action keywords: ${capabilities.allActionKeywords.join(", ")}\n` +
+      `Installed tools: ${availableTools || "none"}\n` +
+      `Unavailable tools: ${unavailableTools || "none"}\n\n` +
+      `IMPORTANT: Every step's "action" field MUST contain at least one of the recognized action keywords above. ` +
+      `Do NOT use tools that are listed as unavailable.\n\n` +
+      `BEFORE generating any plan steps, use the probe() tool to verify real machine state:\n` +
+      `- What services are running? (ps aux, systemctl status <service>)\n` +
+      `- What is the current config state? (cat config files, find logs)\n` +
+      `- What tool versions are available? (which, --version)\n` +
+      `- Disk space and resource usage? (df -h, free -m)\n` +
+      `- User context and permissions? (id, whoami)\n` +
+      `- Any other observable fact your maintenance plan depends on\n\n` +
+      `Probe until you have enough real observations to generate a grounded maintenance plan. ` +
+      `Then output the plan as JSON.\n\n` +
+      planOutputFormat;
+
+    const retrySystemPrompt =
+      `You are Synth's envoy agent performing a maintenance operation.\n\n` +
+      `Environment observations have already been collected and are provided in the prompt. ` +
+      `Use those observations directly — do NOT attempt to call any tools. ` +
+      `Output the maintenance plan as JSON.\n\n` +
+      planOutputFormat;
+
+    const baseSections: string[] = [];
+
+    baseSections.push(`## Maintenance Objective\n${sanitizeForPrompt(intent)}`);
+
+    baseSections.push(
+      `## Target Environment\n` +
+      `Name: ${sanitizeForPrompt(envName)}\n` +
+      `ID: ${instruction.environment.id}\n` +
+      `Variables: ${Object.keys(instruction.environment.variables).length} defined`,
+    );
+
+    if (instruction.partition) {
+      baseSections.push(
+        `## Partition\n` +
+        `Name: ${sanitizeForPrompt(instruction.partition.name)}\n` +
+        `ID: ${instruction.partition.id}\n` +
+        `Variables: ${Object.keys(instruction.partition.variables).length} defined`,
+      );
+    }
+
+    baseSections.push(
+      `## Resolved Variables\n` +
+      `${Object.entries(instruction.resolvedVariables).map(([k, v]) => `${k}=${maskIfSecret(k, v)}`).join("\n")}`,
+    );
+
+    baseSections.push(
+      `## Local System State\n` +
+      `Hostname: ${scanResult.hostname}\n` +
+      `OS: ${scanResult.os}\n` +
+      `Deployments directory: ${scanResult.deploymentsDir}\n` +
+      `Active environments: ${scanResult.knownState.activeEnvironments}\n` +
+      `Last deployment: ${scanResult.knownState.lastDeploymentAt?.toISOString() ?? "none"}`,
+    );
+
+    baseSections.push(
+      `## Envoy Capabilities — ONLY use actions and tools listed here\n` +
+      `Action keywords: ${capabilities.allActionKeywords.join(", ")}\n` +
+      `Handlers: ${capabilities.handlers.map((h) => `${h.name} [${h.actionKeywords.join(", ")}]`).join("; ")}\n` +
+      `Installed tools: ${availableTools || "none"}\n` +
+      `Unavailable tools: ${unavailableTools || "none"}\n` +
+      `Unsatisfied handler dependencies: ${capabilities.unsatisfiedDependencies.join(", ") || "none"}`,
+    );
+
+    const MAX_ATTEMPTS = 3;
+    let lastObservations: string | null = null;
+    let previousObservationSummary = "";
+    const probeLog: Array<{ command: string; output: string }> = [];
+    const probeExecutor = this.probeExecutor;
+
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      envoyLog("MAINTAIN-ATTEMPT", { attempt, maxAttempts: MAX_ATTEMPTS, intent });
+      const promptSections = [...baseSections];
+
+      if (attempt > 1 && probeLog.length > 0) {
+        const probeContext = probeLog.map((e) => `$ ${e.command}\n${e.output}`).join("\n\n");
+        promptSections.push(
+          `## Environment Observations (probed before this session)\n` +
+          `${probeContext}\n\n` +
+          `These are real observations from the target machine collected during this planning session. ` +
+          `Use them as the basis for your plan — do not re-probe.`,
+        );
+      }
+
+      if (lastObservations) {
+        promptSections.push(
+          `## Dry-Run Observations (system state from previous plan attempt)\n` +
+          `${lastObservations}\n\n` +
+          `A FAILED observation does not automatically mean the plan needs changing: if your ` +
+          `plan already includes a step that will resolve the issue, the observation will ` +
+          `be satisfied at runtime and you should keep the plan as-is. ` +
+          `Only add new steps if the issue is genuinely not addressed by your current plan.`,
+        );
+      }
+
+      const promptSummary =
+        `Maintain: ${intent} → "${envName}"` +
+        (attempt > 1 ? ` (attempt ${attempt} — revising for dry-run observations)` : "");
+
+      let llmResult: import("@synth-deploy/core").LlmResult;
+
+      if (attempt === 1) {
+        llmResult = await this.llmClient!.callWithProbeLoop({
+          prompt: promptSections.join("\n\n"),
+          systemPrompt: probeSystemPrompt,
+          promptSummary,
+          partitionId: instruction.partition?.id ?? null,
+          operationId: instruction.operationId,
+          maxTokens: 4096,
+          onProbe: async (command: string) => {
+            const result = await probeExecutor.execute(command);
+            recordEntry({
+              partitionId: instruction.partition?.id ?? null,
+              operationId: instruction.operationId,
+              agent: "envoy",
+              decisionType: "environment-probe",
+              decision: result.blocked ? `Probe blocked: ${command}` : `Probe executed: ${command}`,
+              reasoning: result.blocked
+                ? result.blockedReason ?? "Command blocked"
+                : `Exit ${result.exitCode ?? 0}`,
+              context: {
+                command,
+                blocked: result.blocked,
+                blockedReason: result.blockedReason,
+                exitCode: result.exitCode,
+                outputPreview: result.output ? result.output.slice(0, 500) : undefined,
+              },
+            });
+            const output = result.blocked
+              ? result.blockedReason ?? "Command blocked"
+              : result.output ?? "(no output)";
+            probeLog.push({ command, output });
+            return output;
+          },
+        });
+      } else {
+        llmResult = await this.llmClient!.reason({
+          prompt: promptSections.join("\n\n"),
+          systemPrompt: retrySystemPrompt,
+          promptSummary,
+          partitionId: instruction.partition?.id ?? null,
+          operationId: instruction.operationId,
+          maxTokens: 4096,
+        });
+      }
+
+      if (!llmResult.ok) {
+        recordEntry({
+          partitionId: instruction.partition?.id ?? null,
+          operationId: instruction.operationId,
+          agent: "envoy",
+          decisionType: "plan-generation",
+          decision: `LLM maintenance planning failed on attempt ${attempt}` +
+            (attempt < MAX_ATTEMPTS ? ` — retrying with accumulated probe context` : ` — operation cannot proceed`),
+          reasoning: `LLM call failed: ${llmResult.reason}.` +
+            (probeLog.length > 0 ? ` ${probeLog.length} probe result(s) available for retry.` : ""),
+          context: { llmFailed: true, llmReason: llmResult.reason, attempt, probeCount: probeLog.length },
+        });
+        if (attempt < MAX_ATTEMPTS) {
+          lastObservations = `Previous planning attempt failed: ${llmResult.reason}. ` +
+            `Use the environment observations above to generate the best plan you can.`;
+          continue;
+        }
+        throw new Error(
+          `Maintenance planning failed after ${MAX_ATTEMPTS} attempt(s): ${llmResult.reason}. ` +
+          `LLM is required for maintenance operations.`,
+        );
+      }
+
+      type ParsedMaintenancePlan = {
+        reasoning: string;
+        steps: Array<{
+          description: string;
+          action: string;
+          target: string;
+          params?: Record<string, unknown>;
+          reversible: boolean;
+          rollbackAction?: string;
+          execPreview?: string;
+        }>;
+        assessmentSummary?: string;
+      };
+
+      let currentParsed: ParsedMaintenancePlan;
+      try {
+        let text = llmResult.text.trim();
+        const fencedMatch = text.match(/```(?:json)?\s*\n([\s\S]*?)\n\s*```/);
+        if (fencedMatch) {
+          text = fencedMatch[1].trim();
+        } else if (text.startsWith("```")) {
+          text = text.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "");
+        } else if (!text.startsWith("{")) {
+          const firstBrace = text.indexOf("{");
+          const lastBrace = text.lastIndexOf("}");
+          if (firstBrace !== -1 && lastBrace > firstBrace) {
+            text = text.substring(firstBrace, lastBrace + 1);
+          }
+        }
+        const raw = JSON.parse(text);
+        if (!Array.isArray(raw?.steps)) throw new Error("Plan missing steps array");
+        for (const s of raw.steps as Array<Record<string, unknown>>) {
+          if (typeof s.action !== "string" || !s.action) throw new Error(`Step "${s.description ?? "?"}" missing action`);
+          if (typeof s.target !== "string") throw new Error(`Step "${s.description ?? "?"}" missing target`);
+          if (typeof s.description !== "string") s.description = s.action;
+        }
+        currentParsed = raw as ParsedMaintenancePlan;
+      } catch (parseErr) {
+        const preview = llmResult.text?.substring(0, 500) ?? "(no text)";
+        recordEntry({
+          partitionId: instruction.partition?.id ?? null,
+          operationId: instruction.operationId,
+          agent: "envoy",
+          decisionType: "plan-generation",
+          decision: `LLM response could not be parsed on attempt ${attempt}`,
+          reasoning:
+            `Parse error: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}. ` +
+            `Response preview: ${preview}`,
+          context: { parseError: true, attempt, responsePreview: preview },
+        });
+        if (attempt < MAX_ATTEMPTS) {
+          lastObservations = `Previous LLM response could not be parsed: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}. ` +
+            `You MUST respond with a valid JSON object containing "reasoning" (string) and "steps" (array). ` +
+            `Do not return an empty object.`;
+          continue;
+        }
+        throw new Error(`Maintenance planning failed: LLM response could not be parsed after ${MAX_ATTEMPTS} attempt(s).`);
+      }
+
+      const plan: DeploymentPlan = {
+        steps: currentParsed.steps.map((s) => ({
+          description: s.description,
+          action: s.action,
+          target: s.target,
+          params: s.params,
+          reversible: s.reversible ?? false,
+          rollbackAction: s.rollbackAction ?? undefined,
+          execPreview: s.execPreview,
+        })),
+        reasoning: currentParsed.reasoning,
+      };
+
+      await this.executorReady;
+
+      if (!this.operationExecutor) {
+        recordEntry({
+          partitionId: instruction.partition?.id ?? null,
+          operationId: instruction.operationId,
+          agent: "envoy",
+          decisionType: "plan-generation",
+          decision: `Generated maintenance plan (dry-run skipped — executor not initialized): ${plan.steps.length} step(s)`,
+          reasoning: currentParsed.reasoning,
+          context: { dryRunSkipped: true },
+        });
+        return {
+          plan,
+          rollbackPlan: this.buildRollbackPlan(plan, instruction),
+          assessmentSummary: currentParsed.assessmentSummary,
+        };
+      }
+
+      const dryRunResult = await this.operationExecutor.executeDryRun(plan.steps);
+
+      if (!dryRunResult.hasFailedObservations) {
+        envoyLog("MAINTAIN-DRY-RUN", { attempt, passed: true, failures: 0 });
+        const rollbackPlan = this.buildRollbackPlan(plan, instruction);
+        plan.reasoning =
+          currentParsed.reasoning +
+          ` [Dry-run validated: all ${dryRunResult.stepResults.length} step(s) passed on attempt ${attempt}. ` +
+          `Confidence: ${dryRunResult.overallFidelity}.` +
+          `${dryRunResult.allUnknowns.length > 0 ? ` Unknowns: ${dryRunResult.allUnknowns.join("; ")}.` : ""}]`;
+
+        recordEntry({
+          partitionId: instruction.partition?.id ?? null,
+          operationId: instruction.operationId,
+          agent: "envoy",
+          decisionType: "plan-generation",
+          decision:
+            `Generated and validated maintenance plan: ${plan.steps.length} step(s) → "${envName}" ` +
+            `(dry-run passed on attempt ${attempt})`,
+          reasoning: currentParsed.reasoning,
+          context: {
+            environmentName: envName,
+            llmAvailable: true,
+            stepCount: plan.steps.length,
+            rollbackStepCount: rollbackPlan.steps.length,
+            dryRunAttempt: attempt,
+            dryRunFidelity: dryRunResult.overallFidelity,
+            dryRunUnknowns: dryRunResult.allUnknowns,
+          },
+        });
+
+        envoyLog("MAINTAIN-COMPLETE", { steps: plan.steps.length });
+        return { plan, rollbackPlan, assessmentSummary: currentParsed.assessmentSummary };
+      }
+
+      const _failedObsCount = dryRunResult.stepResults.reduce(
+        (n, sr) => n + sr.result.observations.filter((o) => !o.passed).length,
+        0,
+      );
+      envoyLog("MAINTAIN-DRY-RUN", { attempt, passed: false, failures: _failedObsCount });
+
+      const currentObsSummary = dryRunResult.stepResults
+        .filter((sr) => sr.result.observations.some((o) => !o.passed))
+        .map((sr) => {
+          const failed = sr.result.observations.filter((o) => !o.passed).map((o) => `[${o.name}] ${o.detail}`);
+          return `Step ${sr.stepIndex + 1} "${sr.step.description}": ${failed.join("; ")}`;
+        })
+        .join(". ");
+
+      if (attempt > 1 && currentObsSummary === previousObservationSummary) {
+        recordEntry({
+          partitionId: instruction.partition?.id ?? null,
+          operationId: instruction.operationId,
+          agent: "envoy",
+          decisionType: "plan-generation",
+          decision: `Maintenance plan stuck — same failed observations after ${attempt} attempts`,
+          reasoning:
+            `Re-planning produced the same observation failures. Stuck on: ${currentObsSummary}. ` +
+            `Returning plan with failure annotations.`,
+          context: { dryRunAttempt: attempt, stuckDetails: currentObsSummary },
+        });
+        plan.reasoning = `Plan has unresolved environmental issues (stuck after ${attempt} attempt(s)): ${currentObsSummary}. Review before approving.`;
+        return {
+          plan,
+          rollbackPlan: this.buildRollbackPlan(plan, instruction),
+          assessmentSummary: currentParsed.assessmentSummary,
+        };
+      }
+
+      if (attempt === MAX_ATTEMPTS) {
+        recordEntry({
+          partitionId: instruction.partition?.id ?? null,
+          operationId: instruction.operationId,
+          agent: "envoy",
+          decisionType: "plan-generation",
+          decision: `Maintenance plan blocked — unresolved environmental issues after ${MAX_ATTEMPTS} attempts`,
+          reasoning: `Unresolved: ${currentObsSummary}.`,
+          context: { dryRunAttempt: attempt, maxAttempts: MAX_ATTEMPTS, unresolvedDetails: currentObsSummary },
+        });
+        const blockReason =
+          `Plan has unresolved environmental issues after ${MAX_ATTEMPTS} attempt(s): ` +
+          `${currentObsSummary}. Review before approving.`;
+        plan.reasoning = blockReason;
+        return {
+          plan,
+          rollbackPlan: this.buildRollbackPlan(plan, instruction),
+          assessmentSummary: currentParsed.assessmentSummary,
+          blocked: true,
+          blockReason,
+        };
+      }
+
+      previousObservationSummary = currentObsSummary;
+
+      lastObservations = dryRunResult.stepResults
+        .filter((sr) => sr.result.observations.length > 0)
+        .map((sr) => {
+          const obs = sr.result.observations
+            .map((o) => `  - ${o.name}: ${o.detail} [${o.passed ? "PASSED" : "FAILED"}]`)
+            .join("\n");
+          return `Step ${sr.stepIndex + 1} "${sr.step.description}":\n${obs}`;
+        })
+        .join("\n");
+
+      if (dryRunResult.allUnknowns.length > 0) {
+        lastObservations += `\n\nUnknowns:\n${dryRunResult.allUnknowns.map((u) => `  - ${u}`).join("\n")}`;
+      }
+
+      recordEntry({
+        partitionId: instruction.partition?.id ?? null,
+        operationId: instruction.operationId,
+        agent: "envoy",
+        decisionType: "plan-generation",
+        decision: `Dry-run found failed observations — re-planning with environmental context (attempt ${attempt + 1}/${MAX_ATTEMPTS})`,
+        reasoning: `Failed observations: ${currentObsSummary}. Re-invoking planning with observations injected as context.`,
+        context: { dryRunAttempt: attempt, failedObsSummary: currentObsSummary },
+      });
+    }
+
+    throw new Error("Unreachable: maintenance planning loop exited without returning");
   }
 
   /**

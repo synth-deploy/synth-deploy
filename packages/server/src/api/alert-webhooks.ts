@@ -309,7 +309,7 @@ export function registerAlertWebhookRoutes(
 
             planningClient.requestPlan({
               operationId: operation.id,
-              operationType: channel.defaultOperationType as "deploy" | "query" | "investigate",
+              operationType: channel.defaultOperationType as "deploy" | "query" | "investigate" | "maintain",
               intent,
               environment: environmentForPlanning,
               partition: partition

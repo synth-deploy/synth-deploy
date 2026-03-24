@@ -126,7 +126,7 @@ export function registerOperationRoutes(
 
         planningClient.requestPlan({
           operationId: deployment.id,
-          operationType: deployment.input.type as "deploy" | "query" | "investigate" | "trigger",
+          operationType: deployment.input.type as "deploy" | "query" | "investigate" | "maintain" | "trigger",
           intent: deployment.intent ?? (deployment.input.type === "trigger"
             ? `Monitor: ${(deployment.input as { condition: string }).condition}. When triggered: ${(deployment.input as { responseIntent: string }).responseIntent}`
             : undefined),
@@ -1571,7 +1571,7 @@ export function registerOperationRoutes(
 
         planningClient.requestPlan({
           operationId: childOp.id,
-          operationType: responseType as "deploy" | "query" | "investigate" | "trigger",
+          operationType: responseType as "deploy" | "query" | "investigate" | "maintain" | "trigger",
           intent: childOp.intent,
           environment: environmentForPlanning,
           version: "",
