@@ -243,6 +243,14 @@ export const CreateDeploymentSchema = z.object({
   version: z.string().optional(),
 });
 
+const ChildOperationInputSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("deploy"), artifactId: z.string().min(1), artifactVersionId: z.string().optional() }),
+  z.object({ type: z.literal("maintain"), intent: z.string().min(1), parameters: z.record(z.unknown()).optional() }),
+  z.object({ type: z.literal("query"), intent: z.string().min(1) }),
+  z.object({ type: z.literal("investigate"), intent: z.string().min(1), allowWrite: z.boolean().optional() }),
+  z.object({ type: z.literal("trigger"), condition: z.string().min(1), responseIntent: z.string().min(1), parameters: z.record(z.unknown()).optional() }),
+]);
+
 // --- Operations ---
 
 export const CreateOperationSchema = z.object({
@@ -262,6 +270,8 @@ export const CreateOperationSchema = z.object({
   parentOperationId: z.string().optional(),
   /** Override to require manual approval even when auto-approve would apply */
   requireApproval: z.boolean().optional(),
+  /** Composite-specific: child operations to execute sequentially */
+  operations: z.array(ChildOperationInputSchema).optional(),
 });
 
 export const ApproveDeploymentSchema = z.object({

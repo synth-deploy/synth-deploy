@@ -31,7 +31,7 @@ interface Props {
 }
 
 type DeployScope = "environment" | "envoy" | "partition";
-type OpType = "deploy" | "maintain" | "query" | "investigate" | "trigger";
+type OpType = "deploy" | "maintain" | "query" | "investigate" | "trigger" | "composite";
 
 export default function OperationAuthoringPanel({ title, preselectedArtifactId, preselectedEnvironmentId, preselectedPartitionId, preselectedOpType, preselectedIntent, preselectedTriggerCondition, preselectedTriggerResponseIntent }: Props) {
   const { pushPanel } = useCanvas();
@@ -67,6 +67,29 @@ export default function OperationAuthoringPanel({ title, preselectedArtifactId, 
   const [triggerResponseIntent, setTriggerResponseIntent] = useState(preselectedTriggerResponseIntent ?? "");
   const [forceManualApproval, setForceManualApproval] = useState(false);
 
+  // Composite: child operation list
+  const [compositeChildren, setCompositeChildren] = useState<Array<{
+    id: string;
+    type: "deploy" | "query" | "investigate";
+    intent: string;
+    artifactId?: string;
+  }>>([]);
+
+  function addCompositeChild() {
+    setCompositeChildren((prev) => [
+      ...prev,
+      { id: crypto.randomUUID(), type: "query", intent: "" },
+    ]);
+  }
+
+  function removeCompositeChild(id: string) {
+    setCompositeChildren((prev) => prev.filter((c) => c.id !== id));
+  }
+
+  function updateCompositeChild(id: string, updates: Partial<(typeof compositeChildren)[0]>) {
+    setCompositeChildren((prev) => prev.map((c) => c.id === id ? { ...c, ...updates } : c));
+  }
+
   function toggleArtifact(id: string) {
     setSelectedArtifactIds((prev) =>
       prev.includes(id) ? prev.filter((a) => a !== id) : [...prev, id],
@@ -79,7 +102,9 @@ export default function OperationAuthoringPanel({ title, preselectedArtifactId, 
   async function handleRequestPlan() {
     if (opType === "deploy" && (!primaryArtifactId || (environmentsEnabled && !hasTarget))) return;
     if (opType === "trigger" && (!triggerCondition.trim() || !triggerResponseIntent.trim())) return;
-    if (opType !== "deploy" && opType !== "trigger" && !intent.trim()) return;
+    if (opType === "composite" && compositeChildren.length === 0) return;
+    if (opType === "composite" && compositeChildren.some((c) => !c.intent.trim() && c.type !== "deploy")) return;
+    if (opType !== "deploy" && opType !== "trigger" && opType !== "composite" && !intent.trim()) return;
     setSubmitting(true);
     setError(null);
 
@@ -100,13 +125,20 @@ export default function OperationAuthoringPanel({ title, preselectedArtifactId, 
         partitionId: selectedPartitionId || undefined,
         envoyId: deployScope === "envoy" ? (selectedEnvoyId || undefined) : undefined,
         type: opType,
-        intent: opType === "trigger" ? undefined : (intent.trim() || undefined),
+        intent: opType === "trigger" || opType === "composite" ? undefined : (intent.trim() || undefined),
         ...(opType === "investigate" ? { allowWrite } : {}),
         ...(opType === "trigger" ? {
           condition: triggerCondition.trim(),
           responseIntent: triggerResponseIntent.trim(),
         } : {}),
         ...(forceManualApproval ? { requireApproval: true } : {}),
+        ...(opType === "composite" ? {
+          operations: compositeChildren.map((c) =>
+            c.type === "deploy"
+              ? { type: "deploy" as const, artifactId: c.artifactId ?? "" }
+              : { type: c.type as "query" | "investigate", intent: c.intent }
+          ),
+        } : {}),
       } as Parameters<typeof createOperation>[0]);
 
       pushPanel({
@@ -201,7 +233,9 @@ export default function OperationAuthoringPanel({ title, preselectedArtifactId, 
     ? selectedArtifactIds.length > 0 && hasTarget
     : opType === "trigger"
       ? triggerCondition.trim().length > 0 && triggerResponseIntent.trim().length > 0
-      : intent.trim().length > 0;
+      : opType === "composite"
+        ? compositeChildren.length > 0 && compositeChildren.every((c) => c.type === "deploy" ? !!c.artifactId : c.intent.trim().length > 0)
+        : intent.trim().length > 0;
   const contextHint = getContextHint();
 
   return (
@@ -221,8 +255,8 @@ export default function OperationAuthoringPanel({ title, preselectedArtifactId, 
         <div style={{ marginBottom: 18 }}>
           <div className="section-label" style={{ marginBottom: 8 }}>Operation type</div>
           <div style={{ display: "flex", gap: 4 }}>
-            {(["deploy", "maintain", "query", "investigate", "trigger"] as OpType[]).map((t) => {
-              const isAvailable = t === "deploy" || t === "maintain" || t === "query" || t === "investigate" || t === "trigger";
+            {(["deploy", "maintain", "query", "investigate", "trigger", "composite"] as OpType[]).map((t) => {
+              const isAvailable = t === "deploy" || t === "maintain" || t === "query" || t === "investigate" || t === "trigger" || t === "composite";
               return (
                 <button
                   key={t}
@@ -293,7 +327,7 @@ export default function OperationAuthoringPanel({ title, preselectedArtifactId, 
               }}
             />
           </div>
-        ) : (
+        ) : opType === "composite" ? null : (
           /* Intent / objective field */
           <div style={{ marginBottom: 20 }}>
             <div className="section-label" style={{ marginBottom: 8 }}>
@@ -317,6 +351,109 @@ export default function OperationAuthoringPanel({ title, preselectedArtifactId, 
                 boxSizing: "border-box",
               }}
             />
+          </div>
+        )}
+
+        {/* Composite: child operation builder */}
+        {opType === "composite" && (
+          <div style={{ marginBottom: 20 }}>
+            <div className="section-label" style={{ marginBottom: 8 }}>Child operations (executed sequentially)</div>
+            {compositeChildren.length === 0 && (
+              <div style={{ fontSize: 12, color: "var(--text-muted)", fontFamily: "var(--font-mono)", marginBottom: 10 }}>
+                No operations added yet. Add child operations to build the sequence.
+              </div>
+            )}
+            {compositeChildren.map((child, idx) => (
+              <div key={child.id} style={{ background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 6, padding: "12px", marginBottom: 8 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                  <span style={{ fontSize: 12, color: "var(--text-muted)", fontFamily: "var(--font-mono)", fontWeight: 600, minWidth: 20 }}>
+                    {idx + 1}.
+                  </span>
+                  <select
+                    value={child.type}
+                    onChange={(e) => updateCompositeChild(child.id, { type: e.target.value as "deploy" | "query" | "investigate", intent: "" })}
+                    style={{
+                      padding: "4px 8px",
+                      fontSize: 12,
+                      fontFamily: "var(--font-mono)",
+                      background: "var(--surface-3, var(--surface))",
+                      color: "var(--text)",
+                      border: "1px solid var(--border)",
+                      borderRadius: 4,
+                    }}
+                  >
+                    <option value="deploy">deploy</option>
+                    <option value="query">query</option>
+                    <option value="investigate">investigate</option>
+                  </select>
+                  <button
+                    onClick={() => removeCompositeChild(child.id)}
+                    style={{ marginLeft: "auto", fontSize: 12, color: "var(--text-muted)", background: "none", border: "none", cursor: "pointer", padding: "2px 6px" }}
+                  >
+                    ✕
+                  </button>
+                </div>
+                {child.type === "deploy" ? (
+                  <select
+                    value={child.artifactId ?? ""}
+                    onChange={(e) => updateCompositeChild(child.id, { artifactId: e.target.value })}
+                    style={{
+                      width: "100%",
+                      padding: "6px 8px",
+                      fontSize: 12,
+                      fontFamily: "var(--font-mono)",
+                      background: "var(--surface-3, var(--surface))",
+                      color: "var(--text)",
+                      border: "1px solid var(--border)",
+                      borderRadius: 4,
+                      boxSizing: "border-box",
+                    }}
+                  >
+                    <option value="">— select artifact —</option>
+                    {(artifacts ?? []).map((a) => (
+                      <option key={a.id} value={a.id}>{a.name} ({a.type})</option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    value={child.intent}
+                    onChange={(e) => updateCompositeChild(child.id, { intent: e.target.value })}
+                    placeholder={
+                      child.type === "query" ? "What to check…" :
+                      "What to investigate…"
+                    }
+                    style={{
+                      width: "100%",
+                      padding: "6px 8px",
+                      fontSize: 12,
+                      fontFamily: "var(--font-mono)",
+                      background: "var(--surface-3, var(--surface))",
+                      color: "var(--text)",
+                      border: "1px solid var(--border)",
+                      borderRadius: 4,
+                      boxSizing: "border-box",
+                    }}
+                  />
+                )}
+              </div>
+            ))}
+            <button
+              onClick={addCompositeChild}
+              style={{
+                padding: "6px 14px",
+                fontSize: 12,
+                fontFamily: "var(--font-mono)",
+                background: "var(--surface-2)",
+                color: "var(--accent)",
+                border: "1px solid var(--accent)",
+                borderRadius: 4,
+                cursor: "pointer",
+                marginTop: 4,
+              }}
+            >
+              + Add operation
+            </button>
           </div>
         )}
 
