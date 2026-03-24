@@ -125,7 +125,7 @@ export default function OperationAuthoringPanel({ title, preselectedArtifactId, 
         partitionId: selectedPartitionId || undefined,
         envoyId: deployScope === "envoy" ? (selectedEnvoyId || undefined) : undefined,
         type: opType,
-        intent: opType === "trigger" || opType === "composite" ? undefined : (intent.trim() || undefined),
+        intent: opType === "deploy" || opType === "trigger" || opType === "composite" ? undefined : (intent.trim() || undefined),
         ...(opType === "investigate" ? { allowWrite } : {}),
         ...(opType === "trigger" ? {
           condition: triggerCondition.trim(),
@@ -327,16 +327,16 @@ export default function OperationAuthoringPanel({ title, preselectedArtifactId, 
               }}
             />
           </div>
-        ) : opType === "composite" ? null : (
+        ) : opType === "composite" || opType === "deploy" ? null : (
           /* Intent / objective field */
           <div style={{ marginBottom: 20 }}>
             <div className="section-label" style={{ marginBottom: 8 }}>
-              {opType === "deploy" ? "Objective (optional)" : "Objective"}
+              Objective
             </div>
             <textarea
               value={intent}
               onChange={(e) => setIntent(e.target.value)}
-              placeholder={opType === "deploy" ? "Describe the goal of this deployment…" : "Describe what you want Synth to do…"}
+              placeholder="Describe what you want Synth to do…"
               rows={2}
               style={{
                 width: "100%",
