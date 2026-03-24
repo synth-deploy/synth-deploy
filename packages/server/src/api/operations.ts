@@ -459,7 +459,7 @@ export function registerOperationRoutes(
 
         const compositeChildren = deployments.list()
           .filter((d) => d.lineage === deployment.id)
-          .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+          .sort((a, b) => ((a as { sequenceIndex?: number }).sequenceIndex ?? 0) - ((b as { sequenceIndex?: number }).sequenceIndex ?? 0));
 
         // Approve all children before executing sequentially
         for (const child of compositeChildren) {
@@ -1786,7 +1786,8 @@ export function registerOperationRoutes(
     const environment = parentOp.environmentId ? environments.get(parentOp.environmentId) : undefined;
     const partition = parentOp.partitionId ? partitions.get(parentOp.partitionId) : undefined;
 
-    for (const childInput of childInputs) {
+    for (let seqIdx = 0; seqIdx < childInputs.length; seqIdx++) {
+      const childInput = childInputs[seqIdx];
       const childOp = {
         id: crypto.randomUUID(),
         input: childInput,
@@ -1803,6 +1804,7 @@ export function registerOperationRoutes(
         variables: parentOp.variables,
         debriefEntryIds: [] as string[],
         createdAt: new Date(),
+        sequenceIndex: seqIdx,
       };
       deployments.save(childOp);
       childIds.push(childOp.id);
