@@ -15,7 +15,6 @@ import type {
   ITelemetryStore,
   DebriefWriter,
   AlertWebhookSource,
-  TelemetryAction,
 } from "@synth-deploy/core";
 import type { PersistentAlertWebhookStore } from "@synth-deploy/core";
 import { requirePermission } from "../middleware/permissions.js";
@@ -105,8 +104,8 @@ export function registerAlertWebhookRoutes(
       const actor = (request.user as { email?: string })?.email ?? "anonymous";
       telemetry.record({
         actor,
-        action: "alert-webhook.created" as TelemetryAction,
-        target: { type: "alert-webhook" as "deployment", id: channel.id },
+        action: "alert-webhook.created",
+        target: { type: "alert-webhook", id: channel.id },
         details: { source, name },
       });
 
@@ -221,7 +220,7 @@ export function registerAlertWebhookRoutes(
             partitionId: channel.partitionId ?? null,
             operationId: activeExisting.id,
             agent: "server",
-            decisionType: "alert-webhook-suppressed" as Parameters<typeof debrief.record>[0]["decisionType"],
+            decisionType: "alert-webhook-suppressed",
             decision: `Alert "${alert.name}" suppressed — operation ${activeExisting.id} is already in progress (${activeExisting.status})`,
             reasoning: `Deduplication: an operation for this alert from webhook channel "${channel.name}" is already active.`,
             context: { channelId: channel.id, alertName: alert.name, activeOpId: activeExisting.id },
@@ -272,7 +271,7 @@ export function registerAlertWebhookRoutes(
           partitionId: channel.partitionId ?? null,
           operationId: operation.id,
           agent: "server",
-          decisionType: "alert-webhook-received" as Parameters<typeof debrief.record>[0]["decisionType"],
+          decisionType: "alert-webhook-received",
           decision: `External alert received from ${channel.source}: "${alert.name}" (${alert.severity})`,
           reasoning: `Webhook channel "${channel.name}" received a ${alert.severity} alert. Intent: ${intent}`,
           context: {
@@ -288,7 +287,7 @@ export function registerAlertWebhookRoutes(
 
         telemetry.record({
           actor: `webhook:${channel.name}`,
-          action: "alert-webhook.fired" as TelemetryAction,
+          action: "alert-webhook.fired",
           target: { type: "deployment" as const, id: operation.id },
           details: { channelId: channel.id, alertName: alert.name, severity: alert.severity },
         });

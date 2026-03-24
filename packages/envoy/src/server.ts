@@ -39,6 +39,12 @@ const EscalateGeneralSchema = z.object({
 
 const PlanRequestSchema = z.object({
   operationId: z.string(),
+  /** Operation type — determines which planning path to use. Defaults to "deploy". */
+  operationType: z.enum(["deploy", "query", "investigate", "maintain", "trigger"]).optional(),
+  /** Natural language objective for non-deploy operations */
+  intent: z.string().optional(),
+  /** Whether the investigation is allowed to run write probes (default false) */
+  allowWrite: z.boolean().optional(),
   artifact: z.object({
     id: z.string(),
     name: z.string(),
@@ -50,7 +56,7 @@ const PlanRequestSchema = z.object({
       deploymentIntent: z.string().optional(),
       confidence: z.number(),
     }),
-  }),
+  }).optional(),
   environment: z.object({
     id: z.string(),
     name: z.string(),

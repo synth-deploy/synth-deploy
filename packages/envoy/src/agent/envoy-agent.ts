@@ -122,7 +122,7 @@ export interface DeploymentResult {
 export interface PlanningInstruction {
   operationId: string;
   /** Operation type — determines which planning path to use. Defaults to "deploy". */
-  operationType?: "deploy" | "query" | "investigate";
+  operationType?: "deploy" | "query" | "investigate" | "maintain" | "trigger";
   /** Natural language objective for non-deploy operations */
   intent?: string;
   /** Whether the investigation is allowed to run write probes (default false) */

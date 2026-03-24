@@ -349,6 +349,8 @@ export const DecisionType = z.enum([
   "trigger-resumed",
   "trigger-disabled",
   "health-report-received",
+  "alert-webhook-received",
+  "alert-webhook-suppressed",
 ]);
 export type DecisionType = z.infer<typeof DecisionType>;
 
@@ -636,7 +638,9 @@ export type TelemetryAction =
   | "trigger.suppressed"
   | "trigger.paused"
   | "trigger.resumed"
-  | "trigger.disabled";
+  | "trigger.disabled"
+  | "alert-webhook.created"
+  | "alert-webhook.fired";
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
   environmentsEnabled: true,
