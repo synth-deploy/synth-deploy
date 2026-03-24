@@ -1524,8 +1524,12 @@ export class EnvoyAgent {
       if (loopResult.text) {
         const jsonMatch = loopResult.text.match(/\{[\s\S]*\}/);
         if (jsonMatch) {
-          const parsed = TriggerDirectiveSchema.safeParse(JSON.parse(jsonMatch[0]));
-          if (parsed.success) directive = parsed.data;
+          try {
+            const parsed = TriggerDirectiveSchema.safeParse(JSON.parse(jsonMatch[0]));
+            if (parsed.success) directive = parsed.data;
+          } catch {
+            // malformed JSON — fall through to default probe below
+          }
         }
       }
     } catch (err) {
