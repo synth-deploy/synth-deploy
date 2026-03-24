@@ -197,16 +197,7 @@ export function registerOperationRoutes(
             dep.status = "awaiting_approval" as typeof dep.status;
             dep.recommendation = computeRecommendation(dep, deployments, result.assessmentSummary);
             deployments.save(dep);
-
-            debrief.record({
-              partitionId: dep.partitionId ?? null,
-              operationId: dep.id,
-              agent: "envoy",
-              decisionType: "plan-generation" as Parameters<typeof debrief.record>[0]["decisionType"],
-              decision: `Monitoring plan generated with ${probes.length} probe(s): ${triggerInput.condition}`,
-              reasoning: result.plan.reasoning,
-              context: { probeCount: probes.length, condition: triggerInput.condition, responseIntent: triggerInput.responseIntent, envoyId: planningEnvoy.id },
-            });
+            // Debrief plan-generation entry is recorded by the envoy's planTrigger — no duplicate here.
             return;
           }
 
