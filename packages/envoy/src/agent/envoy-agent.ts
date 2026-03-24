@@ -1783,6 +1783,9 @@ export class EnvoyAgent {
       `Unsatisfied handler dependencies: ${capabilities.unsatisfiedDependencies.join(", ") || "none"}`,
     );
 
+    const reqId = instruction.operationId ?? crypto.randomUUID().slice(0, 8);
+    this.planLog.startRequest(reqId, `maintain:${intent}`, "", envName);
+
     const MAX_ATTEMPTS = 3;
     let lastObservations: string | null = null;
     let previousObservationSummary = "";
@@ -1791,6 +1794,7 @@ export class EnvoyAgent {
 
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
       envoyLog("MAINTAIN-ATTEMPT", { attempt, maxAttempts: MAX_ATTEMPTS, intent });
+      this.planLog.log(`ATTEMPT`, `attempt=${attempt}/${MAX_ATTEMPTS} method=${attempt === 1 ? "probeLoop" : "reason"} probes=${probeLog.length}`);
       const promptSections = [...baseSections];
 
       if (attempt > 1 && probeLog.length > 0) {
@@ -1866,6 +1870,7 @@ export class EnvoyAgent {
       }
 
       if (!llmResult.ok) {
+        this.planLog.log(`LLM-FAIL attempt=${attempt}`, llmResult.reason);
         recordEntry({
           partitionId: instruction.partition?.id ?? null,
           operationId: instruction.operationId,
@@ -1887,6 +1892,8 @@ export class EnvoyAgent {
           `LLM is required for maintenance operations.`,
         );
       }
+
+      this.planLog.log(`LLM-RESPONSE attempt=${attempt}`, `length=${llmResult.text.length} starts=${llmResult.text.substring(0, 200)}`);
 
       type ParsedMaintenancePlan = {
         reasoning: string;
@@ -1925,8 +1932,10 @@ export class EnvoyAgent {
           if (typeof s.description !== "string") s.description = s.action;
         }
         currentParsed = raw as ParsedMaintenancePlan;
+        this.planLog.log(`PARSED-OK attempt=${attempt}`, `${currentParsed.steps.length} steps, reasoning=${currentParsed.reasoning?.length ?? 0} chars`);
       } catch (parseErr) {
         const preview = llmResult.text?.substring(0, 500) ?? "(no text)";
+        this.planLog.log(`PARSE-FAIL attempt=${attempt}`, `error=${parseErr instanceof Error ? parseErr.message : String(parseErr)} preview=${preview}`);
         recordEntry({
           partitionId: instruction.partition?.id ?? null,
           operationId: instruction.operationId,
@@ -1939,6 +1948,7 @@ export class EnvoyAgent {
           context: { parseError: true, attempt, responsePreview: preview },
         });
         if (attempt < MAX_ATTEMPTS) {
+          this.planLog.log(`PARSE-RETRY`, `will retry as attempt ${attempt + 1}`);
           lastObservations = `Previous LLM response could not be parsed: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}. ` +
             `You MUST respond with a valid JSON object containing "reasoning" (string) and "steps" (array). ` +
             `Do not return an empty object.`;
@@ -1959,6 +1969,8 @@ export class EnvoyAgent {
         })),
         reasoning: currentParsed.reasoning,
       };
+
+      this.planLog.logPlanSteps(`PLAN attempt=${attempt}`, currentParsed.steps);
 
       await this.executorReady;
 
@@ -1981,7 +1993,19 @@ export class EnvoyAgent {
 
       const dryRunResult = await this.operationExecutor.executeDryRun(plan.steps);
 
+      this.planLog.logDryRun(
+        attempt,
+        dryRunResult.stepResults.map((sr) => ({
+          stepIndex: sr.stepIndex,
+          stepDesc: sr.step.description,
+          handler: this.operationRegistry?.resolve(sr.step.action, "linux")?.name ?? null,
+          observations: sr.result.observations,
+          predictedOutcome: sr.result.predictedOutcome as Record<string, unknown> | undefined,
+        })),
+      );
+
       if (!dryRunResult.hasFailedObservations) {
+        this.planLog.log(`DRY-RUN-PASSED attempt=${attempt}`, `fidelity=${dryRunResult.overallFidelity}`);
         envoyLog("MAINTAIN-DRY-RUN", { attempt, passed: true, failures: 0 });
         const rollbackPlan = this.buildRollbackPlan(plan, instruction);
         plan.reasoning =
@@ -2018,6 +2042,7 @@ export class EnvoyAgent {
         (n, sr) => n + sr.result.observations.filter((o) => !o.passed).length,
         0,
       );
+      this.planLog.log(`DRY-RUN-FAILED attempt=${attempt}`, `failedObservations=true`);
       envoyLog("MAINTAIN-DRY-RUN", { attempt, passed: false, failures: _failedObsCount });
 
       const currentObsSummary = dryRunResult.stepResults
@@ -2029,6 +2054,7 @@ export class EnvoyAgent {
         .join(". ");
 
       if (attempt > 1 && currentObsSummary === previousObservationSummary) {
+        this.planLog.log("STUCK", `same failures after ${attempt} attempts: ${currentObsSummary}`);
         recordEntry({
           partitionId: instruction.partition?.id ?? null,
           operationId: instruction.operationId,
@@ -2049,6 +2075,7 @@ export class EnvoyAgent {
       }
 
       if (attempt === MAX_ATTEMPTS) {
+        this.planLog.log("BLOCKED", `max attempts reached: ${currentObsSummary}`);
         recordEntry({
           partitionId: instruction.partition?.id ?? null,
           operationId: instruction.operationId,
