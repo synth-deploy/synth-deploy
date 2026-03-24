@@ -242,7 +242,7 @@ export function registerOperationRoutes(
               operationId: dep.id,
               agent: "envoy",
               decisionType: "plan-generation" as Parameters<typeof debrief.record>[0]["decisionType"],
-              decision: `Deployment plan blocked — infrastructure prerequisites not met`,
+              decision: `Operation plan blocked — infrastructure prerequisites not met`,
               reasoning: result.blockReason ?? result.plan.reasoning,
               context: { stepCount: result.plan.steps.length, envoyId: planningEnvoy.id, blocked: true },
             });
@@ -257,7 +257,7 @@ export function registerOperationRoutes(
               operationId: dep.id,
               agent: "envoy",
               decisionType: "plan-generation" as Parameters<typeof debrief.record>[0]["decisionType"],
-              decision: `Deployment plan generated with ${result.plan.steps.length} steps`,
+              decision: `Operation plan generated with ${result.plan.steps.length} steps`,
               reasoning: result.plan.reasoning,
               context: { stepCount: result.plan.steps.length, envoyId: planningEnvoy.id, delta: result.delta },
             });
@@ -291,7 +291,7 @@ export function registerOperationRoutes(
   app.get<{ Params: { id: string } }>("/api/operations/:id", { preHandler: [requirePermission("deployment.view")] }, async (request, reply) => {
     const deployment = deployments.get(request.params.id);
     if (!deployment) {
-      return reply.status(404).send({ error: "Deployment not found" });
+      return reply.status(404).send({ error: "Operation not found" });
     }
 
     return {
@@ -304,7 +304,7 @@ export function registerOperationRoutes(
   app.get<{ Params: { id: string } }>("/api/operations/:id/whats-new", { preHandler: [requirePermission("deployment.view")] }, async (request, reply) => {
     const deployment = deployments.get(request.params.id);
     if (!deployment) {
-      return reply.status(404).send({ error: "Deployment not found" });
+      return reply.status(404).send({ error: "Operation not found" });
     }
 
     const versions = artifactStore.getVersions(getArtifactId(deployment) ?? "");
@@ -352,7 +352,7 @@ export function registerOperationRoutes(
     async (request, reply) => {
       const deployment = deployments.get(request.params.id);
       if (!deployment) {
-        return reply.status(404).send({ error: "Deployment not found" });
+        return reply.status(404).send({ error: "Operation not found" });
       }
 
       const parsed = SubmitPlanSchema.safeParse(request.body);
@@ -361,7 +361,7 @@ export function registerOperationRoutes(
       }
 
       if ((deployment.status) !== "pending" && (deployment.status) !== "planning") {
-        return reply.status(409).send({ error: `Cannot submit plan for deployment in "${deployment.status}" status` });
+        return reply.status(409).send({ error: `Cannot submit plan for operation in "${deployment.status}" status` });
       }
 
       deployment.plan = parsed.data.plan;
@@ -378,7 +378,7 @@ export function registerOperationRoutes(
         operationId: deployment.id,
         agent: "envoy",
         decisionType: "plan-generation" as Parameters<typeof debrief.record>[0]["decisionType"],
-        decision: `Deployment plan submitted with ${parsed.data.plan.steps.length} steps`,
+        decision: `Operation plan submitted with ${parsed.data.plan.steps.length} steps`,
         reasoning: parsed.data.plan.reasoning,
         context: { stepCount: parsed.data.plan.steps.length },
       });
@@ -394,7 +394,7 @@ export function registerOperationRoutes(
     async (request, reply) => {
       const deployment = deployments.get(request.params.id);
       if (!deployment) {
-        return reply.status(404).send({ error: "Deployment not found" });
+        return reply.status(404).send({ error: "Operation not found" });
       }
 
       const parsed = ApproveDeploymentSchema.safeParse(request.body);
@@ -403,7 +403,7 @@ export function registerOperationRoutes(
       }
 
       if ((deployment.status) !== "awaiting_approval") {
-        return reply.status(409).send({ error: `Cannot approve deployment in "${deployment.status}" status — must be "awaiting_approval"` });
+        return reply.status(409).send({ error: `Cannot approve operation in "${deployment.status}" status — must be "awaiting_approval"` });
       }
 
       // Transition deployment status
@@ -420,7 +420,7 @@ export function registerOperationRoutes(
         operationId: deployment.id,
         agent: "server",
         decisionType: "system",
-        decision: `Deployment approved by ${actor}`,
+        decision: `Operation approved by ${actor}`,
         reasoning: parsed.data.modifications
           ? `Approved with modifications: ${parsed.data.modifications}`
           : "Approved without modifications",
@@ -532,7 +532,7 @@ export function registerOperationRoutes(
     async (request, reply) => {
       const deployment = deployments.get(request.params.id);
       if (!deployment) {
-        return reply.status(404).send({ error: "Deployment not found" });
+        return reply.status(404).send({ error: "Operation not found" });
       }
 
       const parsed = RejectDeploymentSchema.safeParse(request.body);
@@ -541,7 +541,7 @@ export function registerOperationRoutes(
       }
 
       if ((deployment.status) !== "awaiting_approval") {
-        return reply.status(409).send({ error: `Cannot reject deployment in "${deployment.status}" status — must be "awaiting_approval"` });
+        return reply.status(409).send({ error: `Cannot reject operation in "${deployment.status}" status — must be "awaiting_approval"` });
       }
 
       // Transition deployment status and store rejection reason
@@ -557,7 +557,7 @@ export function registerOperationRoutes(
         operationId: deployment.id,
         agent: "server",
         decisionType: "system",
-        decision: "Deployment plan rejected",
+        decision: "Operation plan rejected",
         reasoning: parsed.data.reason,
         context: { reason: parsed.data.reason },
         actor: request.user?.email,
@@ -575,7 +575,7 @@ export function registerOperationRoutes(
     async (request, reply) => {
       const deployment = deployments.get(request.params.id);
       if (!deployment) {
-        return reply.status(404).send({ error: "Deployment not found" });
+        return reply.status(404).send({ error: "Operation not found" });
       }
 
       const parsed = ModifyDeploymentPlanSchema.safeParse(request.body);
@@ -584,11 +584,11 @@ export function registerOperationRoutes(
       }
 
       if ((deployment.status) !== "awaiting_approval") {
-        return reply.status(409).send({ error: `Cannot modify deployment in "${deployment.status}" status — must be "awaiting_approval"` });
+        return reply.status(409).send({ error: `Cannot modify operation in "${deployment.status}" status — must be "awaiting_approval"` });
       }
 
       if (!deployment.plan) {
-        return reply.status(409).send({ error: "Deployment has no plan to modify" });
+        return reply.status(409).send({ error: "Operation has no plan to modify" });
       }
 
       // Validate modified plan with envoy if available
@@ -646,7 +646,7 @@ export function registerOperationRoutes(
         operationId: deployment.id,
         agent: "server",
         decisionType: "plan-modification" as Parameters<typeof debrief.record>[0]["decisionType"],
-        decision: `Deployment plan modified by ${actor}`,
+        decision: `Operation plan modified by ${actor}`,
         reasoning: parsed.data.reason,
         context: {
           modifiedBy: actor,
@@ -680,11 +680,11 @@ export function registerOperationRoutes(
       const deploymentId = request.params.id;
       const deployment = deployments.get(deploymentId);
       if (!deployment) {
-        return reply.status(404).send({ error: "Deployment not found" });
+        return reply.status(404).send({ error: "Operation not found" });
       }
 
       if ((deployment.status) !== "awaiting_approval") {
-        return reply.status(409).send({ error: `Cannot replan deployment in "${deployment.status}" status — must be "awaiting_approval"` });
+        return reply.status(409).send({ error: `Cannot replan operation in "${deployment.status}" status — must be "awaiting_approval"` });
       }
 
       const parsed = ReplanDeploymentSchema.safeParse(request.body);
@@ -772,7 +772,7 @@ export function registerOperationRoutes(
 
       const dep = deployments.get(deploymentId);
       if (!dep) {
-        return reply.status(404).send({ error: "Deployment not found after replanning" });
+        return reply.status(404).send({ error: "Operation not found after replanning" });
       }
 
       dep.plan = result.plan;
@@ -802,7 +802,7 @@ export function registerOperationRoutes(
     async (request, reply) => {
       const deployment = deployments.get(request.params.id);
       if (!deployment) {
-        return reply.status(404).send({ error: "Deployment not found" });
+        return reply.status(404).send({ error: "Operation not found" });
       }
 
       const now = new Date();
@@ -869,13 +869,13 @@ export function registerOperationRoutes(
     async (request, reply) => {
       const deployment = deployments.get(request.params.id);
       if (!deployment) {
-        return reply.status(404).send({ error: "Deployment not found" });
+        return reply.status(404).send({ error: "Operation not found" });
       }
 
       const finishedStatuses = new Set(["succeeded", "failed", "rolled_back"]);
       if (!finishedStatuses.has(deployment.status)) {
         return reply.status(409).send({
-          error: `Cannot request rollback plan for deployment in "${deployment.status}" status — deployment must be finished`,
+          error: `Cannot request rollback plan for operation in "${deployment.status}" status — operation must be finished`,
         });
       }
 
@@ -986,7 +986,7 @@ export function registerOperationRoutes(
     async (request, reply) => {
       const deployment = deployments.get(request.params.id);
       if (!deployment) {
-        return reply.status(404).send({ error: "Deployment not found" });
+        return reply.status(404).send({ error: "Operation not found" });
       }
 
       if (!deployment.rollbackPlan) {
@@ -996,7 +996,7 @@ export function registerOperationRoutes(
       const finishedStatuses = new Set(["succeeded", "failed"]);
       if (!finishedStatuses.has(deployment.status)) {
         return reply.status(409).send({
-          error: `Cannot execute rollback for deployment in "${deployment.status}" status`,
+          error: `Cannot execute rollback for operation in "${deployment.status}" status`,
         });
       }
 
@@ -1093,7 +1093,7 @@ export function registerOperationRoutes(
     async (request, reply) => {
       const source = deployments.get(request.params.id);
       if (!source) {
-        return reply.status(404).send({ error: "Deployment not found" });
+        return reply.status(404).send({ error: "Operation not found" });
       }
 
       // Calculate attempt number by following the retryOf chain
@@ -1159,8 +1159,8 @@ export function registerOperationRoutes(
         operationId: deployment.id,
         agent: "server",
         decisionType: "system",
-        decision: `Retry of deployment ${source.id} (attempt #${attemptNumber})`,
-        reasoning: `User initiated retry of deployment ${source.id}. Same artifact, version, environment, and partition.`,
+        decision: `Retry of operation ${source.id} (attempt #${attemptNumber})`,
+        reasoning: `User initiated retry of operation ${source.id}. Same artifact, version, environment, and partition.`,
         context: { retryOf: source.id, attemptNumber, actor },
         actor: request.user?.email,
       });
@@ -1215,7 +1215,7 @@ export function registerOperationRoutes(
                 operationId: dep.id,
                 agent: "envoy",
                 decisionType: "plan-generation" as Parameters<typeof debrief.record>[0]["decisionType"],
-                decision: `Deployment plan blocked — infrastructure prerequisites not met`,
+                decision: `Operation plan blocked — infrastructure prerequisites not met`,
                 reasoning: result.blockReason ?? result.plan.reasoning,
                 context: { stepCount: result.plan.steps.length, envoyId: planningEnvoy.id, blocked: true },
               });
@@ -1229,7 +1229,7 @@ export function registerOperationRoutes(
                 operationId: dep.id,
                 agent: "envoy",
                 decisionType: "plan-generation" as Parameters<typeof debrief.record>[0]["decisionType"],
-                decision: `Deployment plan generated with ${result.plan.steps.length} steps`,
+                decision: `Operation plan generated with ${result.plan.steps.length} steps`,
                 reasoning: result.plan.reasoning,
                 context: { stepCount: result.plan.steps.length, envoyId: planningEnvoy.id, delta: result.delta },
               });
@@ -1266,7 +1266,7 @@ export function registerOperationRoutes(
     async (request, reply) => {
       const deployment = deployments.get(request.params.id);
       if (!deployment) {
-        return reply.status(404).send({ error: "Deployment not found" });
+        return reply.status(404).send({ error: "Operation not found" });
       }
 
       const entries = debrief.getByOperation(deployment.id);
@@ -1371,7 +1371,7 @@ export function registerOperationRoutes(
 
       // Validate the deploymentId in the URL matches the body
       if (event.deploymentId !== request.params.id) {
-        return reply.status(400).send({ error: "Deployment ID in URL does not match event body" });
+        return reply.status(400).send({ error: "Operation ID in URL does not match event body" });
       }
 
       progressStore.push(event);
@@ -1760,7 +1760,7 @@ function computeRecommendation(
     );
     if (conflicting.length > 0) {
       verdict = "hold";
-      factors.push(`${conflicting.length} other deployment(s) in progress for this environment`);
+      factors.push(`${conflicting.length} other operation(s) in progress for this environment`);
     }
   }
 
@@ -1770,7 +1770,7 @@ function computeRecommendation(
     : 0;
   if (recentCount > 5) {
     if (verdict === "proceed") verdict = "caution";
-    factors.push(`High deployment frequency: ${recentCount} deployments in the last 24h`);
+    factors.push(`High operation frequency: ${recentCount} operations in the last 24h`);
   }
 
   // Check last deployment status
@@ -1780,9 +1780,9 @@ function computeRecommendation(
   if (lastDeploy && lastDeploy.id !== deployment.id) {
     if ((lastDeploy.status) === "failed" || (lastDeploy.status) === "rolled_back") {
       if (verdict === "proceed") verdict = "caution";
-      factors.push(`Last deployment to this environment ${lastDeploy.status}`);
+      factors.push(`Last operation to this environment ${lastDeploy.status}`);
     } else if ((lastDeploy.status) === "succeeded") {
-      factors.push("Last deployment to this environment succeeded");
+      factors.push("Last operation to this environment succeeded");
     }
   }
 
@@ -1791,9 +1791,9 @@ function computeRecommendation(
   }
 
   const summaryMap: Record<RecommendationVerdict, string> = {
-    proceed: "Proceed — no conflicting deployments, target environment is stable",
+    proceed: "Proceed — no conflicting operations, target environment is stable",
     caution: "Proceed with caution — review risk factors before greenlighting",
-    hold: "Hold — resolve conflicting deployments before proceeding",
+    hold: "Hold — resolve conflicting operations before proceeding",
   };
 
   return { verdict, summary: llmSummary ?? summaryMap[verdict], factors };

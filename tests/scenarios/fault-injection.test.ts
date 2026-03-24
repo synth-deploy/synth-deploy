@@ -21,7 +21,7 @@ import {
   SynthAgent,
   InMemoryDeploymentStore,
 } from "@synth-deploy/server/agent/synth-agent.js";
-import { registerDeploymentRoutes } from "@synth-deploy/server/api/deployments.js";
+import { registerOperationRoutes } from "@synth-deploy/server/api/operations.js";
 import { registerPartitionRoutes } from "@synth-deploy/server/api/partitions.js";
 import { registerEnvironmentRoutes } from "@synth-deploy/server/api/environments.js";
 import { registerSettingsRoutes } from "@synth-deploy/server/api/settings.js";
@@ -86,7 +86,7 @@ async function createCommandWithEnvoy(envoyUrl: string, timeoutMs = 2000) {
 
   const app = Fastify({ logger: false });
   addMockAuth(app);
-  registerDeploymentRoutes(app, deployments, diary, partitions, environments, artifactStore, settings, telemetry);
+  registerOperationRoutes(app, deployments, diary, partitions, environments, artifactStore, settings, telemetry);
   registerPartitionRoutes(app, partitions, deployments, diary, telemetry);
   registerEnvironmentRoutes(app, environments, deployments, telemetry);
   registerSettingsRoutes(app, settings, telemetry);
@@ -132,7 +132,7 @@ describe("Envoy offline — deployment creation", { timeout: 30000 }, () => {
     expect(dep.id).toBeDefined();
 
     // Verify the deployment is retrievable
-    const detailRes = await http(cmd.baseUrl, "GET", `/api/deployments/${dep.id}`);
+    const detailRes = await http(cmd.baseUrl, "GET", `/api/operations/${dep.id}`);
     expect(detailRes.status).toBe(200);
   });
 });
@@ -259,7 +259,7 @@ describe("Invalid configuration", () => {
   it("deployment with nonexistent artifact returns clear error", async () => {
     const envId = await createEnvironment(cmd.baseUrl, "invalid-art-env");
 
-    const res = await http(cmd.baseUrl, "POST", "/api/deployments", {
+    const res = await http(cmd.baseUrl, "POST", "/api/operations", {
       artifactId: "nonexistent-artifact",
       environmentId: envId,
       version: "1.0.0",
@@ -273,7 +273,7 @@ describe("Invalid configuration", () => {
     const artId = await createArtifact(cmd.baseUrl, "invalid-part-svc");
     const envId = await createEnvironment(cmd.baseUrl, "invalid-part-env");
 
-    const res = await http(cmd.baseUrl, "POST", "/api/deployments", {
+    const res = await http(cmd.baseUrl, "POST", "/api/operations", {
       artifactId: artId,
       partitionId: "nonexistent-partition",
       environmentId: envId,
@@ -287,7 +287,7 @@ describe("Invalid configuration", () => {
   it("deployment with nonexistent environment returns clear error", async () => {
     const artId = await createArtifact(cmd.baseUrl, "invalid-env-svc");
 
-    const res = await http(cmd.baseUrl, "POST", "/api/deployments", {
+    const res = await http(cmd.baseUrl, "POST", "/api/operations", {
       artifactId: artId,
       environmentId: "nonexistent-env",
       version: "1.0.0",

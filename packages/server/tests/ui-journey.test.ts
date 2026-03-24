@@ -4,7 +4,7 @@ import type { FastifyInstance } from "fastify";
 import { DecisionDebrief, PartitionStore, EnvironmentStore, ArtifactStore, SettingsStore, TelemetryStore } from "@synth-deploy/core";
 import type { Deployment, DebriefEntry, PostmortemReport, OperationHistory } from "@synth-deploy/core";
 import { SynthAgent, InMemoryDeploymentStore } from "../src/agent/synth-agent.js";
-import { registerDeploymentRoutes } from "../src/api/deployments.js";
+import { registerOperationRoutes } from "../src/api/operations.js";
 import { registerPartitionRoutes } from "../src/api/partitions.js";
 import { registerEnvironmentRoutes } from "../src/api/environments.js";
 import { registerArtifactRoutes } from "../src/api/artifacts.js";
@@ -61,7 +61,7 @@ beforeAll(async () => {
 
   app = Fastify();
   addMockAuth(app);
-  registerDeploymentRoutes(app, deployments, diary, partitions, environments, artifactStore, settings, telemetry);
+  registerOperationRoutes(app, deployments, diary, partitions, environments, artifactStore, settings, telemetry);
   registerPartitionRoutes(app, partitions, deployments, diary, telemetry);
   registerEnvironmentRoutes(app, environments, deployments, telemetry);
   registerArtifactRoutes(app, artifactStore, telemetry);
@@ -174,7 +174,7 @@ describe("Complete UI user journey", () => {
   it("triggers a deployment", async () => {
     const res = await app.inject({
       method: "POST",
-      url: "/api/deployments",
+      url: "/api/operations",
       payload: {
         artifactId,
         partitionId,
@@ -194,7 +194,7 @@ describe("Complete UI user journey", () => {
   it("lists deployments filtered by partition", async () => {
     const res = await app.inject({
       method: "GET",
-      url: `/api/deployments?partitionId=${partitionId}`,
+      url: `/api/operations?partitionId=${partitionId}`,
     });
 
     const body = JSON.parse(res.payload);
@@ -207,7 +207,7 @@ describe("Complete UI user journey", () => {
   it("gets deployment detail", async () => {
     const res = await app.inject({
       method: "GET",
-      url: `/api/deployments/${firstDeploymentId}`,
+      url: `/api/operations/${firstDeploymentId}`,
     });
 
     const body = JSON.parse(res.payload);
@@ -219,7 +219,7 @@ describe("Complete UI user journey", () => {
   it("triggers a second deployment (version upgrade)", async () => {
     const res = await app.inject({
       method: "POST",
-      url: "/api/deployments",
+      url: "/api/operations",
       payload: {
         artifactId,
         partitionId,
@@ -239,7 +239,7 @@ describe("Complete UI user journey", () => {
   it("lists all deployments for partition showing both", async () => {
     const res = await app.inject({
       method: "GET",
-      url: `/api/deployments?partitionId=${partitionId}`,
+      url: `/api/operations?partitionId=${partitionId}`,
     });
 
     const body = JSON.parse(res.payload);
@@ -254,7 +254,7 @@ describe("Complete UI user journey", () => {
   it("lists deployments filtered by artifact", async () => {
     const res = await app.inject({
       method: "GET",
-      url: `/api/deployments?artifactId=${artifactId}`,
+      url: `/api/operations?artifactId=${artifactId}`,
     });
 
     const body = JSON.parse(res.payload);
@@ -277,7 +277,7 @@ describe("Complete UI user journey", () => {
   });
 
   it("lists all deployments", async () => {
-    const res = await app.inject({ method: "GET", url: "/api/deployments" });
+    const res = await app.inject({ method: "GET", url: "/api/operations" });
     const body = JSON.parse(res.payload);
     expect(body.deployments.length).toBeGreaterThanOrEqual(2);
   });

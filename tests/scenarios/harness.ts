@@ -23,7 +23,7 @@ import {
   SynthAgent,
   InMemoryDeploymentStore,
 } from "@synth-deploy/server/agent/synth-agent.js";
-import { registerDeploymentRoutes } from "@synth-deploy/server/api/deployments.js";
+import { registerOperationRoutes } from "@synth-deploy/server/api/operations.js";
 import { registerPartitionRoutes } from "@synth-deploy/server/api/partitions.js";
 import { registerEnvironmentRoutes } from "@synth-deploy/server/api/environments.js";
 import { registerSettingsRoutes } from "@synth-deploy/server/api/settings.js";
@@ -177,7 +177,7 @@ export async function deploy(
     variables?: Record<string, string>;
   },
 ): Promise<{ status: number; body: Record<string, unknown> }> {
-  return http(baseUrl, "POST", "/api/deployments", {
+  return http(baseUrl, "POST", "/api/operations", {
     artifactId: params.artifactId,
     environmentId: params.environmentId,
     partitionId: params.partitionId,
@@ -205,7 +205,7 @@ export async function createSynthServer(): Promise<SynthServerContext> {
 
   const app = Fastify({ logger: false });
   addMockAuth(app);
-  registerDeploymentRoutes(app, deployments, diary, partitions, environments, artifactStore, settings, telemetry);
+  registerOperationRoutes(app, deployments, diary, partitions, environments, artifactStore, settings, telemetry);
   registerPartitionRoutes(app, partitions, deployments, diary, telemetry);
   registerEnvironmentRoutes(app, environments, deployments, telemetry);
   registerSettingsRoutes(app, settings, telemetry);

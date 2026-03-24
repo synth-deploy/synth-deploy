@@ -15,7 +15,7 @@ const loginExample = `curl -X POST http://localhost:9410/api/auth/login \\
 #   "user": { "id": "...", "username": "admin", "role": "admin" }
 # }`;
 
-const createDeploymentExample = `curl -X POST http://localhost:9410/api/deployments \\
+const createOperationExample = `curl -X POST http://localhost:9410/api/operations \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer eyJhbG..." \\
   -d '{
@@ -29,24 +29,17 @@ const createDeploymentExample = `curl -X POST http://localhost:9410/api/deployme
     }
   }'`;
 
-const listDeploymentsExample = `# List all deployments
-curl http://localhost:9410/api/deployments \\
+const listOperationsExample = `# List all operations
+curl http://localhost:9410/api/operations \\
   -H "Authorization: Bearer eyJhbG..."
 
 # Filter by status
-curl "http://localhost:9410/api/deployments?status=running" \\
+curl "http://localhost:9410/api/operations?status=running" \\
   -H "Authorization: Bearer eyJhbG..."
 
 # Filter by partition
-curl "http://localhost:9410/api/deployments?partitionId=part_main" \\
+curl "http://localhost:9410/api/operations?partitionId=part_main" \\
   -H "Authorization: Bearer eyJhbG..."`;
-
-const agentQueryExample = `curl -X POST http://localhost:9410/api/agent/query \\
-  -H "Content-Type: application/json" \\
-  -H "Authorization: Bearer eyJhbG..." \\
-  -d '{
-    "query": "What failed in the last deployment to production?"
-  }'`;
 
 const apiKeyExample = `# Create a scoped API key
 curl -X POST http://localhost:9410/api/auth/api-keys \\
@@ -58,7 +51,7 @@ curl -X POST http://localhost:9410/api/auth/api-keys \\
   }'
 
 # Use the API key
-curl http://localhost:9410/api/deployments \\
+curl http://localhost:9410/api/operations \\
   -H "Authorization: Bearer synth_key_..."`;
 
 const healthExample = `# Basic health check (no auth required)
@@ -177,26 +170,26 @@ curl http://localhost:9410/api/health/llm \\
     </tbody>
   </table>
 
-  <!-- ───────────────── Deployments ───────────────── -->
+  <!-- ───────────────── Operations ───────────────── -->
 
-  <h2>Deployments</h2>
+  <h2>Operations</h2>
 
   <table>
     <thead>
       <tr><th>Method</th><th>Path</th><th>Permission</th><th>Description</th></tr>
     </thead>
     <tbody>
-      <tr><td><code>POST</code></td><td><code>/api/deployments</code></td><td><code>deployment.create</code></td><td>Create and dispatch a new deployment</td></tr>
-      <tr><td><code>GET</code></td><td><code>/api/deployments</code></td><td><code>deployment.view</code></td><td>List deployments — supports filtering by status, partition, environment</td></tr>
+      <tr><td><code>POST</code></td><td><code>/api/operations</code></td><td><code>deployment.create</code></td><td>Create and dispatch a new operation (deploy, maintain, query, investigate, trigger)</td></tr>
+      <tr><td><code>GET</code></td><td><code>/api/operations</code></td><td><code>deployment.view</code></td><td>List operations — supports filtering by status, type, partition, environment</td></tr>
       <tr><td><code>GET</code></td><td><code>/api/debrief</code></td><td><code>deployment.view</code></td><td>Query debrief entries — the decision log for agent actions</td></tr>
     </tbody>
   </table>
 
-  <h3>Create a Deployment</h3>
-  <pre><code>{createDeploymentExample}</code></pre>
+  <h3>Create an Operation</h3>
+  <pre><code>{createOperationExample}</code></pre>
 
-  <h3>List Deployments</h3>
-  <pre><code>{listDeploymentsExample}</code></pre>
+  <h3>List Operations</h3>
+  <pre><code>{listOperationsExample}</code></pre>
 
   <!-- ───────────────── Partitions ───────────────── -->
 
@@ -261,9 +254,9 @@ curl http://localhost:9410/api/health/llm \\
   <h2>Agent (Intelligence)</h2>
 
   <p>
-    The agent is Synth's reasoning core. It resolves natural language queries,
-    generates deployment plans, and produces pre-flight analyses. These
-    endpoints require a configured LLM connection
+    The agent is Synth's reasoning core. It generates deployment plans
+    and produces pre-flight analyses. These endpoints require a configured
+    LLM connection
     (<code>SYNTH_LLM_API_KEY</code>).
   </p>
 
@@ -273,14 +266,10 @@ curl http://localhost:9410/api/health/llm \\
     </thead>
     <tbody>
       <tr><td><code>GET</code></td><td><code>/api/agent/context</code></td><td>Token</td><td>Agent context summary — current state the agent is reasoning about</td></tr>
-      <tr><td><code>POST</code></td><td><code>/api/agent/query</code></td><td>Token</td><td>Query the agent in natural language — ask about deployments, failures, environment state</td></tr>
       <tr><td><code>POST</code></td><td><code>/api/agent/pre-flight</code></td><td>Token</td><td>Generate a pre-flight analysis for a planned deployment</td></tr>
       <tr><td><code>POST</code></td><td><code>/api/agent/pre-flight/response</code></td><td>Token</td><td>Submit a user response to pre-flight questions or confirmations</td></tr>
     </tbody>
   </table>
-
-  <h3>Query the Agent</h3>
-  <pre><code>{agentQueryExample}</code></pre>
 
   <!-- ───────────────── Settings ───────────────── -->
 

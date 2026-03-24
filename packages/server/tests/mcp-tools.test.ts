@@ -207,7 +207,7 @@ describe("get-deployment-status", () => {
     });
 
     expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain("Deployment not found");
+    expect(result.content[0].text).toContain("Operation not found");
     expect(result.content[0].text).toContain("does-not-exist");
   });
 });

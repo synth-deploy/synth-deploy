@@ -95,7 +95,7 @@ export function registerTools(
       const deployment = deployments.get(deploymentId);
       if (!deployment) {
         return {
-          content: [{ type: "text", text: `Error: Deployment not found: ${deploymentId}` }],
+          content: [{ type: "text", text: `Error: Operation not found: ${deploymentId}` }],
           isError: true,
         };
       }

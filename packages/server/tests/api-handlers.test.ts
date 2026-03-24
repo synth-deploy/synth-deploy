@@ -13,7 +13,7 @@ import { SynthAgent, InMemoryDeploymentStore } from "../src/agent/synth-agent.js
 import { registerPartitionRoutes } from "../src/api/partitions.js";
 import { registerEnvironmentRoutes } from "../src/api/environments.js";
 import { registerSettingsRoutes } from "../src/api/settings.js";
-import { registerDeploymentRoutes } from "../src/api/deployments.js";
+import { registerOperationRoutes } from "../src/api/operations.js";
 import { registerArtifactRoutes } from "../src/api/artifacts.js";
 import { registerHealthRoutes } from "../src/api/health.js";
 
@@ -76,7 +76,7 @@ async function createTestServer(): Promise<TestContext> {
   registerPartitionRoutes(app, partitions, deployments, diary, telemetry);
   registerEnvironmentRoutes(app, environments, deployments, telemetry);
   registerSettingsRoutes(app, settings, telemetry);
-  registerDeploymentRoutes(app, deployments, diary, partitions, environments, artifactStore, settings, telemetry);
+  registerOperationRoutes(app, deployments, diary, partitions, environments, artifactStore, settings, telemetry);
   registerArtifactRoutes(app, artifactStore, telemetry);
   registerHealthRoutes(app);
 
@@ -93,7 +93,7 @@ async function deployViaHttp(
 ) {
   return server.inject({
     method: "POST",
-    url: "/api/deployments",
+    url: "/api/operations",
     payload: {
       artifactId: params.artifactId,
       environmentId: params.environmentId,
@@ -763,9 +763,9 @@ describe("Deployment Routes", () => {
     return artifact.id;
   }
 
-  // --- POST /api/deployments ---
+  // --- POST /api/operations ---
 
-  describe("POST /api/deployments", () => {
+  describe("POST /api/operations", () => {
     it("creates a deployment and returns 201", async () => {
       const env = ctx.environments.create("production", { APP_ENV: "production" });
       const partition = ctx.partitions.create("Acme", { DB_HOST: "acme-db" });
@@ -789,7 +789,7 @@ describe("Deployment Routes", () => {
     it("returns 400 for invalid trigger", async () => {
       const res = await ctx.app.inject({
         method: "POST",
-        url: "/api/deployments",
+        url: "/api/operations",
         payload: {},
       });
 
@@ -801,7 +801,7 @@ describe("Deployment Routes", () => {
 
       const res = await ctx.app.inject({
         method: "POST",
-        url: "/api/deployments",
+        url: "/api/operations",
         payload: {
           artifactId: "nonexistent-artifact",
           environmentId: env.id,
@@ -817,7 +817,7 @@ describe("Deployment Routes", () => {
 
       const res = await ctx.app.inject({
         method: "POST",
-        url: "/api/deployments",
+        url: "/api/operations",
         payload: {
           artifactId,
           environmentId: "nonexistent",
@@ -834,7 +834,7 @@ describe("Deployment Routes", () => {
 
       const res = await ctx.app.inject({
         method: "POST",
-        url: "/api/deployments",
+        url: "/api/operations",
         payload: {
           artifactId,
           environmentId: env.id,
@@ -847,13 +847,13 @@ describe("Deployment Routes", () => {
     });
   });
 
-  // --- GET /api/deployments ---
+  // --- GET /api/operations ---
 
-  describe("GET /api/deployments", () => {
+  describe("GET /api/operations", () => {
     it("returns empty list when no deployments exist", async () => {
       const res = await ctx.app.inject({
         method: "GET",
-        url: "/api/deployments",
+        url: "/api/operations",
       });
 
       expect(res.statusCode).toBe(200);
@@ -875,7 +875,7 @@ describe("Deployment Routes", () => {
 
       const res = await ctx.app.inject({
         method: "GET",
-        url: "/api/deployments",
+        url: "/api/operations",
       });
 
       expect(res.statusCode).toBe(200);
@@ -904,7 +904,7 @@ describe("Deployment Routes", () => {
 
       const res = await ctx.app.inject({
         method: "GET",
-        url: `/api/deployments?partitionId=${p1.id}`,
+        url: `/api/operations?partitionId=${p1.id}`,
       });
 
       expect(res.statusCode).toBe(200);
@@ -934,7 +934,7 @@ describe("Deployment Routes", () => {
 
       const res = await ctx.app.inject({
         method: "GET",
-        url: `/api/deployments?artifactId=${art1}`,
+        url: `/api/operations?artifactId=${art1}`,
       });
 
       expect(res.statusCode).toBe(200);
@@ -944,9 +944,9 @@ describe("Deployment Routes", () => {
     });
   });
 
-  // --- GET /api/deployments/:id ---
+  // --- GET /api/operations/:id ---
 
-  describe("GET /api/deployments/:id", () => {
+  describe("GET /api/operations/:id", () => {
     it("returns a deployment with debrief entries", async () => {
       const env = ctx.environments.create("production");
       const partition = ctx.partitions.create("Acme");
@@ -962,7 +962,7 @@ describe("Deployment Routes", () => {
 
       const res = await ctx.app.inject({
         method: "GET",
-        url: `/api/deployments/${deploymentId}`,
+        url: `/api/operations/${deploymentId}`,
       });
 
       expect(res.statusCode).toBe(200);
@@ -975,18 +975,18 @@ describe("Deployment Routes", () => {
     it("returns 404 for non-existent deployment", async () => {
       const res = await ctx.app.inject({
         method: "GET",
-        url: "/api/deployments/does-not-exist",
+        url: "/api/operations/does-not-exist",
       });
 
       expect(res.statusCode).toBe(404);
       const body = JSON.parse(res.payload);
-      expect(body.error).toBe("Deployment not found");
+      expect(body.error).toBe("Operation not found");
     });
   });
 
-  // --- GET /api/deployments/:id/postmortem ---
+  // --- GET /api/operations/:id/postmortem ---
 
-  describe("GET /api/deployments/:id/postmortem", () => {
+  describe("GET /api/operations/:id/postmortem", () => {
     it("returns a postmortem for a deployment", async () => {
       const env = ctx.environments.create("production");
       const partition = ctx.partitions.create("Acme");
@@ -1002,7 +1002,7 @@ describe("Deployment Routes", () => {
 
       const res = await ctx.app.inject({
         method: "GET",
-        url: `/api/deployments/${deploymentId}/postmortem`,
+        url: `/api/operations/${deploymentId}/postmortem`,
       });
 
       expect(res.statusCode).toBe(200);
@@ -1013,7 +1013,7 @@ describe("Deployment Routes", () => {
     it("returns 404 for non-existent deployment", async () => {
       const res = await ctx.app.inject({
         method: "GET",
-        url: "/api/deployments/does-not-exist/postmortem",
+        url: "/api/operations/does-not-exist/postmortem",
       });
 
       expect(res.statusCode).toBe(404);

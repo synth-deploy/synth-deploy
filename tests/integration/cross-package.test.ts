@@ -21,7 +21,7 @@ import {
   SynthAgent,
   InMemoryDeploymentStore,
 } from "@synth-deploy/server/agent/synth-agent.js";
-import { registerDeploymentRoutes } from "@synth-deploy/server/api/deployments.js";
+import { registerOperationRoutes } from "@synth-deploy/server/api/operations.js";
 import { registerPartitionRoutes } from "@synth-deploy/server/api/partitions.js";
 import { registerEnvironmentRoutes } from "@synth-deploy/server/api/environments.js";
 import { registerSettingsRoutes } from "@synth-deploy/server/api/settings.js";
@@ -242,7 +242,7 @@ describe("REST API -> SynthAgent -> store persistence roundtrip", () => {
 
     commandApp = Fastify({ logger: false });
     addMockAuth(commandApp);
-    registerDeploymentRoutes(commandApp, deployments, diary, partitions, environments, artifactStore, settings, telemetry);
+    registerOperationRoutes(commandApp, deployments, diary, partitions, environments, artifactStore, settings, telemetry);
     registerPartitionRoutes(commandApp, partitions, deployments, diary, telemetry);
     registerEnvironmentRoutes(commandApp, environments, deployments, telemetry);
     registerSettingsRoutes(commandApp, settings, telemetry);
@@ -282,7 +282,7 @@ describe("REST API -> SynthAgent -> store persistence roundtrip", () => {
     const environmentId = (envRes.body.environment as Record<string, unknown>).id as string;
 
     // Step 4: Create a deployment
-    const deployRes = await inject(commandApp, "POST", "/api/deployments", {
+    const deployRes = await inject(commandApp, "POST", "/api/operations", {
       artifactId,
       partitionId,
       environmentId,
@@ -292,7 +292,7 @@ describe("REST API -> SynthAgent -> store persistence roundtrip", () => {
 
     const deployment = deployRes.body.deployment as Record<string, unknown>;
     const deploymentId = deployment.id as string;
-    expect(deployment.artifactId).toBe(artifactId);
+    expect((deployment.input as Record<string, unknown>).artifactId).toBe(artifactId);
     expect(deployment.partitionId).toBe(partitionId);
     expect(deployment.environmentId).toBe(environmentId);
 
@@ -304,11 +304,11 @@ describe("REST API -> SynthAgent -> store persistence roundtrip", () => {
     expect(deployedVars.LOG_LEVEL).toBe("warn");
 
     // Step 5: Verify deployment persists in the store
-    const fetchedDeploy = await inject(commandApp, "GET", `/api/deployments/${deploymentId}`);
+    const fetchedDeploy = await inject(commandApp, "GET", `/api/operations/${deploymentId}`);
     expect(fetchedDeploy.status).toBe(200);
     const stored = fetchedDeploy.body.deployment as Record<string, unknown>;
     expect(stored.id).toBe(deploymentId);
-    expect(stored.artifactId).toBe(artifactId);
+    expect((stored.input as Record<string, unknown>).artifactId).toBe(artifactId);
     expect(stored.partitionId).toBe(partitionId);
   });
 
@@ -319,7 +319,7 @@ describe("REST API -> SynthAgent -> store persistence roundtrip", () => {
 
     const partitionId = partList[0].id as string;
 
-    const filteredRes = await inject(commandApp, "GET", `/api/deployments?partitionId=${partitionId}`);
+    const filteredRes = await inject(commandApp, "GET", `/api/operations?partitionId=${partitionId}`);
     expect(filteredRes.status).toBe(200);
     const filteredDeps = filteredRes.body.deployments as Array<Record<string, unknown>>;
     for (const dep of filteredDeps) {
@@ -363,7 +363,7 @@ describe("Partition isolation end-to-end", () => {
 
     commandApp = Fastify({ logger: false });
     addMockAuth(commandApp);
-    registerDeploymentRoutes(commandApp, deployments, diary, partitions, environments, artifactStore, settings, telemetry);
+    registerOperationRoutes(commandApp, deployments, diary, partitions, environments, artifactStore, settings, telemetry);
     registerPartitionRoutes(commandApp, partitions, deployments, diary, telemetry);
     registerEnvironmentRoutes(commandApp, environments, deployments, telemetry);
     registerSettingsRoutes(commandApp, settings, telemetry);
@@ -404,7 +404,7 @@ describe("Partition isolation end-to-end", () => {
   });
 
   it("deploys to both partitions independently", async () => {
-    const depARes = await inject(commandApp, "POST", "/api/deployments", {
+    const depARes = await inject(commandApp, "POST", "/api/operations", {
       artifactId,
       partitionId: partitionAId,
       environmentId,
@@ -412,7 +412,7 @@ describe("Partition isolation end-to-end", () => {
     });
     expect(depARes.status).toBe(201);
 
-    const depBRes = await inject(commandApp, "POST", "/api/deployments", {
+    const depBRes = await inject(commandApp, "POST", "/api/operations", {
       artifactId,
       partitionId: partitionBId,
       environmentId,
@@ -422,8 +422,8 @@ describe("Partition isolation end-to-end", () => {
   });
 
   it("deployments for partition A are NOT visible when querying partition B", async () => {
-    const partADeps = await inject(commandApp, "GET", `/api/deployments?partitionId=${partitionAId}`);
-    const partBDeps = await inject(commandApp, "GET", `/api/deployments?partitionId=${partitionBId}`);
+    const partADeps = await inject(commandApp, "GET", `/api/operations?partitionId=${partitionAId}`);
+    const partBDeps = await inject(commandApp, "GET", `/api/operations?partitionId=${partitionBId}`);
 
     const aDeps = partADeps.body.deployments as Array<Record<string, unknown>>;
     const bDeps = partBDeps.body.deployments as Array<Record<string, unknown>>;
@@ -481,7 +481,7 @@ describe("Decision Diary completeness for multi-step workflow", () => {
 
     commandApp = Fastify({ logger: false });
     addMockAuth(commandApp);
-    registerDeploymentRoutes(commandApp, deployments, diary, partitions, environments, artifactStore, settings, telemetry);
+    registerOperationRoutes(commandApp, deployments, diary, partitions, environments, artifactStore, settings, telemetry);
     registerPartitionRoutes(commandApp, partitions, deployments, diary, telemetry);
     registerEnvironmentRoutes(commandApp, environments, deployments, telemetry);
     registerSettingsRoutes(commandApp, settings, telemetry);
@@ -513,7 +513,7 @@ describe("Decision Diary completeness for multi-step workflow", () => {
     });
     const partitionId = (partRes.body.partition as Record<string, unknown>).id as string;
 
-    const deployRes = await inject(commandApp, "POST", "/api/deployments", {
+    const deployRes = await inject(commandApp, "POST", "/api/operations", {
       artifactId,
       partitionId,
       environmentId,
@@ -523,7 +523,7 @@ describe("Decision Diary completeness for multi-step workflow", () => {
     const deploymentId = (deployRes.body.deployment as Record<string, unknown>).id as string;
 
     // Verify deployment is retrievable
-    const debriefRes = await inject(commandApp, "GET", `/api/deployments/${deploymentId}`);
+    const debriefRes = await inject(commandApp, "GET", `/api/operations/${deploymentId}`);
     expect(debriefRes.status).toBe(200);
     expect(debriefRes.body.deployment).toBeDefined();
     expect(debriefRes.body.debrief).toBeDefined();

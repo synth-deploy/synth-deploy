@@ -21,7 +21,7 @@ import {
   SynthAgent,
   InMemoryDeploymentStore,
 } from "@synth-deploy/server/agent/synth-agent.js";
-import { registerDeploymentRoutes } from "@synth-deploy/server/api/deployments.js";
+import { registerOperationRoutes } from "@synth-deploy/server/api/operations.js";
 import { registerPartitionRoutes } from "@synth-deploy/server/api/partitions.js";
 import { registerEnvironmentRoutes } from "@synth-deploy/server/api/environments.js";
 import { registerSettingsRoutes } from "@synth-deploy/server/api/settings.js";
@@ -80,7 +80,7 @@ async function deployViaHttp(
   baseUrl: string,
   params: { artifactId: string; partitionId: string; environmentId: string; version: string },
 ): Promise<{ status: number; body: Record<string, unknown> }> {
-  return httpRequest(baseUrl, "POST", "/api/deployments", {
+  return httpRequest(baseUrl, "POST", "/api/operations", {
     artifactId: params.artifactId,
     environmentId: params.environmentId,
     partitionId: params.partitionId,
@@ -138,7 +138,7 @@ async function createSynthServer(): Promise<SynthServerContext> {
 
   const app = Fastify({ logger: false });
   addMockAuth(app);
-  registerDeploymentRoutes(app, deployments, diary, partitions, environments, artifactStore, settings, telemetry);
+  registerOperationRoutes(app, deployments, diary, partitions, environments, artifactStore, settings, telemetry);
   registerPartitionRoutes(app, partitions, deployments, diary, telemetry);
   registerEnvironmentRoutes(app, environments, deployments, telemetry);
   registerSettingsRoutes(app, settings, telemetry);
@@ -203,7 +203,7 @@ describe("E2E: Full deployment lifecycle via HTTP", () => {
 
     const deployment = deployRes.body.deployment as Record<string, unknown>;
     const deploymentId = deployment.id as string;
-    expect(deployment.artifactId).toBe(artifactId);
+    expect((deployment.input as Record<string, unknown>).artifactId).toBe(artifactId);
     expect(deployment.partitionId).toBe(partitionId);
     expect(deployment.environmentId).toBe(environmentId);
 
@@ -215,11 +215,11 @@ describe("E2E: Full deployment lifecycle via HTTP", () => {
     expect(deployedVars.LOG_LEVEL).toBe("warn");
 
     // Step 5: Verify deployment persists via HTTP GET
-    const fetchedDeploy = await httpRequest(ctx.baseUrl, "GET", `/api/deployments/${deploymentId}`);
+    const fetchedDeploy = await httpRequest(ctx.baseUrl, "GET", `/api/operations/${deploymentId}`);
     expect(fetchedDeploy.status).toBe(200);
     const stored = fetchedDeploy.body.deployment as Record<string, unknown>;
     expect(stored.id).toBe(deploymentId);
-    expect(stored.artifactId).toBe(artifactId);
+    expect((stored.input as Record<string, unknown>).artifactId).toBe(artifactId);
     expect(stored.partitionId).toBe(partitionId);
   });
 
@@ -230,7 +230,7 @@ describe("E2E: Full deployment lifecycle via HTTP", () => {
 
     const partitionId = partList[0].id as string;
 
-    const filteredRes = await httpRequest(ctx.baseUrl, "GET", `/api/deployments?partitionId=${partitionId}`);
+    const filteredRes = await httpRequest(ctx.baseUrl, "GET", `/api/operations?partitionId=${partitionId}`);
     expect(filteredRes.status).toBe(200);
     const filteredDeps = filteredRes.body.deployments as Array<Record<string, unknown>>;
     for (const dep of filteredDeps) {
@@ -429,8 +429,8 @@ describe("E2E: Partition isolation via HTTP", () => {
   });
 
   it("deployments for partition A are NOT visible when querying partition B via HTTP", async () => {
-    const partADeps = await httpRequest(ctx.baseUrl, "GET", `/api/deployments?partitionId=${partitionAId}`);
-    const partBDeps = await httpRequest(ctx.baseUrl, "GET", `/api/deployments?partitionId=${partitionBId}`);
+    const partADeps = await httpRequest(ctx.baseUrl, "GET", `/api/operations?partitionId=${partitionAId}`);
+    const partBDeps = await httpRequest(ctx.baseUrl, "GET", `/api/operations?partitionId=${partitionBId}`);
 
     const aDeps = partADeps.body.deployments as Array<Record<string, unknown>>;
     const bDeps = partBDeps.body.deployments as Array<Record<string, unknown>>;

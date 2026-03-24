@@ -67,7 +67,7 @@ describe("Deploy happy path", () => {
   });
 
   it("deployment has debrief entries with actionable detail", async () => {
-    const res = await http(h.server.baseUrl, "GET", `/api/deployments/${deploymentId}`);
+    const res = await http(h.server.baseUrl, "GET", `/api/operations/${deploymentId}`);
     expect(res.status).toBe(200);
 
     const entries = res.body.debrief as Array<Record<string, unknown>>;
@@ -83,7 +83,7 @@ describe("Deploy happy path", () => {
   });
 
   it("debrief can be queried via general endpoint", async () => {
-    const res = await http(h.server.baseUrl, "GET", `/api/deployments/${deploymentId}`);
+    const res = await http(h.server.baseUrl, "GET", `/api/operations/${deploymentId}`);
     const entries = res.body.debrief as Array<Record<string, unknown>>;
     // Just verify the endpoint returns successfully
     expect(Array.isArray(entries)).toBe(true);
@@ -111,7 +111,7 @@ describe("Deploy failure investigation", () => {
     const dep = res.body.deployment as Record<string, unknown>;
     const depId = dep.id as string;
 
-    const detailRes = await http(h.server.baseUrl, "GET", `/api/deployments/${depId}`);
+    const detailRes = await http(h.server.baseUrl, "GET", `/api/operations/${depId}`);
     expect(detailRes.status).toBe(200);
     expect(detailRes.body.deployment).toBeDefined();
   });
@@ -129,7 +129,7 @@ describe("Deploy failure investigation", () => {
     });
 
     const depId = (res.body.deployment as Record<string, unknown>).id as string;
-    const pmRes = await http(h.server.baseUrl, "GET", `/api/deployments/${depId}/postmortem`);
+    const pmRes = await http(h.server.baseUrl, "GET", `/api/operations/${depId}/postmortem`);
     expect(pmRes.status).toBe(200);
     expect(pmRes.body.postmortem).toBeDefined();
   });
@@ -178,7 +178,7 @@ describe("Multi-partition isolation", () => {
       const res = await http(
         h.server.baseUrl,
         "GET",
-        `/api/deployments?partitionId=${partitions[i].id}`,
+        `/api/operations?partitionId=${partitions[i].id}`,
       );
       const deps = res.body.deployments as Array<Record<string, unknown>>;
 
@@ -290,7 +290,7 @@ describe("Partition lifecycle", () => {
     expect(getRes.status).toBe(200);
 
     // Deployment still queryable
-    const depRes = await http(h.server.baseUrl, "GET", `/api/deployments/${depId}`);
+    const depRes = await http(h.server.baseUrl, "GET", `/api/operations/${depId}`);
     expect(depRes.status).toBe(200);
   });
 

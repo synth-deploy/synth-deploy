@@ -18,7 +18,7 @@ import { InMemoryDeploymentStore } from "../src/agent/synth-agent.js";
 import { registerPartitionRoutes } from "../src/api/partitions.js";
 import { registerEnvironmentRoutes } from "../src/api/environments.js";
 import { registerSettingsRoutes } from "../src/api/settings.js";
-import { registerDeploymentRoutes } from "../src/api/deployments.js";
+import { registerOperationRoutes } from "../src/api/operations.js";
 import { registerArtifactRoutes } from "../src/api/artifacts.js";
 import { registerAuthMiddleware, generateTokens } from "../src/middleware/auth.js";
 
@@ -120,7 +120,7 @@ async function createTestServer(): Promise<TestContext> {
   registerPartitionRoutes(app, partitions, deployments, diary, telemetry);
   registerEnvironmentRoutes(app, environments, deployments, telemetry);
   registerSettingsRoutes(app, settings, telemetry);
-  registerDeploymentRoutes(app, deployments, diary, partitions, environments, artifactStore, settings, telemetry);
+  registerOperationRoutes(app, deployments, diary, partitions, environments, artifactStore, settings, telemetry);
   registerArtifactRoutes(app, artifactStore, telemetry);
 
   await app.ready();
@@ -175,8 +175,8 @@ describe("RBAC enforcement", () => {
   describe("unauthenticated requests return 401", () => {
     const routes: Array<{ method: "GET" | "POST" | "PUT" | "DELETE"; url: string }> = [
       // Deployments
-      { method: "GET", url: "/api/deployments" },
-      { method: "POST", url: "/api/deployments" },
+      { method: "GET", url: "/api/operations" },
+      { method: "POST", url: "/api/operations" },
       { method: "GET", url: "/api/debrief" },
       // Artifacts
       { method: "GET", url: "/api/artifacts" },
@@ -215,10 +215,10 @@ describe("RBAC enforcement", () => {
   // -------------------------------------------------------------------------
 
   describe("viewer cannot perform write operations (403)", () => {
-    it("POST /api/deployments returns 403 for viewer", async () => {
+    it("POST /api/operations returns 403 for viewer", async () => {
       const res = await ctx.app.inject({
         method: "POST",
-        url: "/api/deployments",
+        url: "/api/operations",
         headers: { authorization: `Bearer ${ctx.viewerToken}` },
         payload: { artifactId: "a1", environmentId: "e1" },
       });
@@ -318,10 +318,10 @@ describe("RBAC enforcement", () => {
   // -------------------------------------------------------------------------
 
   describe("viewer can access read-only routes (200)", () => {
-    it("GET /api/deployments returns 200 for viewer", async () => {
+    it("GET /api/operations returns 200 for viewer", async () => {
       const res = await ctx.app.inject({
         method: "GET",
-        url: "/api/deployments",
+        url: "/api/operations",
         headers: { authorization: `Bearer ${ctx.viewerToken}` },
       });
       expect(res.statusCode).toBe(200);

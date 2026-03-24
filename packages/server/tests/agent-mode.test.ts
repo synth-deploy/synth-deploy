@@ -3,7 +3,7 @@ import Fastify from "fastify";
 import type { FastifyInstance } from "fastify";
 import { DecisionDebrief, PartitionStore, EnvironmentStore, ArtifactStore, SettingsStore, TelemetryStore } from "@synth-deploy/core";
 import { SynthAgent, InMemoryDeploymentStore } from "../src/agent/synth-agent.js";
-import { registerDeploymentRoutes } from "../src/api/deployments.js";
+import { registerOperationRoutes } from "../src/api/operations.js";
 import { registerPartitionRoutes } from "../src/api/partitions.js";
 import { registerEnvironmentRoutes } from "../src/api/environments.js";
 import { registerArtifactRoutes } from "../src/api/artifacts.js";
@@ -66,7 +66,7 @@ beforeAll(async () => {
 
   app = Fastify();
   addMockAuth(app);
-  registerDeploymentRoutes(app, deployments, diary, partitions, environments, artifactStore, settings, telemetry);
+  registerOperationRoutes(app, deployments, diary, partitions, environments, artifactStore, settings, telemetry);
   registerPartitionRoutes(app, partitions, deployments, diary, telemetry);
   registerEnvironmentRoutes(app, environments, deployments, telemetry);
   registerArtifactRoutes(app, artifactStore, telemetry);
@@ -120,7 +120,7 @@ async function deployViaHttp(
 ) {
   return server.inject({
     method: "POST",
-    url: "/api/deployments",
+    url: "/api/operations",
     payload: {
       artifactId: params.artifactId,
       environmentId: params.environmentId,

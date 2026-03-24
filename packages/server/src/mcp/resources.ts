@@ -50,7 +50,7 @@ export function registerResources(
     async (uri, { deploymentId }) => {
       const deployment = deployments.get(deploymentId as string);
       if (!deployment) {
-        return { contents: [{ uri: uri.href, text: JSON.stringify({ error: "Deployment not found" }) }] };
+        return { contents: [{ uri: uri.href, text: JSON.stringify({ error: "Operation not found" }) }] };
       }
       const entries = debrief.getByOperation(deploymentId as string);
       return {
