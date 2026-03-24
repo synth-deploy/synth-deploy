@@ -1722,10 +1722,21 @@ export class EnvoyAgent {
       `Then output the plan as JSON.\n\n` +
       planOutputFormat;
 
+    // Used on retries when probe observations are available in the prompt.
     const retrySystemPrompt =
       `You are Synth's envoy agent performing a maintenance operation.\n\n` +
       `Environment observations have already been collected and are provided in the prompt. ` +
       `Use those observations directly — do NOT attempt to call any tools. ` +
+      `Output the maintenance plan as JSON.\n\n` +
+      planOutputFormat;
+
+    // Used on retries when the first attempt failed before making any probe calls
+    // (probeLog is empty) — don't claim observations were collected when they weren't.
+    const noObsRetrySystemPrompt =
+      `You are Synth's envoy agent performing a maintenance operation.\n\n` +
+      `A previous planning attempt failed. No environment observations are available. ` +
+      `Use the context provided (environment name, resolved variables, envoy capabilities) ` +
+      `to produce the best maintenance plan you can. Do NOT attempt to call any tools. ` +
       `Output the maintenance plan as JSON.\n\n` +
       planOutputFormat;
 
@@ -1846,7 +1857,7 @@ export class EnvoyAgent {
       } else {
         llmResult = await this.llmClient!.reason({
           prompt: promptSections.join("\n\n"),
-          systemPrompt: retrySystemPrompt,
+          systemPrompt: probeLog.length > 0 ? retrySystemPrompt : noObsRetrySystemPrompt,
           promptSummary,
           partitionId: instruction.partition?.id ?? null,
           operationId: instruction.operationId,
