@@ -2010,7 +2010,7 @@ export function registerOperationRoutes(
       }
 
       const targetEnvoy = child.envoyId ? envoyRegistry?.get(child.envoyId) : envoyRegistry?.list()[0];
-      if (!targetEnvoy || !envoyClient) {
+      if (!targetEnvoy) {
         const dep = deployments.get(parentId);
         if (dep) {
           dep.status = "failed" as typeof dep.status;
