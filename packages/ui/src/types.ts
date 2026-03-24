@@ -1,6 +1,18 @@
 // Frontend type definitions mirroring @synth-deploy/core types.
 // Dates come as ISO strings from the API.
 
+export type ApprovalMode = "auto" | "required";
+
+export interface ApprovalDefaults {
+  query: ApprovalMode;
+  investigate: ApprovalMode;
+  trigger: ApprovalMode;
+  deploy: ApprovalMode;
+  maintain: ApprovalMode;
+  composite: ApprovalMode;
+  environmentOverrides: Record<string, Partial<Record<string, ApprovalMode>>>;
+}
+
 export type ConflictPolicy = "strict" | "permissive";
 
 export type TaskModelTask =
@@ -129,6 +141,7 @@ export interface AppSettings {
   coBranding?: CoBrandingConfig;
   mcpServers?: McpServerConfig[];
   llm?: LlmProviderConfig;
+  approvalDefaults?: ApprovalDefaults;
 }
 
 export interface CommandInfo {

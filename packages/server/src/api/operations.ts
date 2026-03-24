@@ -47,7 +47,7 @@ export function registerOperationRoutes(
       return reply.status(400).send({ error: parsed.error.message });
     }
 
-    const { artifactId, environmentId, partitionId, envoyId, version, type: operationType, intent, allowWrite, condition, responseIntent } = parsed.data;
+    const { artifactId, environmentId, partitionId, envoyId, version, type: operationType, intent, allowWrite, condition, responseIntent, parentOperationId, requireApproval } = parsed.data;
 
     // Validate artifact exists (required for deploy operations)
     if (operationType === "deploy" && !artifactId) {
@@ -95,6 +95,8 @@ export function registerOperationRoutes(
       id: crypto.randomUUID(),
       input: operationInput,
       intent,
+      lineage: parentOperationId,
+      triggeredBy: parentOperationId ? ("user" as const) : undefined,
       environmentId,
       partitionId,
       envoyId: targetEnvoy?.id,
@@ -103,6 +105,7 @@ export function registerOperationRoutes(
       variables: resolved,
       debriefEntryIds: [] as string[],
       createdAt: new Date(),
+      ...(requireApproval ? { forceManualApproval: true } : {}),
     };
 
     deployments.save(deployment);
@@ -214,7 +217,9 @@ export function registerOperationRoutes(
 
             const currentSettings = settings.get();
             const envLookup = (id: string) => environments.get(id)?.name;
-            const approvalMode = resolveApprovalMode(dep.input.type, dep.environmentId, currentSettings, envLookup);
+            const approvalMode = dep.forceManualApproval
+              ? "required"
+              : resolveApprovalMode(dep.input.type, dep.environmentId, currentSettings, envLookup);
 
             if (approvalMode === "auto") {
               // Auto-approve — findings are the deliverable

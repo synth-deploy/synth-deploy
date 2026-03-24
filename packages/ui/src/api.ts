@@ -305,6 +305,10 @@ export async function createOperation(trigger: {
   partitionId?: string;
   envoyId?: string;
   version?: string;
+  /** Parent operation that spawned this one (e.g. investigation → resolution) */
+  parentOperationId?: string;
+  /** Override to require manual approval even when auto-approve would apply */
+  requireApproval?: boolean;
 }): Promise<{ deployment: Deployment }> {
   return fetchJson("/api/operations", {
     method: "POST",
