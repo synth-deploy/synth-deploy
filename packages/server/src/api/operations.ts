@@ -1766,7 +1766,7 @@ export function registerOperationRoutes(
 
   async function planCompositeChildren(
     parentOp: import("@synth-deploy/core").Operation,
-    registry: EnvoyRegistry,
+    _registry: EnvoyRegistry,
     planningEnvoy: { id: string; name: string; url: string },
   ): Promise<void> {
     const compositeInput = parentOp.input as { type: "composite"; operations: import("@synth-deploy/core").OperationInput[] };
