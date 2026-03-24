@@ -2072,6 +2072,7 @@ export function registerOperationRoutes(
         if (dep) {
           dep.status = "failed" as typeof dep.status;
           dep.failureReason = `Child operation ${i + 1} (${child.input.type}) execution dispatch failed: ${err instanceof Error ? err.message : "unknown error"}`;
+          dep.completedAt = new Date();
           deployments.save(dep);
           debrief.record({
             partitionId: dep.partitionId ?? null,
