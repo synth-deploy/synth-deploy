@@ -297,6 +297,8 @@ export interface Operation {
   enrichment?: OperationEnrichment;
   recommendation?: OperationRecommendation;
   retryOf?: OperationId;
+  /** When true, manual approval is required even if resolveApprovalMode() returns 'auto' */
+  forceManualApproval?: boolean;
   /** Trigger-specific: installed monitoring directive (populated after approval) */
   monitoringDirective?: MonitoringDirective;
   /** Trigger-specific: current trigger status */

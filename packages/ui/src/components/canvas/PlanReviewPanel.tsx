@@ -452,6 +452,7 @@ export default function PlanReviewPanel({ deploymentId }: Props) {
           intent: res.intent,
           environmentId: deployment.environmentId,
           partitionId: deployment.partitionId,
+          parentOperationId: deploymentId,
         });
         pushPanel({
           type: "plan-review",

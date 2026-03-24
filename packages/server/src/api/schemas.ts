@@ -258,6 +258,10 @@ export const CreateOperationSchema = z.object({
   condition: z.string().optional(),
   /** Trigger-specific: what to do when the condition fires */
   responseIntent: z.string().optional(),
+  /** Parent operation that spawned this one (e.g. investigation → resolution) */
+  parentOperationId: z.string().optional(),
+  /** Override to require manual approval even when auto-approve would apply */
+  requireApproval: z.boolean().optional(),
 });
 
 export const ApproveDeploymentSchema = z.object({

@@ -8,7 +8,8 @@ import {
   createOperation,
   recordPreFlightResponse,
 } from "../../api.js";
-import type { Artifact, Partition, Environment, Deployment } from "../../types.js";
+import type { Artifact, Partition, Environment, Deployment, ApprovalMode } from "../../types.js";
+import { DEFAULT_APPROVAL_DEFAULTS } from "../../types.js";
 import type { EnvoyRegistryEntry, PreFlightContext } from "../../api.js";
 import { useSettings } from "../../context/SettingsContext.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
@@ -62,6 +63,7 @@ export default function OperationAuthoringPanel({ title, preselectedArtifactId, 
   const [allowWrite, setAllowWrite] = useState(false);
   const [triggerCondition, setTriggerCondition] = useState("");
   const [triggerResponseIntent, setTriggerResponseIntent] = useState("");
+  const [forceManualApproval, setForceManualApproval] = useState(false);
 
   function toggleArtifact(id: string) {
     setSelectedArtifactIds((prev) =>
@@ -102,6 +104,7 @@ export default function OperationAuthoringPanel({ title, preselectedArtifactId, 
           condition: triggerCondition.trim(),
           responseIntent: triggerResponseIntent.trim(),
         } : {}),
+        ...(forceManualApproval ? { requireApproval: true } : {}),
       } as Parameters<typeof createOperation>[0]);
 
       pushPanel({
@@ -136,6 +139,28 @@ export default function OperationAuthoringPanel({ title, preselectedArtifactId, 
     }
     return "";
   }
+
+  function getResolvedApprovalMode(): ApprovalMode {
+    const defaults = appSettings?.approvalDefaults;
+    if (defaults) {
+      // Check environment-specific override
+      if (selectedEnvironmentId && defaults.environmentOverrides) {
+        const envName = (environments ?? []).find((e) => e.id === selectedEnvironmentId)?.name;
+        if (envName && defaults.environmentOverrides[envName]) {
+          const override = defaults.environmentOverrides[envName][opType];
+          if (override) return override;
+        }
+      }
+      // Per-type default from settings
+      const typeDefault = defaults[opType as keyof typeof defaults];
+      if (typeDefault === "auto" || typeDefault === "required") return typeDefault;
+    }
+    // Fall back to canonical defaults from core
+    return DEFAULT_APPROVAL_DEFAULTS[opType as keyof typeof DEFAULT_APPROVAL_DEFAULTS] ?? "required";
+  }
+
+  const resolvedApprovalMode = getResolvedApprovalMode();
+  const effectiveApprovalMode: ApprovalMode = forceManualApproval ? "required" : resolvedApprovalMode;
 
   function getContextHint(): string {
     const envoyCount = (envoys ?? []).length;
@@ -200,7 +225,7 @@ export default function OperationAuthoringPanel({ title, preselectedArtifactId, 
                 <button
                   key={t}
                   disabled={!isAvailable}
-                  onClick={() => isAvailable && setOpType(t)}
+                  onClick={() => { if (isAvailable) { setOpType(t); setForceManualApproval(false); } }}
                   title={isAvailable ? undefined : "Coming soon"}
                   style={{
                     padding: "5px 12px",
@@ -800,6 +825,30 @@ export default function OperationAuthoringPanel({ title, preselectedArtifactId, 
               </button>
             </div>
 
+            {/* Approval mode */}
+            <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 8, paddingLeft: 32 }}>
+              <span style={{
+                fontSize: 11,
+                fontWeight: 600,
+                padding: "2px 8px",
+                borderRadius: 4,
+                color: effectiveApprovalMode === "auto" ? "var(--status-succeeded)" : "var(--text-muted)",
+                background: effectiveApprovalMode === "auto"
+                  ? "color-mix(in srgb, var(--status-succeeded) 12%, transparent)"
+                  : "color-mix(in srgb, var(--text-muted) 12%, transparent)",
+              }}>
+                {effectiveApprovalMode === "auto" ? "Auto-approved" : "Requires approval"}
+              </span>
+              {resolvedApprovalMode === "auto" && (
+                <button
+                  onClick={() => setForceManualApproval((v) => !v)}
+                  style={{ fontSize: 11, color: "var(--text-muted)", background: "none", border: "none", cursor: "pointer", padding: 0, textDecoration: "underline" }}
+                >
+                  {forceManualApproval ? "Allow auto-approve" : "Require approval"}
+                </button>
+              )}
+            </div>
+
             {/* Multi-artifact order preview */}
             {selectedArtifactObjects.length > 1 && (
               <div className="nd-order-preview">
@@ -848,6 +897,29 @@ export default function OperationAuthoringPanel({ title, preselectedArtifactId, 
                   : "Begin Investigation"}
               </button>
             </div>
+            {/* Approval mode */}
+            <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{
+                fontSize: 11,
+                fontWeight: 600,
+                padding: "2px 8px",
+                borderRadius: 4,
+                color: effectiveApprovalMode === "auto" ? "var(--status-succeeded)" : "var(--text-muted)",
+                background: effectiveApprovalMode === "auto"
+                  ? "color-mix(in srgb, var(--status-succeeded) 12%, transparent)"
+                  : "color-mix(in srgb, var(--text-muted) 12%, transparent)",
+              }}>
+                {effectiveApprovalMode === "auto" ? "Auto-approved" : "Requires approval"}
+              </span>
+              {resolvedApprovalMode === "auto" && (
+                <button
+                  onClick={() => setForceManualApproval((v) => !v)}
+                  style={{ fontSize: 11, color: "var(--text-muted)", background: "none", border: "none", cursor: "pointer", padding: 0, textDecoration: "underline" }}
+                >
+                  {forceManualApproval ? "Allow auto-approve" : "Require approval"}
+                </button>
+              )}
+            </div>
           </div>
         )}
 
@@ -871,6 +943,29 @@ export default function OperationAuthoringPanel({ title, preselectedArtifactId, 
               >
                 {submitting ? "Creating…" : "Create Trigger"}
               </button>
+            </div>
+            {/* Approval mode */}
+            <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{
+                fontSize: 11,
+                fontWeight: 600,
+                padding: "2px 8px",
+                borderRadius: 4,
+                color: effectiveApprovalMode === "auto" ? "var(--status-succeeded)" : "var(--text-muted)",
+                background: effectiveApprovalMode === "auto"
+                  ? "color-mix(in srgb, var(--status-succeeded) 12%, transparent)"
+                  : "color-mix(in srgb, var(--text-muted) 12%, transparent)",
+              }}>
+                {effectiveApprovalMode === "auto" ? "Auto-approved" : "Requires approval"}
+              </span>
+              {resolvedApprovalMode === "auto" && (
+                <button
+                  onClick={() => setForceManualApproval((v) => !v)}
+                  style={{ fontSize: 11, color: "var(--text-muted)", background: "none", border: "none", cursor: "pointer", padding: 0, textDecoration: "underline" }}
+                >
+                  {forceManualApproval ? "Allow auto-approve" : "Require approval"}
+                </button>
+              )}
             </div>
           </div>
         )}
