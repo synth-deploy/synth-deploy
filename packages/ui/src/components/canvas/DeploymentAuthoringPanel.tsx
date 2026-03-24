@@ -222,7 +222,7 @@ export default function OperationAuthoringPanel({ title, preselectedArtifactId, 
           <div className="section-label" style={{ marginBottom: 8 }}>Operation type</div>
           <div style={{ display: "flex", gap: 4 }}>
             {(["deploy", "maintain", "query", "investigate", "trigger"] as OpType[]).map((t) => {
-              const isAvailable = t === "deploy" || t === "query" || t === "investigate" || t === "trigger";
+              const isAvailable = t === "deploy" || t === "maintain" || t === "query" || t === "investigate" || t === "trigger";
               return (
                 <button
                   key={t}
@@ -598,8 +598,8 @@ export default function OperationAuthoringPanel({ title, preselectedArtifactId, 
               </div>
             )}
           </div>
-        ) : (opType === "query" || opType === "investigate" || opType === "trigger") ? (
-          /* Single-column Where section for query/investigate/trigger */
+        ) : (opType === "maintain" || opType === "query" || opType === "investigate" || opType === "trigger") ? (
+          /* Single-column Where section for maintain/query/investigate/trigger */
           <div style={{ marginBottom: 20 }}>
             <div className="section-label" style={{ marginBottom: 10 }}>Where</div>
 
@@ -873,8 +873,8 @@ export default function OperationAuthoringPanel({ title, preselectedArtifactId, 
           </div>
         )}
 
-        {/* Non-deploy action bar — for query and investigate */}
-        {canDeploy && (opType === "query" || opType === "investigate") && (
+        {/* Non-deploy action bar — for maintain, query, and investigate */}
+        {canDeploy && (opType === "maintain" || opType === "query" || opType === "investigate") && (
           <div className="nd-action-bar">
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <div>
@@ -894,6 +894,8 @@ export default function OperationAuthoringPanel({ title, preselectedArtifactId, 
               >
                 {submitting
                   ? "Running…"
+                  : opType === "maintain"
+                  ? "Plan Maintenance"
                   : opType === "query"
                   ? "Run Query"
                   : "Begin Investigation"}
