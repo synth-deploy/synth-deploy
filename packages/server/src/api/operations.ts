@@ -86,7 +86,7 @@ export function registerOperationRoutes(
       : operationType === "trigger"
         ? { type: "trigger" as const, condition: condition ?? intent ?? "", responseIntent: responseIntent ?? intent ?? "" }
         : operationType === "composite"
-          ? { type: "composite" as const, operations: [] }
+          ? { type: "composite" as const, operations: (parsed.data.operations ?? []) as import("@synth-deploy/core").OperationInput[] }
           : operationType === "investigate"
             ? { type: "investigate" as const, intent: intent ?? "", ...(allowWrite !== undefined ? { allowWrite } : {}) }
             : { type: operationType as "maintain" | "query", intent: intent ?? "" };
@@ -123,6 +123,12 @@ export function registerOperationRoutes(
         const environmentForPlanning = environment
           ? { id: environment.id, name: environment.name, variables: environment.variables }
           : { id: `direct:${planningEnvoy.id}`, name: planningEnvoy.name, variables: {} };
+
+        // Composite: orchestrate child planning separately — do not send composite to envoy directly
+        if (deployment.input.type === "composite") {
+          planCompositeChildren(deployment, envoyRegistry, planningEnvoy);
+          return;
+        }
 
         planningClient.requestPlan({
           operationId: deployment.id,
@@ -445,6 +451,28 @@ export function registerOperationRoutes(
           ? { modifications: parsed.data.modifications }
           : { planStepCount: deployment.plan?.steps.length ?? 0 },
       });
+
+      // Composite operations: execute children sequentially
+      if (deployment.input.type === "composite") {
+        deployment.status = "running" as typeof deployment.status;
+        deployments.save(deployment);
+
+        const compositeChildren = deployments.list()
+          .filter((d) => d.lineage === deployment.id)
+          .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+        // Approve all children before executing sequentially
+        for (const child of compositeChildren) {
+          child.approvedBy = parsed.data.approvedBy;
+          child.approvedAt = new Date();
+          child.status = "approved" as typeof child.status;
+          deployments.save(child);
+        }
+
+        executeCompositeSequentially(deployment.id, compositeChildren.map((c) => c.id));
+
+        return { deployment, approved: true };
+      }
 
       // Trigger operations: install monitoring directive on envoy
       if (deployment.input.type === "trigger" && deployment.monitoringDirective && envoyRegistry) {
@@ -1730,6 +1758,385 @@ export function registerOperationRoutes(
       return { operation: op, disabled: true };
     },
   );
+
+  // ---------------------------------------------------------------------------
+  // Composite operation helpers — defined inside registerOperationRoutes so
+  // they close over the stores and registry.
+  // ---------------------------------------------------------------------------
+
+  async function planCompositeChildren(
+    parentOp: import("@synth-deploy/core").Operation,
+    registry: EnvoyRegistry,
+    planningEnvoy: { id: string; name: string; url: string },
+  ): Promise<void> {
+    const compositeInput = parentOp.input as { type: "composite"; operations: import("@synth-deploy/core").OperationInput[] };
+    const childInputs = compositeInput.operations;
+
+    if (childInputs.length === 0) {
+      const dep = deployments.get(parentOp.id);
+      if (dep) {
+        dep.status = "failed" as typeof dep.status;
+        dep.failureReason = "Composite operation has no child operations";
+        deployments.save(dep);
+      }
+      return;
+    }
+
+    const childIds: string[] = [];
+    const environment = parentOp.environmentId ? environments.get(parentOp.environmentId) : undefined;
+    const partition = parentOp.partitionId ? partitions.get(parentOp.partitionId) : undefined;
+
+    for (const childInput of childInputs) {
+      const childOp = {
+        id: crypto.randomUUID(),
+        input: childInput,
+        intent: "intent" in childInput ? (childInput as { intent: string }).intent
+          : childInput.type === "trigger" ? `Monitor: ${(childInput as { condition: string }).condition}`
+          : undefined,
+        lineage: parentOp.id,
+        triggeredBy: "agent" as const,
+        environmentId: parentOp.environmentId,
+        partitionId: parentOp.partitionId,
+        envoyId: planningEnvoy.id,
+        version: parentOp.version ?? "",
+        status: "pending" as const,
+        variables: parentOp.variables,
+        debriefEntryIds: [] as string[],
+        createdAt: new Date(),
+      };
+      deployments.save(childOp);
+      childIds.push(childOp.id);
+    }
+
+    debrief.record({
+      partitionId: parentOp.partitionId ?? null,
+      operationId: parentOp.id,
+      agent: "server",
+      decisionType: "composite-plan-generation" as Parameters<typeof debrief.record>[0]["decisionType"],
+      decision: `Composite operation planning ${childIds.length} child operation(s) sequentially`,
+      reasoning: `Sequential composite: ${childInputs.map((c) => c.type).join(" → ")}`,
+      context: { childIds, childCount: childIds.length, sequence: childInputs.map((c) => c.type) },
+    });
+
+    const environmentForPlanning = environment
+      ? { id: environment.id, name: environment.name, variables: environment.variables }
+      : { id: `direct:${planningEnvoy.id}`, name: planningEnvoy.name, variables: {} };
+
+    let anyFailed = false;
+
+    for (const childId of childIds) {
+      const child = deployments.get(childId);
+      if (!child) continue;
+      const childInput = child.input;
+
+      const childArtifact = childInput.type === "deploy"
+        ? artifactStore.get((childInput as { artifactId: string }).artifactId)
+        : undefined;
+
+      const planningClient = new EnvoyClient(planningEnvoy.url);
+
+      try {
+        const result = await planningClient.requestPlan({
+          operationId: childId,
+          operationType: childInput.type as "deploy" | "query" | "investigate" | "maintain" | "trigger",
+          intent: "intent" in childInput ? (childInput as { intent?: string }).intent
+            : childInput.type === "trigger" ? `Monitor: ${(childInput as { condition: string }).condition}`
+            : undefined,
+          ...(childArtifact ? {
+            artifact: {
+              id: childArtifact.id,
+              name: childArtifact.name,
+              type: childArtifact.type,
+              analysis: childArtifact.analysis,
+            },
+          } : {}),
+          ...(childInput.type === "investigate" && "allowWrite" in childInput
+            ? { allowWrite: (childInput as { allowWrite?: boolean }).allowWrite }
+            : {}),
+          environment: environmentForPlanning,
+          partition: partition ? { id: partition.id, name: partition.name, variables: partition.variables } : undefined,
+          version: parentOp.version ?? "",
+          resolvedVariables: parentOp.variables,
+        });
+
+        const childDep = deployments.get(childId);
+        if (!childDep) continue;
+
+        if (result.blocked) {
+          childDep.status = "failed" as typeof childDep.status;
+          childDep.failureReason = result.blockReason ?? "Plan blocked";
+          deployments.save(childDep);
+          anyFailed = true;
+
+          const parentDep = deployments.get(parentOp.id);
+          if (parentDep && parentDep.status === "pending") {
+            parentDep.status = "failed" as typeof parentDep.status;
+            parentDep.failureReason = `Child operation (${childInput.type}) plan blocked: ${childDep.failureReason}`;
+            deployments.save(parentDep);
+            debrief.record({
+              partitionId: parentDep.partitionId ?? null,
+              operationId: parentDep.id,
+              agent: "server",
+              decisionType: "composite-child-failed" as Parameters<typeof debrief.record>[0]["decisionType"],
+              decision: `Child operation planning blocked — composite cannot proceed`,
+              reasoning: childDep.failureReason,
+              context: { childId, childType: childInput.type },
+            });
+          }
+          break;
+        }
+
+        childDep.plan = result.plan;
+        childDep.rollbackPlan = result.rollbackPlan;
+        childDep.envoyId = planningEnvoy.id;
+        if (childInput.type === "query" && result.queryFindings) childDep.queryFindings = result.queryFindings;
+        if (childInput.type === "investigate" && result.investigationFindings) childDep.investigationFindings = result.investigationFindings;
+        childDep.status = "awaiting_approval" as typeof childDep.status;
+        deployments.save(childDep);
+
+        debrief.record({
+          partitionId: childDep.partitionId ?? null,
+          operationId: childDep.id,
+          agent: "envoy",
+          decisionType: "plan-generation" as Parameters<typeof debrief.record>[0]["decisionType"],
+          decision: `Child operation plan generated with ${result.plan.steps.length} steps`,
+          reasoning: result.plan.reasoning,
+          context: { stepCount: result.plan.steps.length, envoyId: planningEnvoy.id, parentOperationId: parentOp.id },
+        });
+      } catch (err) {
+        const childDep = deployments.get(childId);
+        if (childDep) {
+          childDep.status = "failed" as typeof childDep.status;
+          childDep.failureReason = err instanceof Error ? err.message : "Planning failed";
+          deployments.save(childDep);
+        }
+        anyFailed = true;
+
+        const parentDep = deployments.get(parentOp.id);
+        if (parentDep && parentDep.status === "pending") {
+          parentDep.status = "failed" as typeof parentDep.status;
+          parentDep.failureReason = `Child operation (${childInput.type}) planning failed: ${err instanceof Error ? err.message : "unknown error"}`;
+          deployments.save(parentDep);
+          debrief.record({
+            partitionId: parentDep.partitionId ?? null,
+            operationId: parentDep.id,
+            agent: "server",
+            decisionType: "composite-child-failed" as Parameters<typeof debrief.record>[0]["decisionType"],
+            decision: `Child operation planning failed — composite cannot proceed`,
+            reasoning: parentDep.failureReason!,
+            context: { childId, childType: childInput.type, error: parentDep.failureReason },
+          });
+        }
+        break;
+      }
+    }
+
+    if (!anyFailed) {
+      // All children planned — build combined summary plan and await approval
+      const allChildren = childIds.map((id) => deployments.get(id)).filter(Boolean) as import("@synth-deploy/core").Operation[];
+
+      const combinedSteps = allChildren.flatMap((c, idx) => {
+        if (!c.plan) return [];
+        return c.plan.steps.map((step) => ({
+          ...step,
+          description: `[${idx + 1}/${allChildren.length}: ${c.input.type}] ${step.description}`,
+        }));
+      });
+
+      const combinedReasoning = allChildren.map((c, idx) =>
+        `Step ${idx + 1} (${c.input.type}): ${c.plan?.reasoning ?? "no reasoning"}`
+      ).join("\n\n");
+
+      const parentDep = deployments.get(parentOp.id);
+      if (parentDep && parentDep.status === "pending") {
+        parentDep.plan = { steps: combinedSteps, reasoning: combinedReasoning };
+        parentDep.rollbackPlan = { steps: [], reasoning: "Child operations handle their own rollback" };
+        parentDep.status = "awaiting_approval" as typeof parentDep.status;
+        parentDep.recommendation = computeRecommendation(parentDep, deployments);
+        deployments.save(parentDep);
+
+        debrief.record({
+          partitionId: parentDep.partitionId ?? null,
+          operationId: parentDep.id,
+          agent: "server",
+          decisionType: "composite-plan-generation" as Parameters<typeof debrief.record>[0]["decisionType"],
+          decision: `All ${allChildren.length} child plans ready — composite awaiting approval`,
+          reasoning: combinedReasoning,
+          context: { childIds, totalSteps: combinedSteps.length },
+        });
+      }
+    }
+  }
+
+  async function executeCompositeSequentially(
+    parentId: string,
+    childIds: string[],
+  ): Promise<void> {
+    const parentOp = deployments.get(parentId);
+    if (!parentOp) return;
+
+    debrief.record({
+      partitionId: parentOp.partitionId ?? null,
+      operationId: parentOp.id,
+      agent: "server",
+      decisionType: "composite-child-started" as Parameters<typeof debrief.record>[0]["decisionType"],
+      decision: `Starting sequential execution of ${childIds.length} child operations`,
+      reasoning: `Composite operation approved — executing children in order`,
+      context: { childIds, totalChildren: childIds.length },
+    });
+
+    for (let i = 0; i < childIds.length; i++) {
+      const childId = childIds[i];
+      const child = deployments.get(childId);
+      if (!child || !child.plan || !child.rollbackPlan) {
+        const dep = deployments.get(parentId);
+        if (dep) {
+          dep.status = "failed" as typeof dep.status;
+          dep.failureReason = `Child operation ${i + 1} has no plan — cannot execute`;
+          deployments.save(dep);
+          debrief.record({
+            partitionId: dep.partitionId ?? null,
+            operationId: dep.id,
+            agent: "server",
+            decisionType: "composite-child-failed" as Parameters<typeof debrief.record>[0]["decisionType"],
+            decision: `Child operation ${i + 1} missing plan — composite failed`,
+            reasoning: dep.failureReason!,
+            context: { childId, childIndex: i },
+          });
+        }
+        return;
+      }
+
+      const targetEnvoy = child.envoyId ? envoyRegistry?.get(child.envoyId) : envoyRegistry?.list()[0];
+      if (!targetEnvoy || !envoyClient) {
+        const dep = deployments.get(parentId);
+        if (dep) {
+          dep.status = "failed" as typeof dep.status;
+          dep.failureReason = `No envoy available for child operation ${i + 1}`;
+          deployments.save(dep);
+        }
+        return;
+      }
+
+      child.status = "running" as typeof child.status;
+      deployments.save(child);
+
+      debrief.record({
+        partitionId: child.partitionId ?? null,
+        operationId: child.id,
+        agent: "server",
+        decisionType: "composite-child-started" as Parameters<typeof debrief.record>[0]["decisionType"],
+        decision: `Executing child operation ${i + 1}/${childIds.length} (${child.input.type})`,
+        reasoning: `Sequential composite execution — child ${i + 1} of ${childIds.length}`,
+        context: { childId, childIndex: i, parentOperationId: parentId, childType: child.input.type },
+      });
+
+      const artifact = artifactStore.get(getArtifactId(child) ?? "");
+      const serverPort = process.env.PORT ?? "9410";
+      const serverUrl = process.env.SYNTH_SERVER_URL ?? `http://localhost:${serverPort}`;
+      const progressCallbackUrl = `${serverUrl}/api/operations/${child.id}/progress`;
+      const callbackToken = envoyRegistry?.list().find((r) => r.url === (targetEnvoy as { url: string }).url)?.token;
+
+      const childEnvoyClient = new EnvoyClient((targetEnvoy as { url: string }).url);
+
+      try {
+        await childEnvoyClient.executeApprovedPlan({
+          operationId: child.id,
+          plan: child.plan,
+          rollbackPlan: child.rollbackPlan,
+          artifactType: artifact?.type ?? "unknown",
+          artifactName: artifact?.name ?? "unknown",
+          environmentId: child.environmentId ?? "",
+          progressCallbackUrl,
+          callbackToken,
+        });
+      } catch (err) {
+        const dep = deployments.get(parentId);
+        if (dep) {
+          dep.status = "failed" as typeof dep.status;
+          dep.failureReason = `Child operation ${i + 1} (${child.input.type}) execution dispatch failed: ${err instanceof Error ? err.message : "unknown error"}`;
+          deployments.save(dep);
+          debrief.record({
+            partitionId: dep.partitionId ?? null,
+            operationId: dep.id,
+            agent: "server",
+            decisionType: "composite-child-failed" as Parameters<typeof debrief.record>[0]["decisionType"],
+            decision: `Child operation ${i + 1} execution dispatch failed`,
+            reasoning: dep.failureReason!,
+            context: { childId, childIndex: i, error: dep.failureReason },
+          });
+        }
+        return;
+      }
+
+      // Wait for child to complete (poll every 2 seconds, 5-minute timeout)
+      const timeoutMs = 300_000;
+      const pollIntervalMs = 2_000;
+      const start = Date.now();
+      let childSucceeded = false;
+
+      while (Date.now() - start < timeoutMs) {
+        await new Promise<void>((resolve) => setTimeout(resolve, pollIntervalMs));
+        const updated = deployments.get(childId);
+        if (updated?.status === "succeeded") {
+          childSucceeded = true;
+          break;
+        }
+        if (updated?.status === "failed" || updated?.status === "rolled_back") {
+          break;
+        }
+      }
+
+      const finalChild = deployments.get(childId);
+      if (!childSucceeded) {
+        const reason = finalChild?.failureReason ?? `Child operation ${i + 1} did not complete in time`;
+        const dep = deployments.get(parentId);
+        if (dep) {
+          dep.status = "failed" as typeof dep.status;
+          dep.failureReason = `Composite stopped at step ${i + 1}/${childIds.length} (${child.input.type}): ${reason}`;
+          dep.completedAt = new Date();
+          deployments.save(dep);
+          debrief.record({
+            partitionId: dep.partitionId ?? null,
+            operationId: dep.id,
+            agent: "server",
+            decisionType: "composite-child-failed" as Parameters<typeof debrief.record>[0]["decisionType"],
+            decision: `Composite stopped at child ${i + 1}/${childIds.length} — ${child.input.type} failed`,
+            reasoning: dep.failureReason!,
+            context: { childId, childIndex: i, failedChildType: child.input.type, completedChildren: i },
+          });
+        }
+        return;
+      }
+
+      debrief.record({
+        partitionId: finalChild?.partitionId ?? null,
+        operationId: childId,
+        agent: "server",
+        decisionType: "composite-child-completed" as Parameters<typeof debrief.record>[0]["decisionType"],
+        decision: `Child operation ${i + 1}/${childIds.length} (${child.input.type}) completed successfully`,
+        reasoning: `Child execution succeeded — proceeding to next child`,
+        context: { childId, childIndex: i, parentOperationId: parentId },
+      });
+    }
+
+    // All children succeeded
+    const dep = deployments.get(parentId);
+    if (dep) {
+      dep.status = "succeeded" as typeof dep.status;
+      dep.completedAt = new Date();
+      deployments.save(dep);
+      debrief.record({
+        partitionId: dep.partitionId ?? null,
+        operationId: dep.id,
+        agent: "server",
+        decisionType: "composite-completed" as Parameters<typeof debrief.record>[0]["decisionType"],
+        decision: `Composite operation completed — all ${childIds.length} child operations succeeded`,
+        reasoning: `All child operations executed successfully in sequence`,
+        context: { childIds, totalChildren: childIds.length },
+      });
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------

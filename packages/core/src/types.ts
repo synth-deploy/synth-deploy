@@ -353,6 +353,11 @@ export const DecisionType = z.enum([
   "health-report-received",
   "alert-webhook-received",
   "alert-webhook-suppressed",
+  "composite-plan-generation",
+  "composite-child-started",
+  "composite-child-completed",
+  "composite-child-failed",
+  "composite-completed",
 ]);
 export type DecisionType = z.infer<typeof DecisionType>;
 
