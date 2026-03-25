@@ -184,11 +184,12 @@ function DeploymentDebriefDetail({ deploymentId, onBack, onNavigate }: { deploym
   if (!deployment) return <div className="error-msg">Deployment not found</div>;
 
   const safeAllDeployments = allDeployments ?? [];
+  const depArtifactId = deployment.artifactId ?? (deployment.input?.type === "deploy" ? deployment.input.artifactId : undefined);
   const artName = deployment.input?.type === "trigger"
     ? (deployment.monitoringDirective?.condition ?? deployment.intent ?? "Trigger")
     : deployment.input?.type && deployment.input.type !== "deploy"
       ? (deployment.intent ?? deployment.input.type)
-      : ((artifacts ?? []).find((a) => a.id === deployment.artifactId)?.name ?? deployment.artifactId?.slice(0, 8) ?? "—");
+      : ((artifacts ?? []).find((a) => a.id === depArtifactId)?.name ?? depArtifactId?.slice(0, 8) ?? "—");
   const envName = (environments ?? []).find((e) => e.id === deployment.environmentId)?.name ?? deployment.environmentId?.slice(0, 8) ?? "—";
   const partName = deployment.partitionId
     ? ((partitions ?? []).find((p) => p.id === deployment.partitionId)?.name ?? null)
@@ -1012,11 +1013,12 @@ export default function DebriefPanel({ title, filterPartitionId, filterDecisionT
   const FINISHED_STATUSES = new Set(["succeeded", "failed", "rolled_back"]);
 
   function renderDeploymentRow(dep: Deployment) {
+    const rowArtifactId = dep.artifactId ?? (dep.input?.type === "deploy" ? dep.input.artifactId : undefined);
     const artName = dep.input?.type === "trigger"
       ? (dep.monitoringDirective?.condition ?? dep.intent ?? "Trigger")
       : dep.input?.type && dep.input.type !== "deploy"
         ? (dep.intent ?? dep.input.type)
-        : ((artifacts ?? []).find((a) => a.id === dep.artifactId)?.name ?? dep.artifactId?.slice(0, 8) ?? "—");
+        : ((artifacts ?? []).find((a) => a.id === rowArtifactId)?.name ?? rowArtifactId?.slice(0, 8) ?? "—");
     const envName = (environments ?? []).find((e) => e.id === dep.environmentId)?.name ?? dep.environmentId?.slice(0, 8) ?? "—";
     const duration = formatDuration(dep.createdAt, dep.completedAt);
     const isFinished = FINISHED_STATUSES.has(dep.status);

@@ -1123,7 +1123,8 @@ export default function OperationAuthoringPanel({ title, preselectedArtifactId, 
                 .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
                 .slice(0, 5)
                 .map((dep) => {
-                  const art = artList.find((a) => a.id === dep.artifactId);
+                    const depArtifactId = dep.artifactId ?? (dep.input?.type === "deploy" ? dep.input.artifactId : undefined);
+                  const art = artList.find((a) => a.id === depArtifactId);
                   const env = (environments ?? []).find((e) => e.id === dep.environmentId);
                   const isAwaiting = dep.status === "awaiting_approval";
                   const statusColors: Record<string, string> = {
@@ -1160,7 +1161,7 @@ export default function OperationAuthoringPanel({ title, preselectedArtifactId, 
                       <span style={{ width: 7, height: 7, borderRadius: "50%", background: statusColor, flexShrink: 0 }} />
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>
-                          {art?.name ?? dep.artifactId?.slice(0, 8) ?? dep.intent ?? dep.input?.type ?? "—"}
+                          {art?.name ?? depArtifactId?.slice(0, 8) ?? dep.intent ?? dep.input?.type ?? "—"}
                         </span>
                         {env && (
                           <span style={{ fontSize: 12, color: "var(--text-muted)", marginLeft: 6 }}>

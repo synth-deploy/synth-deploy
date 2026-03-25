@@ -69,7 +69,7 @@ export default function DeploymentDetail() {
           <div className="deploy-header-meta">
             <div className="meta-item">
               <span className="meta-label">Artifact</span>
-              <span className="meta-value">{artifact?.name ?? deployment.artifactId.slice(0, 8)}</span>
+              <span className="meta-value">{artifact?.name ?? deployment.artifactId?.slice(0, 8) ?? "—"}</span>
             </div>
             {partition && (
               <div className="meta-item">
