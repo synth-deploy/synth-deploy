@@ -2,10 +2,10 @@
 import DocsLayout from "../../layouts/DocsLayout.astro";
 
 const installScript = `# Install both the Synth server and Envoy
-curl -fsSL https://raw.githubusercontent.com/synth-deploy/synth-deploy/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/synth-deploy/synth/main/install.sh | bash
 
 # Or clone and run locally
-git clone https://github.com/synth-deploy/synth-deploy.git
+git clone https://github.com/synth-deploy/synth.git
 cd synth-deploy
 ./install.sh --local`;
 
@@ -19,7 +19,7 @@ Options:
   --server-url <url>  Synth server URL for Envoy (default: http://localhost:9410)`;
 
 const dockerStart = `# Clone the repository
-git clone https://github.com/synth-deploy/synth-deploy.git
+git clone https://github.com/synth-deploy/synth.git
 cd synth-deploy
 
 # Start both services

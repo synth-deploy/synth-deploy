@@ -8,7 +8,7 @@ set -euo pipefail
 COMPONENT="all"
 INSTALL_DIR="/opt/synth"
 DATA_DIR="/var/lib/synth"
-REPO_URL="https://github.com/synth-deploy/synth-deploy.git"
+REPO_URL="https://github.com/synth-deploy/synth.git"
 USE_LOCAL=false
 SERVER_PORT=9410
 ENVOY_PORT=9411

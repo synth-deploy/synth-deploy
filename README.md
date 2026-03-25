@@ -136,7 +136,7 @@ Synth server at `http://localhost:3000`, Envoy at `http://localhost:3001`.
 Requires Node.js 22+.
 
 ```bash
-git clone https://github.com/synth-deploy/synth-deploy.git
+git clone https://github.com/synth-deploy/synth.git
 cd synth-deploy
 npm install && npm run build
 

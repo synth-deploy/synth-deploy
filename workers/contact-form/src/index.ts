@@ -177,7 +177,7 @@ function buildConfirmationHtml(submission: FormSubmission): string {
         ${typeMessage}
       </p>
       <p style="color:#9a9790;font-size:14px;line-height:1.6;margin:0;">
-        In the meantime, feel free to check out the <a href="https://github.com/synth-deploy/synth-deploy" style="color:#6b8aff;text-decoration:none;">source on GitHub</a> or browse the <a href="https://synthdeploy.com/docs" style="color:#6b8aff;text-decoration:none;">documentation</a>.
+        In the meantime, feel free to check out the <a href="https://github.com/synth-deploy/synth" style="color:#6b8aff;text-decoration:none;">source on GitHub</a> or browse the <a href="https://synthdeploy.com/docs" style="color:#6b8aff;text-decoration:none;">documentation</a>.
       </p>
     </div>
     <div style="margin-top:24px;color:#6a6660;font-size:12px;">
