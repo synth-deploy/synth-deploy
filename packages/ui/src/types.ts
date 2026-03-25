@@ -285,11 +285,11 @@ export interface DeploymentEnrichment {
 
 export interface Deployment {
   id: string;
-  artifactId: string;
+  artifactId?: string;
   artifactVersionId?: string;
   envoyId?: string;
   partitionId?: string;
-  environmentId: string;
+  environmentId?: string;
   version: string;
   status: DeploymentStatus;
   variables: Record<string, string>;

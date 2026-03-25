@@ -85,7 +85,7 @@ export default function EnvironmentDetailPanel({ environmentId, title }: Props) 
 
   // Stat card: Artifacts Deployed (unique artifacts with a succeeded deployment)
   const succeededDeps = deployments.filter((d) => d.status === "succeeded");
-  const deployedArtifactIds = [...new Set(succeededDeps.map((d) => d.artifactId))];
+  const deployedArtifactIds = [...new Set(succeededDeps.map((d) => d.artifactId).filter((id): id is string => !!id))];
   const deployedArtifacts = deployedArtifactIds
     .map((id) => (artifacts ?? []).find((a) => a.id === id)?.name ?? id.slice(0, 8))
     .slice(0, 4);
@@ -101,24 +101,23 @@ export default function EnvironmentDetailPanel({ environmentId, title }: Props) 
   // Stat card: Last Deployment
   const sorted = [...deployments].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   const lastDep = sorted[0];
-  const lastDepArtifact = lastDep ? (artifacts ?? []).find((a) => a.id === lastDep.artifactId)?.name ?? lastDep.artifactId.slice(0, 8) : null;
+  const lastDepArtifact = lastDep ? (artifacts ?? []).find((a) => a.id === lastDep.artifactId)?.name ?? lastDep.artifactId?.slice(0, 8) ?? lastDep.intent ?? "—" : null;
   const lastDepEnvoy = lastDep?.envoyId ? (envoys ?? []).find((e) => e.id === lastDep.envoyId)?.name ?? lastDep.envoyId.slice(0, 8) : null;
 
   // Currently Deployed: most recent succeeded deployment per artifactId
   const currentlyDeployed: Array<{ artifact: string; version: string; envoy: string | null; deployedAt: string; health: string }> = [];
   const seenArtifacts = new Set<string>();
   for (const d of succeededDeps.slice().sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())) {
-    if (!seenArtifacts.has(d.artifactId)) {
-      seenArtifacts.add(d.artifactId);
-      const envoy = d.envoyId ? (envoys ?? []).find((e) => e.id === d.envoyId) : null;
-      currentlyDeployed.push({
-        artifact: (artifacts ?? []).find((a) => a.id === d.artifactId)?.name ?? d.artifactId.slice(0, 8),
-        version: d.version,
-        envoy: envoy?.name ?? null,
-        deployedAt: timeAgo(d.createdAt),
-        health: envoy?.health === "OK" ? "healthy" : envoy?.health === "Degraded" ? "degraded" : "unknown",
-      });
-    }
+    if (!d.artifactId || seenArtifacts.has(d.artifactId)) continue;
+    seenArtifacts.add(d.artifactId);
+    const envoy = d.envoyId ? (envoys ?? []).find((e) => e.id === d.envoyId) : null;
+    currentlyDeployed.push({
+      artifact: (artifacts ?? []).find((a) => a.id === d.artifactId)?.name ?? d.artifactId?.slice(0, 8) ?? d.intent ?? "—",
+      version: d.version,
+      envoy: envoy?.name ?? null,
+      deployedAt: timeAgo(d.createdAt),
+      health: envoy?.health === "OK" ? "healthy" : envoy?.health === "Degraded" ? "degraded" : "unknown",
+    });
   }
 
   const vars = Object.entries(environment.variables ?? {});
@@ -359,7 +358,7 @@ export default function EnvironmentDetailPanel({ environmentId, title }: Props) 
                     onClick={() => pushPanel({ type: "deployment-detail", title: `Deployment ${d.version}`, params: { id: d.id } })}
                   >
                     <div style={{ flex: 1, display: "flex", alignItems: "baseline", gap: 8 }}>
-                      <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>{artifact?.name ?? d.artifactId.slice(0, 8)}</span>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>{artifact?.name ?? d.artifactId?.slice(0, 8) ?? d.intent ?? "—"}</span>
                       <span style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>{d.version}</span>
                       {envoy && (
                         <>

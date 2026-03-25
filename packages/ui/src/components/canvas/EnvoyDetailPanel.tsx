@@ -246,6 +246,7 @@ export default function EnvoyDetailPanel({ envoyId, title }: Props) {
   const latestByArtifact = new Map<string, Deployment>();
   for (const d of allDeployments) {
     if (d.status === "succeeded") {
+      if (!d.artifactId) continue;
       const existing = latestByArtifact.get(d.artifactId);
       if (!existing || new Date(d.completedAt ?? d.createdAt) > new Date(existing.completedAt ?? existing.createdAt)) {
         latestByArtifact.set(d.artifactId, d);
@@ -448,7 +449,7 @@ export default function EnvoyDetailPanel({ envoyId, title }: Props) {
                   <div style={{ flex: 1 }}>
                     <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
                       <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>
-                        {artifactMap.get(d.artifactId) ?? d.artifactId}
+                        {(d.artifactId ? artifactMap.get(d.artifactId) : undefined) ?? d.artifactId ?? d.intent ?? "—"}
                       </span>
                       <span style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>{d.version}</span>
                     </div>
@@ -478,7 +479,7 @@ export default function EnvoyDetailPanel({ envoyId, title }: Props) {
           <div className="section-label">Recent Plans</div>
           <div style={{ borderRadius: 10, overflow: "hidden", border: "1px solid var(--border)", background: "var(--surface)" }}>
             {recentPlans.map((d, i, arr) => {
-              const artifactName = artifactMap.get(d.artifactId) ?? d.artifactId;
+              const artifactName = (d.artifactId ? artifactMap.get(d.artifactId) : undefined) ?? d.artifactId ?? d.intent ?? "—";
               const stepCount = d.plan?.steps.length;
               const execStart = d.executionRecord?.startedAt;
               const execEnd = d.executionRecord?.completedAt;

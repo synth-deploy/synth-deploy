@@ -184,7 +184,11 @@ function DeploymentDebriefDetail({ deploymentId, onBack, onNavigate }: { deploym
   if (!deployment) return <div className="error-msg">Deployment not found</div>;
 
   const safeAllDeployments = allDeployments ?? [];
-  const artName = (artifacts ?? []).find((a) => a.id === deployment.artifactId)?.name ?? deployment.artifactId.slice(0, 8);
+  const artName = deployment.input?.type === "trigger"
+    ? (deployment.monitoringDirective?.condition ?? deployment.intent ?? "Trigger")
+    : deployment.input?.type && deployment.input.type !== "deploy"
+      ? (deployment.intent ?? deployment.input.type)
+      : ((artifacts ?? []).find((a) => a.id === deployment.artifactId)?.name ?? deployment.artifactId?.slice(0, 8) ?? "—");
   const envName = (environments ?? []).find((e) => e.id === deployment.environmentId)?.name ?? deployment.environmentId?.slice(0, 8) ?? "—";
   const partName = deployment.partitionId
     ? ((partitions ?? []).find((p) => p.id === deployment.partitionId)?.name ?? null)
@@ -245,7 +249,9 @@ function DeploymentDebriefDetail({ deploymentId, onBack, onNavigate }: { deploym
 
   // Helper to describe a deployment for attempt chain links
   function attemptLabel(dep: Deployment): string {
-    const aName = (artifacts ?? []).find((a) => a.id === dep.artifactId)?.name ?? dep.artifactId.slice(0, 8);
+    const aName = dep.input?.type && dep.input.type !== "deploy"
+      ? (dep.intent ?? dep.input.type)
+      : ((artifacts ?? []).find((a) => a.id === dep.artifactId)?.name ?? dep.artifactId?.slice(0, 8) ?? "—");
     const eName = (environments ?? []).find((e) => e.id === dep.environmentId)?.name ?? dep.environmentId?.slice(0, 8) ?? "—";
     return `${aName} ${dep.version} → ${eName}`;
   }
@@ -311,14 +317,14 @@ function DeploymentDebriefDetail({ deploymentId, onBack, onNavigate }: { deploym
         <span style={{ fontSize: 12, color: "var(--text-muted)" }}>›</span>
         <span
           style={{ fontSize: 13, color: "var(--accent)", cursor: "pointer", fontWeight: 500 }}
-          onClick={() => pushPanel({ type: "artifact-detail", title: artName, params: { artifactId: deployment.artifactId } })}
+          onClick={() => deployment.artifactId && pushPanel({ type: "artifact-detail", title: artName, params: { artifactId: deployment.artifactId } })}
         >
           {artName}
         </span>
         <span style={{ fontSize: 12, color: "var(--text-muted)" }}>›</span>
         <span
           style={{ fontSize: 13, color: "var(--accent)", cursor: "pointer", fontWeight: 500 }}
-          onClick={() => pushPanel({ type: "environment-detail", title: envName, params: { id: deployment.environmentId } })}
+          onClick={() => deployment.environmentId && pushPanel({ type: "environment-detail", title: envName, params: { id: deployment.environmentId } })}
         >
           {envName}
         </span>

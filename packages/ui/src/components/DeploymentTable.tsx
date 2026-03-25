@@ -54,7 +54,7 @@ export default function DeploymentTable({ deployments, environments = [], artifa
         </thead>
         <tbody>
           {deployments.map((d) => {
-            const env = envMap.get(d.environmentId);
+            const env = d.environmentId ? envMap.get(d.environmentId) : undefined;
             return (
               <tr key={d.id} onClick={onClickDeployment ? () => onClickDeployment(d.id) : undefined} style={onClickDeployment ? { cursor: "pointer" } : undefined}>
                 <td>
@@ -63,7 +63,7 @@ export default function DeploymentTable({ deployments, environments = [], artifa
                 <td className="mono">{d.version}</td>
                 {showArtifact && (
                   <td>
-                    {artifactMap.get(d.artifactId)?.name ?? d.artifactId.slice(0, 8)}
+                    {(d.artifactId ? artifactMap.get(d.artifactId)?.name : undefined) ?? d.artifactId?.slice(0, 8) ?? d.intent ?? "—"}
                   </td>
                 )}
                 <td>

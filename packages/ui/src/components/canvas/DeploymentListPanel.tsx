@@ -73,7 +73,7 @@ export default function DeploymentListPanel({ title, filterStatus, filterPartiti
                 <span className={`badge badge-${d.status}`}>{d.status}</span>
                 <span className="canvas-activity-version">{d.version}</span>
                 <span className="canvas-activity-artifact">
-                  {(artifacts ?? []).find((a) => a.id === d.artifactId)?.name ?? d.artifactId.slice(0, 8)}
+                  {(artifacts ?? []).find((a) => a.id === d.artifactId)?.name ?? d.artifactId?.slice(0, 8) ?? d.intent ?? "—"}
                 </span>
                 <span className="canvas-activity-partition">
                   {d.partitionId

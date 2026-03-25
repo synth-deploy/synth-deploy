@@ -673,7 +673,7 @@ function NormalState({ stats: _stats, signals, assessment }: { stats: SystemStat
           </div>
           <div style={{ borderRadius: 10, overflow: "hidden", border: "1px solid var(--border)", background: "var(--surface)" }}>
             {recentDeploys.map((d, i) => {
-              const artName = artifacts.find((a) => a.id === d.artifactId)?.name ?? d.artifactId.slice(0, 8);
+              const artName = artifacts.find((a) => a.id === d.artifactId)?.name ?? d.artifactId?.slice(0, 8) ?? d.intent ?? "—";
               const envName = environments.find((e) => e.id === d.environmentId)?.name ?? d.environmentId?.slice(0, 8) ?? "—";
               return (
                 <div

@@ -574,7 +574,7 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
                     <div className={`v2-deploy-dot v2-deploy-${d.status}`} />
                     <div className="v2-deploy-info">
                       <span className="v2-deploy-version">{d.version}</span>
-                      <span className="v2-deploy-env">{envNameMap[d.environmentId] ?? d.environmentId}</span>
+                      <span className="v2-deploy-env">{(d.environmentId ? envNameMap[d.environmentId] : undefined) ?? d.environmentId ?? "—"}</span>
                     </div>
                     <span className="v2-deploy-time">{new Date(d.createdAt).toLocaleString()}</span>
                     <div className={`v2-deploy-status-pill v2-pill-${d.status}`}>{d.status}</div>

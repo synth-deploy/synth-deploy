@@ -234,8 +234,10 @@ export default function DeploymentDetailPanel({ deploymentId, title }: Props) {
 
   if (!deployment) return null;
 
-  const envName = (environments ?? []).find((e) => e.id === deployment.environmentId)?.name ?? deployment.environmentId;
-  const artName = (artifacts ?? []).find((a) => a.id === deployment.artifactId)?.name ?? deployment.artifactId.slice(0, 8);
+  const envName = (environments ?? []).find((e) => e.id === deployment.environmentId)?.name ?? deployment.environmentId ?? "—";
+  const artName = deployment.input?.type && deployment.input.type !== "deploy"
+    ? (deployment.intent ?? deployment.input.type)
+    : ((artifacts ?? []).find((a) => a.id === deployment.artifactId)?.name ?? deployment.artifactId?.slice(0, 8) ?? "—");
   const partName = deployment.partitionId
     ? ((partitions ?? []).find((t) => t.id === deployment.partitionId)?.name ?? deployment.partitionId.slice(0, 8))
     : null;
@@ -458,7 +460,7 @@ export default function DeploymentDetailPanel({ deploymentId, title }: Props) {
           )}
           <button
             className="canvas-meta-link"
-            onClick={() => pushPanel({ type: "environment-detail", title: envName, params: { id: deployment.environmentId } })}
+            onClick={() => deployment.environmentId && pushPanel({ type: "environment-detail", title: envName, params: { id: deployment.environmentId } })}
           >
             Environment: {envName}
           </button>

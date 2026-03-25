@@ -474,7 +474,7 @@ export default function PlanReviewPanel({ deploymentId }: Props) {
   // Thinking state: plan is being generated
   if (deployment.status === "pending") {
     const pendingArtName =
-      (artifacts ?? []).find((a) => a.id === deployment.artifactId)?.name ?? deployment.artifactId.slice(0, 8);
+      (artifacts ?? []).find((a) => a.id === deployment.artifactId)?.name ?? deployment.artifactId?.slice(0, 8) ?? deployment.intent ?? "—";
     return <PlanPendingView
       deploymentId={deploymentId}
       artifactName={pendingArtName}
@@ -494,9 +494,10 @@ export default function PlanReviewPanel({ deploymentId }: Props) {
   }
 
   const envName =
-    (environments ?? []).find((e) => e.id === deployment.environmentId)?.name ?? deployment.environmentId;
-  const artName =
-    (artifacts ?? []).find((a) => a.id === deployment.artifactId)?.name ?? deployment.artifactId.slice(0, 8);
+    (environments ?? []).find((e) => e.id === deployment.environmentId)?.name ?? deployment.environmentId ?? "—";
+  const artName = deployment.input?.type && deployment.input.type !== "deploy"
+    ? (deployment.intent ?? deployment.input.type)
+    : ((artifacts ?? []).find((a) => a.id === deployment.artifactId)?.name ?? deployment.artifactId?.slice(0, 8) ?? "—");
   const partName = deployment.partitionId
     ? ((partitions ?? []).find((p) => p.id === deployment.partitionId)?.name ?? deployment.partitionId.slice(0, 8))
     : null;

@@ -4553,6 +4553,23 @@ table a:hover {
   overflow: hidden;
 }
 
+.canvas-column-layout {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.canvas-main-content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.canvas-main-content::-webkit-scrollbar {
+  display: none;
+}
+
 /* ---- Segmented control (used in topology, deploy scope) ---- */
 
 .segmented-control {
