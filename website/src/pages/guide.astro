@@ -1,0 +1,790 @@
+---
+import Layout from "../layouts/Layout.astro";
+---
+
+<Layout title="Synth — Guide" description="How to get the most out of Synth across all six operation types. Concrete patterns for deployments, maintenance, investigations, queries, triggers, and composites.">
+  <!-- Hero -->
+  <section class="relative overflow-hidden">
+    <div class="absolute inset-0 pointer-events-none">
+      <div class="absolute top-1/4 left-1/4 w-96 h-96 bg-ds-accent/5 rounded-full blur-[120px]"></div>
+      <div class="absolute bottom-1/3 right-1/3 w-80 h-80 bg-ds-succeeded/5 rounded-full blur-[100px]"></div>
+    </div>
+    <div class="relative mx-auto max-w-6xl px-6 pt-24 pb-16 text-center">
+      <div class="animate-fade-in-up">
+        <p class="section-heading">Guide</p>
+        <h1 class="text-5xl md:text-6xl font-display font-bold leading-tight mb-6">
+          Getting the most<br />
+          <span class="text-ds-accent">out of Synth.</span>
+        </h1>
+        <p class="text-xl text-ds-text-secondary max-w-2xl mx-auto leading-relaxed">
+          Synth's value isn't in executing commands — any tool can do that.
+          The value is in the reasoning gap: the space between "I know what I want"
+          and "I know how to do it safely on this specific machine."
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Scroll-spy sidebar -->
+  <nav id="guide-nav" class="hidden xl:flex fixed left-[max(1rem,calc((100vw-64rem)/2-10rem))] top-1/2 -translate-y-1/2 z-40 flex-col gap-1">
+    <a href="#deploy" data-spy="deploy" class="guide-nav-link">
+      <span class="guide-nav-dot bg-ds-dt-plan"></span>
+      <span class="guide-nav-label">Deploy</span>
+    </a>
+    <a href="#maintain" data-spy="maintain" class="guide-nav-link">
+      <span class="guide-nav-dot bg-ds-envoy"></span>
+      <span class="guide-nav-label">Maintain</span>
+    </a>
+    <a href="#query" data-spy="query" class="guide-nav-link">
+      <span class="guide-nav-dot bg-ds-accent"></span>
+      <span class="guide-nav-label">Query</span>
+    </a>
+    <a href="#investigate" data-spy="investigate" class="guide-nav-link">
+      <span class="guide-nav-dot bg-ds-failed"></span>
+      <span class="guide-nav-label">Investigate</span>
+    </a>
+    <a href="#trigger" data-spy="trigger" class="guide-nav-link">
+      <span class="guide-nav-dot bg-ds-warning"></span>
+      <span class="guide-nav-label">Trigger</span>
+    </a>
+    <a href="#composite" data-spy="composite" class="guide-nav-link">
+      <span class="guide-nav-dot bg-ds-partition"></span>
+      <span class="guide-nav-label">Composite</span>
+    </a>
+    <a href="#fleet" data-spy="fleet" class="guide-nav-link">
+      <span class="guide-nav-dot bg-ds-server"></span>
+      <span class="guide-nav-label">Fleet</span>
+    </a>
+    <a href="#debrief" data-spy="debrief" class="guide-nav-link">
+      <span class="guide-nav-dot bg-ds-debrief"></span>
+      <span class="guide-nav-label">Debrief</span>
+    </a>
+    <a href="#partitions" data-spy="partitions" class="guide-nav-link">
+      <span class="guide-nav-dot bg-ds-partition"></span>
+      <span class="guide-nav-label">Partitions</span>
+    </a>
+    <a href="#compounding" data-spy="compounding" class="guide-nav-link">
+      <span class="guide-nav-dot bg-ds-accent"></span>
+      <span class="guide-nav-label">Compounding</span>
+    </a>
+  </nav>
+
+  <!-- Deploy -->
+  <section id="deploy" class="py-20 border-t border-ds-border">
+    <div class="mx-auto max-w-4xl px-6">
+      <div class="mb-12 scroll-reveal">
+        <div class="flex items-center gap-3 mb-4">
+          <span class="dt-dot bg-ds-dt-plan"></span>
+          <p class="section-heading !mb-0">Deploy</p>
+        </div>
+        <h2 class="text-3xl md:text-4xl font-display font-bold mb-4">
+          Deployments that learn.
+        </h2>
+        <p class="text-lg text-ds-text-secondary leading-relaxed max-w-3xl">
+          Register an artifact, point at an environment, and let Synth plan the deployment.
+          That's the starting point. Where it gets interesting is the learning loop.
+        </p>
+      </div>
+
+      <div class="space-y-6">
+        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-1">
+          <h3 class="text-base font-semibold mb-2 text-ds-text">Annotate early</h3>
+          <p class="text-sm text-ds-text-secondary leading-relaxed">
+            When Synth's artifact analysis is wrong, submit corrections. Two corrections with
+            high confidence auto-apply on future plans — Synth skips LLM analysis entirely for
+            known patterns. Repeated deployments become near-instant.
+          </p>
+        </div>
+        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-2">
+          <h3 class="text-base font-semibold mb-2 text-ds-text">Refine, don't reject</h3>
+          <p class="text-sm text-ds-text-secondary leading-relaxed">
+            When a plan is close but not right, use the Refine action with specific feedback:
+            <span class="text-ds-accent font-mono text-xs">"This version also needs CACHE_TTL updated"</span>.
+            Synth regenerates incorporating your context. Rejection throws away reasoning. Refinement builds on it.
+          </p>
+        </div>
+        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-3">
+          <h3 class="text-base font-semibold mb-2 text-ds-text">Version your artifacts</h3>
+          <p class="text-sm text-ds-text-secondary leading-relaxed">
+            Each version carries metadata and source information. Synth uses version history
+            to contextualize risk — "third patch this week" vs. "first deploy in two months."
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Maintain -->
+  <section id="maintain" class="py-20 border-t border-ds-border">
+    <div class="mx-auto max-w-4xl px-6">
+      <div class="mb-12 scroll-reveal">
+        <div class="flex items-center gap-3 mb-4">
+          <span class="dt-dot bg-ds-envoy"></span>
+          <p class="section-heading !mb-0">Maintain</p>
+        </div>
+        <h2 class="text-3xl md:text-4xl font-display font-bold mb-4">
+          The underrated workhorse.
+        </h2>
+        <p class="text-lg text-ds-text-secondary leading-relaxed max-w-3xl">
+          Most users discover deploy first, but maintain is where daily operational work lives.
+          No artifact needed — just an intent.
+        </p>
+      </div>
+
+      <div class="glass-card p-6 mb-6 scroll-reveal scroll-reveal-delay-1">
+        <h3 class="text-base font-semibold mb-3 text-ds-text">Things that just work</h3>
+        <ul class="space-y-2 text-sm text-ds-text-secondary">
+          <li class="flex items-start gap-2.5">
+            <span class="text-ds-envoy mt-0.5 shrink-0">&rarr;</span>
+            <span><span class="text-ds-text font-mono text-xs">"Rotate TLS certificates on the web tier"</span></span>
+          </li>
+          <li class="flex items-start gap-2.5">
+            <span class="text-ds-envoy mt-0.5 shrink-0">&rarr;</span>
+            <span><span class="text-ds-text font-mono text-xs">"Clean up Docker images older than 30 days"</span></span>
+          </li>
+          <li class="flex items-start gap-2.5">
+            <span class="text-ds-envoy mt-0.5 shrink-0">&rarr;</span>
+            <span><span class="text-ds-text font-mono text-xs">"Update the nginx config to add rate limiting on /api/v2"</span></span>
+          </li>
+          <li class="flex items-start gap-2.5">
+            <span class="text-ds-envoy mt-0.5 shrink-0">&rarr;</span>
+            <span><span class="text-ds-text font-mono text-xs">"Resize the postgres WAL to 2GB"</span></span>
+          </li>
+        </ul>
+      </div>
+
+      <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-2">
+        <h3 class="text-base font-semibold mb-2 text-ds-text">Why this is different</h3>
+        <p class="text-sm text-ds-text-secondary leading-relaxed">
+          Maintain uses the most sophisticated planning path — iterative dry-run refinement. Synth generates
+          a plan, dry-runs it against actual system state, discovers issues
+          (<span class="text-ds-text">"file doesn't exist yet,"</span>
+          <span class="text-ds-text">"service isn't installed"</span>),
+          and regenerates. The plan you approve has already been validated against reality.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Query -->
+  <section id="query" class="py-20 border-t border-ds-border">
+    <div class="mx-auto max-w-4xl px-6">
+      <div class="mb-12 scroll-reveal">
+        <div class="flex items-center gap-3 mb-4">
+          <span class="dt-dot bg-ds-accent"></span>
+          <p class="section-heading !mb-0">Query</p>
+        </div>
+        <h2 class="text-3xl md:text-4xl font-display font-bold mb-4">
+          Your fleet's memory.
+        </h2>
+        <p class="text-lg text-ds-text-secondary leading-relaxed max-w-3xl">
+          Read-only information gathering. The envoy runs a probe loop — executing
+          commands, interpreting results, deciding what to probe next — until it has an answer.
+          Findings go into the Debrief as structured, searchable records.
+        </p>
+      </div>
+
+      <div class="grid md:grid-cols-2 gap-6">
+        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-1">
+          <h3 class="text-base font-semibold mb-2 text-ds-text">Pre-deployment recon</h3>
+          <p class="text-sm text-ds-text-secondary leading-relaxed">
+            <span class="text-ds-text font-mono text-xs">"What versions of openssl are running across prod?"</span>
+            — before deploying something that depends on a specific version.
+          </p>
+        </div>
+        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-2">
+          <h3 class="text-base font-semibold mb-2 text-ds-text">Compliance snapshots</h3>
+          <p class="text-sm text-ds-text-secondary leading-relaxed">
+            <span class="text-ds-text font-mono text-xs">"List all listening ports and their associated processes"</span>
+            — across an environment, with structured findings.
+          </p>
+        </div>
+        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-3">
+          <h3 class="text-base font-semibold mb-2 text-ds-text">Drift detection</h3>
+          <p class="text-sm text-ds-text-secondary leading-relaxed">
+            <span class="text-ds-text font-mono text-xs">"Compare the nginx config on web-1 vs web-2"</span>
+            — the reasoning explains differences, not just diffs.
+          </p>
+        </div>
+        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-4">
+          <h3 class="text-base font-semibold mb-2 text-ds-text">Institutional knowledge</h3>
+          <p class="text-sm text-ds-text-secondary leading-relaxed">
+            Query findings are stored in the Debrief. Six months from now, search
+            "what was running on prod in March" and find structured, reasoned answers — not raw command output.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Investigate -->
+  <section id="investigate" class="py-20 border-t border-ds-border relative overflow-hidden">
+    <div class="absolute inset-0 pointer-events-none">
+      <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-ds-failed/5 rounded-full blur-[120px]"></div>
+    </div>
+    <div class="relative mx-auto max-w-4xl px-6">
+      <div class="mb-12 scroll-reveal">
+        <div class="flex items-center gap-3 mb-4">
+          <span class="dt-dot bg-ds-failed"></span>
+          <p class="section-heading !mb-0">Investigate</p>
+        </div>
+        <h2 class="text-3xl md:text-4xl font-display font-bold mb-4">
+          The 2am companion.
+        </h2>
+        <p class="text-lg text-ds-text-secondary leading-relaxed max-w-3xl">
+          Something is wrong. You don't know what. Describe the symptom.
+          Synth iteratively probes — each finding informs the next — until it has a
+          root cause hypothesis and a proposed resolution.
+        </p>
+      </div>
+
+      <div class="glass-card p-8 mb-8 scroll-reveal scroll-reveal-delay-1">
+        <p class="font-mono text-sm text-ds-accent mb-4">
+          "API response times doubled in the last hour on the prod API tier, investigate"
+        </p>
+        <div class="space-y-3 text-sm text-ds-text-secondary">
+          <div class="flex items-start gap-2.5">
+            <span class="text-ds-text-muted mt-0.5 shrink-0 font-mono text-xs">1.</span>
+            <span>Checks resource utilization — CPU, memory, disk, network</span>
+          </div>
+          <div class="flex items-start gap-2.5">
+            <span class="text-ds-text-muted mt-0.5 shrink-0 font-mono text-xs">2.</span>
+            <span>Examines recent deployments and config changes</span>
+          </div>
+          <div class="flex items-start gap-2.5">
+            <span class="text-ds-text-muted mt-0.5 shrink-0 font-mono text-xs">3.</span>
+            <span>Reviews service logs for error patterns</span>
+          </div>
+          <div class="flex items-start gap-2.5">
+            <span class="text-ds-text-muted mt-0.5 shrink-0 font-mono text-xs">4.</span>
+            <span>Checks upstream dependencies</span>
+          </div>
+          <div class="flex items-start gap-2.5">
+            <span class="text-ds-text-muted mt-0.5 shrink-0 font-mono text-xs">5.</span>
+            <span>Correlates findings into a root cause hypothesis</span>
+          </div>
+          <div class="flex items-start gap-2.5">
+            <span class="text-ds-text-muted mt-0.5 shrink-0 font-mono text-xs">6.</span>
+            <span>Proposes a resolution — with every probe and its result in the Debrief</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid md:grid-cols-2 gap-6">
+        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-2">
+          <h3 class="text-base font-semibold mb-2 text-ds-text">Don't pre-diagnose</h3>
+          <p class="text-sm text-ds-text-secondary leading-relaxed">
+            <span class="text-ds-text">"Investigate high latency on API tier"</span> gives Synth
+            freedom to explore.
+            <span class="text-ds-text">"Check if the database is slow"</span> constrains it to your hypothesis.
+            Let it reason.
+          </p>
+        </div>
+        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-3">
+          <h3 class="text-base font-semibold mb-2 text-ds-text">Self-writing postmortems</h3>
+          <p class="text-sm text-ds-text-secondary leading-relaxed">
+            Every probe command and its result is in the Debrief. The investigation is
+            reproducible and auditable. The postmortem writes itself.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Trigger -->
+  <section id="trigger" class="py-20 border-t border-ds-border">
+    <div class="mx-auto max-w-4xl px-6">
+      <div class="mb-12 scroll-reveal">
+        <div class="flex items-center gap-3 mb-4">
+          <span class="dt-dot bg-ds-warning"></span>
+          <p class="section-heading !mb-0">Trigger</p>
+        </div>
+        <h2 class="text-3xl md:text-4xl font-display font-bold mb-4">
+          Monitoring that acts.
+        </h2>
+        <p class="text-lg text-ds-text-secondary leading-relaxed max-w-3xl">
+          Prometheus tells you something is wrong. Synth tells you something is wrong
+          <strong class="text-ds-text">and executes a reasoned response.</strong> The response is a
+          full operation — planned, approved, executed, debriefed.
+        </p>
+      </div>
+
+      <div class="glass-card p-6 mb-6 scroll-reveal scroll-reveal-delay-1">
+        <h3 class="text-base font-semibold mb-3 text-ds-text">High-value trigger patterns</h3>
+        <ul class="space-y-3 text-sm text-ds-text-secondary">
+          <li class="flex items-start gap-2.5">
+            <span class="text-ds-warning mt-0.5 shrink-0">&#9670;</span>
+            <span>
+              <span class="text-ds-text font-mono text-xs">"When disk usage exceeds 85%, run log cleanup"</span>
+              <span class="text-ds-text-muted"> — spawns a maintain operation</span>
+            </span>
+          </li>
+          <li class="flex items-start gap-2.5">
+            <span class="text-ds-warning mt-0.5 shrink-0">&#9670;</span>
+            <span>
+              <span class="text-ds-text font-mono text-xs">"When the health endpoint returns 500 for 3 consecutive checks, investigate"</span>
+              <span class="text-ds-text-muted"> — spawns an investigation</span>
+            </span>
+          </li>
+          <li class="flex items-start gap-2.5">
+            <span class="text-ds-warning mt-0.5 shrink-0">&#9670;</span>
+            <span>
+              <span class="text-ds-text font-mono text-xs">"When a new Docker image appears in the registry, deploy it to staging"</span>
+              <span class="text-ds-text-muted"> — continuous delivery</span>
+            </span>
+          </li>
+          <li class="flex items-start gap-2.5">
+            <span class="text-ds-warning mt-0.5 shrink-0">&#9670;</span>
+            <span>
+              <span class="text-ds-text font-mono text-xs">"When CPU exceeds 90% for 5 minutes, query what's consuming resources"</span>
+              <span class="text-ds-text-muted"> — situational awareness</span>
+            </span>
+          </li>
+        </ul>
+      </div>
+
+      <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-2">
+        <h3 class="text-base font-semibold mb-2 text-ds-text">Traceable chains</h3>
+        <p class="text-sm text-ds-text-secondary leading-relaxed">
+          Triggers produce operations with lineage tracking. You can trace
+          "this investigation was spawned because trigger X fired because disk hit 92%."
+          The Debrief makes the full causal chain visible.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Composite -->
+  <section id="composite" class="py-20 border-t border-ds-border">
+    <div class="mx-auto max-w-4xl px-6">
+      <div class="mb-12 scroll-reveal">
+        <div class="flex items-center gap-3 mb-4">
+          <span class="dt-dot bg-ds-partition"></span>
+          <p class="section-heading !mb-0">Composite</p>
+        </div>
+        <h2 class="text-3xl md:text-4xl font-display font-bold mb-4">
+          Runbooks that reason.
+        </h2>
+        <p class="text-lg text-ds-text-secondary leading-relaxed max-w-3xl">
+          Real operational work is rarely one action. Composite chains multiple operation types
+          into a single plan, single approval, sequential execution.
+          If step 2 fails, step 3 never runs. The whole workflow is atomic in intent.
+        </p>
+      </div>
+
+      <div class="glass-card p-8 mb-8 scroll-reveal scroll-reveal-delay-1">
+        <p class="text-sm text-ds-text-muted mb-4">A production deployment as a composite:</p>
+        <div class="space-y-3 text-sm">
+          <div class="flex items-start gap-2.5">
+            <span class="entity-badge border-ds-accent-border bg-ds-accent-dim text-ds-accent text-[10px] py-0.5 shrink-0">query</span>
+            <span class="text-ds-text-secondary">"What's the current state of the prod environment?"</span>
+          </div>
+          <div class="flex items-start gap-2.5">
+            <span class="entity-badge border-ds-succeeded/40 bg-ds-succeeded/10 text-ds-succeeded text-[10px] py-0.5 shrink-0">deploy</span>
+            <span class="text-ds-text-secondary">Push the new artifact version</span>
+          </div>
+          <div class="flex items-start gap-2.5">
+            <span class="entity-badge border-ds-envoy/40 bg-ds-envoy/10 text-ds-envoy text-[10px] py-0.5 shrink-0">maintain</span>
+            <span class="text-ds-text-secondary">Update config to enable the new feature flag</span>
+          </div>
+          <div class="flex items-start gap-2.5">
+            <span class="entity-badge border-ds-accent-border bg-ds-accent-dim text-ds-accent text-[10px] py-0.5 shrink-0">query</span>
+            <span class="text-ds-text-secondary">"Verify all services are healthy post-deploy"</span>
+          </div>
+        </div>
+        <p class="text-xs text-ds-text-muted mt-4">One approval. One Debrief. Four operations.</p>
+      </div>
+
+      <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-2">
+        <h3 class="text-base font-semibold mb-2 text-ds-text">Runbooks without the drift</h3>
+        <p class="text-sm text-ds-text-secondary leading-relaxed">
+          Any multi-step procedure documented in a wiki can become a composite operation.
+          Synth plans each step against live system state — not against instructions someone
+          wrote six months ago.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Fleet -->
+  <section id="fleet" class="py-20 border-t border-ds-border">
+    <div class="mx-auto max-w-4xl px-6">
+      <div class="mb-12 scroll-reveal">
+        <div class="flex items-center gap-3 mb-4">
+          <span class="dt-dot bg-ds-server"></span>
+          <p class="section-heading !mb-0">Fleet</p>
+        </div>
+        <h2 class="text-3xl md:text-4xl font-display font-bold mb-4">
+          Controlled rollouts.
+        </h2>
+        <p class="text-lg text-ds-text-secondary leading-relaxed max-w-3xl">
+          When targeting an environment with multiple envoys, Synth supports progressive rollout
+          strategies. Representative envoys plan first — the plan is validated against real system
+          state before rolling to the fleet.
+        </p>
+      </div>
+
+      <div class="grid md:grid-cols-3 gap-6">
+        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-1">
+          <h3 class="text-base font-semibold mb-2 text-ds-text">All-at-once</h3>
+          <p class="text-sm text-ds-text-secondary leading-relaxed">
+            Every envoy simultaneously. For low-risk, well-understood changes.
+          </p>
+        </div>
+        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-2">
+          <h3 class="text-base font-semibold mb-2 text-ds-text">Batched</h3>
+          <p class="text-sm text-ds-text-secondary leading-relaxed">
+            Groups of N by count or percentage. Pause between batches. Halt if failures exceed a threshold.
+          </p>
+        </div>
+        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-3">
+          <h3 class="text-base font-semibold mb-2 text-ds-text">Canary</h3>
+          <p class="text-sm text-ds-text-secondary leading-relaxed">
+            Single envoy first, observe, then expand. Health check wait between stages.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Debrief & Partitions -->
+  <section id="debrief" class="py-20 border-t border-ds-border relative overflow-hidden">
+    <div class="absolute inset-0 pointer-events-none">
+      <div class="absolute top-1/4 right-1/4 w-96 h-96 bg-ds-debrief/5 rounded-full blur-[120px]"></div>
+    </div>
+    <div class="relative mx-auto max-w-4xl px-6">
+      <div class="mb-12 scroll-reveal">
+        <div class="flex items-center gap-3 mb-4">
+          <span class="dt-dot bg-ds-debrief"></span>
+          <p class="section-heading !mb-0">Debrief</p>
+        </div>
+        <h2 class="text-3xl md:text-4xl font-display font-bold mb-4">
+          Operational memory.
+        </h2>
+        <p class="text-lg text-ds-text-secondary leading-relaxed max-w-3xl">
+          The Debrief is not a log. It's a structured record of decisions, reasoning, and context.
+          Every operation produces entries tagged with decision types, searchable and auditable.
+        </p>
+      </div>
+
+      <div class="grid md:grid-cols-2 gap-6 mb-8">
+        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-1">
+          <h3 class="text-base font-semibold mb-2 text-ds-text">Postmortems</h3>
+          <p class="text-sm text-ds-text-secondary leading-relaxed">
+            Search by time range and operation type to reconstruct an incident. The reasoning
+            field explains <em>why</em> decisions were made, not just what.
+          </p>
+        </div>
+        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-2">
+          <h3 class="text-base font-semibold mb-2 text-ds-text">Knowledge transfer</h3>
+          <p class="text-sm text-ds-text-secondary leading-relaxed">
+            New team members read debriefs to understand operational history.
+            "Why do we deploy this service before that one?" is answered in the reasoning.
+          </p>
+        </div>
+        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-3">
+          <h3 class="text-base font-semibold mb-2 text-ds-text">Pattern recognition</h3>
+          <p class="text-sm text-ds-text-secondary leading-relaxed">
+            Search debriefs for recurring failure types. If deployment failures cluster around
+            a specific service, that's signal — visible to anyone who searches.
+          </p>
+        </div>
+        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-4">
+          <h3 class="text-base font-semibold mb-2 text-ds-text">MCP resource access</h3>
+          <p class="text-sm text-ds-text-secondary leading-relaxed">
+            External tools can query the Debrief via MCP resources. Hook your incident management
+            tool into Synth's debrief endpoint for automated context during pages.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Partitions -->
+  <section id="partitions" class="py-20 border-t border-ds-border">
+    <div class="mx-auto max-w-4xl px-6">
+      <div class="mb-12 scroll-reveal">
+        <div class="flex items-center gap-3 mb-4">
+          <span class="dt-dot bg-ds-partition"></span>
+          <p class="section-heading !mb-0">Partitions</p>
+        </div>
+        <h2 class="text-3xl md:text-4xl font-display font-bold mb-4">
+          Logical isolation without overhead.
+        </h2>
+        <p class="text-lg text-ds-text-secondary leading-relaxed max-w-3xl">
+          Partitions scope variables and constraints without requiring separate infrastructure.
+          Variables set at the partition level override environment-level values.
+        </p>
+      </div>
+
+      <div class="grid md:grid-cols-2 gap-6">
+        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-1">
+          <h3 class="text-base font-semibold mb-2 text-ds-text">Multi-tenant deployments</h3>
+          <p class="text-sm text-ds-text-secondary leading-relaxed">
+            Partition per customer with customer-specific configuration. Same infrastructure,
+            isolated state.
+          </p>
+        </div>
+        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-2">
+          <h3 class="text-base font-semibold mb-2 text-ds-text">Compliance boundaries</h3>
+          <p class="text-sm text-ds-text-secondary leading-relaxed">
+            Partition for PCI-scoped services with stricter constraints. Data doesn't bleed
+            across partitions.
+          </p>
+        </div>
+        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-3">
+          <h3 class="text-base font-semibold mb-2 text-ds-text">Team boundaries</h3>
+          <p class="text-sm text-ds-text-secondary leading-relaxed">
+            Each team's services in their own partition with their own variable namespace
+            and operational history.
+          </p>
+        </div>
+        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-4">
+          <h3 class="text-base font-semibold mb-2 text-ds-text">Feature flags</h3>
+          <p class="text-sm text-ds-text-secondary leading-relaxed">
+            Partition for canary users with different variable values. Same deployment target,
+            different runtime configuration.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Compounding -->
+  <section id="compounding" class="py-20 border-t border-ds-border relative overflow-hidden">
+    <div class="absolute inset-0 pointer-events-none">
+      <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-ds-accent/5 rounded-full blur-[120px]"></div>
+    </div>
+    <div class="relative mx-auto max-w-4xl px-6">
+      <div class="mb-12 scroll-reveal">
+        <h2 class="text-3xl md:text-4xl font-display font-bold mb-4">
+          The patterns that compound.
+        </h2>
+        <p class="text-lg text-ds-text-secondary leading-relaxed max-w-3xl">
+          The real power emerges from combining capabilities. Each operation type
+          feeds naturally into the next.
+        </p>
+      </div>
+
+      <div class="space-y-6">
+        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-1">
+          <h3 class="text-base font-semibold mb-2 text-ds-text">Continuous improvement loop</h3>
+          <p class="text-sm text-ds-text-secondary leading-relaxed">
+            Deploy &rarr; Debrief reveals issue &rarr; Investigate &rarr; Root cause found &rarr;
+            Maintain to fix &rarr; Trigger to prevent recurrence.
+          </p>
+        </div>
+        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-2">
+          <h3 class="text-base font-semibold mb-2 text-ds-text">Self-documenting operations</h3>
+          <p class="text-sm text-ds-text-secondary leading-relaxed">
+            Every action produces a Debrief. Over time, the Debrief becomes the authoritative
+            operational history — not wikis, not Slack threads.
+          </p>
+        </div>
+        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-3">
+          <h3 class="text-base font-semibold mb-2 text-ds-text">Artifact learning</h3>
+          <p class="text-sm text-ds-text-secondary leading-relaxed">
+            Each deployment teaches Synth about your artifacts. Annotations accelerate this.
+            After a few cycles, planning for known artifacts is nearly instantaneous.
+          </p>
+        </div>
+        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-4">
+          <h3 class="text-base font-semibold mb-2 text-ds-text">Trigger chains</h3>
+          <p class="text-sm text-ds-text-secondary leading-relaxed">
+            A trigger fires &rarr; spawns an investigation &rarr; investigation finds a fix &rarr;
+            creates a maintenance operation &rarr; the whole chain is traceable via lineage.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="py-28 border-t border-ds-border relative overflow-hidden">
+    <div class="absolute inset-0 pointer-events-none">
+      <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-ds-accent/5 rounded-full blur-[120px]"></div>
+    </div>
+    <div class="relative mx-auto max-w-6xl px-6 text-center scroll-reveal">
+      <h2 class="text-3xl md:text-4xl font-display font-bold mb-4">Ready to try it?</h2>
+      <p class="text-ds-text-secondary text-lg mb-8 max-w-xl mx-auto">
+        Synth is source-available and self-hosted. Install it, connect an LLM, and run
+        your first operation in under five minutes.
+      </p>
+      <div class="flex items-center justify-center gap-4">
+        <a
+          href="https://github.com/synth-deploy/synth"
+          target="_blank"
+          rel="noopener"
+          class="rounded-md bg-ds-accent px-6 py-3 text-ds-bg font-semibold hover:bg-ds-accent/90 transition-colors"
+        >
+          Get Started
+        </a>
+        <a
+          href="/docs"
+          class="rounded-md border border-ds-border px-6 py-3 text-ds-text hover:border-ds-accent-border hover:bg-ds-surface transition-colors"
+        >
+          Read the Docs
+        </a>
+      </div>
+    </div>
+  </section>
+</Layout>
+
+<style>
+  .guide-nav-link {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.35rem 0.75rem;
+    border-radius: 0.375rem;
+    text-decoration: none;
+    transition: all 0.3s ease;
+    opacity: 0;
+    transform: translateX(-8px);
+  }
+  .guide-nav-link.visible {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  .guide-nav-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    transition: all 0.3s ease;
+    opacity: 0.25;
+  }
+  .guide-nav-label {
+    font-size: 0.75rem;
+    font-weight: 500;
+    letter-spacing: 0.025em;
+    color: rgba(154, 151, 144, 0.4);
+    transition: all 0.3s ease;
+    white-space: nowrap;
+  }
+  .guide-nav-link:hover .guide-nav-label {
+    color: rgba(154, 151, 144, 0.8);
+  }
+  .guide-nav-link:hover .guide-nav-dot {
+    opacity: 0.6;
+  }
+
+  /* Visited = section has been scrolled past or is current */
+  .guide-nav-link.visited .guide-nav-dot {
+    opacity: 0.6;
+  }
+  .guide-nav-link.visited .guide-nav-label {
+    color: rgba(228, 226, 222, 0.5);
+  }
+
+  /* Active = currently in viewport */
+  .guide-nav-link.active .guide-nav-dot {
+    opacity: 1;
+    width: 8px;
+    height: 8px;
+    box-shadow: 0 0 8px currentColor;
+  }
+  .guide-nav-link.active .guide-nav-label {
+    color: #e4e2de;
+    font-weight: 600;
+  }
+</style>
+
+<script>
+  // Scroll-reveal observer
+  const revealObserver = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add("revealed");
+        }
+      });
+    },
+    { threshold: 0.1, rootMargin: "0px 0px -50px 0px" },
+  );
+  document.querySelectorAll(".scroll-reveal").forEach((el) => revealObserver.observe(el));
+
+  // Guide sidebar scroll-spy
+  const nav = document.getElementById("guide-nav");
+  if (nav) {
+    const links = nav.querySelectorAll<HTMLAnchorElement>(".guide-nav-link");
+    const sectionIds = Array.from(links).map((l) => l.dataset.spy!);
+    const sections = sectionIds.map((id) => document.getElementById(id)).filter(Boolean) as HTMLElement[];
+    const visited = new Set<string>();
+
+    let navShown = false;
+    let firstReveal = true;
+
+    function showNav() {
+      if (navShown) return;
+      navShown = true;
+      nav.style.pointerEvents = "auto";
+      if (firstReveal) {
+        firstReveal = false;
+        links.forEach((link, i) => {
+          setTimeout(() => link.classList.add("visible"), i * 60);
+        });
+      } else {
+        links.forEach((link) => link.classList.add("visible"));
+      }
+    }
+
+    function hideNav() {
+      if (!navShown) return;
+      navShown = false;
+      nav.style.pointerEvents = "none";
+      links.forEach((link) => link.classList.remove("visible"));
+    }
+
+    // Watch the hero — hide nav when hero is visible, show when it's not
+    const hero = document.querySelector("section:first-of-type");
+    if (hero) {
+      const heroObserver = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((entry) => {
+            if (entry.isIntersecting) {
+              hideNav();
+            } else {
+              showNav();
+            }
+          });
+        },
+        { threshold: 0.15 },
+      );
+      heroObserver.observe(hero);
+    }
+
+    // Smooth scroll on click
+    links.forEach((link) => {
+      link.addEventListener("click", (e) => {
+        e.preventDefault();
+        const id = link.dataset.spy!;
+        const target = document.getElementById(id);
+        if (target) {
+          target.scrollIntoView({ behavior: "smooth", block: "start" });
+          history.replaceState(null, "", `#${id}`);
+        }
+      });
+    });
+
+    // Track which section is in view
+    const spyObserver = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          const id = entry.target.id;
+          if (entry.isIntersecting) {
+            visited.add(id);
+            links.forEach((link) => {
+              const spy = link.dataset.spy!;
+              link.classList.toggle("active", spy === id);
+              link.classList.toggle("visited", visited.has(spy) && spy !== id);
+            });
+          }
+        });
+      },
+      { threshold: 0, rootMargin: "-30% 0px -50% 0px" },
+    );
+
+    sections.forEach((section) => spyObserver.observe(section));
+  }
+</script>

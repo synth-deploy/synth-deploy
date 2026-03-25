@@ -409,58 +409,40 @@ import SynthMark from "../components/SynthMark.astro";
     </div>
   </section>
 
-  <!-- Section 1: Simple Setup -->
-  <section id="features" class="py-28 border-t border-ds-border">
-    <div class="mx-auto max-w-6xl px-6">
-      <div class="text-center mb-16 scroll-reveal">
-        <p class="section-heading">Simple to Set Up</p>
-        <h2 class="text-3xl md:text-4xl font-display font-bold mb-4">Two components. One command.</h2>
-        <p class="text-ds-text-secondary text-lg max-w-2xl mx-auto">
-          Synth runs as two lightweight services — the Synth server and Envoy — that communicate
-          over HTTP. No complex infrastructure. No vendor lock-in. Self-hosted by design.
-        </p>
-      </div>
-
-      <div class="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
-        <!-- Synth server card -->
-        <div class="glass-card p-8 scroll-reveal scroll-reveal-delay-1">
-          <div class="flex items-center gap-3 mb-4">
-            <div class="entity-badge border-ds-server/30 bg-ds-server/10 text-ds-server">
-              Synth
-            </div>
-          </div>
-          <h3 class="text-lg font-semibold mb-2">The brain</h3>
-          <p class="text-ds-text-secondary leading-relaxed text-sm">
-            Central server that manages operations, partitions, and environments.
-            Runs the intelligent agent, exposes the REST API, and hosts the MCP server.
-          </p>
-          <div class="mt-4 font-mono text-xs text-ds-text-muted bg-ds-bg/50 rounded-md px-4 py-3">
-            docker run synth-deploy/server
-          </div>
-        </div>
-
-        <!-- Envoy card -->
-        <div class="glass-card p-8 scroll-reveal scroll-reveal-delay-2">
-          <div class="flex items-center gap-3 mb-4">
-            <div class="entity-badge border-ds-envoy/30 bg-ds-envoy/10 text-ds-envoy">
-              Envoy
-            </div>
-          </div>
-          <h3 class="text-lg font-semibold mb-2">The hands</h3>
-          <p class="text-ds-text-secondary leading-relaxed text-sm">
-            Lightweight agents deployed on target machines. Execute operation steps,
-            probe targets, run health checks, and report results back to Synth.
-          </p>
-          <div class="mt-4 font-mono text-xs text-ds-text-muted bg-ds-bg/50 rounded-md px-4 py-3">
-            docker run synth-deploy/envoy
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
+  <!-- Scroll-spy sidebar -->
+  <nav id="home-nav" class="hidden xl:flex fixed left-[max(1rem,calc((100vw-64rem)/2-10rem))] top-1/2 -translate-y-1/2 z-40 flex-col gap-1">
+    <a href="#operations" data-spy="operations" class="guide-nav-link">
+      <span class="guide-nav-dot bg-ds-accent"></span>
+      <span class="guide-nav-label">Operations</span>
+    </a>
+    <a href="#features" data-spy="features" class="guide-nav-link">
+      <span class="guide-nav-dot bg-ds-server"></span>
+      <span class="guide-nav-label">Components</span>
+    </a>
+    <a href="#how-it-works" data-spy="how-it-works" class="guide-nav-link">
+      <span class="guide-nav-dot bg-ds-envoy"></span>
+      <span class="guide-nav-label">Architecture</span>
+    </a>
+    <a href="#capabilities" data-spy="capabilities" class="guide-nav-link">
+      <span class="guide-nav-dot bg-ds-partition"></span>
+      <span class="guide-nav-label">Capabilities</span>
+    </a>
+    <a href="#decisions" data-spy="decisions" class="guide-nav-link">
+      <span class="guide-nav-dot bg-ds-debrief"></span>
+      <span class="guide-nav-label">Decisions</span>
+    </a>
+    <a href="#depth" data-spy="depth" class="guide-nav-link">
+      <span class="guide-nav-dot bg-ds-failed"></span>
+      <span class="guide-nav-label">Depth</span>
+    </a>
+    <a href="#pioneer" data-spy="pioneer" class="guide-nav-link">
+      <span class="guide-nav-dot bg-ds-warning"></span>
+      <span class="guide-nav-label">Pioneer Program</span>
+    </a>
+  </nav>
 
   <!-- Section: Operation Types -->
-  <section class="py-28 border-t border-ds-border">
+  <section id="operations" class="py-28 border-t border-ds-border">
     <div class="mx-auto max-w-6xl px-6">
       <div class="text-center mb-16 scroll-reveal">
         <p class="section-heading">Operation Types</p>
@@ -553,219 +535,51 @@ import SynthMark from "../components/SynthMark.astro";
     </div>
   </section>
 
-  <!-- Section 2: Intelligent Decisions -->
-  <section class="py-28 border-t border-ds-border relative overflow-hidden">
-    <div class="absolute inset-0 pointer-events-none">
-      <div class="absolute top-1/2 left-0 w-96 h-96 bg-ds-dt-plan/5 rounded-full blur-[120px]"></div>
-      <div class="absolute bottom-0 right-1/4 w-72 h-72 bg-ds-debrief/5 rounded-full blur-[100px]"></div>
-    </div>
-
-    <div class="relative mx-auto max-w-6xl px-6">
+  <!-- Section 1: Simple Setup -->
+  <section id="features" class="py-28 border-t border-ds-border">
+    <div class="mx-auto max-w-6xl px-6">
       <div class="text-center mb-16 scroll-reveal">
-        <p class="section-heading">Intelligent Decisions</p>
-        <h2 class="text-3xl md:text-4xl font-display font-bold mb-4">Every action explained. Every decision logged.</h2>
+        <p class="section-heading">Simple to Set Up</p>
+        <h2 class="text-3xl md:text-4xl font-display font-bold mb-4">Two components. One command.</h2>
         <p class="text-ds-text-secondary text-lg max-w-2xl mx-auto">
-          The agent resolves variables, plans operations, handles conflicts, and diagnoses
-          failures — then explains all of it in plain language. When something goes wrong
-          at 2am, the Debrief tells you exactly what happened and what to do next.
+          Synth runs as two lightweight services — the Synth server and Envoy — that communicate
+          over HTTP. No complex infrastructure. No vendor lock-in. Self-hosted by design.
         </p>
       </div>
 
-      <!-- Decision type showcase -->
-      <div class="grid md:grid-cols-3 gap-6 mb-16">
-        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-1">
-          <div class="flex items-center gap-2 mb-3">
-            <span class="dt-dot bg-ds-dt-plan"></span>
-            <span class="text-xs font-semibold uppercase tracking-wide text-ds-dt-plan">Pipeline Plan</span>
-          </div>
-          <p class="text-sm text-ds-text-secondary leading-relaxed">
-            Agent analyzed web-app v2.4.1 and planned a 3-step pipeline:
-            install, migrate, verify. Skipped cache-warmup — no Redis configured.
-          </p>
-        </div>
-
-        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-2">
-          <div class="flex items-center gap-2 mb-3">
-            <span class="dt-dot bg-ds-dt-conflict"></span>
-            <span class="text-xs font-semibold uppercase tracking-wide text-ds-dt-conflict">Variable Conflict</span>
-          </div>
-          <p class="text-sm text-ds-text-secondary leading-relaxed">
-            APP_ENV defined in both partition (production) and environment (staging).
-            Resolved using environment-wins policy. Logged both values for audit.
-          </p>
-        </div>
-
-        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-3">
-          <div class="flex items-center gap-2 mb-3">
-            <span class="dt-dot bg-ds-dt-diagnostic"></span>
-            <span class="text-xs font-semibold uppercase tracking-wide text-ds-dt-diagnostic">Diagnostic</span>
-          </div>
-          <p class="text-sm text-ds-text-secondary leading-relaxed">
-            Health check failed on attempt 1/3 (ECONNREFUSED on port 9410).
-            Root cause: migration step increased startup time. Retried after 5s — passed.
-          </p>
-        </div>
-      </div>
-
-      <!-- Debrief timeline mockup -->
-      <div class="max-w-2xl mx-auto scroll-reveal scroll-reveal-delay-4">
-        <div class="glass-card accent-glow overflow-hidden">
-          <div class="flex items-center gap-2 px-5 py-3 border-b border-ds-border">
-            <div class="entity-badge border-ds-debrief/30 bg-ds-debrief/10 text-ds-debrief text-[10px] py-0.5">
-              Debrief
-            </div>
-            <span class="text-xs text-ds-text-muted ml-auto">web-app v2.4.1 &rarr; acme-corp / production</span>
-          </div>
-          <div class="p-5 space-y-0">
-            <!-- Timeline entries -->
-            <div class="flex gap-3 pb-4 relative">
-              <div class="flex flex-col items-center">
-                <span class="dt-dot bg-ds-dt-plan mt-1"></span>
-                <div class="w-px flex-1 bg-ds-border mt-1"></div>
-              </div>
-              <div>
-                <p class="text-xs font-semibold text-ds-dt-plan uppercase tracking-wide">Pipeline Plan</p>
-                <p class="text-sm text-ds-text-secondary mt-0.5">Planned 3-step pipeline for web-app v2.4.1</p>
-                <p class="text-xs text-ds-text-muted mt-1">Steps: install-deps &rarr; run-migrations &rarr; health-check</p>
-              </div>
-            </div>
-
-            <div class="flex gap-3 pb-4 relative">
-              <div class="flex flex-col items-center">
-                <span class="dt-dot bg-ds-dt-config mt-1"></span>
-                <div class="w-px flex-1 bg-ds-border mt-1"></div>
-              </div>
-              <div>
-                <p class="text-xs font-semibold text-ds-dt-config uppercase tracking-wide">Configuration</p>
-                <p class="text-sm text-ds-text-secondary mt-0.5">Resolved 4 variables across partition and environment</p>
-                <p class="text-xs text-ds-text-muted mt-1">1 conflict: APP_ENV — environment value wins (staging)</p>
-              </div>
-            </div>
-
-            <div class="flex gap-3 pb-4 relative">
-              <div class="flex flex-col items-center">
-                <span class="dt-dot bg-ds-dt-execution mt-1"></span>
-                <div class="w-px flex-1 bg-ds-border mt-1"></div>
-              </div>
-              <div>
-                <p class="text-xs font-semibold text-ds-dt-execution uppercase tracking-wide">Execution</p>
-                <p class="text-sm text-ds-text-secondary mt-0.5">All 3 steps completed successfully in 17.5s</p>
-                <p class="text-xs text-ds-text-muted mt-1">install-deps: 14.2s | migrations: 3.1s | health: 0.2s</p>
-              </div>
-            </div>
-
-            <div class="flex gap-3 pb-4 relative">
-              <div class="flex flex-col items-center">
-                <span class="dt-dot bg-ds-dt-verification mt-1"></span>
-                <div class="w-px flex-1 bg-ds-border mt-1"></div>
-              </div>
-              <div>
-                <p class="text-xs font-semibold text-ds-dt-verification uppercase tracking-wide">Verification</p>
-                <p class="text-sm text-ds-text-secondary mt-0.5">Health check passed — HTTP 200 on /health in 42ms</p>
-                <p class="text-xs text-ds-text-muted mt-1">Endpoint: http://acme-web:3000/health</p>
-              </div>
-            </div>
-
-            <div class="flex gap-3 relative">
-              <div class="flex flex-col items-center">
-                <span class="dt-dot bg-ds-dt-completion mt-1"></span>
-              </div>
-              <div>
-                <p class="text-xs font-semibold text-ds-dt-completion uppercase tracking-wide">Completed</p>
-                <p class="text-sm text-ds-text-secondary mt-0.5">Deployment succeeded — all checks passed, artifacts written</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Section 3: Core Capabilities -->
-  <section class="py-28 border-t border-ds-border">
-    <div class="mx-auto max-w-6xl px-6">
-      <div class="text-center mb-16 scroll-reveal">
-        <p class="section-heading">Capabilities</p>
-        <h2 class="text-3xl md:text-4xl font-display font-bold">Intelligence where friction used to be</h2>
-      </div>
-
-      <div class="grid md:grid-cols-3 gap-6">
+      <div class="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+        <!-- Synth server card -->
         <div class="glass-card p-8 scroll-reveal scroll-reveal-delay-1">
-          <div class="flex items-center gap-2 mb-4">
-            <div class="entity-badge border-ds-partition/30 bg-ds-partition/10 text-ds-partition text-[10px] py-0.5">
-              Partition
+          <div class="flex items-center gap-3 mb-4">
+            <div class="entity-badge border-ds-server/30 bg-ds-server/10 text-ds-server">
+              Synth
             </div>
           </div>
-          <h3 class="text-lg font-semibold mb-2">Scoped Isolation</h3>
+          <h3 class="text-lg font-semibold mb-2">The brain</h3>
           <p class="text-ds-text-secondary leading-relaxed text-sm">
-            Partitions give operations their own variables, history, and configuration.
-            Use them when you need isolation — no cross-partition data access or failure
-            propagation. Operations work with or without partition context.
+            Central server that manages operations, partitions, and environments.
+            Runs the intelligent agent, exposes the REST API, and hosts the MCP server.
           </p>
+          <div class="mt-4 font-mono text-xs text-ds-text-muted bg-ds-bg/50 rounded-md px-4 py-3">
+            docker run synth-deploy/server
+          </div>
         </div>
 
+        <!-- Envoy card -->
         <div class="glass-card p-8 scroll-reveal scroll-reveal-delay-2">
-          <div class="flex items-center gap-2 mb-4">
-            <div class="entity-badge border-ds-debrief/30 bg-ds-debrief/10 text-ds-debrief text-[10px] py-0.5">
-              Debrief
+          <div class="flex items-center gap-3 mb-4">
+            <div class="entity-badge border-ds-envoy/30 bg-ds-envoy/10 text-ds-envoy">
+              Envoy
             </div>
           </div>
-          <h3 class="text-lg font-semibold mb-2">Decision Transparency</h3>
+          <h3 class="text-lg font-semibold mb-2">The hands</h3>
           <p class="text-ds-text-secondary leading-relaxed text-sm">
-            Every agent decision is logged in plain language. When something goes wrong,
-            the Debrief tells you exactly what happened, why, and what to do next —
-            specific enough to act on at 2am.
+            Lightweight agents deployed on target machines. Execute operation steps,
+            probe targets, run health checks, and report results back to Synth.
           </p>
-        </div>
-
-        <div class="glass-card p-8 scroll-reveal scroll-reveal-delay-3">
-          <div class="flex items-center gap-2 mb-4">
-            <div class="entity-badge border-ds-order/30 bg-ds-order/10 text-ds-order text-[10px] py-0.5">
-              Operations
-            </div>
+          <div class="mt-4 font-mono text-xs text-ds-text-muted bg-ds-bg/50 rounded-md px-4 py-3">
+            docker run synth-deploy/envoy
           </div>
-          <h3 class="text-lg font-semibold mb-2">Immutable Record</h3>
-          <p class="text-ds-text-secondary leading-relaxed text-sm">
-            Every operation captures the exact state at execution time — objective, plan,
-            variables, outcome. Re-run any past operation with confidence. Full audit trail
-            from intent to result.
-          </p>
-        </div>
-
-        <div class="glass-card p-8 scroll-reveal scroll-reveal-delay-4">
-          <div class="flex items-center gap-2 mb-4">
-            <div class="entity-badge border-ds-server/30 bg-ds-server/10 text-ds-server text-[10px] py-0.5">
-              MCP
-            </div>
-          </div>
-          <h3 class="text-lg font-semibold mb-2">Protocol-Native</h3>
-          <p class="text-ds-text-secondary leading-relaxed text-sm">
-            Built on Model Context Protocol from the foundation. Connect external
-            data sources, monitoring tools, and CI/CD systems through standardized
-            MCP servers — not custom integrations.
-          </p>
-        </div>
-
-        <div class="glass-card p-8 scroll-reveal scroll-reveal-delay-1">
-          <div class="flex items-center gap-2 mb-4">
-            <div class="entity-badge border-ds-dt-plan/30 bg-ds-dt-plan/10 text-ds-dt-plan text-[10px] py-0.5">LLM</div>
-          </div>
-          <h3 class="text-lg font-semibold mb-2">Any Model, Any Provider</h3>
-          <p class="text-ds-text-secondary leading-relaxed text-sm">
-            Claude, GPT, Gemini, Grok, DeepSeek, Ollama, or any OpenAI-compatible endpoint.
-            Run the intelligence entirely on your infrastructure — no data leaves your network.
-          </p>
-        </div>
-
-        <div class="glass-card p-8 scroll-reveal scroll-reveal-delay-2">
-          <div class="flex items-center gap-2 mb-4">
-            <div class="entity-badge border-ds-failed/30 bg-ds-failed/10 text-ds-failed text-[10px] py-0.5">Security</div>
-          </div>
-          <h3 class="text-lg font-semibold mb-2">Hardened by Default</h3>
-          <p class="text-ds-text-secondary leading-relaxed text-sm">
-            Prompt injection protection, SSRF validation, secrets masking, path traversal guards,
-            and webhook HMAC verification. RBAC with SAML/OIDC/LDAP integration.
-          </p>
         </div>
       </div>
     </div>
@@ -1040,8 +854,226 @@ import SynthMark from "../components/SynthMark.astro";
     </div>
   </section>
 
+  <!-- Section 3: Core Capabilities -->
+  <section id="capabilities" class="py-28 border-t border-ds-border">
+    <div class="mx-auto max-w-6xl px-6">
+      <div class="text-center mb-16 scroll-reveal">
+        <p class="section-heading">Capabilities</p>
+        <h2 class="text-3xl md:text-4xl font-display font-bold">Intelligence where friction used to be</h2>
+      </div>
+
+      <div class="grid md:grid-cols-3 gap-6">
+        <div class="glass-card p-8 scroll-reveal scroll-reveal-delay-1">
+          <div class="flex items-center gap-2 mb-4">
+            <div class="entity-badge border-ds-partition/30 bg-ds-partition/10 text-ds-partition text-[10px] py-0.5">
+              Partition
+            </div>
+          </div>
+          <h3 class="text-lg font-semibold mb-2">Scoped Isolation</h3>
+          <p class="text-ds-text-secondary leading-relaxed text-sm">
+            Partitions give operations their own variables, history, and configuration.
+            Use them when you need isolation — no cross-partition data access or failure
+            propagation. Operations work with or without partition context.
+          </p>
+        </div>
+
+        <div class="glass-card p-8 scroll-reveal scroll-reveal-delay-2">
+          <div class="flex items-center gap-2 mb-4">
+            <div class="entity-badge border-ds-debrief/30 bg-ds-debrief/10 text-ds-debrief text-[10px] py-0.5">
+              Debrief
+            </div>
+          </div>
+          <h3 class="text-lg font-semibold mb-2">Decision Transparency</h3>
+          <p class="text-ds-text-secondary leading-relaxed text-sm">
+            Every agent decision is logged in plain language. When something goes wrong,
+            the Debrief tells you exactly what happened, why, and what to do next —
+            specific enough to act on at 2am.
+          </p>
+        </div>
+
+        <div class="glass-card p-8 scroll-reveal scroll-reveal-delay-3">
+          <div class="flex items-center gap-2 mb-4">
+            <div class="entity-badge border-ds-order/30 bg-ds-order/10 text-ds-order text-[10px] py-0.5">
+              Operations
+            </div>
+          </div>
+          <h3 class="text-lg font-semibold mb-2">Immutable Record</h3>
+          <p class="text-ds-text-secondary leading-relaxed text-sm">
+            Every operation captures the exact state at execution time — objective, plan,
+            variables, outcome. Re-run any past operation with confidence. Full audit trail
+            from intent to result.
+          </p>
+        </div>
+
+        <div class="glass-card p-8 scroll-reveal scroll-reveal-delay-4">
+          <div class="flex items-center gap-2 mb-4">
+            <div class="entity-badge border-ds-server/30 bg-ds-server/10 text-ds-server text-[10px] py-0.5">
+              MCP
+            </div>
+          </div>
+          <h3 class="text-lg font-semibold mb-2">Protocol-Native</h3>
+          <p class="text-ds-text-secondary leading-relaxed text-sm">
+            Built on Model Context Protocol from the foundation. Connect external
+            data sources, monitoring tools, and CI/CD systems through standardized
+            MCP servers — not custom integrations.
+          </p>
+        </div>
+
+        <div class="glass-card p-8 scroll-reveal scroll-reveal-delay-1">
+          <div class="flex items-center gap-2 mb-4">
+            <div class="entity-badge border-ds-dt-plan/30 bg-ds-dt-plan/10 text-ds-dt-plan text-[10px] py-0.5">LLM</div>
+          </div>
+          <h3 class="text-lg font-semibold mb-2">Any Model, Any Provider</h3>
+          <p class="text-ds-text-secondary leading-relaxed text-sm">
+            Claude, GPT, Gemini, Grok, DeepSeek, Ollama, or any OpenAI-compatible endpoint.
+            Run the intelligence entirely on your infrastructure — no data leaves your network.
+          </p>
+        </div>
+
+        <div class="glass-card p-8 scroll-reveal scroll-reveal-delay-2">
+          <div class="flex items-center gap-2 mb-4">
+            <div class="entity-badge border-ds-failed/30 bg-ds-failed/10 text-ds-failed text-[10px] py-0.5">Security</div>
+          </div>
+          <h3 class="text-lg font-semibold mb-2">Hardened by Default</h3>
+          <p class="text-ds-text-secondary leading-relaxed text-sm">
+            Prompt injection protection, SSRF validation, secrets masking, path traversal guards,
+            and webhook HMAC verification. RBAC with SAML/OIDC/LDAP integration.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Section 2: Intelligent Decisions -->
+  <section id="decisions" class="py-28 border-t border-ds-border relative overflow-hidden">
+    <div class="absolute inset-0 pointer-events-none">
+      <div class="absolute top-1/2 left-0 w-96 h-96 bg-ds-dt-plan/5 rounded-full blur-[120px]"></div>
+      <div class="absolute bottom-0 right-1/4 w-72 h-72 bg-ds-debrief/5 rounded-full blur-[100px]"></div>
+    </div>
+
+    <div class="relative mx-auto max-w-6xl px-6">
+      <div class="text-center mb-16 scroll-reveal">
+        <p class="section-heading">Intelligent Decisions</p>
+        <h2 class="text-3xl md:text-4xl font-display font-bold mb-4">Every action explained. Every decision logged.</h2>
+        <p class="text-ds-text-secondary text-lg max-w-2xl mx-auto">
+          The agent resolves variables, plans operations, handles conflicts, and diagnoses
+          failures — then explains all of it in plain language. When something goes wrong
+          at 2am, the Debrief tells you exactly what happened and what to do next.
+        </p>
+      </div>
+
+      <!-- Decision type showcase -->
+      <div class="grid md:grid-cols-3 gap-6 mb-16">
+        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-1">
+          <div class="flex items-center gap-2 mb-3">
+            <span class="dt-dot bg-ds-dt-plan"></span>
+            <span class="text-xs font-semibold uppercase tracking-wide text-ds-dt-plan">Pipeline Plan</span>
+          </div>
+          <p class="text-sm text-ds-text-secondary leading-relaxed">
+            Agent analyzed web-app v2.4.1 and planned a 3-step pipeline:
+            install, migrate, verify. Skipped cache-warmup — no Redis configured.
+          </p>
+        </div>
+
+        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-2">
+          <div class="flex items-center gap-2 mb-3">
+            <span class="dt-dot bg-ds-dt-conflict"></span>
+            <span class="text-xs font-semibold uppercase tracking-wide text-ds-dt-conflict">Variable Conflict</span>
+          </div>
+          <p class="text-sm text-ds-text-secondary leading-relaxed">
+            APP_ENV defined in both partition (production) and environment (staging).
+            Resolved using environment-wins policy. Logged both values for audit.
+          </p>
+        </div>
+
+        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-3">
+          <div class="flex items-center gap-2 mb-3">
+            <span class="dt-dot bg-ds-dt-diagnostic"></span>
+            <span class="text-xs font-semibold uppercase tracking-wide text-ds-dt-diagnostic">Diagnostic</span>
+          </div>
+          <p class="text-sm text-ds-text-secondary leading-relaxed">
+            Health check failed on attempt 1/3 (ECONNREFUSED on port 9410).
+            Root cause: migration step increased startup time. Retried after 5s — passed.
+          </p>
+        </div>
+      </div>
+
+      <!-- Debrief timeline mockup -->
+      <div class="max-w-2xl mx-auto scroll-reveal scroll-reveal-delay-4">
+        <div class="glass-card accent-glow overflow-hidden">
+          <div class="flex items-center gap-2 px-5 py-3 border-b border-ds-border">
+            <div class="entity-badge border-ds-debrief/30 bg-ds-debrief/10 text-ds-debrief text-[10px] py-0.5">
+              Debrief
+            </div>
+            <span class="text-xs text-ds-text-muted ml-auto">web-app v2.4.1 &rarr; acme-corp / production</span>
+          </div>
+          <div class="p-5 space-y-0">
+            <!-- Timeline entries -->
+            <div class="flex gap-3 pb-4 relative">
+              <div class="flex flex-col items-center">
+                <span class="dt-dot bg-ds-dt-plan mt-1"></span>
+                <div class="w-px flex-1 bg-ds-border mt-1"></div>
+              </div>
+              <div>
+                <p class="text-xs font-semibold text-ds-dt-plan uppercase tracking-wide">Pipeline Plan</p>
+                <p class="text-sm text-ds-text-secondary mt-0.5">Planned 3-step pipeline for web-app v2.4.1</p>
+                <p class="text-xs text-ds-text-muted mt-1">Steps: install-deps &rarr; run-migrations &rarr; health-check</p>
+              </div>
+            </div>
+
+            <div class="flex gap-3 pb-4 relative">
+              <div class="flex flex-col items-center">
+                <span class="dt-dot bg-ds-dt-config mt-1"></span>
+                <div class="w-px flex-1 bg-ds-border mt-1"></div>
+              </div>
+              <div>
+                <p class="text-xs font-semibold text-ds-dt-config uppercase tracking-wide">Configuration</p>
+                <p class="text-sm text-ds-text-secondary mt-0.5">Resolved 4 variables across partition and environment</p>
+                <p class="text-xs text-ds-text-muted mt-1">1 conflict: APP_ENV — environment value wins (staging)</p>
+              </div>
+            </div>
+
+            <div class="flex gap-3 pb-4 relative">
+              <div class="flex flex-col items-center">
+                <span class="dt-dot bg-ds-dt-execution mt-1"></span>
+                <div class="w-px flex-1 bg-ds-border mt-1"></div>
+              </div>
+              <div>
+                <p class="text-xs font-semibold text-ds-dt-execution uppercase tracking-wide">Execution</p>
+                <p class="text-sm text-ds-text-secondary mt-0.5">All 3 steps completed successfully in 17.5s</p>
+                <p class="text-xs text-ds-text-muted mt-1">install-deps: 14.2s | migrations: 3.1s | health: 0.2s</p>
+              </div>
+            </div>
+
+            <div class="flex gap-3 pb-4 relative">
+              <div class="flex flex-col items-center">
+                <span class="dt-dot bg-ds-dt-verification mt-1"></span>
+                <div class="w-px flex-1 bg-ds-border mt-1"></div>
+              </div>
+              <div>
+                <p class="text-xs font-semibold text-ds-dt-verification uppercase tracking-wide">Verification</p>
+                <p class="text-sm text-ds-text-secondary mt-0.5">Health check passed — HTTP 200 on /health in 42ms</p>
+                <p class="text-xs text-ds-text-muted mt-1">Endpoint: http://acme-web:3000/health</p>
+              </div>
+            </div>
+
+            <div class="flex gap-3 relative">
+              <div class="flex flex-col items-center">
+                <span class="dt-dot bg-ds-dt-completion mt-1"></span>
+              </div>
+              <div>
+                <p class="text-xs font-semibold text-ds-dt-completion uppercase tracking-wide">Completed</p>
+                <p class="text-sm text-ds-text-secondary mt-0.5">Deployment succeeded — all checks passed, artifacts written</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- Section 5: Operational Depth -->
-  <section class="py-28 border-t border-ds-border">
+  <section id="depth" class="py-28 border-t border-ds-border">
     <div class="mx-auto max-w-6xl px-6">
       <div class="text-center mb-16 scroll-reveal">
         <p class="section-heading">Operational Depth</p>
@@ -1094,7 +1126,7 @@ import SynthMark from "../components/SynthMark.astro";
   </section>
 
   <!-- Pioneer Program callout -->
-  <section class="py-28 border-t border-ds-border relative overflow-hidden">
+  <section id="pioneer" class="py-28 border-t border-ds-border relative overflow-hidden">
     <div class="absolute inset-0 pointer-events-none">
       <div class="absolute top-1/2 left-1/3 w-96 h-96 bg-ds-partition/5 rounded-full blur-[120px]"></div>
     </div>
@@ -1147,9 +1179,67 @@ import SynthMark from "../components/SynthMark.astro";
   </section>
 </Layout>
 
-<!-- Scroll reveal observer -->
+<!-- Scroll-spy sidebar styles -->
+<style>
+  .guide-nav-link {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.35rem 0.75rem;
+    border-radius: 0.375rem;
+    text-decoration: none;
+    transition: all 0.3s ease;
+    opacity: 0;
+    transform: translateX(-8px);
+  }
+  .guide-nav-link.visible {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  .guide-nav-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    transition: all 0.3s ease;
+    opacity: 0.25;
+  }
+  .guide-nav-label {
+    font-size: 0.75rem;
+    font-weight: 500;
+    letter-spacing: 0.025em;
+    color: rgba(154, 151, 144, 0.4);
+    transition: all 0.3s ease;
+    white-space: nowrap;
+  }
+  .guide-nav-link:hover .guide-nav-label {
+    color: rgba(154, 151, 144, 0.8);
+  }
+  .guide-nav-link:hover .guide-nav-dot {
+    opacity: 0.6;
+  }
+  .guide-nav-link.visited .guide-nav-dot {
+    opacity: 0.6;
+  }
+  .guide-nav-link.visited .guide-nav-label {
+    color: rgba(228, 226, 222, 0.5);
+  }
+  .guide-nav-link.active .guide-nav-dot {
+    opacity: 1;
+    width: 8px;
+    height: 8px;
+    box-shadow: 0 0 8px currentColor;
+  }
+  .guide-nav-link.active .guide-nav-label {
+    color: #e4e2de;
+    font-weight: 600;
+  }
+</style>
+
+<!-- Scroll reveal + scroll-spy observer -->
 <script>
-  const observer = new IntersectionObserver(
+  // Scroll-reveal
+  const revealObserver = new IntersectionObserver(
     (entries) => {
       entries.forEach((entry) => {
         if (entry.isIntersecting) {
@@ -1159,8 +1249,89 @@ import SynthMark from "../components/SynthMark.astro";
     },
     { threshold: 0.1, rootMargin: "0px 0px -50px 0px" },
   );
+  document.querySelectorAll(".scroll-reveal").forEach((el) => revealObserver.observe(el));
 
-  document.querySelectorAll(".scroll-reveal").forEach((el) => observer.observe(el));
+  // Scroll-spy sidebar
+  const nav = document.getElementById("home-nav");
+  if (nav) {
+    const links = nav.querySelectorAll<HTMLAnchorElement>(".guide-nav-link");
+    const sectionIds = Array.from(links).map((l) => l.dataset.spy!);
+    const sections = sectionIds.map((id) => document.getElementById(id)).filter(Boolean) as HTMLElement[];
+    const visited = new Set<string>();
+
+    let navShown = false;
+    let firstReveal = true;
+
+    function showNav() {
+      if (navShown) return;
+      navShown = true;
+      nav.style.pointerEvents = "auto";
+      if (firstReveal) {
+        firstReveal = false;
+        links.forEach((link, i) => {
+          setTimeout(() => link.classList.add("visible"), i * 60);
+        });
+      } else {
+        links.forEach((link) => link.classList.add("visible"));
+      }
+    }
+
+    function hideNav() {
+      if (!navShown) return;
+      navShown = false;
+      nav.style.pointerEvents = "none";
+      links.forEach((link) => link.classList.remove("visible"));
+    }
+
+    // Watch the hero — hide nav when hero is visible, show when it's not
+    const hero = document.querySelector("section:first-of-type");
+    if (hero) {
+      const heroObserver = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((entry) => {
+            if (entry.isIntersecting) {
+              hideNav();
+            } else {
+              showNav();
+            }
+          });
+        },
+        { threshold: 0.15 },
+      );
+      heroObserver.observe(hero);
+    }
+
+    links.forEach((link) => {
+      link.addEventListener("click", (e) => {
+        e.preventDefault();
+        const id = link.dataset.spy!;
+        const target = document.getElementById(id);
+        if (target) {
+          target.scrollIntoView({ behavior: "smooth", block: "start" });
+          history.replaceState(null, "", `#${id}`);
+        }
+      });
+    });
+
+    const spyObserver = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          const id = entry.target.id;
+          if (entry.isIntersecting) {
+            visited.add(id);
+            links.forEach((link) => {
+              const spy = link.dataset.spy!;
+              link.classList.toggle("active", spy === id);
+              link.classList.toggle("visited", visited.has(spy) && spy !== id);
+            });
+          }
+        });
+      },
+      { threshold: 0, rootMargin: "-30% 0px -50% 0px" },
+    );
+
+    sections.forEach((section) => spyObserver.observe(section));
+  }
 </script>
 
 <!-- Hero demo styles — is:global needed because JS adds classes dynamically -->
