@@ -1,0 +1,23 @@
+name: "Composite: investigate then fix"
+type: composite
+tags: [composite, staging, investigate, maintain]
+
+setup:
+  environments:
+    - name: staging
+      variables:
+        APP_ENV: staging
+
+operation:
+  type: composite
+  intent: "Investigate service health issue and apply corrective action"
+  environmentRef: staging
+  operations:
+    - type: investigate
+      intent: "Check why the API is returning slow responses on staging"
+    - type: maintain
+      intent: "Apply configuration fix based on investigation findings"
+
+assertions:
+  - responseStatus: 201
+  - statusIn: [pending, planning, awaiting_approval]

@@ -1,0 +1,25 @@
+name: "Investigate: 502 errors"
+type: investigate
+tags: [investigate, production, incident]
+
+setup:
+  environments:
+    - name: production
+      variables:
+        APP_ENV: production
+        UPSTREAM_URL: "http://api.internal:8080"
+  partitions:
+    - name: AcmeCorp
+      variables:
+        DB_HOST: acme-db.internal
+
+operation:
+  type: investigate
+  intent: "Web app is returning 502 Bad Gateway errors intermittently — diagnose the root cause"
+  environmentRef: production
+  partitionRef: AcmeCorp
+  allowWrite: false
+
+assertions:
+  - responseStatus: 201
+  - statusIn: [pending, planning, awaiting_approval]

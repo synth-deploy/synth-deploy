@@ -1,0 +1,20 @@
+name: "Trigger: disk cleanup on high usage"
+type: trigger
+tags: [trigger, production, automation]
+
+setup:
+  environments:
+    - name: production
+      variables:
+        APP_ENV: production
+        LOG_RETENTION_DAYS: "7"
+
+operation:
+  type: trigger
+  condition: "disk_usage > 85"
+  responseIntent: "Run log cleanup to free disk space on the target host"
+  environmentRef: production
+
+assertions:
+  - responseStatus: 201
+  - statusIn: [pending, planning, awaiting_approval]

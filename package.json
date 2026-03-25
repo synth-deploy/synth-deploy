@@ -15,12 +15,15 @@
     "test:coverage": "npm test --workspace=packages/core --workspace=packages/server --workspace=packages/envoy --workspace=packages/ui -- --coverage",
     "test:integration": "vitest run --config tests/vitest.config.ts",
     "test:scenarios": "vitest run --config tests/vitest.config.ts scenarios/",
+    "test:playbooks": "vitest run --config tests/vitest.config.ts scenarios/playbook.test.ts",
+    "exercise": "tsx tests/playbooks/cli.ts",
     "clean": "rm -rf packages/*/dist packages/*/*.tsbuildinfo"
   },
   "engines": {
     "node": ">=22.0.0"
   },
   "devDependencies": {
-    "@vitest/coverage-v8": "^4.0.18"
+    "@vitest/coverage-v8": "^4.0.18",
+    "yaml": "^2.8.3"
   }
 }

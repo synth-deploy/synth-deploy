@@ -1,0 +1,18 @@
+name: "Query: recent deployments"
+type: query
+tags: [query]
+
+setup:
+  environments:
+    - name: production
+      variables:
+        APP_ENV: production
+
+operation:
+  type: query
+  intent: "List all deployments from the last 7 days"
+  environmentRef: production
+
+assertions:
+  - responseStatus: 201
+  - statusIn: [pending, planning, awaiting_approval]

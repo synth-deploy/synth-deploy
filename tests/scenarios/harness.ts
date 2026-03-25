@@ -187,6 +187,142 @@ export async function deploy(
 }
 
 // ---------------------------------------------------------------------------
+// Operation helpers — all 6 types
+// ---------------------------------------------------------------------------
+
+export type OperationType = "deploy" | "maintain" | "query" | "investigate" | "trigger" | "composite";
+
+export interface CreateOperationParams {
+  type: OperationType;
+  environmentId?: string;
+  partitionId?: string;
+  envoyId?: string;
+  artifactId?: string;
+  version?: string;
+  intent?: string;
+  allowWrite?: boolean;
+  condition?: string;
+  responseIntent?: string;
+  requireApproval?: boolean;
+  operations?: Array<Record<string, unknown>>;
+}
+
+export async function createOperation(
+  baseUrl: string,
+  params: CreateOperationParams,
+): Promise<{ status: number; body: Record<string, unknown> }> {
+  const payload: Record<string, unknown> = { type: params.type };
+  if (params.environmentId) payload.environmentId = params.environmentId;
+  if (params.partitionId) payload.partitionId = params.partitionId;
+  if (params.envoyId) payload.envoyId = params.envoyId;
+  if (params.artifactId) payload.artifactId = params.artifactId;
+  if (params.version) payload.version = params.version;
+  if (params.intent) payload.intent = params.intent;
+  if (params.allowWrite !== undefined) payload.allowWrite = params.allowWrite;
+  if (params.condition) payload.condition = params.condition;
+  if (params.responseIntent) payload.responseIntent = params.responseIntent;
+  if (params.requireApproval !== undefined) payload.requireApproval = params.requireApproval;
+  if (params.operations) payload.operations = params.operations;
+  return http(baseUrl, "POST", "/api/operations", payload);
+}
+
+export async function maintain(
+  baseUrl: string,
+  params: { intent: string; environmentId?: string; partitionId?: string; parameters?: Record<string, unknown> },
+): Promise<{ status: number; body: Record<string, unknown> }> {
+  return createOperation(baseUrl, { type: "maintain", ...params });
+}
+
+export async function queryOp(
+  baseUrl: string,
+  params: { intent: string; environmentId?: string; partitionId?: string },
+): Promise<{ status: number; body: Record<string, unknown> }> {
+  return createOperation(baseUrl, { type: "query", ...params });
+}
+
+export async function investigate(
+  baseUrl: string,
+  params: { intent: string; environmentId?: string; partitionId?: string; allowWrite?: boolean },
+): Promise<{ status: number; body: Record<string, unknown> }> {
+  return createOperation(baseUrl, { type: "investigate", ...params });
+}
+
+export async function triggerOp(
+  baseUrl: string,
+  params: { condition: string; responseIntent: string; environmentId?: string; partitionId?: string },
+): Promise<{ status: number; body: Record<string, unknown> }> {
+  return createOperation(baseUrl, { type: "trigger", ...params });
+}
+
+export async function compositeOp(
+  baseUrl: string,
+  params: { operations: Array<Record<string, unknown>>; environmentId?: string; partitionId?: string; intent?: string },
+): Promise<{ status: number; body: Record<string, unknown> }> {
+  return createOperation(baseUrl, { type: "composite", ...params });
+}
+
+// ---------------------------------------------------------------------------
+// Operation query helpers
+// ---------------------------------------------------------------------------
+
+export async function getOperation(
+  baseUrl: string,
+  operationId: string,
+): Promise<{ status: number; body: Record<string, unknown> }> {
+  return http(baseUrl, "GET", `/api/operations/${operationId}`);
+}
+
+export async function waitForStatus(
+  baseUrl: string,
+  operationId: string,
+  targetStatuses: string[],
+  timeoutMs = 10000,
+): Promise<Record<string, unknown>> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const res = await getOperation(baseUrl, operationId);
+    const dep = res.body.deployment as Record<string, unknown> | undefined;
+    const status = dep?.status as string | undefined;
+    if (status && targetStatuses.includes(status)) return dep!;
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  throw new Error(`Operation ${operationId} did not reach ${targetStatuses.join("|")} within ${timeoutMs}ms`);
+}
+
+// ---------------------------------------------------------------------------
+// Seed standard entities — reusable setup for playbooks
+// ---------------------------------------------------------------------------
+
+export interface StandardEntities {
+  artifactId: string;
+  prodEnvId: string;
+  stagingEnvId: string;
+  acmePartId: string;
+  betaPartId: string;
+}
+
+export async function seedStandardEntities(baseUrl: string): Promise<StandardEntities> {
+  const artifactId = await createArtifact(baseUrl, "web-app");
+  const prodEnvId = await createEnvironment(baseUrl, "production", {
+    APP_ENV: "production",
+    LOG_LEVEL: "warn",
+  });
+  const stagingEnvId = await createEnvironment(baseUrl, "staging", {
+    APP_ENV: "staging",
+    LOG_LEVEL: "debug",
+  });
+  const acmePartId = await createPartition(baseUrl, "AcmeCorp", {
+    DB_HOST: "acme-db.internal",
+    REGION: "us-east-1",
+  });
+  const betaPartId = await createPartition(baseUrl, "BetaInc", {
+    DB_HOST: "beta-db.internal",
+    REGION: "eu-west-1",
+  });
+  return { artifactId, prodEnvId, stagingEnvId, acmePartId, betaPartId };
+}
+
+// ---------------------------------------------------------------------------
 // Server factories
 // ---------------------------------------------------------------------------
 

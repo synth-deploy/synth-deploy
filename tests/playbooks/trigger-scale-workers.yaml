@@ -1,0 +1,20 @@
+name: "Trigger: scale workers on high latency"
+type: trigger
+tags: [trigger, production, scaling]
+
+setup:
+  environments:
+    - name: production
+      variables:
+        APP_ENV: production
+        WORKER_COUNT: "4"
+
+operation:
+  type: trigger
+  condition: "response_time_p95 > 2000"
+  responseIntent: "Scale up web worker processes to handle increased load"
+  environmentRef: production
+
+assertions:
+  - responseStatus: 201
+  - statusIn: [pending, planning, awaiting_approval]

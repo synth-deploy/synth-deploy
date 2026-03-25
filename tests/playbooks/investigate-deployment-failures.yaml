@@ -1,0 +1,19 @@
+name: "Investigate: repeated deployment failures"
+type: investigate
+tags: [investigate, production]
+
+setup:
+  environments:
+    - name: production
+      variables:
+        APP_ENV: production
+
+operation:
+  type: investigate
+  intent: "Last 3 deployments to production have failed at the health check step — find the root cause"
+  environmentRef: production
+  allowWrite: false
+
+assertions:
+  - responseStatus: 201
+  - statusIn: [pending, planning, awaiting_approval]

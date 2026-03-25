@@ -1,0 +1,20 @@
+name: "Trigger: certificate renewal"
+type: trigger
+tags: [trigger, production, security]
+
+setup:
+  environments:
+    - name: production
+      variables:
+        APP_ENV: production
+        CERT_PATH: /etc/ssl/certs/app.pem
+
+operation:
+  type: trigger
+  condition: "cert_days_remaining < 30"
+  responseIntent: "Renew TLS certificates before expiration"
+  environmentRef: production
+
+assertions:
+  - responseStatus: 201
+  - statusIn: [pending, planning, awaiting_approval]

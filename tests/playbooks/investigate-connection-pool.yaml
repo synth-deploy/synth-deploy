@@ -1,0 +1,25 @@
+name: "Investigate: connection pool exhaustion"
+type: investigate
+tags: [investigate, production, database]
+
+setup:
+  environments:
+    - name: production
+      variables:
+        APP_ENV: production
+        DB_POOL_MAX: "20"
+  partitions:
+    - name: AcmeCorp
+      variables:
+        DB_HOST: acme-db.internal
+
+operation:
+  type: investigate
+  intent: "Database connection pool is exhausted causing request timeouts — investigate what is holding connections"
+  environmentRef: production
+  partitionRef: AcmeCorp
+  allowWrite: false
+
+assertions:
+  - responseStatus: 201
+  - statusIn: [pending, planning, awaiting_approval]

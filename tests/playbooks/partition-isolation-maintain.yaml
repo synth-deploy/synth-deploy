@@ -1,0 +1,26 @@
+name: "Partition isolation: maintain operations"
+type: maintain
+tags: [maintain, isolation, multi-partition]
+
+setup:
+  environments:
+    - name: production
+      variables:
+        APP_ENV: production
+  partitions:
+    - name: AcmeCorp
+      variables:
+        DB_HOST: acme-db.internal
+    - name: BetaInc
+      variables:
+        DB_HOST: beta-db.internal
+
+operation:
+  type: maintain
+  intent: "Run log rotation on the production environment"
+  environmentRef: production
+  partitionRef: AcmeCorp
+
+assertions:
+  - responseStatus: 201
+  - statusIn: [pending, planning, awaiting_approval]

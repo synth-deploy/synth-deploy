@@ -1,0 +1,24 @@
+name: "Maintain: rotate API keys"
+type: maintain
+tags: [maintain, production, security]
+
+setup:
+  environments:
+    - name: production
+      variables:
+        APP_ENV: production
+        API_KEY_VERSION: "3"
+  partitions:
+    - name: AcmeCorp
+      variables:
+        DB_HOST: acme-db.internal
+
+operation:
+  type: maintain
+  intent: "Rotate API keys for the production environment"
+  environmentRef: production
+  partitionRef: AcmeCorp
+
+assertions:
+  - responseStatus: 201
+  - statusIn: [pending, planning, awaiting_approval]

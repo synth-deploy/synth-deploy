@@ -1,0 +1,27 @@
+name: "Deploy happy path"
+type: deploy
+tags: [deploy, smoke]
+
+setup:
+  artifacts:
+    - name: web-app
+  environments:
+    - name: production
+      variables:
+        APP_ENV: production
+        LOG_LEVEL: warn
+  partitions:
+    - name: AcmeCorp
+      variables:
+        DB_HOST: acme-db.internal
+
+operation:
+  type: deploy
+  artifactRef: web-app
+  environmentRef: production
+  partitionRef: AcmeCorp
+  version: "1.0.0"
+
+assertions:
+  - responseStatus: 201
+  - statusIn: [pending, planning, awaiting_approval]

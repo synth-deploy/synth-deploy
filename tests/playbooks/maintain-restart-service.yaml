@@ -1,0 +1,23 @@
+name: "Maintain: restart service"
+type: maintain
+tags: [maintain, production]
+
+setup:
+  environments:
+    - name: production
+      variables:
+        APP_ENV: production
+  partitions:
+    - name: AcmeCorp
+      variables:
+        SERVICE_NAME: web-app
+
+operation:
+  type: maintain
+  intent: "Restart the web-app service to pick up new configuration"
+  environmentRef: production
+  partitionRef: AcmeCorp
+
+assertions:
+  - responseStatus: 201
+  - statusIn: [pending, planning, awaiting_approval]

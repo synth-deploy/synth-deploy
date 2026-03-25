@@ -1,0 +1,19 @@
+name: "Maintain: update nginx config"
+type: maintain
+tags: [maintain, staging]
+
+setup:
+  environments:
+    - name: staging
+      variables:
+        APP_ENV: staging
+        GZIP_ENABLED: "false"
+
+operation:
+  type: maintain
+  intent: "Update nginx configuration to enable gzip compression"
+  environmentRef: staging
+
+assertions:
+  - responseStatus: 201
+  - statusIn: [pending, planning, awaiting_approval]

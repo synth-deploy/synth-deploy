@@ -1,0 +1,32 @@
+name: "Composite: deploy + rotate keys + verify"
+type: composite
+tags: [composite, production, deploy, maintain, query]
+
+setup:
+  artifacts:
+    - name: web-app
+  environments:
+    - name: production
+      variables:
+        APP_ENV: production
+  partitions:
+    - name: AcmeCorp
+      variables:
+        DB_HOST: acme-db.internal
+
+operation:
+  type: composite
+  intent: "Deploy v2.4, rotate API keys, then verify the deployment"
+  environmentRef: production
+  partitionRef: AcmeCorp
+  operations:
+    - type: deploy
+      artifactRef: web-app
+    - type: maintain
+      intent: "Rotate API keys after deployment"
+    - type: query
+      intent: "Verify the deployment is healthy and responding correctly"
+
+assertions:
+  - responseStatus: 201
+  - statusIn: [pending, planning, awaiting_approval]
