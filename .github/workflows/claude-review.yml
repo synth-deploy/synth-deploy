@@ -1,0 +1,57 @@
+name: Claude Review
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+  issues:
+    types: [opened, assigned, labeled]
+
+concurrency:
+  group: claude-review-${{ github.event.pull_request.number || github.event.issue.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    # Only run for @claude mentions in comments, or automatically on PR open/sync
+    if: |
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'issues' && github.event.action == 'assigned' && github.event.assignee.login == 'claude')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Claude Review
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          use_sticky_comment: true
+          claude_args: "--max-turns 10 --model claude-sonnet-4-6"
+          # On PR events, provide a review prompt; on comments, Claude responds interactively
+          prompt: |
+            You are reviewing a PR for the Synth deployment system.
+            Read CLAUDE.md and UI_PATTERNS.md for project conventions.
+
+            For this PR:
+            1. Check the diff for correctness — does the change do what it claims?
+            2. Check for security issues (injection, auth bypass, boundary violations)
+            3. Check UI changes against UI_PATTERNS.md (CSS variables, not hex; correct classes)
+            4. Run `npm test` to verify nothing is broken
+            5. Run `npm run exercise` to verify all operation types still work
+            6. If new code paths are untested, generate a playbook YAML in tests/playbooks/
+
+            Post findings as review comments. Be specific — line numbers, concrete suggestions.
+            Don't comment on style unless it violates CLAUDE.md or UI_PATTERNS.md.

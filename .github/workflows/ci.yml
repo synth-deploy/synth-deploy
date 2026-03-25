@@ -48,3 +48,7 @@ jobs:
 
       - name: Run integration and e2e tests
         run: npm run test:integration
+
+      - name: Audit dependencies for vulnerabilities
+        run: npm audit --omit=dev --audit-level=high
+        continue-on-error: true

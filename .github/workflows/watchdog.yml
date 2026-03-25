@@ -1,0 +1,117 @@
+name: Watchdog
+
+on:
+  schedule:
+    # Mon + Thu at 3:17am UTC (off-minute to avoid fleet contention)
+    - cron: '17 3 * * 1,4'
+  workflow_dispatch:
+    inputs:
+      focus:
+        description: 'Focus area (all, security, coverage, deps, playbooks)'
+        required: false
+        default: 'all'
+
+concurrency:
+  group: watchdog
+  cancel-in-progress: true
+
+jobs:
+  watchdog:
+    name: Autonomous QA Sweep
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+      security-events: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 50  # enough history for diff analysis
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Run all playbooks
+        id: playbooks
+        run: npm run exercise 2>&1 | tee /tmp/playbook-results.txt
+        continue-on-error: true
+
+      - name: Run unit tests with coverage
+        id: tests
+        run: npm run test:coverage 2>&1 | tee /tmp/test-results.txt
+        continue-on-error: true
+
+      - name: Run integration tests
+        id: integration
+        run: npm run test:integration 2>&1 | tee /tmp/integration-results.txt
+        continue-on-error: true
+
+      - name: Audit dependencies
+        id: audit
+        run: npm audit --json > /tmp/audit-results.json 2>&1 || true
+
+      - name: Claude Watchdog Analysis
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          claude_args: "--max-turns 15 --model claude-sonnet-4-6"
+          prompt: |
+            You are the Synth QA watchdog. This is an automated sweep.
+            Read CLAUDE.md for project context.
+
+            Focus: ${{ github.event.inputs.focus || 'all' }}
+
+            ## Data available
+            - Playbook results: /tmp/playbook-results.txt
+            - Test results: /tmp/test-results.txt
+            - Integration results: /tmp/integration-results.txt
+            - npm audit JSON: /tmp/audit-results.json
+            - Recent commits: run `git log --oneline -20`
+
+            ## Your job
+
+            1. **Analyze results**: Read the test/playbook output files. Identify failures.
+
+            2. **Analyze recent changes**: Run `git log --oneline -20` and `git diff HEAD~5`
+               to see what changed recently. Check if new code paths lack test coverage.
+
+            3. **Generate targeted playbooks**: For any changed server/envoy code paths
+               that aren't covered by existing playbooks, generate new YAML files in
+               tests/playbooks/ and run them with `npm run exercise`.
+
+            4. **Check dependency vulnerabilities**: Read /tmp/audit-results.json.
+               Flag any high/critical vulnerabilities.
+
+            5. **Check coverage gaps**: Look at packages/*/coverage/lcov.info for
+               files with critically low coverage (< 20%). Focus especially on:
+               - packages/envoy/src/execution/boundary-validator.ts (security critical)
+               - packages/envoy/src/execution/operation-executor.ts (execution critical)
+               - packages/server/src/api/operations.ts (approval/rejection flow)
+
+            6. **File issues**: For each finding, create a GitHub issue using:
+               `gh issue create --title "..." --body "..." --label "bug"`
+               or `--label "security"` for vulnerability findings.
+
+               Only file issues for NEW findings — check existing open issues first
+               with `gh issue list --limit 50` to avoid duplicates.
+
+            7. **Summary**: Post a summary of findings. Include:
+               - Playbook pass/fail count
+               - Test pass/fail count
+               - Vulnerability count (high/critical)
+               - Issues filed
+               - Coverage hotspots
+
+            Be specific and actionable. Engineers read this at 2am.
