@@ -135,9 +135,10 @@ describe("OperationAuthoringPanel", () => {
       expect(screen.getByText("web-app")).toBeInTheDocument();
     });
 
-    it("shows Objective as optional for deploy", () => {
+    it("does not show Objective field for deploy", () => {
       renderPanel();
-      expect(screen.getByText("Objective (optional)")).toBeInTheDocument();
+      expect(screen.queryByText("Objective (optional)")).not.toBeInTheDocument();
+      expect(screen.queryByText("Objective")).not.toBeInTheDocument();
     });
   });
 
