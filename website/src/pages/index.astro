@@ -3,7 +3,7 @@ import Layout from "../layouts/Layout.astro";
 import SynthMark from "../components/SynthMark.astro";
 ---
 
-<Layout title="Synth — Deployment Intelligence, Embedded" description="Synth is an intelligent deployment system. You say what and where — Synth reasons about the how, produces a plan, and explains every decision. Open source, self-hosted.">
+<Layout title="Synth — Operations that reason." description="Synth is an intelligent operations system. Describe the objective — Synth plans against your actual infrastructure, you approve, and execution is exact. Self-hosted, MCP-native, open source.">
   <!-- Hero -->
   <section class="relative overflow-hidden">
     <div class="absolute inset-0 pointer-events-none">
@@ -16,12 +16,15 @@ import SynthMark from "../components/SynthMark.astro";
         <!-- Left: tagline + CTAs -->
         <div class="animate-fade-in-up text-center lg:text-left">
           <h1 class="text-4xl md:text-5xl lg:text-[3.25rem] font-display font-bold leading-tight mb-6">
-            You say <span class="text-ds-accent">what</span> and <span class="text-ds-accent">where</span>.<br />
-            Synth figures out the <span class="text-ds-accent">how</span>.
+            Operations that <span class="text-ds-accent">reason</span>.
           </h1>
-          <p class="text-lg text-ds-text-secondary max-w-lg mx-auto lg:mx-0 mb-8 leading-relaxed">
-            An intelligent deployment system that reasons about your artifacts,
-            produces a plan, and explains every decision before it touches a thing.
+          <p class="text-lg text-ds-text-secondary max-w-lg mx-auto lg:mx-0 mb-2 leading-relaxed font-semibold">
+            Intelligent planning. Human approval. Deterministic execution.
+          </p>
+          <p class="text-base text-ds-text-muted max-w-lg mx-auto lg:mx-0 mb-8 leading-relaxed">
+            Describe any operational objective — deploy, investigate, maintain, query.
+            Synth plans against your actual infrastructure, explains every decision,
+            and executes exactly what you approved.
           </p>
           <div class="flex items-center justify-center lg:justify-start gap-4 mb-8">
             <a
@@ -435,12 +438,106 @@ import SynthMark from "../components/SynthMark.astro";
           </div>
           <h3 class="text-lg font-semibold mb-2">The hands</h3>
           <p class="text-ds-text-secondary leading-relaxed text-sm">
-            Lightweight agents deployed on target machines. Execute deployment steps,
-            run health checks, and report results back to Synth.
+            Lightweight agents deployed on target machines. Execute operation steps,
+            probe targets, run health checks, and report results back to Synth.
           </p>
           <div class="mt-4 font-mono text-xs text-ds-text-muted bg-ds-bg/50 rounded-md px-4 py-3">
             docker run synth-deploy/envoy
           </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Section: Operation Types -->
+  <section class="py-28 border-t border-ds-border">
+    <div class="mx-auto max-w-6xl px-6">
+      <div class="text-center mb-16 scroll-reveal">
+        <p class="section-heading">Operation Types</p>
+        <h2 class="text-3xl md:text-4xl font-display font-bold mb-4">One system. Every kind of operational work.</h2>
+        <p class="text-ds-text-secondary text-lg max-w-2xl mx-auto">
+          A deployment is one type of operation. Synth handles six — all through the same
+          intelligent pipeline: plan, approve, execute, debrief.
+        </p>
+      </div>
+
+      <div class="grid md:grid-cols-3 gap-6">
+        <!-- Deploy -->
+        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-1">
+          <div class="flex items-center gap-2 mb-3">
+            <span class="dt-dot bg-ds-accent"></span>
+            <span class="text-xs font-semibold uppercase tracking-wide text-ds-accent">Deploy</span>
+          </div>
+          <p class="text-sm font-semibold text-ds-text mb-1">Artifact to target</p>
+          <p class="text-sm text-ds-text-secondary leading-relaxed mb-3">
+            Analyze what you're deploying, probe the target, produce a plan. The original operation — and still the most common.
+          </p>
+          <p class="text-xs font-mono text-ds-text-muted bg-ds-bg/50 rounded px-3 py-2">"Deploy payments-api v2.4.1 to production"</p>
+        </div>
+
+        <!-- Maintain -->
+        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-2">
+          <div class="flex items-center gap-2 mb-3">
+            <span class="dt-dot bg-ds-warning"></span>
+            <span class="text-xs font-semibold uppercase tracking-wide text-ds-warning">Maintain</span>
+          </div>
+          <p class="text-sm font-semibold text-ds-text mb-1">Mutating work, no artifact</p>
+          <p class="text-sm text-ds-text-secondary leading-relaxed mb-3">
+            Corrective actions, credential rotation, configuration changes. Envoy probes current state, plans the safest path.
+          </p>
+          <p class="text-xs font-mono text-ds-text-muted bg-ds-bg/50 rounded px-3 py-2">"Rotate TLS certificates on the web tier"</p>
+        </div>
+
+        <!-- Query -->
+        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-3">
+          <div class="flex items-center gap-2 mb-3">
+            <span class="dt-dot bg-ds-dt-plan"></span>
+            <span class="text-xs font-semibold uppercase tracking-wide text-ds-dt-plan">Query</span>
+          </div>
+          <p class="text-sm font-semibold text-ds-text mb-1">Read-only fleet discovery</p>
+          <p class="text-sm text-ds-text-secondary leading-relaxed mb-3">
+            Ask a question about infrastructure state. Envoy probes, Synth reasons, the Debrief is the deliverable.
+          </p>
+          <p class="text-xs font-mono text-ds-text-muted bg-ds-bg/50 rounded px-3 py-2">"What's the cert expiry status across prod?"</p>
+        </div>
+
+        <!-- Investigate -->
+        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-1">
+          <div class="flex items-center gap-2 mb-3">
+            <span class="dt-dot bg-ds-dt-diagnostic"></span>
+            <span class="text-xs font-semibold uppercase tracking-wide text-ds-dt-diagnostic">Investigate</span>
+          </div>
+          <p class="text-sm font-semibold text-ds-text mb-1">Iterative diagnostic probing</p>
+          <p class="text-sm text-ds-text-secondary leading-relaxed mb-3">
+            Each finding informs what to probe next. Produces a diagnostic report with a proposed resolution — ready to approve and execute.
+          </p>
+          <p class="text-xs font-mono text-ds-text-muted bg-ds-bg/50 rounded px-3 py-2">"Something is slow on the API tier, investigate"</p>
+        </div>
+
+        <!-- Trigger -->
+        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-2">
+          <div class="flex items-center gap-2 mb-3">
+            <span class="dt-dot bg-ds-partition"></span>
+            <span class="text-xs font-semibold uppercase tracking-wide text-ds-partition">Trigger</span>
+          </div>
+          <p class="text-sm font-semibold text-ds-text mb-1">Condition-based automation</p>
+          <p class="text-sm text-ds-text-secondary leading-relaxed mb-3">
+            Define a condition and a response intent. When the threshold is crossed, Synth spawns a child operation automatically.
+          </p>
+          <p class="text-xs font-mono text-ds-text-muted bg-ds-bg/50 rounded px-3 py-2">"When disk &gt; 85%, run log-cleanup"</p>
+        </div>
+
+        <!-- Composite -->
+        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-3">
+          <div class="flex items-center gap-2 mb-3">
+            <span class="dt-dot bg-ds-server"></span>
+            <span class="text-xs font-semibold uppercase tracking-wide text-ds-server">Composite</span>
+          </div>
+          <p class="text-sm font-semibold text-ds-text mb-1">Multi-operation sequences</p>
+          <p class="text-sm text-ds-text-secondary leading-relaxed mb-3">
+            Plan multiple operation types as one coherent sequence. Single approval, dependency ordering, full lineage.
+          </p>
+          <p class="text-xs font-mono text-ds-text-muted bg-ds-bg/50 rounded px-3 py-2">"Deploy v2.4, rotate API keys, run post-deploy verification"</p>
         </div>
       </div>
     </div>
@@ -458,9 +555,9 @@ import SynthMark from "../components/SynthMark.astro";
         <p class="section-heading">Intelligent Decisions</p>
         <h2 class="text-3xl md:text-4xl font-display font-bold mb-4">Every action explained. Every decision logged.</h2>
         <p class="text-ds-text-secondary text-lg max-w-2xl mx-auto">
-          The agent resolves variables, plans pipelines, handles conflicts, and diagnoses
+          The agent resolves variables, plans operations, handles conflicts, and diagnoses
           failures — then explains all of it in plain language. When something goes wrong
-          at 2am, the Debrief tells you exactly what happened.
+          at 2am, the Debrief tells you exactly what happened and what to do next.
         </p>
       </div>
 
@@ -591,9 +688,9 @@ import SynthMark from "../components/SynthMark.astro";
           </div>
           <h3 class="text-lg font-semibold mb-2">Scoped Isolation</h3>
           <p class="text-ds-text-secondary leading-relaxed text-sm">
-            Partitions give deployments their own variables, history, and configuration.
+            Partitions give operations their own variables, history, and configuration.
             Use them when you need isolation — no cross-partition data access or failure
-            propagation. Deployments work with or without partition context.
+            propagation. Operations work with or without partition context.
           </p>
         </div>
 
@@ -614,14 +711,14 @@ import SynthMark from "../components/SynthMark.astro";
         <div class="glass-card p-8 scroll-reveal scroll-reveal-delay-3">
           <div class="flex items-center gap-2 mb-4">
             <div class="entity-badge border-ds-order/30 bg-ds-order/10 text-ds-order text-[10px] py-0.5">
-              Deployment
+              Operations
             </div>
           </div>
-          <h3 class="text-lg font-semibold mb-2">Immutable Snapshots</h3>
+          <h3 class="text-lg font-semibold mb-2">Immutable Record</h3>
           <p class="text-ds-text-secondary leading-relaxed text-sm">
-            Deployments capture the exact configuration at execution time — steps, variables,
-            deploy config. Re-deploy any previous snapshot with confidence. Full audit trail
-            from intent to outcome.
+            Every operation captures the exact state at execution time — objective, plan,
+            variables, outcome. Re-run any past operation with confidence. Full audit trail
+            from intent to result.
           </p>
         </div>
 
@@ -675,8 +772,8 @@ import SynthMark from "../components/SynthMark.astro";
         <p class="section-heading">Architecture</p>
         <h2 class="text-3xl md:text-4xl font-display font-bold mb-4">How it all connects</h2>
         <p class="text-ds-text-secondary text-lg max-w-2xl mx-auto">
-          The deployment flow moves from intent to execution to explanation.
-          Every step is visible. Every decision is recorded.
+          Every operation follows the same path: intent to intelligent planning,
+          to human approval, to deterministic execution, to plain-language explanation.
         </p>
       </div>
 
@@ -691,7 +788,7 @@ import SynthMark from "../components/SynthMark.astro";
             </div>
             <div>
               <p class="text-sm font-semibold text-ds-text">Engineer declares intent</p>
-              <p class="text-xs text-ds-text-muted mt-1">What to deploy, where to deploy it, and any partition or environment context.</p>
+              <p class="text-xs text-ds-text-muted mt-1">What needs to happen, which targets, and any partition or environment context.</p>
             </div>
           </div>
 
@@ -706,7 +803,7 @@ import SynthMark from "../components/SynthMark.astro";
                 <p class="text-sm font-semibold text-ds-text">Synth reasons and plans</p>
                 <span class="entity-badge border-ds-server/30 bg-ds-server/10 text-ds-server text-[10px] py-0.5">Synth</span>
               </div>
-              <p class="text-xs text-ds-text-muted mt-1">The agent analyzes the artifact, resolves variables, probes target systems, and generates a deployment plan — steps are not predefined, they're reasoned from context.</p>
+              <p class="text-xs text-ds-text-muted mt-1">The agent analyzes the objective, probes target systems, resolves variables, and generates a plan — steps are not predefined, they're reasoned from what it actually finds.</p>
             </div>
           </div>
 
@@ -940,7 +1037,7 @@ import SynthMark from "../components/SynthMark.astro";
         <p class="section-heading">Operational Depth</p>
         <h2 class="text-3xl md:text-4xl font-display font-bold mb-4">Built for engineers who get paged</h2>
         <p class="text-ds-text-secondary text-lg max-w-2xl mx-auto">
-          Synth is designed for the worst moments — when a deploy fails at 2am
+          Synth is designed for the worst moments — when something goes wrong at 2am
           and you need to understand what happened immediately, not after reading logs
           for twenty minutes.
         </p>
@@ -1013,7 +1110,7 @@ import SynthMark from "../components/SynthMark.astro";
       <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-ds-accent/5 rounded-full blur-[120px]"></div>
     </div>
     <div class="relative mx-auto max-w-6xl px-6 text-center scroll-reveal">
-      <h2 class="text-3xl md:text-4xl font-display font-bold mb-4">Ready to deploy smarter?</h2>
+      <h2 class="text-3xl md:text-4xl font-display font-bold mb-4">Stop writing runbooks.</h2>
       <p class="text-ds-text-secondary text-lg mb-8 max-w-xl mx-auto">
         Synth is source-available and self-hosted. Get started in minutes.
       </p>

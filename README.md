@@ -8,21 +8,21 @@
 <h1 align="center">Synth</h1>
 
 <p align="center">
-  <strong>Deployment intelligence, not deployment automation.</strong><br />
-  You say what and where. Synth figures out the how.
+  <strong>Operations that reason.</strong><br />
+  Intelligent planning. Human approval. Deterministic execution.
 </p>
 
 <p align="center">
-  <a href="https://synthdeploy.com/docs">Documentation</a> &middot;
-  <a href="https://synthdeploy.com/pricing">Pricing</a> &middot;
-  <a href="https://synthdeploy.com/roadmap">Roadmap</a>
+  <a href="https://synthops.app/docs">Documentation</a> &middot;
+  <a href="https://synthops.app/pricing">Pricing</a> &middot;
+  <a href="https://synthops.app/roadmap">Roadmap</a>
 </p>
 
 ---
 
-Deployment tools are scripting engines. They execute exactly what you told them to execute. When something unexpected happens — a service on a different port, a conflicting environment variable, a migration that needs to run first — they hand you an exit code and wait for you to figure it out.
+Every operational tool in production today is, at its core, a script runner. It does what you told it to do when you wrote the script. When something unexpected happens — a service on a different port, a target in a different state than assumed, a conflict between what the runbook says and what the system actually is — it hands you an exit code and waits for you to figure it out.
 
-Synth is built differently. The intelligence is the product, not a feature added on top. You declare what you're deploying and where. Synth analyzes the artifact, reasons about the target environment, resolves conflicts, produces a plan, and explains every decision in plain language before it touches a thing.
+Synth is built differently. The intelligence is the product, not a feature added on top. You describe an objective — deploy, investigate, maintain, query. Synth probes your actual infrastructure, reasons about what it finds, produces a plan, and explains every decision in plain language before it touches a thing.
 
 ## The Problem
 
@@ -70,7 +70,7 @@ Debrief: 6 decisions logged
 
 ## Operations
 
-A deployment is one type of operation. Synth handles five:
+A deployment is one type of operation. Synth handles six:
 
 | Type | Intent | Example |
 |------|--------|---------|
@@ -79,8 +79,9 @@ A deployment is one type of operation. Synth handles five:
 | **Query** | Read-only infrastructure discovery | `What's the cert expiry status across prod?` |
 | **Investigate** | Iterative diagnostic probing | `Something is slow on the API tier, investigate` |
 | **Trigger** | Persistent monitoring directive | `When disk > 85%, run log-cleanup` |
+| **Composite** | Multiple operation types in one plan | `Deploy v2.4, rotate API keys, run post-deploy verification` |
 
-All five follow the same flow: analyze input → plan → approve → deterministic execution → Debrief. The intelligence that makes deployment planning valuable applies to every operation type.
+All six follow the same flow: analyze input → plan → approve → deterministic execution → Debrief. The intelligence that makes deployment planning valuable applies to every operation type.
 
 ## Architecture
 
@@ -179,7 +180,7 @@ Everything in Community, plus:
 - **Telemetry Export** — export operation telemetry to external systems
 - **Configurable Retention** — custom Debrief and history retention policies
 
-Contact [licensing@synthdeploy.com](mailto:licensing@synthdeploy.com) for enterprise licensing.
+Contact [licensing@synthops.app](mailto:licensing@synthops.app) for enterprise licensing.
 
 ## Configuration
 
@@ -214,10 +215,10 @@ Business Source License 1.1. See [LICENSE](LICENSE).
 
 We're looking for engineering teams running Synth in real environments. In exchange for feedback and real-world scenarios: full Enterprise access at no cost, and direct input into the roadmap.
 
-Email [pioneers@synthdeploy.com](mailto:pioneers@synthdeploy.com).
+Email [pioneers@synthops.app](mailto:pioneers@synthops.app).
 
 ---
 
 <p align="center">
-  <a href="https://synthdeploy.com">synthdeploy.com</a>
+  <a href="https://synthops.app">synthops.app</a>
 </p>
