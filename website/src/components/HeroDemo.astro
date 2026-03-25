@@ -1,0 +1,1224 @@
+---
+import SynthMark from "./SynthMark.astro";
+---
+
+<!-- Right: animated demo -->
+<div class="animate-fade-in-up animate-delay-2">
+  <div id="hero-demo" class="glass-card accent-glow overflow-hidden text-left relative" style="min-height: 460px;">
+    <!-- Fake window chrome -->
+    <div class="flex items-center gap-1.5 px-4 py-2.5 border-b border-ds-border bg-ds-bg/40">
+      <span class="w-2.5 h-2.5 rounded-full bg-ds-failed/40"></span>
+      <span class="w-2.5 h-2.5 rounded-full bg-ds-warning/40"></span>
+      <span class="w-2.5 h-2.5 rounded-full bg-ds-succeeded/40"></span>
+      <span class="ml-3 text-[10px] font-mono text-ds-text-muted">Synth</span>
+    </div>
+
+    <!-- Stage 0: Artifact Intake — drag-in + analysis -->
+    <div id="stage-intake" class="demo-stage px-5 pt-5 pb-5">
+      <p id="intake-label" class="text-[10px] font-semibold uppercase tracking-widest text-ds-text-muted mb-4">Artifact Intake</p>
+      <div id="drop-zone" class="rounded-lg border-2 border-dashed border-ds-border flex items-center justify-center" style="height: 120px;">
+        <p class="text-sm text-ds-text-muted">Drop an artifact to begin</p>
+      </div>
+      <div id="artifact-card" class="artifact-dragging absolute rounded-lg border border-ds-accent-border bg-ds-surface px-4 py-3" style="right: -200px; top: 80px;">
+        <div class="flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-md bg-ds-accent/15 flex items-center justify-center">
+            <span class="text-ds-accent text-xs font-bold">C</span>
+          </div>
+          <div>
+            <p class="text-sm font-semibold text-ds-text">payments-api</p>
+            <p class="text-[11px] text-ds-text-muted font-mono">v3.2.1 · container</p>
+          </div>
+        </div>
+      </div>
+      <!-- Analysis section — shown after drop -->
+      <div id="intake-analysis" style="display:none;">
+        <div class="rounded-lg border border-ds-accent-border bg-ds-accent/5 px-4 py-3 mb-3">
+          <div class="flex items-center gap-2.5">
+            <div class="w-8 h-8 rounded-md bg-ds-accent/15 flex items-center justify-center">
+              <span class="text-ds-accent text-xs font-bold">C</span>
+            </div>
+            <div>
+              <p class="text-sm font-semibold text-ds-text">payments-api</p>
+              <p class="text-[11px] text-ds-text-muted font-mono">v3.2.1 · container</p>
+            </div>
+          </div>
+        </div>
+        <div id="analysis-lines" class="space-y-2 font-mono text-xs">
+          <p class="analysis-line text-ds-text-muted opacity-0"><span class="text-ds-dt-scan">■</span> Detected: Docker container image</p>
+          <p class="analysis-line text-ds-text-muted opacity-0"><span class="text-ds-dt-config">■</span> Base: node:20-alpine · 3 layers</p>
+          <p class="analysis-line text-ds-text-muted opacity-0"><span class="text-ds-dt-plan">■</span> Ports: 3000/tcp · Health: /health</p>
+          <p class="analysis-line text-ds-text-muted opacity-0"><span class="text-ds-succeeded">■</span> Checksum verified · No CVEs found</p>
+        </div>
+        <div class="mt-4 h-1 rounded-full bg-ds-border overflow-hidden">
+          <div id="analysis-bar" class="analysis-progress h-full rounded-full bg-ds-accent" style="width: 0%"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Stage 1: Operation Authoring -->
+    <div id="stage-authoring" class="demo-stage px-4 pt-4 pb-4 hidden">
+      <!-- Page title -->
+      <div style="margin-bottom: 10px;">
+        <p class="font-display text-[15px] font-medium text-ds-text" style="margin: 0 0 2px;">New Operation</p>
+        <p class="text-[10px] text-ds-text-muted" style="margin: 0;">Select what and where. Synth figures out how.</p>
+      </div>
+
+      <!-- Operation type selector -->
+      <div class="demo-op-selector">
+        <span id="demo-op-deploy" class="demo-op-pill active">Deploy</span>
+        <span class="demo-op-pill">Maintain</span>
+        <span class="demo-op-pill">Query</span>
+        <span class="demo-op-pill">Investigate</span>
+        <span class="demo-op-pill">Trigger</span>
+        <span class="demo-op-pill">Composite</span>
+      </div>
+
+      <!-- Two-column layout -->
+      <div style="display: grid; grid-template-columns: 3fr 2fr; gap: 14px;">
+        <!-- What column -->
+        <div>
+          <p class="demo-section-label">What</p>
+          <div id="demo-artifact-card" class="demo-nd-artifact-card">
+            <span id="demo-artifact-check" class="demo-nd-check"></span>
+            <div style="flex: 1; min-width: 0;">
+              <div style="display: flex; align-items: baseline; gap: 6px;">
+                <span style="font-size: 12px; font-weight: 600; color: #e4e2de;">payments-api</span>
+                <span style="font-size: 10px; color: #6a6660; font-family: 'IBM Plex Mono', monospace;">container</span>
+              </div>
+              <div style="font-size: 9px; color: #6a6660; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Node.js container image, health at /health</div>
+              <!-- Confidence indicator -->
+              <div id="demo-ci" style="display: inline-flex; align-items: center; gap: 4px; margin-top: 3px;">
+                <span style="display: inline-block; width: 36px; height: 3px; border-radius: 2px; background: rgba(255,255,255,0.07); overflow: hidden;">
+                  <span style="display: block; height: 100%; width: 92%; border-radius: 2px; background: #4cbe7a;"></span>
+                </span>
+                <span style="font-size: 9px; font-family: 'IBM Plex Mono', monospace; font-weight: 600; color: #4cbe7a;">High</span>
+                <span style="font-size: 9px; font-family: 'IBM Plex Mono', monospace; color: #6a6660;">understanding</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Where column -->
+        <div>
+          <p class="demo-section-label">Where</p>
+          <!-- Segmented control -->
+          <div class="demo-seg-control" style="margin-bottom: 6px;">
+            <button id="seg-env" class="demo-seg-btn">Env</button>
+            <button id="seg-envoy" class="demo-seg-btn">Envoy</button>
+            <button id="seg-part" class="demo-seg-btn">Part</button>
+          </div>
+          <!-- Target list -->
+          <div class="demo-target-list">
+            <div id="demo-target-1" class="demo-target-row">
+              <span class="demo-status-pip" style="background: #4cbe7a;"></span>
+              <div style="flex: 1; min-width: 0;">
+                <span style="font-size: 11px; font-weight: 500; color: #e4e2de; font-family: 'IBM Plex Mono', monospace;">prd-web-01</span>
+                <div style="font-size: 9px; color: #6a6660; margin-top: 1px;">3s ago</div>
+              </div>
+            </div>
+            <div class="demo-target-row" style="opacity: 0.4;">
+              <span class="demo-status-pip" style="background: #4cbe7a;"></span>
+              <div style="flex: 1; min-width: 0;">
+                <span style="font-size: 11px; font-weight: 500; color: #e4e2de; font-family: 'IBM Plex Mono', monospace;">prd-web-02</span>
+                <div style="font-size: 9px; color: #6a6660; margin-top: 1px;">45s ago</div>
+              </div>
+            </div>
+          </div>
+          <!-- Context hint -->
+          <div id="demo-hint" class="demo-context-hint" style="opacity: 0; transition: opacity 0.3s;">
+            Deploying directly to <span style="color: #22d3ee; font-weight: 500;">prd-web-01</span>. The envoy will produce a plan specific to this host.
+          </div>
+        </div>
+      </div>
+
+      <!-- Action bar -->
+      <div id="demo-action-bar" class="demo-action-bar" style="opacity: 0; transition: opacity 0.3s;">
+        <button id="demo-request-btn" class="demo-request-plan-btn">Request Plan</button>
+      </div>
+    </div>
+
+    <!-- Stage 2: Reasoning -->
+    <div id="stage-reasoning" class="demo-stage px-5 pt-5 pb-5 hidden" style="display: none;">
+      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 320px; text-align: center;">
+        <!-- SynthMark -->
+        <div style="margin-bottom: 16px;">
+          <SynthMark size={44} />
+        </div>
+        <p style="color: #9a9790; font-size: 14px; font-weight: 600; margin: 0 0 6px;">
+          Reasoning about <span style="color: #e4e2de;">payments-api</span>
+        </p>
+        <p id="reasoning-step-text" style="color: #6a6660; font-size: 11px; font-family: 'IBM Plex Mono', monospace; margin: 0 0 16px; min-height: 16px;">
+          Scanning local environment state…
+        </p>
+        <!-- Progress dots -->
+        <div id="reasoning-dots" style="display: flex; justify-content: center; gap: 6px; margin-bottom: 16px;">
+          <span class="reasoning-dot" style="width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,0.07); transition: background 0.4s;"></span>
+          <span class="reasoning-dot" style="width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,0.07); transition: background 0.4s;"></span>
+          <span class="reasoning-dot" style="width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,0.07); transition: background 0.4s;"></span>
+          <span class="reasoning-dot" style="width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,0.07); transition: background 0.4s;"></span>
+          <span class="reasoning-dot" style="width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,0.07); transition: background 0.4s;"></span>
+          <span class="reasoning-dot" style="width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,0.07); transition: background 0.4s;"></span>
+        </div>
+        <p id="reasoning-elapsed" style="color: #6a6660; font-size: 10px; font-family: 'IBM Plex Mono', monospace; margin: 0;">
+          0s elapsed
+        </p>
+      </div>
+    </div>
+
+    <!-- Stage 3: Plan Review -->
+    <div id="stage-plan" class="demo-stage px-4 pt-4 pb-3 hidden">
+      <!-- Header -->
+      <div style="margin-bottom: 8px;">
+        <p style="font-size: 10px; color: #6a6660; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 700; font-family: 'IBM Plex Mono', monospace; margin: 0 0 3px;">Deployment Plan</p>
+        <p class="font-display" style="font-size: 15px; font-weight: 500; color: #e4e2de; margin: 0;">
+          payments-api <span style="color: #6a6660; font-weight: 400; font-size: 11px; font-family: 'IBM Plex Mono', monospace;">v3.2.1</span>
+        </p>
+        <p style="font-size: 10px; color: #9a9790; margin: 1px 0 0;">&rarr; prd-web-01</p>
+      </div>
+
+      <!-- Synth Assessment -->
+      <div id="plan-assessment" class="demo-assessment opacity-0">
+        <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 5px;">
+          <!-- Mini SynthMark -->
+          <span style="flex-shrink: 0; display: inline-flex;">
+            <SynthMark size={14} />
+          </span>
+          <span style="font-size: 10px; font-weight: 700; color: #6b8aff; text-transform: uppercase; letter-spacing: 1px; font-family: 'IBM Plex Mono', monospace;">Synth Assessment</span>
+          <span style="display: inline-flex; align-items: center; gap: 3px; margin-left: auto;">
+            <span style="display: inline-block; width: 28px; height: 3px; border-radius: 2px; background: rgba(255,255,255,0.07); overflow: hidden;">
+              <span style="display: block; height: 100%; width: 90%; border-radius: 2px; background: #4cbe7a;"></span>
+            </span>
+            <span style="font-size: 9px; font-family: 'IBM Plex Mono', monospace; font-weight: 600; color: #4cbe7a;">High</span>
+            <span style="font-size: 9px; font-family: 'IBM Plex Mono', monospace; color: #6a6660;">confidence</span>
+          </span>
+        </div>
+        <p style="font-size: 10px; color: #e4e2de; line-height: 1.5; margin: 0;">Identical artifact deployed 11× with 100% success rate. No variable conflicts. Host stable.</p>
+      </div>
+
+      <!-- Steps -->
+      <div id="plan-steps-container" style="margin-top: 8px;">
+        <div class="plan-step demo-plan-step-row opacity-0">
+          <span class="demo-plan-step-num">1</span>
+          <div style="flex: 1; min-width: 0;">
+            <p style="font-size: 10px; color: #e4e2de; margin: 0; line-height: 1.3;">Stop service <span style="font-family: 'IBM Plex Mono', monospace; color: #6a6660;">payments-api</span> via systemd</p>
+            <p style="font-size: 9px; color: #6a6660; margin: 1px 0 0;">&#8617; systemctl start payments-api</p>
+          </div>
+          <span class="demo-risk-label" style="color: #4cbe7a;">low</span>
+        </div>
+        <div class="plan-step demo-plan-step-row opacity-0">
+          <span class="demo-plan-step-num">2</span>
+          <div style="flex: 1; min-width: 0;">
+            <p style="font-size: 10px; color: #e4e2de; margin: 0; line-height: 1.3;">Backup <span style="font-family: 'IBM Plex Mono', monospace; color: #6a6660;">/opt/payments-api/</span> to rollback store</p>
+            <p style="font-size: 9px; color: #6a6660; margin: 1px 0 0;">&#8617; restore from backup</p>
+          </div>
+          <span class="demo-risk-label" style="color: #4cbe7a;">low</span>
+        </div>
+        <div class="plan-step demo-plan-step-row opacity-0">
+          <span class="demo-plan-step-num">3</span>
+          <div style="flex: 1; min-width: 0;">
+            <p style="font-size: 10px; color: #e4e2de; margin: 0; line-height: 1.3;">Extract container image to target path</p>
+            <p style="font-size: 9px; color: #6a6660; margin: 1px 0 0;">&#8617; &mdash;</p>
+          </div>
+          <span class="demo-risk-label" style="color: #e05555;">high</span>
+        </div>
+        <div class="plan-step demo-plan-step-row opacity-0">
+          <span class="demo-plan-step-num">4</span>
+          <div style="flex: 1; min-width: 0;">
+            <p style="font-size: 10px; color: #e4e2de; margin: 0; line-height: 1.3;">Apply env config <span style="font-family: 'IBM Plex Mono', monospace; color: #6a6660;">(LOG_LEVEL: debug→info)</span></p>
+            <p style="font-size: 9px; color: #6a6660; margin: 1px 0 0;">&#8617; revert env file</p>
+          </div>
+          <span class="demo-risk-label" style="color: #4cbe7a;">low</span>
+        </div>
+        <div class="plan-step demo-plan-step-row opacity-0" style="border-bottom: none;">
+          <span class="demo-plan-step-num">5</span>
+          <div style="flex: 1; min-width: 0;">
+            <p style="font-size: 10px; color: #e4e2de; margin: 0; line-height: 1.3;">Start service, verify health &rarr; 200 OK</p>
+            <p style="font-size: 9px; color: #6a6660; margin: 1px 0 0;">&#8617; systemctl stop payments-api</p>
+          </div>
+          <span class="demo-risk-label" style="color: #6a6660;">none</span>
+        </div>
+      </div>
+
+      <!-- Action buttons -->
+      <div id="plan-actions" class="opacity-0" style="display: flex; gap: 6px; margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.07); transition: opacity 0.35s, transform 0.35s; transform: translateY(6px);">
+        <button id="greenlight-btn" class="demo-btn-greenlight" style="flex: 1;">Greenlight</button>
+        <button class="demo-btn-refine">Refine</button>
+        <button class="demo-btn-reject">Reject</button>
+      </div>
+    </div>
+
+    <!-- Stage 4: Execution -->
+    <div id="stage-exec" class="demo-stage px-5 pt-5 pb-5 hidden">
+      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+        <p class="text-[10px] font-semibold uppercase tracking-widest text-ds-text-muted" style="margin: 0;">Executing</p>
+        <span class="exec-spinner w-3 h-3 rounded-full border-2 border-ds-accent border-t-transparent"></span>
+        <span class="text-[10px] text-ds-text-muted ml-auto font-mono" id="exec-elapsed">0.0s</span>
+      </div>
+      <!-- Progress bar -->
+      <div id="exec-progress-bar" style="width: 100%; height: 2px; border-radius: 1px; background: #2e313b; margin-bottom: 12px; overflow: hidden;">
+        <div id="exec-progress-fill" style="height: 100%; border-radius: 1px; background: #6b8aff; width: 0%; transition: width 0.4s ease;"></div>
+      </div>
+      <div class="space-y-0">
+        <div class="exec-step flex items-center gap-2.5 py-1.5 border-b border-ds-border/50">
+          <span class="exec-badge" style="width: 20px; height: 20px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; font-family: 'IBM Plex Mono', monospace; flex-shrink: 0; background: #2e313b; color: #6a6660;">1</span>
+          <p class="text-[11px] text-ds-text-secondary flex-1" style="margin: 0;">Stop service via systemd</p>
+          <span class="exec-duration text-[10px] text-ds-text-muted font-mono"></span>
+          <span class="exec-status text-[10px] text-ds-text-muted font-mono">waiting</span>
+        </div>
+        <div class="exec-step flex items-center gap-2.5 py-1.5 border-b border-ds-border/50">
+          <span class="exec-badge" style="width: 20px; height: 20px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; font-family: 'IBM Plex Mono', monospace; flex-shrink: 0; background: #2e313b; color: #6a6660;">2</span>
+          <p class="text-[11px] text-ds-text-secondary flex-1" style="margin: 0;">Backup to rollback store</p>
+          <span class="exec-duration text-[10px] text-ds-text-muted font-mono"></span>
+          <span class="exec-status text-[10px] text-ds-text-muted font-mono">waiting</span>
+        </div>
+        <div class="exec-step flex items-center gap-2.5 py-1.5 border-b border-ds-border/50">
+          <span class="exec-badge" style="width: 20px; height: 20px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; font-family: 'IBM Plex Mono', monospace; flex-shrink: 0; background: #2e313b; color: #6a6660;">3</span>
+          <p class="text-[11px] text-ds-text-secondary flex-1" style="margin: 0;">Extract container image</p>
+          <span class="exec-duration text-[10px] text-ds-text-muted font-mono"></span>
+          <span class="exec-status text-[10px] text-ds-text-muted font-mono">waiting</span>
+        </div>
+        <div class="exec-step flex items-center gap-2.5 py-1.5 border-b border-ds-border/50">
+          <span class="exec-badge" style="width: 20px; height: 20px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; font-family: 'IBM Plex Mono', monospace; flex-shrink: 0; background: #2e313b; color: #6a6660;">4</span>
+          <p class="text-[11px] text-ds-text-secondary flex-1" style="margin: 0;">Apply env config</p>
+          <span class="exec-duration text-[10px] text-ds-text-muted font-mono"></span>
+          <span class="exec-status text-[10px] text-ds-text-muted font-mono">waiting</span>
+        </div>
+        <div class="exec-step flex items-center gap-2.5 py-1.5">
+          <span class="exec-badge" style="width: 20px; height: 20px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; font-family: 'IBM Plex Mono', monospace; flex-shrink: 0; background: #2e313b; color: #6a6660;">5</span>
+          <p class="text-[11px] text-ds-text-secondary flex-1" style="margin: 0;">Start &amp; verify health</p>
+          <span class="exec-duration text-[10px] text-ds-text-muted font-mono"></span>
+          <span class="exec-status text-[10px] text-ds-text-muted font-mono">waiting</span>
+        </div>
+      </div>
+      <!-- Health check result -->
+      <div id="exec-health" class="mt-2.5 rounded-md border border-ds-succeeded/20 bg-ds-succeeded/5 px-3 py-2 opacity-0 transition-opacity duration-300">
+        <p class="text-[10px] font-mono text-ds-succeeded" style="margin: 0;">✓ Health endpoint responded 200 in 340ms — rollback plan verified</p>
+      </div>
+    </div>
+
+    <!-- Stage 5: Debrief -->
+    <div id="stage-debrief" class="demo-stage px-4 pt-3 pb-3 hidden">
+      <!-- Header -->
+      <div style="display:flex;align-items:center;gap:5px;margin-bottom:9px;flex-wrap:nowrap;">
+        <span style="font-size:12px;font-weight:600;color:#e4e2de;white-space:nowrap;">payments-api</span>
+        <span style="font-size:10px;font-family:'IBM Plex Mono',monospace;color:#6a6660;">v3.2.1</span>
+        <span style="font-size:10px;color:#6a6660;margin:0 1px;">→</span>
+        <span style="font-size:10px;font-family:'IBM Plex Mono',monospace;color:#6a6660;white-space:nowrap;">prd-web-01</span>
+        <span style="margin-left:auto;display:inline-flex;align-items:center;gap:6px;flex-shrink:0;">
+          <span style="font-size:9px;font-family:'IBM Plex Mono',monospace;padding:1px 6px;border-radius:3px;background:rgba(76,190,122,0.1);border:1px solid rgba(76,190,122,0.25);color:#4cbe7a;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">succeeded</span>
+          <span style="font-size:10px;font-family:'IBM Plex Mono',monospace;color:#6a6660;">1m 42s</span>
+        </span>
+      </div>
+      <!-- Synth's Assessment -->
+      <div id="debrief-assessment" class="debrief-entry opacity-0" style="margin-bottom:8px;padding:10px 12px;border-radius:8px;background:rgba(107,138,255,0.08);border:1px solid rgba(107,138,255,0.2);">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:5px;">
+          <span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:#6b8aff;font-family:'IBM Plex Mono',monospace;">Synth's Assessment</span>
+        </div>
+        <div style="font-size:11px;color:#4cbe7a;font-weight:600;margin-bottom:4px;">&#10003; Deployment succeeded — no anomalies detected</div>
+        <div style="font-size:10px;color:#9a9590;line-height:1.55;margin-bottom:6px;">payments-api has been deployed 11&times; to this host with 100% success. One config variable changed (LOG_LEVEL debug&rarr;info), anticipated from this env. No rollback criteria triggered.</div>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <span style="font-size:9px;font-family:'IBM Plex Mono',monospace;font-weight:700;padding:1px 7px;border-radius:3px;background:rgba(76,190,122,0.1);border:1px solid rgba(76,190,122,0.2);color:#4cbe7a;text-transform:uppercase;letter-spacing:0.5px;">PROCEED</span>
+          <span style="font-size:10px;color:#6a6660;">No further action required</span>
+        </div>
+      </div>
+      <!-- Decision Log -->
+      <div id="debrief-log-label" class="debrief-entry opacity-0" style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:#6a6660;font-family:'IBM Plex Mono',monospace;margin-bottom:6px;">Decision Log</div>
+      <div class="demo-debrief-tl">
+        <div class="demo-debrief-card dt-config debrief-entry opacity-0">
+          <div class="demo-debrief-hdr">
+            <span class="demo-debrief-time">14:22:05</span>
+            <span class="demo-dt-bdg" style="color:#a78bfa;background:rgba(167,139,250,0.12);">Config</span>
+            <span class="demo-agent-bdg" style="background:#a78bfa;">server</span>
+          </div>
+          <div class="demo-debrief-dec">Resolved API_ENDPOINT, DB_CONNECTION, LOG_LEVEL from partition scope. LOG_LEVEL changed: debug &rarr; info.</div>
+        </div>
+        <div class="demo-debrief-card dt-plan debrief-entry opacity-0">
+          <div class="demo-debrief-hdr">
+            <span class="demo-debrief-time">14:22:07</span>
+            <span class="demo-dt-bdg" style="color:#818cf8;background:rgba(129,140,248,0.12);">Plan</span>
+            <span class="demo-agent-bdg" style="background:#a78bfa;">server</span>
+          </div>
+          <div class="demo-debrief-dec">5-step pipeline. Same artifact deployed 11&times; on this host — 100% success rate. Greenlit automatically.</div>
+          <div style="margin-top:5px;font-size:10px;color:#6a6660;line-height:1.5;font-style:italic;">Using stop/backup/deploy/config/verify pattern from prior deployments. Single config delta (LOG_LEVEL) is low-risk and expected.</div>
+        </div>
+        <div class="demo-debrief-card dt-completion debrief-entry opacity-0">
+          <div class="demo-debrief-hdr">
+            <span class="demo-debrief-time">14:23:13</span>
+            <span class="demo-dt-bdg" style="color:#4cbe7a;background:rgba(76,190,122,0.12);">Complete</span>
+            <span class="demo-agent-bdg" style="background:#a78bfa;">server</span>
+          </div>
+          <div class="demo-debrief-dec">Deployment succeeded — v3.2.0 &rarr; v3.2.1 on prd-web-01. No action required.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Pause on hover indicator -->
+    <div id="demo-paused" class="absolute inset-0 bg-ds-bg/60 backdrop-blur-sm flex items-center justify-center pointer-events-none opacity-0 transition-opacity duration-200">
+      <p class="text-sm text-ds-text-muted">Paused — move cursor to resume</p>
+    </div>
+  </div>
+</div>
+
+<!-- Hero demo styles — is:global needed because JS adds classes dynamically -->
+<style is:global>
+  /* ---- Stage transitions ---- */
+  .demo-stage {
+    transition: opacity 0.4s ease-out;
+  }
+  .demo-stage.hidden {
+    display: none;
+  }
+  .demo-stage.fade-out {
+    opacity: 0;
+  }
+
+  /* ---- Authoring panel components (matching real nd-* patterns) ---- */
+  .demo-section-label {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: #6a6660;
+    font-family: 'IBM Plex Mono', monospace;
+    margin: 0 0 6px;
+  }
+  .demo-nd-artifact-card {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    cursor: default;
+    transition: all 0.15s;
+    background: #272a33;
+    border: 1px solid rgba(255,255,255,0.07);
+  }
+  .demo-nd-artifact-card.selected {
+    background: rgba(107,138,255,0.1);
+    border-color: rgba(107,138,255,0.22);
+  }
+  .demo-nd-check {
+    width: 18px;
+    height: 18px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1.5px solid rgba(255,255,255,0.07);
+    background: transparent;
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    flex-shrink: 0;
+    transition: all 0.15s;
+  }
+  .demo-nd-check.checked {
+    background: #6b8aff;
+    border-color: #6b8aff;
+  }
+  .demo-seg-control {
+    display: flex;
+    gap: 3px;
+    padding: 3px;
+    border-radius: 7px;
+    background: #2e313b;
+    border: 1px solid rgba(255,255,255,0.07);
+    width: 100%;
+  }
+  .demo-seg-btn {
+    padding: 4px 0;
+    border-radius: 5px;
+    border: none;
+    cursor: default;
+    background: transparent;
+    color: #6a6660;
+    font-size: 10px;
+    font-weight: 400;
+    font-family: 'IBM Plex Mono', monospace;
+    transition: all 0.15s;
+    flex: 1;
+    text-align: center;
+  }
+  .demo-seg-btn.active {
+    background: #272a33;
+    color: #e4e2de;
+    font-weight: 600;
+    box-shadow: 0 1px 3px rgba(255,255,255,0.07);
+  }
+  .demo-target-list {
+    border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.07);
+    background: #272a33;
+    padding: 4px;
+  }
+  .demo-target-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    cursor: default;
+    transition: all 0.15s;
+    border: 1px solid transparent;
+  }
+  .demo-target-row.selected {
+    background: rgba(76,190,122,0.08);
+    border-color: rgba(76,190,122,0.2);
+  }
+  .demo-status-pip {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .demo-context-hint {
+    margin-top: 6px;
+    padding: 6px 8px;
+    border-radius: 6px;
+    background: #2e313b;
+    border: 1px solid rgba(255,255,255,0.07);
+    font-size: 9px;
+    color: #6a6660;
+    line-height: 1.5;
+  }
+  .demo-action-bar {
+    margin-top: 10px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: #272a33;
+    border: 1px solid rgba(255,255,255,0.07);
+    display: flex;
+    justify-content: flex-end;
+  }
+  .demo-request-plan-btn {
+    padding: 8px 18px;
+    border-radius: 7px;
+    border: none;
+    cursor: default;
+    background: #6b8aff;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+    font-family: 'IBM Plex Mono', monospace;
+    white-space: nowrap;
+    transition: opacity 0.15s;
+  }
+  .demo-request-plan-btn.clicked {
+    opacity: 0.7;
+  }
+
+  /* ---- SynthMark breathing animation ---- */
+  .demo-synth-mark .sm-line {
+    animation: smBreathe 3s ease-in-out infinite;
+    animation-delay: calc(var(--i, 0) * 0.15s);
+    transform-origin: 10px 39px;
+  }
+  @keyframes smBreathe {
+    0%, 100% { transform: translateX(0); }
+    50% { transform: translateX(-1.5px); }
+  }
+  .demo-synth-mark .sm-dot {
+    animation: smDotPulse 2.5s ease-in-out infinite;
+  }
+  @keyframes smDotPulse {
+    0%, 100% { opacity: 0.5; }
+    50% { opacity: 0.8; }
+  }
+
+  /* ---- Plan Review components ---- */
+  .demo-assessment {
+    padding: 12px 14px;
+    border-radius: 10px;
+    background: rgba(107,138,255,0.1);
+    border: 1px solid rgba(107,138,255,0.22);
+    margin-bottom: 10px;
+    transition: opacity 0.35s ease-out, transform 0.35s ease-out;
+    transform: translateY(6px);
+  }
+  .demo-assessment.visible {
+    opacity: 1 !important;
+    transform: translateY(0);
+  }
+  .demo-plan-step-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 7px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.07);
+    transition: opacity 0.35s ease-out, transform 0.35s ease-out;
+    transform: translateY(6px);
+  }
+  .demo-plan-step-row.visible {
+    opacity: 1 !important;
+    transform: translateY(0);
+  }
+  .demo-plan-step-num {
+    width: 20px;
+    height: 20px;
+    border-radius: 5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #2e313b;
+    color: #6a6660;
+    font-size: 10px;
+    font-weight: 700;
+    font-family: 'IBM Plex Mono', monospace;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+  .demo-risk-label {
+    font-size: 9px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-weight: 600;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+  .demo-btn-greenlight {
+    padding: 10px 16px;
+    border-radius: 8px;
+    cursor: default;
+    font-size: 12px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-weight: 600;
+    border: 1px solid #4cbe7a;
+    background: #4cbe7a;
+    color: #fff;
+    line-height: 1;
+    transition: opacity 0.15s;
+  }
+  .demo-btn-refine {
+    padding: 10px 16px;
+    border-radius: 8px;
+    cursor: default;
+    font-size: 12px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-weight: 600;
+    background: transparent;
+    color: #6b8aff;
+    border: 1.5px solid #6b8aff;
+    line-height: 1;
+  }
+  .demo-btn-reject {
+    padding: 10px 16px;
+    border-radius: 8px;
+    cursor: default;
+    font-size: 12px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-weight: 600;
+    background: #272a33;
+    color: #6a6660;
+    border: 1px solid rgba(255,255,255,0.12);
+    line-height: 1;
+  }
+
+  /* Plan elements fade-in */
+  .plan-step {
+    transition: opacity 0.35s ease-out, transform 0.35s ease-out;
+    transform: translateY(6px);
+  }
+  .plan-step.visible {
+    opacity: 1 !important;
+    transform: translateY(0);
+  }
+  #plan-actions.visible {
+    opacity: 1 !important;
+    transform: translateY(0);
+  }
+  #plan-steps-label.visible {
+    opacity: 1 !important;
+  }
+
+  /* Greenlight pulse */
+  #greenlight-btn.pulse {
+    animation: glPulse 0.6s ease-in-out 2;
+  }
+  @keyframes glPulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(76, 190, 122, 0); }
+    50% { box-shadow: 0 0 0 6px rgba(76, 190, 122, 0.25); }
+  }
+  #greenlight-btn.clicked {
+    background: rgba(76, 190, 122, 0.3) !important;
+    border-color: rgba(76, 190, 122, 0.5) !important;
+  }
+
+  /* ---- Execution ---- */
+  .exec-spinner {
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+  .exec-step .exec-badge.done {
+    background: rgba(76,190,122,0.08) !important;
+    color: #4cbe7a !important;
+    border: 1px solid rgba(76,190,122,0.2) !important;
+  }
+  .exec-step .exec-badge.active {
+    background: rgba(107,138,255,0.1) !important;
+    color: #6b8aff !important;
+    border: 1px solid rgba(107,138,255,0.22) !important;
+  }
+  .exec-step .exec-status.done {
+    color: #4cbe7a !important;
+  }
+  .exec-step .exec-status.active {
+    color: #6b8aff !important;
+  }
+  .exec-step .exec-duration.done {
+    color: #4cbe7a !important;
+  }
+
+  /* ---- Artifact drag-in animation ---- */
+  .artifact-dragging {
+    transition: right 1s cubic-bezier(0.22, 1, 0.36, 1), top 0.8s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.3s ease;
+    opacity: 0;
+  }
+  .artifact-dragging.entering {
+    opacity: 1;
+    right: 50% !important;
+    top: 70px !important;
+    transform: translateX(50%);
+  }
+  .artifact-dragging.landed {
+    opacity: 1;
+    right: 50% !important;
+    top: 90px !important;
+    transform: translateX(50%) scale(0.95);
+    border-color: rgba(107, 138, 255, 0.5);
+    box-shadow: 0 0 20px rgba(107, 138, 255, 0.15);
+  }
+  #drop-zone.accepting {
+    border-color: rgba(107, 138, 255, 0.5);
+    background: rgba(107, 138, 255, 0.05);
+    transition: all 0.3s ease;
+  }
+  #drop-zone p { transition: opacity 0.3s ease; }
+  #drop-zone.accepting p { opacity: 0; }
+
+  /* Analysis line reveal */
+  .analysis-line {
+    transition: opacity 0.4s ease-out, transform 0.4s ease-out;
+    transform: translateX(-8px);
+  }
+  .analysis-line.visible {
+    opacity: 1 !important;
+    transform: translateX(0);
+  }
+  .analysis-progress {
+    transition: width 2.5s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  /* ---- Debrief (mirrors real DebriefTimeline + DebriefEntry) ---- */
+  .demo-debrief-tl {
+    position: relative;
+    padding-left: 22px;
+  }
+  .demo-debrief-tl::before {
+    content: "";
+    position: absolute;
+    left: 7px;
+    top: 4px;
+    bottom: 4px;
+    width: 2px;
+    background: rgba(255,255,255,0.07);
+  }
+  .demo-debrief-card {
+    position: relative;
+    margin-bottom: 8px;
+    padding: 9px 12px;
+    background: #272a33;
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 6px;
+    transition: opacity 0.4s ease-out, transform 0.4s ease-out;
+    transform: translateY(5px);
+  }
+  .demo-debrief-card::before {
+    content: "";
+    position: absolute;
+    left: -17px;
+    top: 14px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.07);
+    border: 2px solid #272a33;
+  }
+  .demo-debrief-card.dt-completion::before { background: #4cbe7a; }
+  .demo-debrief-card.dt-plan::before { background: #818cf8; }
+  .demo-debrief-card.dt-config::before { background: #a78bfa; }
+  .demo-debrief-card.dt-execution::before { background: #60a5fa; }
+  .demo-debrief-card.dt-verification::before { background: #34d399; }
+  .debrief-entry {
+    transition: opacity 0.4s ease-out, transform 0.4s ease-out;
+    transform: translateY(5px);
+  }
+  .debrief-entry.visible {
+    opacity: 1 !important;
+    transform: translateY(0);
+  }
+  .demo-debrief-hdr {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 5px;
+  }
+  .demo-debrief-time {
+    font-size: 10px;
+    color: #6a6660;
+    font-family: 'IBM Plex Mono', monospace;
+  }
+  .demo-dt-bdg {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 9px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    font-family: 'IBM Plex Mono', monospace;
+  }
+  .demo-agent-bdg {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #1e2028;
+    font-family: 'IBM Plex Mono', monospace;
+  }
+  .demo-debrief-dec {
+    font-size: 11px;
+    font-weight: 500;
+    color: #e4e2de;
+    line-height: 1.45;
+  }
+
+  /* ---- Operation type selector ---- */
+  .demo-op-selector {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+  }
+  .demo-op-pill {
+    font-size: 9px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 4px;
+    border: 1px solid rgba(255,255,255,0.07);
+    background: transparent;
+    color: #4a4845;
+    cursor: default;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    transition: none;
+  }
+  .demo-op-pill.active {
+    border-color: rgba(107,138,255,0.35);
+    background: rgba(107,138,255,0.1);
+    color: #6b8aff;
+  }
+
+  /* ---- Pause overlay ---- */
+  #hero-demo:hover #demo-paused {
+    opacity: 1;
+  }
+</style>
+
+<!-- Hero demo orchestrator -->
+<script>
+(function () {
+  const demo = document.getElementById("hero-demo");
+  if (!demo) return;
+
+  let paused = false;
+  const pendingTimeouts = [];
+
+  demo.addEventListener("mouseenter", () => { paused = true; });
+  demo.addEventListener("mouseleave", () => { paused = false; });
+
+  function wait(ms) {
+    return new Promise((resolve) => {
+      function tick() {
+        if (paused) {
+          const id = setTimeout(tick, 50);
+          pendingTimeouts.push(id);
+          return;
+        }
+        if (ms <= 0) { resolve(); return; }
+        const chunk = Math.min(ms, 50);
+        ms -= chunk;
+        const id = setTimeout(tick, chunk);
+        pendingTimeouts.push(id);
+      }
+      tick();
+    });
+  }
+
+  function showStage(id) {
+    demo.querySelectorAll(".demo-stage").forEach((s) => {
+      s.classList.add("hidden");
+      s.style.display = "none";
+    });
+    const stage = document.getElementById(id);
+    if (stage) {
+      stage.classList.remove("hidden");
+      stage.classList.remove("fade-out");
+      stage.style.display = "";
+    }
+  }
+
+  async function fadeToStage(id) {
+    const current = demo.querySelector(".demo-stage:not(.hidden)");
+    if (current) {
+      current.classList.add("fade-out");
+      await wait(400);
+    }
+    showStage(id);
+  }
+
+  // ── Stage 0: Artifact Intake ──────────────────────
+  async function runIntake() {
+    showStage("stage-intake");
+    const card = document.getElementById("artifact-card");
+    const zone = document.getElementById("drop-zone");
+    const label = document.getElementById("intake-label");
+    const analysisSection = document.getElementById("intake-analysis");
+    const lines = document.querySelectorAll("#analysis-lines .analysis-line");
+    const bar = document.getElementById("analysis-bar");
+
+    // Reset
+    card.className = "artifact-dragging absolute rounded-lg border border-ds-accent-border bg-ds-surface px-4 py-3";
+    card.style.right = "-200px";
+    card.style.top = "80px";
+    zone.classList.remove("accepting");
+    zone.style.display = "flex";
+    card.style.display = "";
+    analysisSection.style.display = "none";
+    lines.forEach((l) => { l.classList.remove("visible"); l.style.opacity = "0"; });
+    if (bar) { bar.style.transition = "none"; bar.style.width = "0%"; }
+    if (label) label.textContent = "Artifact Intake";
+
+    await wait(600);
+    // Card slides in from right
+    card.style.opacity = "1";
+    card.classList.add("entering");
+    await wait(1000);
+    // Land in drop zone
+    zone.classList.add("accepting");
+    card.classList.remove("entering");
+    card.classList.add("landed");
+    await wait(600);
+
+    // Transition to analysis
+    zone.style.display = "none";
+    card.style.display = "none";
+    if (label) label.textContent = "Analyzing Artifact";
+    analysisSection.style.display = "block";
+
+    // Start progress bar
+    if (bar) {
+      bar.style.transition = "width 2.5s cubic-bezier(0.22, 1, 0.36, 1)";
+      bar.style.width = "100%";
+    }
+
+    // Reveal lines sequentially
+    for (const line of lines) {
+      await wait(550);
+      line.classList.add("visible");
+    }
+    await wait(600);
+  }
+
+  // ── Stage 1: Operation Authoring ──────────────────
+  async function runAuthoring() {
+    showStage("stage-authoring");
+    const card = document.getElementById("demo-artifact-card");
+    const check = document.getElementById("demo-artifact-check");
+    const segEnvoy = document.getElementById("seg-envoy");
+    const segEnv = document.getElementById("seg-env");
+    const segPart = document.getElementById("seg-part");
+    const target1 = document.getElementById("demo-target-1");
+    const hint = document.getElementById("demo-hint");
+    const actionBar = document.getElementById("demo-action-bar");
+    const requestBtn = document.getElementById("demo-request-btn");
+
+    // Reset
+    card.classList.remove("selected");
+    check.classList.remove("checked");
+    check.textContent = "";
+    segEnvoy.classList.remove("active");
+    segEnv.classList.remove("active");
+    segPart.classList.remove("active");
+    target1.classList.remove("selected");
+    if (hint) hint.style.opacity = "0";
+    if (actionBar) actionBar.style.opacity = "0";
+    requestBtn.classList.remove("clicked");
+
+    await wait(600);
+
+    // 1. Select artifact (checkbox fills)
+    card.classList.add("selected");
+    check.classList.add("checked");
+    check.textContent = "✓";
+    await wait(600);
+
+    // 2. Activate "Envoy" tab
+    segEnvoy.classList.add("active");
+    await wait(500);
+
+    // 3. Select target row (green highlight)
+    target1.classList.add("selected");
+    await wait(400);
+
+    // 4. Show context hint
+    if (hint) hint.style.opacity = "1";
+    await wait(400);
+
+    // 5. Show action bar
+    if (actionBar) actionBar.style.opacity = "1";
+    await wait(600);
+
+    // 6. Click "Request Plan"
+    requestBtn.classList.add("clicked");
+    await wait(500);
+  }
+
+  // ── Stage 2: Reasoning ─────────────────────────────
+  const REASONING_STEPS = [
+    "Scanning local environment state",
+    "Loading previous deployment history",
+    "Analyzing artifact dependencies",
+    "Reasoning about deployment strategy",
+    "Building rollback plan",
+    "Finalizing plan",
+  ];
+
+  async function runReasoning() {
+    await fadeToStage("stage-reasoning");
+    const stepText = document.getElementById("reasoning-step-text");
+    const dots = document.querySelectorAll("#reasoning-dots .reasoning-dot");
+    const elapsedEl = document.getElementById("reasoning-elapsed");
+
+    // Reset
+    dots.forEach((d) => { d.style.background = "rgba(255,255,255,0.07)"; });
+    if (stepText) stepText.textContent = REASONING_STEPS[0] + "…";
+    if (elapsedEl) elapsedEl.textContent = "0s elapsed";
+
+    // Elapsed timer
+    let secs = 0;
+    const timer = setInterval(() => {
+      if (!paused) {
+        secs++;
+        if (elapsedEl) elapsedEl.textContent = secs + "s elapsed";
+      }
+    }, 1000);
+
+    await wait(300);
+
+    // Advance through steps
+    for (let i = 0; i < REASONING_STEPS.length; i++) {
+      if (stepText) stepText.textContent = REASONING_STEPS[i] + "…";
+      dots[i].style.background = "#6b8aff";
+      await wait(600);
+    }
+
+    clearInterval(timer);
+    await wait(400);
+  }
+
+  // ── Stage 3: Plan Review ──────────────────────────
+  async function runPlan() {
+    await fadeToStage("stage-plan");
+    const assessment = document.getElementById("plan-assessment");
+    const stepsLabel = document.getElementById("plan-steps-label");
+    const steps = document.querySelectorAll("#plan-steps-container .plan-step");
+    const actions = document.getElementById("plan-actions");
+    const btn = document.getElementById("greenlight-btn");
+
+    // Reset
+    assessment.classList.remove("visible");
+    assessment.style.opacity = "0";
+    if (stepsLabel) { stepsLabel.classList.remove("visible"); stepsLabel.style.opacity = "0"; }
+    steps.forEach((s) => { s.classList.remove("visible"); s.style.opacity = "0"; });
+    actions.classList.remove("visible");
+    actions.style.opacity = "0";
+    btn.classList.remove("pulse", "clicked");
+
+    await wait(400);
+
+    // Assessment fades in
+    assessment.classList.add("visible");
+    assessment.style.opacity = "1";
+    await wait(400);
+
+    // Steps label
+    if (stepsLabel) { stepsLabel.classList.add("visible"); stepsLabel.style.opacity = "1"; }
+    await wait(200);
+
+    // Steps reveal one-by-one
+    for (const step of steps) {
+      await wait(200);
+      step.classList.add("visible");
+      step.style.opacity = "1";
+    }
+    await wait(300);
+
+    // Action buttons
+    actions.classList.add("visible");
+    actions.style.opacity = "1";
+    await wait(500);
+
+    // Pulse then click greenlight
+    btn.classList.add("pulse");
+    await wait(1200);
+    btn.classList.add("clicked");
+    await wait(600);
+  }
+
+  // ── Stage 4: Execution ────────────────────────────
+  async function runExec() {
+    await fadeToStage("stage-exec");
+    const steps = demo.querySelectorAll("#stage-exec .exec-step");
+    const elapsed = document.getElementById("exec-elapsed");
+    const healthEl = document.getElementById("exec-health");
+    const progressFill = document.getElementById("exec-progress-fill");
+    const stepDurations = ["2.1s", "8.4s", "34.2s", "0.8s", "12.6s"];
+
+    // Reset all steps
+    steps.forEach((s) => {
+      const badge = s.querySelector(".exec-badge");
+      if (badge) {
+        badge.className = "exec-badge";
+        badge.style.cssText = "width:20px;height:20px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;font-family:'IBM Plex Mono',monospace;flex-shrink:0;background:#2e313b;color:#6a6660;";
+      }
+      const status = s.querySelector(".exec-status");
+      if (status) { status.className = "exec-status text-[10px] text-ds-text-muted font-mono"; status.textContent = "waiting"; }
+      const dur = s.querySelector(".exec-duration");
+      if (dur) { dur.textContent = ""; dur.className = "exec-duration text-[10px] text-ds-text-muted font-mono"; }
+    });
+    if (elapsed) elapsed.textContent = "0.0s";
+    if (healthEl) healthEl.style.opacity = "0";
+    if (progressFill) progressFill.style.width = "0%";
+    const spinner = demo.querySelector(".exec-spinner");
+    if (spinner) spinner.style.opacity = "1";
+
+    // Elapsed timer
+    let elapsedMs = 0;
+    const timerInterval = setInterval(() => {
+      if (!paused) {
+        elapsedMs += 100;
+        if (elapsed) elapsed.textContent = (elapsedMs / 1000).toFixed(1) + "s";
+      }
+    }, 100);
+
+    await wait(400);
+
+    for (let i = 0; i < steps.length; i++) {
+      const badge = steps[i].querySelector(".exec-badge");
+      const status = steps[i].querySelector(".exec-status");
+      const dur = steps[i].querySelector(".exec-duration");
+
+      // Mark active
+      if (badge) badge.classList.add("active");
+      if (status) { status.classList.add("active"); status.textContent = "running"; }
+
+      // Update progress bar
+      if (progressFill) progressFill.style.width = ((i + 0.5) / steps.length * 100) + "%";
+
+      // Simulate work
+      await wait(500 + Math.random() * 400);
+
+      // Mark done
+      if (badge) { badge.classList.remove("active"); badge.classList.add("done"); }
+      if (status) { status.classList.remove("active"); status.classList.add("done"); status.textContent = "done"; }
+      if (dur) { dur.textContent = stepDurations[i]; dur.classList.add("done"); }
+
+      // Update progress bar
+      if (progressFill) progressFill.style.width = ((i + 1) / steps.length * 100) + "%";
+    }
+
+    clearInterval(timerInterval);
+    if (elapsed) elapsed.textContent = "57.4s";
+    if (healthEl) healthEl.style.opacity = "1";
+    if (spinner) spinner.style.opacity = "0";
+
+    await wait(800);
+  }
+
+  // ── Stage 5: Debrief ───────────────────────────────
+  async function runDebrief() {
+    await fadeToStage("stage-debrief");
+    const assessment = document.getElementById("debrief-assessment");
+    const logLabel = document.getElementById("debrief-log-label");
+    const cards = demo.querySelectorAll("#stage-debrief .demo-debrief-tl .debrief-entry");
+
+    // Reset
+    const allEntries = demo.querySelectorAll("#stage-debrief .debrief-entry");
+    allEntries.forEach((e) => { e.classList.remove("visible"); e.style.opacity = "0"; });
+
+    await wait(300);
+
+    // Assessment fades in
+    if (assessment) assessment.classList.add("visible");
+    await wait(700);
+
+    // Decision Log label
+    if (logLabel) logLabel.classList.add("visible");
+    await wait(300);
+
+    // Cards reveal one by one
+    for (const card of cards) {
+      await wait(400);
+      card.classList.add("visible");
+    }
+    await wait(4000);
+  }
+
+  // ── Main loop ─────────────────────────────────────
+  async function runDemo() {
+    while (true) {
+      await runIntake();
+      await runAuthoring();
+      await runReasoning();
+      await runPlan();
+      await runExec();
+      await runDebrief();
+      await wait(1000);
+    }
+  }
+
+  let started = false;
+  function startOnce() {
+    if (started) return;
+    started = true;
+    runDemo();
+  }
+
+  const demoObserver = new IntersectionObserver(
+    (entries) => {
+      if (entries[0].isIntersecting) {
+        demoObserver.disconnect();
+        startOnce();
+      }
+    },
+    { threshold: 0.1 },
+  );
+  demoObserver.observe(demo);
+
+  setTimeout(() => {
+    const rect = demo.getBoundingClientRect();
+    if (rect.top < window.innerHeight) {
+      demoObserver.disconnect();
+      startOnce();
+    }
+  }, 800);
+})();
+</script>

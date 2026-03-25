@@ -1,0 +1,40 @@
+---
+import Layout from "../layouts/Layout.astro";
+import HeroDemo from "../components/HeroDemo.astro";
+---
+
+<Layout
+  title="Synth — Interactive Demo"
+  description="See Synth in action: artifact intake, intelligent planning, human approval, and deterministic execution."
+>
+  <div class="mx-auto max-w-2xl px-6 py-16">
+    <div class="text-center mb-10">
+      <p class="text-xs font-mono uppercase tracking-widest text-ds-text-muted mb-3">Interactive Demo</p>
+      <h1 class="text-2xl font-display font-bold text-ds-text mb-3">Synth in action</h1>
+      <p class="text-sm text-ds-text-secondary max-w-sm mx-auto leading-relaxed">
+        Artifact intake → intelligent planning → human approval → deterministic execution
+      </p>
+    </div>
+
+    <HeroDemo />
+
+    <div class="mt-12 flex flex-col items-center gap-4">
+      <div class="flex items-center gap-6 text-sm">
+        <a
+          href="https://github.com/synth-deploy/synth"
+          target="_blank"
+          rel="noopener"
+          class="rounded-md bg-ds-accent px-5 py-2.5 text-ds-bg font-semibold hover:bg-ds-accent/90 transition-colors"
+        >
+          Get Started
+        </a>
+        <a href="/docs" class="text-ds-text-secondary hover:text-ds-text transition-colors">
+          Read the Docs →
+        </a>
+      </div>
+      <a href="/" class="text-xs text-ds-text-muted hover:text-ds-text transition-colors">
+        ← Back to synthops.app
+      </a>
+    </div>
+  </div>
+</Layout>

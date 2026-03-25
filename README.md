@@ -14,7 +14,7 @@
 
 <p align="center">
   <a href="https://synthops.app/docs">Documentation</a> &middot;
-  <a href="https://synthops.app/pricing">Pricing</a> &middot;
+  <a href="https://synthops.app/guide">Guide</a> &middot;
   <a href="https://synthops.app/roadmap">Roadmap</a>
 </p>
 
@@ -23,6 +23,15 @@
   <img src="https://img.shields.io/badge/node-%3E%3D22-brightgreen" alt="Node.js 22+" />
   <img src="https://img.shields.io/badge/docker-ready-2496ED?logo=docker&logoColor=white" alt="Docker ready" />
 </p>
+
+---
+
+<p align="center">
+  <a href="https://synthops.app/demo">
+    <img src="assets/demo-screenshot.png" alt="Synth — Plan Review" width="680" />
+  </a>
+</p>
+<p align="center"><sub><a href="https://synthops.app/demo">View the interactive demo →</a></sub></p>
 
 ---
 
