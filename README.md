@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="design/icons/dark/synth-icon-scalable.svg">
-    <img src="design/icons/light/synth-icon-scalable.svg" width="220" alt="Synth logo" />
+    <source media="(prefers-color-scheme: dark)" srcset="assets/icons/dark/synth-icon-scalable.svg">
+    <img src="assets/icons/light/synth-icon-scalable.svg" width="220" alt="Synth logo" />
   </picture>
 </p>
 
