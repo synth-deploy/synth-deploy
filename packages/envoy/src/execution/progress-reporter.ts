@@ -75,7 +75,7 @@ export function createCallbackReporter(callbackUrl: string, token?: string): Pro
     pendingEvents.push(event);
 
     // For terminal events, flush immediately
-    if (event.type === "deployment-completed" || event.type === "step-failed") {
+    if (event.type === "deployment-completed" || event.type === "script-failed") {
       if (flushTimer) {
         clearTimeout(flushTimer);
         flushTimer = null;

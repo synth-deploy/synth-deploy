@@ -254,7 +254,7 @@ export default function DeploymentDetailPanel({ deploymentId, title }: Props) {
 
   // ── Running — full-screen execution overlay ───────────────────────────────
   if (isRunning) {
-    const planSteps = deployment.plan?.steps ?? [];
+    const planSummary = deployment.plan?.scriptedPlan?.stepSummary ?? [];
     const isRollback = progressEvents.some((e) => e.type === "rollback-started");
     const rollbackDone = progressEvents.some((e) => e.type === "rollback-completed");
     const anyFailed = progressEvents.some((e) => e.type === "step-failed");
@@ -335,9 +335,9 @@ export default function DeploymentDetailPanel({ deploymentId, title }: Props) {
             </div>
           )}
 
-          {/* Step list */}
-          {planSteps.length > 0 ? (
-            planSteps.map((step, i) => {
+          {/* Step summary list */}
+          {planSummary.length > 0 ? (
+            planSummary.map((step, i) => {
               const evt = stepMap.get(i);
               const isCompleted = evt?.type === "step-completed";
               const isActive = evt?.type === "step-started";
@@ -363,7 +363,7 @@ export default function DeploymentDetailPanel({ deploymentId, title }: Props) {
                           ? "var(--text)"
                           : "var(--text-muted)",
                   }}>
-                    {step.description || step.action}
+                    {step.description}
                   </span>
                 </div>
               );
@@ -532,48 +532,122 @@ export default function DeploymentDetailPanel({ deploymentId, title }: Props) {
                 {deployment.plan.reasoning}
               </div>
             )}
-            <div>
-              {deployment.plan.steps.map((step, i) => (
-                <div
-                  key={i}
-                  className="plan-step-row"
-                  style={{ cursor: step.execPreview ? "pointer" : "default" }}
-                  onClick={() => step.execPreview && togglePlanStep(i)}
-                >
-                  <span className="plan-step-num">{i + 1}</span>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: 13, color: "var(--text)" }}>{step.description || step.action}</div>
-                        {step.rollbackAction && (
-                          <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>↩ {step.rollbackAction}</div>
-                        )}
+
+            {/* Step summaries */}
+            {deployment.plan.scriptedPlan && (
+              <div>
+                {deployment.plan.scriptedPlan.stepSummary.map((step, i) => (
+                  <div key={i} className="plan-step-row">
+                    <span className="plan-step-num">{i + 1}</span>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 13, color: "var(--text)" }}>{step.description}</div>
+                        </div>
+                        <span style={{
+                          fontSize: 10,
+                          fontFamily: "var(--font-mono)",
+                          fontWeight: 600,
+                          padding: "2px 6px",
+                          borderRadius: 4,
+                          color: !step.reversible ? "var(--status-failed)" : "var(--status-succeeded)",
+                          background: !step.reversible
+                            ? "color-mix(in srgb, var(--status-failed) 12%, transparent)"
+                            : "color-mix(in srgb, var(--status-succeeded) 12%, transparent)",
+                          flexShrink: 0,
+                        }}>
+                          {step.reversible ? "reversible" : "irreversible"}
+                        </span>
                       </div>
-                      <span style={{
-                        fontSize: 10,
-                        fontFamily: "var(--font-mono)",
-                        fontWeight: 600,
-                        color: !step.reversible ? "var(--status-failed)" : step.rollbackAction ? "var(--status-succeeded)" : "var(--text-muted)",
-                        flexShrink: 0,
-                      }}>
-                        {!step.reversible ? "high" : step.rollbackAction ? "low" : "none"}
-                      </span>
-                      {step.execPreview && (
-                        <button
-                          onClick={(e) => { e.stopPropagation(); togglePlanStep(i); }}
-                          style={{ background: "none", border: "none", cursor: "pointer", padding: "2px 4px", color: "var(--text-muted)", fontSize: 11, fontFamily: "var(--font-mono)", flexShrink: 0 }}
-                        >
-                          {expandedPlanSteps.has(i) ? "▲" : "▼"}
-                        </button>
-                      )}
                     </div>
-                    {expandedPlanSteps.has(i) && step.execPreview && (
-                      <div className="plan-step-exec-preview">{step.execPreview}</div>
-                    )}
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+
+                {/* Script toggle */}
+                <button
+                  onClick={() => togglePlanStep(-1)}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                    background: "none",
+                    border: "1px solid var(--border)",
+                    borderRadius: 6,
+                    padding: "6px 12px",
+                    marginTop: 10,
+                    cursor: "pointer",
+                    color: "var(--text-muted)",
+                    fontSize: 12,
+                    fontFamily: "var(--font-mono)",
+                  }}
+                >
+                  {expandedPlanSteps.has(-1) ? "▲ Hide Script" : "▼ View Script"}
+                </button>
+                {expandedPlanSteps.has(-1) && (
+                  <pre style={{
+                    marginTop: 8,
+                    padding: "14px 16px",
+                    borderRadius: 8,
+                    background: "var(--surface-alt)",
+                    border: "1px solid var(--border)",
+                    fontSize: 12,
+                    fontFamily: "var(--font-mono)",
+                    color: "var(--text)",
+                    overflow: "auto",
+                    maxHeight: 400,
+                    whiteSpace: "pre-wrap",
+                    wordBreak: "break-word",
+                    lineHeight: 1.5,
+                  }}>
+                    {deployment.plan.scriptedPlan.executionScript}
+                  </pre>
+                )}
+
+                {/* Rollback script toggle */}
+                {deployment.plan.scriptedPlan.rollbackScript && (
+                  <>
+                    <button
+                      onClick={() => togglePlanStep(-2)}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6,
+                        background: "none",
+                        border: "1px solid var(--border)",
+                        borderRadius: 6,
+                        padding: "6px 12px",
+                        marginTop: 8,
+                        cursor: "pointer",
+                        color: "var(--text-muted)",
+                        fontSize: 12,
+                        fontFamily: "var(--font-mono)",
+                      }}
+                    >
+                      {expandedPlanSteps.has(-2) ? "▲ Hide Rollback Script" : "▼ Rollback Script"}
+                    </button>
+                    {expandedPlanSteps.has(-2) && (
+                      <pre style={{
+                        marginTop: 8,
+                        padding: "14px 16px",
+                        borderRadius: 8,
+                        background: "var(--surface-alt)",
+                        border: "1px solid color-mix(in srgb, var(--status-warning) 30%, var(--border))",
+                        fontSize: 12,
+                        fontFamily: "var(--font-mono)",
+                        color: "var(--text)",
+                        overflow: "auto",
+                        maxHeight: 400,
+                        whiteSpace: "pre-wrap",
+                        wordBreak: "break-word",
+                        lineHeight: 1.5,
+                      }}>
+                        {deployment.plan.scriptedPlan.rollbackScript}
+                      </pre>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
           </div>
         )}
 

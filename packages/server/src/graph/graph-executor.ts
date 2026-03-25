@@ -246,7 +246,14 @@ export class GraphExecutor {
             operationId: node.deploymentId ?? node.id,
             plan: enrichedPlan,
             rollbackPlan: {
-              steps: [],
+              scriptedPlan: {
+                platform: "bash",
+                executionScript: "# No rollback plan provided",
+                dryRunScript: null,
+                rollbackScript: null,
+                reasoning: "No rollback plan provided",
+                stepSummary: [],
+              },
               reasoning: "No rollback plan provided",
             },
             artifactType: "graph-node",
@@ -419,7 +426,14 @@ export class GraphExecutor {
           operationId: node.deploymentId ?? nodeId,
           plan,
           rollbackPlan: {
-            steps: [],
+            scriptedPlan: {
+              platform: "bash",
+              executionScript: "# Rollback of rollback not supported",
+              dryRunScript: null,
+              rollbackScript: null,
+              reasoning: "Rollback of rollback not supported",
+              stepSummary: [],
+            },
             reasoning: "Rollback of rollback not supported",
           },
           artifactType: "graph-node-rollback",

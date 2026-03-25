@@ -780,7 +780,7 @@ function DeploymentDebriefDetail({ deploymentId, onBack, onNavigate }: { deploym
         </div>
       )}
 
-      {/* Executed Plan steps — prefer executionRecord, fall back to plan.steps, then debrief entries */}
+      {/* Executed Plan steps — prefer executionRecord, fall back to plan.scriptedPlan.stepSummary, then debrief entries */}
       {(deployment.executionRecord || deployment.plan || executionEntries.length > 0) && (
         <div className="canvas-section">
           <h3 className="canvas-section-title">Executed Plan</h3>
@@ -806,9 +806,10 @@ function DeploymentDebriefDetail({ deploymentId, onBack, onNavigate }: { deploym
                     </div>
                   );
                 })
-              : deployment.plan
-              ? deployment.plan.steps.map((step, i) => {
-                  const isLast = i === deployment.plan!.steps.length - 1;
+              : deployment.plan?.scriptedPlan
+              ? deployment.plan.scriptedPlan.stepSummary.map((step, i) => {
+                  const summarySteps = deployment.plan!.scriptedPlan!.stepSummary;
+                  const isLast = i === summarySteps.length - 1;
                   const succeeded = deployment.status === "succeeded";
                   const failed = deployment.status === "failed" || deployment.status === "rolled_back";
                   const iconColor = succeeded ? "var(--status-succeeded)" : failed ? "var(--status-failed)" : "var(--text-muted)";
@@ -819,9 +820,17 @@ function DeploymentDebriefDetail({ deploymentId, onBack, onNavigate }: { deploym
                       <span style={{ width: 22, height: 22, borderRadius: 5, display: "flex", alignItems: "center", justifyContent: "center", background: iconBg, color: iconColor, fontSize: 11, fontWeight: 700, flexShrink: 0, marginTop: 1 }}>{iconLabel}</span>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 13, color: "var(--text)" }}>{step.description}</div>
-                        {step.action && <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2, fontFamily: "var(--font-mono)" }}>{step.action}</div>}
                       </div>
-                      {step.target && <span style={{ fontSize: 11, fontFamily: "var(--font-mono)", color: "var(--text-muted)", flexShrink: 0, marginTop: 3 }}>{step.target}</span>}
+                      <span style={{
+                        fontSize: 10,
+                        fontFamily: "var(--font-mono)",
+                        fontWeight: 600,
+                        color: !step.reversible ? "var(--status-failed)" : "var(--status-succeeded)",
+                        flexShrink: 0,
+                        marginTop: 3,
+                      }}>
+                        {step.reversible ? "reversible" : "irreversible"}
+                      </span>
                     </div>
                   );
                 })
@@ -969,24 +978,35 @@ function DeploymentDebriefDetail({ deploymentId, onBack, onNavigate }: { deploym
                   {deployment.rollbackPlan.reasoning}
                 </div>
               )}
-              <div style={{ borderRadius: 10, overflow: "hidden", border: "1px solid var(--border)", background: "var(--surface)" }}>
-                {deployment.rollbackPlan.steps.map((step, i) => {
-                  const isLast = i === deployment.rollbackPlan!.steps.length - 1;
-                  return (
-                    <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "11px 16px", borderBottom: isLast ? "none" : "1px solid var(--border)" }}>
-                      <span style={{
-                        width: 20, height: 20, borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center",
-                        background: "var(--accent-soft, rgba(45,91,240,0.06))", color: "var(--accent)", fontSize: 10, fontWeight: 700, flexShrink: 0, marginTop: 1,
-                      }}>{i + 1}</span>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: 13, color: "var(--text)" }}>{step.action}</div>
-                        {step.description && <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>{step.description}</div>}
+              {deployment.rollbackPlan.scriptedPlan ? (
+                <div style={{ borderRadius: 10, overflow: "hidden", border: "1px solid var(--border)", background: "var(--surface)" }}>
+                  {deployment.rollbackPlan.scriptedPlan.stepSummary.map((step, i) => {
+                    const summarySteps = deployment.rollbackPlan!.scriptedPlan!.stepSummary;
+                    const isLast = i === summarySteps.length - 1;
+                    return (
+                      <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "11px 16px", borderBottom: isLast ? "none" : "1px solid var(--border)" }}>
+                        <span style={{
+                          width: 20, height: 20, borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center",
+                          background: "var(--accent-soft, rgba(45,91,240,0.06))", color: "var(--accent)", fontSize: 10, fontWeight: 700, flexShrink: 0, marginTop: 1,
+                        }}>{i + 1}</span>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 13, color: "var(--text)" }}>{step.description}</div>
+                        </div>
+                        <span style={{
+                          fontSize: 10,
+                          fontFamily: "var(--font-mono)",
+                          fontWeight: 600,
+                          color: !step.reversible ? "var(--status-failed)" : "var(--status-succeeded)",
+                          flexShrink: 0,
+                          marginTop: 3,
+                        }}>
+                          {step.reversible ? "reversible" : "irreversible"}
+                        </span>
                       </div>
-                      {step.target && <span style={{ fontSize: 11, fontFamily: "var(--font-mono)", color: "var(--text-muted)", flexShrink: 0, marginTop: 3 }}>{step.target}</span>}
-                    </div>
-                  );
-                })}
-              </div>
+                    );
+                  })}
+                </div>
+              ) : null}
             </>
           )}
         </div>

@@ -5,27 +5,33 @@
 // Core executor
 export { DefaultOperationExecutor } from "./operation-executor.js";
 export type {
-  OperationResult,
   ExecutionProgressEvent,
   ProgressCallback,
   PlanExecutionResult,
   DryRunPlanResult,
 } from "./operation-executor.js";
 
-// Registry
-export { DefaultOperationRegistry } from "./operation-registry.js";
+// Script runner
+export { ScriptRunner } from "./script-runner.js";
 export type {
-  OperationHandler,
-  HandlerResult,
-  DryRunResult,
-} from "./operation-registry.js";
+  ScriptResult,
+  ScriptedPlanResult,
+  ScriptProgressEvent,
+  ScriptProgressCallback,
+} from "./script-runner.js";
 
 // Boundary validation
 export { BoundaryValidator } from "./boundary-validator.js";
 export type {
-  ValidationResult,
-  PlanValidationResult,
+  ScriptValidationResult,
 } from "./boundary-validator.js";
+
+// LLM boundary audit (opt-in)
+export { auditScriptBoundaries } from "./llm-boundary-audit.js";
+export type {
+  BoundaryAuditResult,
+  AuditLlmClient,
+} from "./llm-boundary-audit.js";
 
 // Platform abstraction
 export { createPlatformAdapter } from "./platform.js";
@@ -36,11 +42,3 @@ export type {
   FilesystemOps,
 } from "./platform.js";
 export { LinuxPlatformAdapter } from "./platform/linux.js";
-
-// Handlers
-export { ServiceHandler } from "./handlers/service-handler.js";
-export { FileHandler } from "./handlers/file-handler.js";
-export { ConfigHandler } from "./handlers/config-handler.js";
-export { ProcessHandler } from "./handlers/process-handler.js";
-export { ContainerHandler } from "./handlers/container-handler.js";
-export { VerifyHandler } from "./handlers/verify-handler.js";

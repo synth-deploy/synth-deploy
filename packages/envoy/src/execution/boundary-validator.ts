@@ -1,318 +1,91 @@
-import path from "node:path";
 import type {
-  PlannedStep,
+  ScriptedPlan,
   SecurityBoundary,
-  SecurityBoundaryType,
 } from "@synth-deploy/core";
-import type { DefaultOperationRegistry } from "./operation-registry.js";
 
 // ---------------------------------------------------------------------------
 // Types — validation results
 // ---------------------------------------------------------------------------
 
 /**
- * Result of validating a single step against security boundaries.
+ * Result of validating a scripted plan against security boundaries.
  */
-export interface ValidationResult {
+export interface ScriptValidationResult {
   allowed: boolean;
-  step: PlannedStep;
-  violatedBoundary?: SecurityBoundary;
-  reason?: string;
-}
-
-/**
- * Result of validating an entire plan against security boundaries.
- */
-export interface PlanValidationResult {
-  allowed: boolean;
-  results: ValidationResult[];
-  violations: ValidationResult[];
+  violations: string[];
 }
 
 // ---------------------------------------------------------------------------
-// Handler-name to boundary-type mapping
+// BoundaryValidator — validates scripted plans against security boundaries
 // ---------------------------------------------------------------------------
 
 /**
- * Maps handler names to security boundary types. This is the single source
- * of truth for which handler category maps to which boundary. When the
- * registry is available, classifyAction() uses handler vocabulary directly.
- */
-const HANDLER_BOUNDARY_MAP: Record<string, SecurityBoundaryType> = {
-  service: "service",
-  file: "filesystem",
-  config: "filesystem",
-  container: "execution",
-  process: "execution",
-  verify: "network",
-};
-
-// ---------------------------------------------------------------------------
-// BoundaryValidator — enforces security boundaries on planned steps
-// ---------------------------------------------------------------------------
-
-/**
- * Validates planned deployment steps against security boundaries.
+ * Validates scripted plans against security boundaries.
  *
- * Security boundaries define what an envoy is allowed to do:
- * - filesystem: which paths can be read/written
- * - service: which services can be managed
- * - network: which hosts/ports can be accessed
- * - credential: which secrets can be used
- * - execution: which commands can be run
+ * With scripted plans, boundary enforcement shifts from per-step handler-based
+ * classification to script-level analysis. The validator inspects the script
+ * text for references to paths, commands, and hosts that violate boundaries.
  *
- * Every step is validated BEFORE execution begins. If any step
- * violates a boundary, the entire plan is rejected — no partial
- * execution.
- *
- * When constructed with a registry reference, classifyAction() derives
- * its vocabulary from registered handlers instead of a hardcoded list.
+ * This is a best-effort static analysis — the LLM audit pass (when enabled)
+ * provides deeper semantic analysis as a complement.
  */
 export class BoundaryValidator {
-  private registry: DefaultOperationRegistry | null;
-
-  constructor(registry?: DefaultOperationRegistry) {
-    this.registry = registry ?? null;
-  }
   /**
-   * Validate a single step against the provided boundaries.
+   * Validate a scripted plan against the provided boundaries.
+   * If no boundaries are configured, allow everything (boundaries are opt-in).
    */
-  validateStep(
-    step: PlannedStep,
+  validatePlan(
+    plan: ScriptedPlan,
     boundaries: SecurityBoundary[],
-  ): ValidationResult {
-    // If no boundaries are configured, allow everything.
-    // This matches the "correctness first" constraint —
-    // boundaries are opt-in, not required.
+  ): ScriptValidationResult {
     if (boundaries.length === 0) {
-      return { allowed: true, step };
+      return { allowed: true, violations: [] };
     }
 
-    // Determine which boundary type this action falls under
-    const boundaryType = this.classifyAction(step.action);
-    if (!boundaryType) {
-      // Unclassifiable actions are denied by default —
-      // the system must understand every action it executes
-      return {
-        allowed: false,
-        step,
-        reason:
-          `Action "${step.action}" could not be classified into a security ` +
-          `boundary type. The executor cannot validate this action against ` +
-          `configured boundaries. Either register a handler for this action ` +
-          `type or add an explicit boundary configuration.`,
-      };
-    }
+    const violations: string[] = [];
+    const scriptText = [
+      plan.executionScript,
+      plan.rollbackScript ?? "",
+    ].join("\n");
 
-    // Find matching boundaries for this type
-    const relevantBoundaries = boundaries.filter(
-      (b) => b.boundaryType === boundaryType,
-    );
-
-    // If no boundaries exist for this type, allow by default.
-    // Only configured boundary types are enforced.
-    if (relevantBoundaries.length === 0) {
-      return { allowed: true, step };
-    }
-
-    // Check each relevant boundary
-    for (const boundary of relevantBoundaries) {
-      const violation = this.checkBoundary(step, boundary);
-      if (violation) {
-        return {
-          allowed: false,
-          step,
-          violatedBoundary: boundary,
-          reason: violation,
-        };
+    for (const boundary of boundaries) {
+      const result = this.checkBoundary(scriptText, boundary);
+      if (result) {
+        violations.push(result);
       }
     }
 
-    return { allowed: true, step };
-  }
-
-  /**
-   * Validate all steps in a plan. Returns detailed results for each step.
-   * If any step is denied, the entire plan is considered invalid.
-   */
-  validatePlan(
-    steps: PlannedStep[],
-    boundaries: SecurityBoundary[],
-  ): PlanValidationResult {
-    const results = steps.map((step) => this.validateStep(step, boundaries));
-    const violations = results.filter((r) => !r.allowed);
-
     return {
       allowed: violations.length === 0,
-      results,
       violations,
     };
   }
 
   // -------------------------------------------------------------------------
-  // Internal: action classification and boundary checking
+  // Internal: boundary checking against script text
   // -------------------------------------------------------------------------
 
-  /**
-   * Classify an action string into a security boundary type.
-   *
-   * When a registry is available, this derives the classification from
-   * registered handler vocabularies — no duplicated keyword lists.
-   * Falls back to a static mapping when no registry is configured.
-   *
-   * Returns undefined if the action doesn't match any known type.
-   */
-  private classifyAction(action: string | undefined): SecurityBoundaryType | undefined {
-    if (!action) return undefined;
-    const lower = action.toLowerCase();
-
-    // When registry is available, match against handler vocabularies
-    if (this.registry) {
-      const capabilities = this.registry.listCapabilities();
-      for (const cap of capabilities) {
-        const matches = cap.actionKeywords.some((kw) => lower.includes(kw));
-        if (matches) {
-          const boundaryType = HANDLER_BOUNDARY_MAP[cap.name];
-          if (boundaryType) return boundaryType;
-        }
-      }
-      return undefined;
-    }
-
-    // Fallback: static classification (used when no registry is provided,
-    // e.g. in standalone validation scenarios)
-
-    // Service actions
-    if (
-      lower.includes("start") ||
-      lower.includes("stop") ||
-      lower.includes("restart") ||
-      lower.includes("service") ||
-      lower.includes("reload")
-    ) {
-      return "service";
-    }
-
-    // Filesystem actions
-    if (
-      lower.includes("copy") ||
-      lower.includes("move") ||
-      lower.includes("backup") ||
-      lower.includes("permission") ||
-      lower.includes("symlink") ||
-      lower.includes("file") ||
-      lower.includes("write") ||
-      lower.includes("read") ||
-      lower.includes("mkdir") ||
-      lower.includes("delete") ||
-      lower.includes("config") ||
-      lower.includes("template") ||
-      lower.includes("substitute") ||
-      lower.includes("transform")
-    ) {
-      return "filesystem";
-    }
-
-    // Network actions
-    if (
-      lower.includes("health") ||
-      lower.includes("check") ||
-      lower.includes("verify") ||
-      lower.includes("validate") ||
-      lower.includes("port") ||
-      lower.includes("http") ||
-      lower.includes("connect") ||
-      lower.includes("test")
-    ) {
-      return "network";
-    }
-
-    // Execution actions
-    if (
-      lower.includes("run") ||
-      lower.includes("execute") ||
-      lower.includes("command") ||
-      lower.includes("script") ||
-      lower.includes("docker") ||
-      lower.includes("container") ||
-      lower.includes("compose") ||
-      lower.includes("pull") ||
-      lower.includes("image")
-    ) {
-      return "execution";
-    }
-
-    return undefined;
-  }
-
-  /**
-   * Check a step against a specific boundary.
-   * Returns a violation reason string, or undefined if allowed.
-   */
   private checkBoundary(
-    step: PlannedStep,
+    scriptText: string,
     boundary: SecurityBoundary,
   ): string | undefined {
     const config = boundary.config;
 
     switch (boundary.boundaryType) {
       case "filesystem": {
-        // Filesystem boundaries define allowed paths.
-        // We resolve both the target and allowed paths to prevent
-        // path traversal attacks (e.g., /allowed/../etc/shadow).
         const allowedPaths = config.allowedPaths as string[] | undefined;
-        if (allowedPaths && allowedPaths.length > 0) {
-          const resolvedTarget = path.resolve(step.target);
-          const inAllowedPath = allowedPaths.some((p) => {
-            const resolvedAllowed = path.resolve(p);
-            // Use trailing separator to prevent prefix attacks:
-            // e.g., /app-secret should not match allowed path /app
-            const prefix = resolvedAllowed.endsWith(path.sep)
-              ? resolvedAllowed
-              : resolvedAllowed + path.sep;
-            return resolvedTarget === resolvedAllowed || resolvedTarget.startsWith(prefix);
-          });
-          if (!inAllowedPath) {
-            return (
-              `Step targets "${step.target}" (resolved: ${path.resolve(step.target)}) which is outside the allowed ` +
-              `filesystem paths: ${allowedPaths.join(", ")}. This boundary ` +
-              `restricts file operations to specific directories to prevent ` +
-              `unintended modifications to the host system.`
-            );
-          }
-        }
-        return undefined;
-      }
+        if (!allowedPaths || allowedPaths.length === 0) return undefined;
 
-      case "service": {
-        // Service boundaries define allowed service names
-        const allowedServices = config.allowedServices as string[] | undefined;
-        if (allowedServices && allowedServices.length > 0) {
-          const target = step.target;
-          if (!allowedServices.includes(target)) {
-            return (
-              `Step targets service "${target}" which is not in the allowed ` +
-              `service list: ${allowedServices.join(", ")}. This boundary ` +
-              `restricts which system services the envoy can manage.`
-            );
-          }
-        }
-        return undefined;
-      }
-
-      case "network": {
-        // Network boundaries define allowed hosts/ports
-        const allowedHosts = config.allowedHosts as string[] | undefined;
-        if (allowedHosts && allowedHosts.length > 0) {
-          const target = step.target;
-          const inAllowedHost = allowedHosts.some(
-            (h) => target.includes(h),
+        // Extract path-like references from the script
+        const pathRefs = this.extractPaths(scriptText);
+        for (const ref of pathRefs) {
+          const inAllowed = allowedPaths.some((p) =>
+            ref === p || ref.startsWith(p.endsWith("/") ? p : p + "/"),
           );
-          if (!inAllowedHost) {
+          if (!inAllowed) {
             return (
-              `Step targets "${target}" which is not in the allowed ` +
-              `network hosts: ${allowedHosts.join(", ")}. This boundary ` +
-              `restricts which network endpoints the envoy can access.`
+              `Script references path "${ref}" which is outside the allowed ` +
+              `filesystem paths: ${allowedPaths.join(", ")}.`
             );
           }
         }
@@ -320,42 +93,118 @@ export class BoundaryValidator {
       }
 
       case "execution": {
-        // Execution boundaries define allowed commands
         const allowedCommands = config.allowedCommands as string[] | undefined;
-        if (allowedCommands && allowedCommands.length > 0) {
-          const action = step.action.toLowerCase();
-          const target = step.target.toLowerCase();
-          const inAllowedCommand = allowedCommands.some(
-            (c) => action.includes(c.toLowerCase()) || target.includes(c.toLowerCase()),
+        if (!allowedCommands || allowedCommands.length === 0) return undefined;
+
+        // Extract command references from the script
+        const commands = this.extractCommands(scriptText);
+        for (const cmd of commands) {
+          const inAllowed = allowedCommands.some((c) =>
+            cmd.toLowerCase().includes(c.toLowerCase()),
           );
-          if (!inAllowedCommand) {
+          if (!inAllowed) {
             return (
-              `Step action "${step.action}" targeting "${step.target}" does ` +
-              `not match any allowed execution commands: ${allowedCommands.join(", ")}. ` +
-              `This boundary restricts which commands the envoy can execute.`
+              `Script uses command "${cmd}" which is not in the allowed ` +
+              `execution commands: ${allowedCommands.join(", ")}.`
             );
           }
         }
         return undefined;
       }
 
-      case "credential": {
-        // Credential boundaries define which secrets can be accessed
-        const allowedCredentials = config.allowedCredentials as string[] | undefined;
-        if (allowedCredentials && allowedCredentials.length > 0) {
-          const target = step.target;
-          if (!allowedCredentials.includes(target)) {
+      case "network": {
+        const allowedHosts = config.allowedHosts as string[] | undefined;
+        if (!allowedHosts || allowedHosts.length === 0) return undefined;
+
+        // Extract host references from the script
+        const hosts = this.extractHosts(scriptText);
+        for (const host of hosts) {
+          const inAllowed = allowedHosts.some((h) => host.includes(h));
+          if (!inAllowed) {
             return (
-              `Step accesses credential "${target}" which is not in the ` +
-              `allowed credentials: ${allowedCredentials.join(", ")}. This ` +
-              `boundary restricts which secrets the envoy can use.`
+              `Script references host "${host}" which is not in the allowed ` +
+              `network hosts: ${allowedHosts.join(", ")}.`
             );
           }
         }
         return undefined;
       }
+
+      case "service": {
+        const allowedServices = config.allowedServices as string[] | undefined;
+        if (!allowedServices || allowedServices.length === 0) return undefined;
+
+        // Check for systemctl/service/launchctl references
+        const servicePattern = /(?:systemctl\s+\w+\s+|service\s+|launchctl\s+\w+\s+)([\w.-]+)/g;
+        let match;
+        while ((match = servicePattern.exec(scriptText)) !== null) {
+          const svcName = match[1];
+          if (!allowedServices.includes(svcName)) {
+            return (
+              `Script manages service "${svcName}" which is not in the allowed ` +
+              `service list: ${allowedServices.join(", ")}.`
+            );
+          }
+        }
+        return undefined;
+      }
+
+      case "credential":
+        // Credential boundaries require semantic understanding —
+        // delegate to the LLM audit pass when enabled
+        return undefined;
     }
 
     return undefined;
+  }
+
+  /** Extract absolute path references from script text */
+  private extractPaths(script: string): string[] {
+    const paths = new Set<string>();
+    // Match absolute paths (Unix-style)
+    const pathPattern = /(?:^|\s|["'=])(\/([\w.-]+\/)+[\w.*-]*)/gm;
+    let match;
+    while ((match = pathPattern.exec(script)) !== null) {
+      const p = match[1];
+      // Skip common non-path references
+      if (p.startsWith("/dev/") || p.startsWith("/proc/") || p === "/dev/null") continue;
+      paths.add(p);
+    }
+    return [...paths];
+  }
+
+  /** Extract command names from script text (first word of each line) */
+  private extractCommands(script: string): string[] {
+    const cmds = new Set<string>();
+    for (const line of script.split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#") || trimmed.startsWith("//")) continue;
+      // Skip shell builtins and control structures
+      if (/^(if|then|else|elif|fi|for|do|done|while|case|esac|function|return|exit|echo|printf|set|export|local|readonly|declare|unset|shift|trap|cd|pwd|true|false|test|\[|\[\[)(\s|$)/.test(trimmed)) continue;
+      // Extract the command (first word, possibly with path)
+      const cmdMatch = trimmed.match(/^(?:sudo\s+)?([^\s|;&]+)/);
+      if (cmdMatch) {
+        const cmd = cmdMatch[1].replace(/^.*\//, ""); // strip path prefix
+        if (cmd) cmds.add(cmd);
+      }
+    }
+    return [...cmds];
+  }
+
+  /** Extract hostname/URL references from script text */
+  private extractHosts(script: string): string[] {
+    const hosts = new Set<string>();
+    // Match URLs
+    const urlPattern = /https?:\/\/([\w.-]+)/g;
+    let match;
+    while ((match = urlPattern.exec(script)) !== null) {
+      hosts.add(match[1]);
+    }
+    // Match curl/wget/ssh targets
+    const cmdHostPattern = /(?:curl|wget|ssh|scp|rsync)\s+(?:-[^\s]*\s+)*(?:[\w]+@)?([\w.-]+(?:\.\w{2,}))/g;
+    while ((match = cmdHostPattern.exec(script)) !== null) {
+      hosts.add(match[1]);
+    }
+    return [...hosts];
   }
 }

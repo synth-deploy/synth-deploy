@@ -5,7 +5,8 @@ import type {
   DeploymentEnrichment,
   DeploymentPlan,
   DeploymentRecommendation,
-  PlannedStep,
+  ScriptedPlan,
+  StepSummary,
   DebriefEntry,
   PostmortemReport,
   Artifact,
@@ -352,7 +353,7 @@ export async function rejectDeployment(
 
 export async function modifyDeploymentPlan(
   id: string,
-  data: { steps: PlannedStep[]; reason: string },
+  data: { scriptedPlan: ScriptedPlan; stepSummary: StepSummary[]; reason: string },
 ): Promise<{ deployment: Deployment; modified: boolean }> {
   return fetchJson(`/api/operations/${id}/modify`, {
     method: "POST",

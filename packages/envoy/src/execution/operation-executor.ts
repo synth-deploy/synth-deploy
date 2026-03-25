@@ -1,30 +1,15 @@
 import type {
-  PlannedStep,
-  SecurityBoundary,
+  ScriptedPlan,
   DebriefWriter,
 } from "@synth-deploy/core";
-import { envoyLog, envoyWarn, envoyError } from "../logger.js";
-import type { DefaultOperationRegistry, DryRunResult } from "./operation-registry.js";
-import type { BoundaryValidator } from "./boundary-validator.js";
+import { envoyLog, envoyError } from "../logger.js";
+import { ScriptRunner } from "./script-runner.js";
+import type { ScriptResult, ScriptProgressCallback } from "./script-runner.js";
 import type { Platform } from "./platform.js";
 
 // ---------------------------------------------------------------------------
 // Types — execution results and progress events
 // ---------------------------------------------------------------------------
-
-/**
- * Result of executing a single planned step.
- */
-export interface OperationResult {
-  step: PlannedStep;
-  status: "completed" | "failed";
-  output: string;
-  error?: string;
-  startedAt: Date;
-  completedAt: Date;
-  durationMs: number;
-  systemStateAfter?: string;
-}
 
 /**
  * Progress event emitted during plan execution. Consumers use these
@@ -33,17 +18,18 @@ export interface OperationResult {
 export interface ExecutionProgressEvent {
   deploymentId: string;
   type:
-    | "step-started"
-    | "step-completed"
-    | "step-failed"
+    | "script-started"
+    | "script-output"
+    | "script-completed"
+    | "script-failed"
     | "rollback-started"
     | "rollback-completed"
     | "deployment-completed";
-  stepIndex: number;
-  stepDescription: string;
+  phase: "dry-run" | "execution" | "rollback";
   status: "in_progress" | "completed" | "failed";
   output?: string;
   error?: string;
+  exitCode?: number;
   timestamp: Date;
   /** 0–100 percentage of overall progress */
   overallProgress: number;
@@ -55,495 +41,138 @@ export interface ExecutionProgressEvent {
 export type ProgressCallback = (event: ExecutionProgressEvent) => void;
 
 /**
- * Full result of executing an entire plan.
+ * Full result of executing a scripted plan.
  */
 export interface PlanExecutionResult {
   success: boolean;
-  results: OperationResult[];
-  /** If execution failed, which step failed */
-  failedStepIndex?: number;
-  /** If rollback was triggered, the results of rollback steps */
-  rollbackResults?: OperationResult[];
+  /** Result of the execution script */
+  executionResult: ScriptResult;
+  /** Result of the rollback script (if rollback was triggered) */
+  rollbackResult?: ScriptResult;
   totalDurationMs: number;
 }
 
 /**
- * Aggregate result of dry-running an entire plan. Contains per-step results
- * and an overall confidence assessment. The LLM assesses viability based on
- * these observations — handlers only report facts, not decisions.
+ * Result of running a dry-run script.
  */
 export interface DryRunPlanResult {
-  /** Per-step dry-run results, in plan order */
-  stepResults: Array<{
-    step: PlannedStep;
-    stepIndex: number;
-    result: DryRunResult;
-  }>;
-  /** Overall confidence: worst fidelity across all steps */
-  overallFidelity: "deterministic" | "speculative" | "unknown";
-  /** All unknowns aggregated across steps */
-  allUnknowns: string[];
-  /** True if any observation across any step has passed: false */
-  hasFailedObservations: boolean;
+  /** stdout from the dry-run script */
+  output: string;
+  /** stderr from the dry-run script */
+  errors: string;
+  /** Whether the dry-run script exited cleanly */
+  success: boolean;
+  /** Exit code */
+  exitCode: number;
+  /** Execution duration */
+  durationMs: number;
 }
 
 // ---------------------------------------------------------------------------
-// DefaultOperationExecutor — orchestrates plan execution
+// DefaultOperationExecutor — orchestrates scripted plan execution
 // ---------------------------------------------------------------------------
 
 /**
  * The operation executor is the deterministic engine that runs approved
- * deployment plans. It does NOT reason — that happened during planning.
- * It executes exactly what was approved, validates boundaries, and
+ * scripted plans. It does NOT reason — that happened during planning.
+ * It executes the approved script verbatim, captures output, and
  * handles failures with automatic rollback.
  *
  * Contract:
- * 1. Validate ALL steps against security boundaries before executing any
- * 2. Execute steps sequentially (order matters for deployments)
- * 3. On failure, automatically rollback completed steps in reverse order
- * 4. Every action is recorded to the debrief
- * 5. The system is always left in a known state
+ * 1. The approved script runs exactly as written — no re-reasoning
+ * 2. stdout/stderr captured in real-time for progress and debrief
+ * 3. Exit code determines success/failure
+ * 4. On failure, the rollback script runs automatically (if one exists)
+ * 5. Debrief records all scripts, output, timing, and outcomes
  */
 export class DefaultOperationExecutor {
+  private scriptRunner: ScriptRunner;
+
   constructor(
-    private registry: DefaultOperationRegistry,
-    private boundaryValidator: BoundaryValidator,
     private platform: Platform,
     private debrief?: DebriefWriter,
-  ) {}
+    timeoutMs?: number,
+  ) {
+    this.scriptRunner = new ScriptRunner(platform, timeoutMs);
+  }
 
   /**
-   * Dry-run an entire plan: walk steps in order, call handler.dryRun()
-   * on each, feed predicted outcomes from earlier steps into later ones.
-   * Returns aggregate results with overall confidence assessment.
-   *
-   * This is read-only — no side effects on the target system.
+   * Run a dry-run script and return the results for LLM feedback.
+   * This is read-only — the dry-run script should only probe system state.
    */
-  async executeDryRun(steps: PlannedStep[]): Promise<DryRunPlanResult> {
-    const stepResults: DryRunPlanResult["stepResults"] = [];
-    const predictedOutcomes = new Map<number, Record<string, unknown>>();
-    const allUnknowns: string[] = [];
-    let worstFidelity: DryRunPlanResult["overallFidelity"] = "deterministic";
-    let hasFailedObservations = false;
-
-    // Pre-scan: infer planned outcomes from step actions so subsequent steps
-    // can see prior intent even if the handler doesn't produce a prediction.
-    // This fixes container-name-collision false positives when a prior stop/rm
-    // step resolves to a different handler or produces no predictedOutcome.
-    for (let i = 0; i < steps.length; i++) {
-      const lower = (steps[i].action ?? "").toLowerCase();
-      const target = steps[i].target;
-      if (
-        (lower.includes("stop") || lower.includes("remove") || lower.includes("rm") || lower.includes("kill")) &&
-        (lower.includes("docker") || lower.includes("container"))
-      ) {
-        const action = (lower.includes("remove") || lower.includes("rm"))
-          ? "removed"
-          : lower.includes("kill") ? "stopped" : "stopped";
-        predictedOutcomes.set(i, { containerAction: action, containerName: target });
-      }
+  async executeDryRun(plan: ScriptedPlan): Promise<DryRunPlanResult> {
+    if (!plan.dryRunScript) {
+      return {
+        output: "No dry-run script for this operation type.",
+        errors: "",
+        success: true,
+        exitCode: 0,
+        durationMs: 0,
+      };
     }
 
-    for (let i = 0; i < steps.length; i++) {
-      const step = steps[i];
-
-      // Resolve handler for this step
-      const handler = this.registry.resolve(step.action, this.platform);
-      if (!handler) {
-        const result: DryRunResult = {
-          observations: [
-            {
-              name: "handler-exists",
-              passed: false,
-              detail:
-                `No handler registered for action "${step.action}" on platform ` +
-                `"${this.platform}". The action must contain a recognized keyword.`,
-            },
-          ],
-          fidelity: "deterministic",
-        };
-        console.warn(`[Handler] dry-run step ${i + 1}: no handler for action "${step.action}"`);
-        envoyWarn(`DRY-RUN step ${i + 1}: no handler for action "${step.action}"`);
-        stepResults.push({ step, stepIndex: i, result });
-        hasFailedObservations = true;
-        continue;
-      }
-
-      // Run the handler's dry-run check with predicted outcomes from prior steps
-      const result = await handler.dryRun(step, predictedOutcomes);
-
-      const failedObs = result.observations.filter((o) => !o.passed);
-      if (failedObs.length > 0) {
-        console.warn(`[Handler] dry-run step ${i + 1}: ${failedObs.length} failed observation(s) — ${failedObs.map((o) => o.name).join(", ")}`);
-        envoyWarn(`DRY-RUN step ${i + 1}: ${failedObs.length} failed observation(s)`, failedObs.map((o) => o.name));
-      } else {
-        console.log(`[Handler] dry-run step ${i + 1}: passed`);
-        envoyLog(`DRY-RUN step ${i + 1}: passed`);
-      }
-
-      stepResults.push({ step, stepIndex: i, result });
-
-      // Check if any observation failed
-      if (result.observations.some((o) => !o.passed)) {
-        hasFailedObservations = true;
-      }
-
-      // Record predicted outcome for subsequent steps
-      if (result.predictedOutcome) {
-        predictedOutcomes.set(i, result.predictedOutcome);
-      }
-
-      // Track unknowns
-      if (result.unknowns) {
-        allUnknowns.push(...result.unknowns);
-      }
-
-      // Track worst fidelity
-      if (result.fidelity === "unknown") {
-        worstFidelity = "unknown";
-      } else if (result.fidelity === "speculative" && worstFidelity === "deterministic") {
-        worstFidelity = "speculative";
-      }
-    }
+    const result = await this.scriptRunner.executeDryRun(
+      plan.dryRunScript,
+      plan.platform,
+    );
 
     return {
-      stepResults,
-      overallFidelity: worstFidelity,
-      allUnknowns,
-      hasFailedObservations,
+      output: result.stdout,
+      errors: result.stderr,
+      success: result.success,
+      exitCode: result.exitCode,
+      durationMs: result.durationMs,
     };
   }
 
   /**
-   * Execute a single step after boundary validation.
-   */
-  async executeStep(
-    step: PlannedStep,
-    boundaries: SecurityBoundary[],
-  ): Promise<OperationResult> {
-    const startedAt = new Date();
-
-    // Validate boundary
-    const validation = this.boundaryValidator.validateStep(step, boundaries);
-    if (!validation.allowed) {
-      const completedAt = new Date();
-      return {
-        step,
-        status: "failed",
-        output: "",
-        error: `Security boundary violation: ${validation.reason}`,
-        startedAt,
-        completedAt,
-        durationMs: completedAt.getTime() - startedAt.getTime(),
-      };
-    }
-
-    // Resolve handler
-    const handler = this.registry.resolve(step.action, this.platform);
-    if (!handler) {
-      const completedAt = new Date();
-      const caps = this.registry.listCapabilities();
-      const handlerSummary = caps
-        .map((c) => `${c.name} [keywords: ${c.actionKeywords.join(", ")}]`)
-        .join("; ");
-      const allKeywords = this.registry.allActionKeywords();
-      return {
-        step,
-        status: "failed",
-        output: "",
-        error:
-          `No handler registered for action "${step.action}" on platform ` +
-          `"${this.platform}". The action string must contain at least one ` +
-          `recognized keyword. Available handlers: ${handlerSummary || "none"}. ` +
-          `Recognized action keywords: ${allKeywords.join(", ") || "none"}.`,
-        startedAt,
-        completedAt,
-        durationMs: completedAt.getTime() - startedAt.getTime(),
-      };
-    }
-
-    // Execute
-    try {
-      const result = await handler.execute(step.action, step.target, {
-        ...step.params,
-        description: step.description,
-        rollbackAction: step.rollbackAction,
-        reversible: step.reversible,
-      });
-
-      const completedAt = new Date();
-      const durationMs = completedAt.getTime() - startedAt.getTime();
-
-      // Optional post-execution verification
-      let systemStateAfter: string | undefined;
-      if (result.success && handler.verify) {
-        const verified = await handler.verify(step.action, step.target);
-        systemStateAfter = verified
-          ? "verified"
-          : "execution succeeded but verification failed";
-      }
-
-      // Record to debrief
-      this.recordDebrief(step, result.success, result.output, durationMs, result.error);
-
-      return {
-        step,
-        status: result.success ? "completed" : "failed",
-        output: result.output,
-        error: result.error,
-        startedAt,
-        completedAt,
-        durationMs,
-        systemStateAfter,
-      };
-    } catch (err: unknown) {
-      const completedAt = new Date();
-      const errorMsg = err instanceof Error ? err.message : String(err);
-
-      this.recordDebrief(step, false, "", completedAt.getTime() - startedAt.getTime(), errorMsg);
-
-      return {
-        step,
-        status: "failed",
-        output: "",
-        error: `Unexpected error executing "${step.action}": ${errorMsg}`,
-        startedAt,
-        completedAt,
-        durationMs: completedAt.getTime() - startedAt.getTime(),
-      };
-    }
-  }
-
-  /**
-   * Execute an entire plan: validate all steps first, then execute
-   * sequentially. On failure, automatically rollback in reverse order.
+   * Execute an approved scripted plan. Runs the execution script verbatim
+   * and triggers rollback on failure.
    */
   async executePlan(
-    steps: PlannedStep[],
-    boundaries: SecurityBoundary[],
+    plan: ScriptedPlan,
     onProgress?: ProgressCallback,
-    deploymentId?: string,
+    operationId?: string,
   ): Promise<PlanExecutionResult> {
+    const opId = operationId ?? "unknown";
     const planStart = Date.now();
-    const depId = deploymentId ?? "unknown";
 
-    // Phase 1: Validate ALL steps before executing any
-    const planValidation = this.boundaryValidator.validatePlan(steps, boundaries);
-    if (!planValidation.allowed) {
-      const violations = planValidation.violations;
-      const firstViolation = violations[0];
-      return {
-        success: false,
-        results: [{
-          step: firstViolation.step,
-          status: "failed",
-          output: "",
-          error:
-            `Plan rejected: ${violations.length} security boundary violation(s). ` +
-            `First violation: ${firstViolation.reason}`,
-          startedAt: new Date(),
-          completedAt: new Date(),
-          durationMs: 0,
-        }],
-        failedStepIndex: steps.indexOf(firstViolation.step),
-        totalDurationMs: Date.now() - planStart,
-      };
-    }
-
-    // Phase 2: Execute steps sequentially
-    const results: OperationResult[] = [];
-    let failedIndex: number | undefined;
-
-    for (let i = 0; i < steps.length; i++) {
-      const step = steps[i];
-
-      console.log(`[Handler] step ${i + 1}/${steps.length} — ${step.action} ${step.target}`);
-      envoyLog(`EXEC step ${i + 1}/${steps.length}`, { action: step.action, target: step.target });
-
-      // Emit step-started
-      onProgress?.({
-        deploymentId: depId,
-        type: "step-started",
-        stepIndex: i,
-        stepDescription: step.description,
-        status: "in_progress",
-        timestamp: new Date(),
-        overallProgress: Math.round((i / steps.length) * 100),
-      });
-
-      const result = await this.executeStep(step, boundaries);
-      results.push(result);
-
-      if (result.status === "completed") {
-        console.log(`[Handler] executed step ${i + 1}: success in ${result.durationMs}ms`);
-        envoyLog(`EXEC step ${i + 1}: success`, { durationMs: result.durationMs });
-      }
-
-      if (result.status === "failed") {
-        console.error(`[Handler] executed step ${i + 1}: failure in ${result.durationMs}ms — ${result.error}`);
-        envoyError(`EXEC step ${i + 1}: failure`, { durationMs: result.durationMs, error: result.error });
-        failedIndex = i;
-
-        // Emit step-failed
-        onProgress?.({
-          deploymentId: depId,
-          type: "step-failed",
-          stepIndex: i,
-          stepDescription: step.description,
-          status: "failed",
-          error: result.error,
-          timestamp: new Date(),
-          overallProgress: Math.round((i / steps.length) * 100),
-        });
-
-        // Phase 3: Automatic rollback of completed steps
-        const completedSteps = results
-          .filter((r) => r.status === "completed")
-          .map((r) => r.step);
-
-        let rollbackResults: OperationResult[] | undefined;
-        if (completedSteps.length > 0) {
-          console.log(`[Rollback] rolling back — ${completedSteps.length} steps to undo`);
-          envoyLog(`ROLLBACK rolling back`, { stepsToUndo: completedSteps.length });
-          rollbackResults = await this.rollback(
-            completedSteps,
-            boundaries,
-            onProgress,
-            depId,
-          );
-        }
-
-        return {
-          success: false,
-          results,
-          failedStepIndex: failedIndex,
-          rollbackResults,
-          totalDurationMs: Date.now() - planStart,
-        };
-      }
-
-      // Emit step-completed
-      onProgress?.({
-        deploymentId: depId,
-        type: "step-completed",
-        stepIndex: i,
-        stepDescription: step.description,
-        status: "completed",
-        output: result.output,
-        timestamp: new Date(),
-        overallProgress: Math.round(((i + 1) / steps.length) * 100),
-      });
-    }
-
-    // All steps succeeded
-    onProgress?.({
-      deploymentId: depId,
-      type: "deployment-completed",
-      stepIndex: steps.length - 1,
-      stepDescription: "All steps completed",
-      status: "completed",
-      timestamp: new Date(),
-      overallProgress: 100,
+    envoyLog("Executing scripted plan", {
+      platform: plan.platform,
+      hasRollback: !!plan.rollbackScript,
+      stepCount: plan.stepSummary.length,
     });
+
+    // Bridge progress events
+    const progressBridge: ScriptProgressCallback | undefined = onProgress
+      ? (event) => {
+          onProgress({
+            deploymentId: opId,
+            type: event.type as ExecutionProgressEvent["type"],
+            phase: event.phase,
+            status: event.type.includes("failed") ? "failed"
+              : event.type.includes("completed") ? "completed"
+              : "in_progress",
+            output: event.output,
+            error: event.error,
+            exitCode: event.exitCode,
+            timestamp: event.timestamp,
+            overallProgress: event.overallProgress,
+          });
+        }
+      : undefined;
+
+    const result = await this.scriptRunner.executePlan(plan, opId, progressBridge);
+
+    // Record to debrief
+    this.recordDebrief(plan, result.executionResult, result.rollbackResult, opId);
 
     return {
-      success: true,
-      results,
+      success: result.success,
+      executionResult: result.executionResult,
+      rollbackResult: result.rollbackResult,
       totalDurationMs: Date.now() - planStart,
     };
-  }
-
-  /**
-   * Rollback completed steps in reverse order using each step's
-   * rollbackAction. Steps without a rollbackAction are skipped.
-   */
-  async rollback(
-    completedSteps: PlannedStep[],
-    boundaries: SecurityBoundary[],
-    onProgress?: ProgressCallback,
-    deploymentId?: string,
-  ): Promise<OperationResult[]> {
-    const depId = deploymentId ?? "unknown";
-    const rollbackResults: OperationResult[] = [];
-
-    // Emit rollback-started
-    onProgress?.({
-      deploymentId: depId,
-      type: "rollback-started",
-      stepIndex: 0,
-      stepDescription: `Rolling back ${completedSteps.length} completed step(s)`,
-      status: "in_progress",
-      timestamp: new Date(),
-      overallProgress: 0,
-    });
-
-    // Reverse order — undo the most recent step first
-    const reversed = [...completedSteps].reverse();
-
-    for (let i = 0; i < reversed.length; i++) {
-      const step = reversed[i];
-
-      console.log(`[Rollback] undoing step ${i + 1}: ${step.action} ${step.target}`);
-      envoyLog(`ROLLBACK undoing step ${i + 1}`, { action: step.action, target: step.target });
-
-      if (!step.rollbackAction) {
-        // No rollback action defined — skip but record
-        rollbackResults.push({
-          step,
-          status: "completed",
-          output: `No rollback action defined for "${step.description}" — skipped`,
-          startedAt: new Date(),
-          completedAt: new Date(),
-          durationMs: 0,
-        });
-        continue;
-      }
-
-      // Create a rollback step from the original step's rollback action
-      const rollbackStep: PlannedStep = {
-        description: `Rollback: ${step.description}`,
-        action: step.rollbackAction,
-        target: step.target,
-        reversible: false,
-      };
-
-      const result = await this.executeStep(rollbackStep, boundaries);
-      rollbackResults.push(result);
-
-      // Log rollback failures but continue — best effort to leave
-      // system in known state
-      if (result.status === "failed") {
-        this.debrief?.record({
-          partitionId: null,
-          operationId: depId,
-          agent: "envoy",
-          decisionType: "rollback-execution",
-          decision: `Rollback step failed: ${step.description}`,
-          reasoning:
-            `Failed to rollback "${step.description}" with action ` +
-            `"${step.rollbackAction}": ${result.error}. The system may ` +
-            `be in a partially-rolled-back state. Manual intervention ` +
-            `may be required to restore the expected state.`,
-          context: {
-            originalStep: step,
-            rollbackError: result.error,
-          },
-        });
-      }
-    }
-
-    // Emit rollback-completed
-    onProgress?.({
-      deploymentId: depId,
-      type: "rollback-completed",
-      stepIndex: 0,
-      stepDescription: `Rollback complete — ${rollbackResults.filter((r) => r.status === "completed").length}/${reversed.length} steps rolled back`,
-      status: "completed",
-      timestamp: new Date(),
-      overallProgress: 100,
-    });
-
-    return rollbackResults;
   }
 
   // -------------------------------------------------------------------------
@@ -551,37 +180,59 @@ export class DefaultOperationExecutor {
   // -------------------------------------------------------------------------
 
   private recordDebrief(
-    step: PlannedStep,
-    success: boolean,
-    output: string,
-    durationMs: number,
-    error?: string,
+    plan: ScriptedPlan,
+    executionResult: ScriptResult,
+    rollbackResult: ScriptResult | undefined,
+    operationId: string,
   ): void {
     if (!this.debrief) return;
 
+    // Record execution result
     this.debrief.record({
       partitionId: null,
-      operationId: null,
+      operationId,
       agent: "envoy",
       decisionType: "deployment-execution",
-      decision: `Executed: ${step.action} ${step.target} — ${success ? "succeeded" : "failed"}`,
-      reasoning: success
-        ? `Step "${step.description}" completed in ${durationMs}ms. ` +
-          `Action "${step.action}" applied to "${step.target}". ` +
-          `Output: ${output || "(no output)"}.`
-        : `Step "${step.description}" failed after ${durationMs}ms. ` +
-          `Action "${step.action}" targeting "${step.target}" did not complete. ` +
-          `Error: ${error ?? "unknown"}. ` +
-          `${step.reversible ? "This step is reversible — rollback will be attempted." : "This step is not reversible — manual intervention may be needed."}`,
+      decision: executionResult.success
+        ? `Script execution succeeded (exit code 0) in ${executionResult.durationMs}ms`
+        : `Script execution failed (exit code ${executionResult.exitCode}) in ${executionResult.durationMs}ms${executionResult.timedOut ? " — timed out" : ""}`,
+      reasoning: plan.reasoning,
       context: {
-        action: step.action,
-        target: step.target,
-        success,
-        output: output.slice(0, 500),
-        error,
-        durationMs,
-        reversible: step.reversible,
+        platform: plan.platform,
+        exitCode: executionResult.exitCode,
+        success: executionResult.success,
+        timedOut: executionResult.timedOut,
+        durationMs: executionResult.durationMs,
+        stdout: executionResult.stdout.slice(0, 2000),
+        stderr: executionResult.stderr.slice(0, 2000),
+        executionScript: plan.executionScript,
+        dryRunScript: plan.dryRunScript,
+        rollbackScript: plan.rollbackScript,
+        stepSummary: plan.stepSummary,
       },
     });
+
+    // Record rollback result if one occurred
+    if (rollbackResult) {
+      this.debrief.record({
+        partitionId: null,
+        operationId,
+        agent: "envoy",
+        decisionType: "rollback-execution",
+        decision: rollbackResult.success
+          ? `Rollback script succeeded (exit code 0) in ${rollbackResult.durationMs}ms`
+          : `Rollback script failed (exit code ${rollbackResult.exitCode}) in ${rollbackResult.durationMs}ms. ` +
+            `System may be in a partially-rolled-back state. Manual intervention may be required.`,
+        reasoning: `Automatic rollback triggered after execution failure. ` +
+          `Rollback script ${rollbackResult.success ? "restored" : "failed to restore"} the previous state.`,
+        context: {
+          exitCode: rollbackResult.exitCode,
+          success: rollbackResult.success,
+          stdout: rollbackResult.stdout.slice(0, 2000),
+          stderr: rollbackResult.stderr.slice(0, 2000),
+          rollbackScript: plan.rollbackScript,
+        },
+      });
+    }
   }
 }

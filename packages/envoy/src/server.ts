@@ -78,18 +78,23 @@ const PlanRequestSchema = z.object({
   triggerResponseIntent: z.string().optional(),
 });
 
-const PlanStepSchema = z.object({
+const StepSummarySchema = z.object({
   description: z.string(),
-  action: z.string(),
-  target: z.string(),
-  params: z.record(z.unknown()).optional(),
-  // Default false — LLM may omit this field and JSON.stringify drops undefined values
-  reversible: z.boolean().default(false),
-  rollbackAction: z.string().optional(),
+  reversible: z.boolean(),
+});
+
+const ScriptedPlanSchema = z.object({
+  platform: z.enum(["bash", "powershell"]),
+  executionScript: z.string(),
+  dryRunScript: z.string().nullable(),
+  rollbackScript: z.string().nullable(),
+  reasoning: z.string(),
+  stepSummary: z.array(StepSummarySchema),
+  diffFromCurrent: z.array(z.object({ key: z.string(), from: z.string(), to: z.string() })).optional(),
 });
 
 const PlanSchema = z.object({
-  steps: z.array(PlanStepSchema),
+  scriptedPlan: ScriptedPlanSchema,
   reasoning: z.string(),
   diffFromCurrent: z.array(z.object({ key: z.string(), from: z.string(), to: z.string() })).optional(),
   diffFromPreviousPlan: z.string().optional(),
@@ -276,10 +281,9 @@ export function createEnvoyServer(
 
   const ValidateRefinementSchema = z.object({
     feedback: z.string().min(1),
-    currentPlanSteps: z.array(z.object({
+    currentPlanSummary: z.array(z.object({
       description: z.string(),
-      action: z.string(),
-      target: z.string(),
+      reversible: z.boolean(),
     })),
     artifactName: z.string(),
     environmentName: z.string(),
@@ -302,13 +306,13 @@ export function createEnvoyServer(
   // -- Validate plan (boundary check only, no execution) ---------------------
 
   app.post("/validate-plan", async (request, reply) => {
-    const body = request.body as { steps?: unknown; boundaries?: unknown };
-    if (!body?.steps || !Array.isArray(body.steps)) {
-      return reply.status(400).send({ error: "Request must include steps array" });
+    const body = request.body as { plan?: unknown; boundaries?: unknown };
+    if (!body?.plan || typeof body.plan !== "object") {
+      return reply.status(400).send({ error: "Request must include plan object (ScriptedPlan)" });
     }
 
     const boundaries = Array.isArray(body.boundaries) ? body.boundaries : [];
-    const result = await agent.validatePlanSteps(body.steps, boundaries);
+    const result = await agent.validateScriptedPlan(body.plan as import("@synth-deploy/core").ScriptedPlan, boundaries);
     return reply.status(200).send(result);
   });
 

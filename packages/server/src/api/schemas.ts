@@ -245,10 +245,10 @@ export const CreateDeploymentSchema = z.object({
 
 const ChildOperationInputSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("deploy"), artifactId: z.string().min(1), artifactVersionId: z.string().optional() }),
-  z.object({ type: z.literal("maintain"), intent: z.string().min(1), parameters: z.record(z.unknown()).optional() }),
+  z.object({ type: z.literal("maintain"), intent: z.string().min(1) }),
   z.object({ type: z.literal("query"), intent: z.string().min(1) }),
   z.object({ type: z.literal("investigate"), intent: z.string().min(1), allowWrite: z.boolean().optional() }),
-  z.object({ type: z.literal("trigger"), condition: z.string().min(1), responseIntent: z.string().min(1), parameters: z.record(z.unknown()).optional() }),
+  z.object({ type: z.literal("trigger"), condition: z.string().min(1), responseIntent: z.string().min(1) }),
 ]);
 
 // --- Operations ---
@@ -284,37 +284,33 @@ export const RejectDeploymentSchema = z.object({
 });
 
 export const ModifyDeploymentPlanSchema = z.object({
-  steps: z.array(z.object({
-    description: z.string().min(1),
-    action: z.string().min(1),
-    target: z.string().min(1),
-    reversible: z.boolean(),
-    rollbackAction: z.string().optional(),
-  })).min(1, "Plan must contain at least one step"),
+  executionScript: z.string().min(1, "Execution script must not be empty"),
+  rollbackScript: z.string().optional(),
   reason: z.string().min(1),
+});
+
+const ScriptedPlanSchema = z.object({
+  platform: z.enum(["bash", "powershell"]),
+  executionScript: z.string().min(1),
+  dryRunScript: z.string().nullable(),
+  rollbackScript: z.string().nullable(),
+  reasoning: z.string().min(1),
+  stepSummary: z.array(z.object({
+    description: z.string().min(1),
+    reversible: z.boolean(),
+  })),
+  diffFromCurrent: z.array(z.object({ key: z.string(), from: z.string(), to: z.string() })).optional(),
 });
 
 export const SubmitPlanSchema = z.object({
   plan: z.object({
-    steps: z.array(z.object({
-      description: z.string().min(1),
-      action: z.string().min(1),
-      target: z.string().min(1),
-      reversible: z.boolean(),
-      rollbackAction: z.string().optional(),
-    })).min(1),
+    scriptedPlan: ScriptedPlanSchema,
     reasoning: z.string().min(1),
     diffFromCurrent: z.array(z.object({ key: z.string(), from: z.string(), to: z.string() })).optional(),
     diffFromPreviousPlan: z.string().optional(),
   }),
   rollbackPlan: z.object({
-    steps: z.array(z.object({
-      description: z.string().min(1),
-      action: z.string().min(1),
-      target: z.string().min(1),
-      reversible: z.boolean(),
-      rollbackAction: z.string().optional(),
-    })),
+    scriptedPlan: ScriptedPlanSchema,
     reasoning: z.string().min(1),
   }),
 });

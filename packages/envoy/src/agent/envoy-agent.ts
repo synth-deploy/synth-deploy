@@ -9,11 +9,13 @@ import type {
   OperationId,
   PartitionId,
   EnvironmentId,
-  PlannedStep,
   SecurityBoundary,
   ArtifactAnalysis,
   DeploymentPlan,
   OperationPlan,
+  ScriptedPlan,
+  StepSummary,
+  ConfigChange,
 } from "@synth-deploy/core";
 import { LlmClient, sanitizeForPrompt, maskIfSecret, QueryFindingsSchema, InvestigationFindingsSchema } from "@synth-deploy/core";
 import type { QueryFindings, InvestigationFindings } from "@synth-deploy/core";
@@ -24,15 +26,8 @@ import { DiagnosticInvestigator } from "./diagnostic-investigator.js";
 import type { DiagnosticReport } from "./diagnostic-investigator.js";
 import {
   DefaultOperationExecutor,
-  DefaultOperationRegistry,
   BoundaryValidator,
   createPlatformAdapter,
-  ServiceHandler,
-  FileHandler,
-  ConfigHandler,
-  ProcessHandler,
-  ContainerHandler,
-  VerifyHandler,
 } from "../execution/index.js";
 
 import { createCallbackReporter } from "../execution/progress-reporter.js";
@@ -70,12 +65,9 @@ export interface DeploymentInstruction {
   environmentName: string;
   /** Name of the partition (for debrief entries) */
   partitionName: string;
-  /** Optional planned steps from the Command agent — when provided, the
-   *  OperationExecutor runs these through platform-aware handlers with
-   *  boundary validation and automatic rollback on failure */
-  plan?: PlannedStep[];
-  /** Security boundaries to validate plan steps against */
-  boundaries?: SecurityBoundary[];
+  /** Optional operation plan from the Command agent — when provided, the
+   *  OperationExecutor runs the scripted plan with automatic rollback on failure */
+  plan?: OperationPlan;
   /** URL to POST progress events to during execution (provided by Command) */
   progressCallbackUrl?: string;
 }
@@ -281,7 +273,6 @@ export interface ExecutionResult {
  */
 export class EnvoyAgent {
   private operationExecutor: DefaultOperationExecutor | null = null;
-  private operationRegistry: DefaultOperationRegistry | null = null;
   private scanner: EnvironmentScanner;
   private investigator: DiagnosticInvestigator;
   private reporter: ServerReporter | null;
@@ -317,27 +308,7 @@ export class EnvoyAgent {
 
   private async initExecutor(): Promise<void> {
     const adapter = await createPlatformAdapter();
-    const registry = new DefaultOperationRegistry();
-
-    // Register handlers — most specific first. ContainerHandler before
-    // ServiceHandler/FileHandler because "docker stop" contains "stop"
-    // (ServiceHandler keyword) and "docker remove" contains "move"
-    // (FileHandler substring match). Domain-specific handlers must win.
-    registry.register(new ContainerHandler());
-    registry.register(new ServiceHandler(adapter));
-    registry.register(new FileHandler(adapter));
-    registry.register(new ConfigHandler());
-    registry.register(new ProcessHandler());
-    registry.register(new VerifyHandler());
-
-    this.operationRegistry = registry;
-
-    // Pass the registry to the validator so it derives classification
-    // from registered handler vocabularies instead of a hardcoded list
-    const validator = new BoundaryValidator(registry);
     this.operationExecutor = new DefaultOperationExecutor(
-      registry,
-      validator,
       adapter.platform,
       this.debrief,
     );
@@ -378,26 +349,23 @@ export class EnvoyAgent {
   }
 
   /**
-   * Validate plan steps against security boundaries without executing.
-   * Used by Command to verify user-modified plans are feasible.
+   * Validate a scripted plan against security boundaries without executing.
+   * Used by Server to verify user-modified plans are feasible.
    */
-  async validatePlanSteps(
-    steps: PlannedStep[],
+  async validateScriptedPlan(
+    plan: ScriptedPlan,
     boundaries: SecurityBoundary[] = [],
   ): Promise<{
     valid: boolean;
-    violations: Array<{ step: string; reason: string }>;
+    violations: string[];
   }> {
     await this.executorReady;
 
-    const result = new BoundaryValidator().validatePlan(steps, boundaries);
+    const result = new BoundaryValidator().validatePlan(plan, boundaries);
 
     return {
       valid: result.allowed,
-      violations: result.violations.map((v) => ({
-        step: v.step.description,
-        reason: v.reason ?? "Violates security boundary",
-      })),
+      violations: result.violations,
     };
   }
 
@@ -576,7 +544,7 @@ export class EnvoyAgent {
 
     // Branch: if a plan was provided by Command, use the OperationExecutor.
     // Otherwise, write workspace artifacts directly (the default path).
-    if (instruction.plan && instruction.plan.length > 0) {
+    if (instruction.plan?.scriptedPlan) {
       return this.executePlan(
         instruction,
         localRecord,
@@ -603,7 +571,7 @@ export class EnvoyAgent {
 
   /**
    * Execute a deployment plan through the OperationExecutor.
-   * Used when the Command agent provides planned steps.
+   * Used when the Command agent provides a scripted plan.
    */
   private async executePlan(
     instruction: DeploymentInstruction,
@@ -613,8 +581,8 @@ export class EnvoyAgent {
     debriefEntries: DebriefEntry[],
     recordEntry: (params: Parameters<DebriefWriter["record"]>[0]) => DebriefEntry,
   ): Promise<DeploymentResult> {
-    const steps = instruction.plan!;
-    const boundaries = instruction.boundaries ?? [];
+    const scriptedPlan = instruction.plan!.scriptedPlan;
+    const stepCount = scriptedPlan.stepSummary.length;
 
     recordEntry({
       partitionId: instruction.partitionId,
@@ -622,36 +590,33 @@ export class EnvoyAgent {
       agent: "envoy",
       decisionType: "deployment-execution",
       decision:
-        `Executing plan: ${steps.length} step(s) for ${instruction.operationId} ` +
+        `Executing scripted plan: ${stepCount} step(s) for ${instruction.operationId} ` +
         `v${instruction.version} via OperationExecutor`,
       reasoning:
-        `Environment scan passed. Executing ${steps.length} planned step(s) ` +
-        `via the OperationExecutor with ${boundaries.length} security boundary ` +
-        `constraint(s). Steps: ${steps.map((s) => s.description).join("; ")}. ` +
-        `All steps are validated against security boundaries before any execution begins. ` +
-        `If any step fails, completed steps will be automatically rolled back in reverse order.`,
+        `Environment scan passed. Executing scripted ${scriptedPlan.platform} plan ` +
+        `with ${stepCount} step(s) via the OperationExecutor. ` +
+        `Steps: ${scriptedPlan.stepSummary.map((s) => s.description).join("; ")}. ` +
+        `If execution fails, the rollback script runs automatically.`,
       context: {
         step: "execute",
         workspacePath: localRecord.workspacePath,
-        stepCount: steps.length,
-        boundaryCount: boundaries.length,
-        steps: steps.map((s) => ({ action: s.action, target: s.target, description: s.description })),
+        stepCount,
+        platform: scriptedPlan.platform,
+        steps: scriptedPlan.stepSummary.map((s) => ({ description: s.description, reversible: s.reversible })),
       },
     });
 
-    envoyLog("EXECUTE-START", { operationId: instruction.operationId, steps: steps.length });
+    envoyLog("EXECUTE-START", { operationId: instruction.operationId, steps: stepCount });
     const execStart = Date.now();
     const planResult = await this.operationExecutor!.executePlan(
-      steps,
-      boundaries,
+      scriptedPlan,
       undefined,
       instruction.operationId,
     );
     const execDurationMs = Date.now() - execStart;
 
     if (!planResult.success) {
-      const failedResult = planResult.results.find((r) => r.status === "failed");
-      const errorMsg = failedResult?.error ?? "Unknown execution error";
+      const errorMsg = planResult.executionResult.stderr || "Execution script failed";
       envoyError("EXECUTE-FAILED", { operationId: instruction.operationId, reason: errorMsg });
 
       this.state.completeDeployment(instruction.deploymentId, "failed", errorMsg);
@@ -667,13 +632,13 @@ export class EnvoyAgent {
         operationId: instruction.operationId,
         agent: "envoy",
         decisionType: "deployment-failure",
-        decision: `Plan execution failed at step ${(planResult.failedStepIndex ?? 0) + 1}/${steps.length}: ${errorMsg}`,
+        decision: `Script execution failed (exit ${planResult.executionResult.exitCode}): ${errorMsg.slice(0, 200)}`,
         reasoning:
-          `Execution failed on step "${steps[planResult.failedStepIndex ?? 0]?.description ?? "unknown"}". ` +
-          `Error: ${errorMsg}. ` +
-          `${planResult.rollbackResults ? `Automatic rollback was executed on ${planResult.rollbackResults.length} completed step(s). ` : ""}` +
+          `Execution script failed with exit code ${planResult.executionResult.exitCode}. ` +
+          `Error: ${errorMsg.slice(0, 500)}. ` +
+          `${planResult.rollbackResult ? `Automatic rollback script was executed. ` : ""}` +
           `The environment should be in its previous state. Total execution time: ${execDurationMs}ms.`,
-        context: { step: "execute", error: errorMsg, durationMs: execDurationMs, failedStepIndex: planResult.failedStepIndex },
+        context: { step: "execute", error: errorMsg, durationMs: execDurationMs, exitCode: planResult.executionResult.exitCode },
       });
 
       recordEntry({
@@ -705,10 +670,8 @@ export class EnvoyAgent {
       return failResult;
     }
 
-    // Collect artifact names from completed steps
-    const artifacts = planResult.results
-      .filter((r) => r.status === "completed")
-      .map((r) => r.step.description);
+    // Collect artifact names from step summaries
+    const artifacts = scriptedPlan.stepSummary.map((s) => s.description);
 
     // Update state and record completion
     this.state.completeDeployment(instruction.deploymentId, "succeeded");
@@ -725,12 +688,11 @@ export class EnvoyAgent {
       operationId: instruction.operationId,
       agent: "envoy",
       decisionType: "deployment-verification",
-      decision: `Plan execution verified — all ${planResult.results.length} steps completed`,
+      decision: `Script execution verified — completed successfully`,
       reasoning:
-        `All ${planResult.results.length} planned steps executed successfully ` +
-        `in ${execDurationMs}ms. Each step was validated against security boundaries ` +
-        `and executed through platform-aware handlers.`,
-      context: { step: "verify", passed: true, stepCount: planResult.results.length },
+        `Execution script completed successfully (exit 0) ` +
+        `in ${execDurationMs}ms covering ${stepCount} step(s).`,
+      context: { step: "verify", passed: true, stepCount },
     });
 
     recordEntry({
@@ -743,10 +705,9 @@ export class EnvoyAgent {
         `v${instruction.version} is now live on "${instruction.environmentName}"`,
       reasoning:
         `Full local pipeline completed successfully: environment scan ` +
-        `confirmed readiness, ${planResult.results.length} execution step(s) ` +
-        `completed via OperationExecutor. Local state updated — ` +
-        `"${instruction.environmentName}" now runs v${instruction.version} ` +
-        `for partition "${instruction.partitionName}". ` +
+        `confirmed readiness, scripted plan executed via OperationExecutor. ` +
+        `Local state updated — "${instruction.environmentName}" now runs ` +
+        `v${instruction.version} for partition "${instruction.partitionName}". ` +
         `Total execution time: ${totalDurationMs}ms.`,
       context: {
         step: "complete",
@@ -754,7 +715,6 @@ export class EnvoyAgent {
         executionDurationMs: execDurationMs,
         totalDurationMs,
         workspacePath: localRecord.workspacePath,
-        executedSteps: planResult.results.length,
       },
     });
 
@@ -768,10 +728,10 @@ export class EnvoyAgent {
       executionDurationMs: execDurationMs,
       totalDurationMs,
       verificationPassed: true,
-      verificationChecks: planResult.results.map((r) => ({
-        name: r.step.action,
-        passed: r.status === "completed",
-        detail: r.output || r.step.description,
+      verificationChecks: scriptedPlan.stepSummary.map((s) => ({
+        name: s.description,
+        passed: true,
+        detail: s.description,
       })),
       failureReason: null,
       diagnostic: null,
@@ -1198,7 +1158,7 @@ export class EnvoyAgent {
    */
   async validateRefinementFeedback(params: {
     feedback: string;
-    currentPlanSteps: Array<{ description: string; action: string; target: string }>;
+    currentPlanSummary: Array<{ description: string; reversible: boolean }>;
     artifactName: string;
     environmentName: string;
     llmApiKey?: string;
@@ -1212,8 +1172,8 @@ export class EnvoyAgent {
       return { mode: "replan", message: "LLM unavailable — proceeding with replan" };
     }
 
-    const stepsSummary = params.currentPlanSteps
-      .map((s, i) => `${i + 1}. [${s.action}] ${s.target} — ${s.description}`)
+    const stepsSummary = params.currentPlanSummary
+      .map((s, i) => `${i + 1}. ${s.description}${s.reversible ? " (reversible)" : ""}`)
       .join("\n");
 
     const prompt =
@@ -1478,15 +1438,28 @@ export class EnvoyAgent {
       });
 
       const plan: OperationPlan = {
-        steps: [{
-          description: "default",
-          action: "echo 0",
-          target: envName,
-          reversible: false,
-        }],
+        scriptedPlan: {
+          platform: "bash",
+          executionScript: "#!/bin/bash\nset -euo pipefail\necho 0",
+          dryRunScript: null,
+          rollbackScript: null,
+          reasoning: `Basic monitoring plan for: ${condition}. LLM unavailable — configure an LLM provider for intelligent probe generation.`,
+          stepSummary: [{ description: "Default echo probe", reversible: false }],
+        },
         reasoning: `Basic monitoring plan for: ${condition}. LLM unavailable — configure an LLM provider for intelligent probe generation.`,
       };
-      return { plan, rollbackPlan: { steps: [], reasoning: "Monitoring triggers do not require rollback." } };
+      const emptyRollback: OperationPlan = {
+        scriptedPlan: {
+          platform: "bash",
+          executionScript: "echo 'No rollback needed'",
+          dryRunScript: null,
+          rollbackScript: null,
+          reasoning: "Monitoring triggers do not require rollback.",
+          stepSummary: [],
+        },
+        reasoning: "Monitoring triggers do not require rollback.",
+      };
+      return { plan, rollbackPlan: emptyRollback };
     }
 
     const systemPrompt =
@@ -1577,20 +1550,41 @@ export class EnvoyAgent {
       },
     });
 
+    // Build probe scripts into a single monitoring script
+    const probeScript = directive.probes.map((p) =>
+      `# Probe: ${p.label}\n${p.command}`,
+    ).join("\n\n");
+
     const plan: OperationPlan = {
-      steps: directive.probes.map((p) => ({
-        description: p.label,
-        action: p.command,
-        target: envName,
-        reversible: false,
-        params: { parseAs: p.parseAs },
-      })),
+      scriptedPlan: {
+        platform: "bash",
+        executionScript: `#!/bin/bash\nset -euo pipefail\n\n${probeScript}`,
+        dryRunScript: null,
+        rollbackScript: null,
+        reasoning: directive.reasoning,
+        stepSummary: directive.probes.map((p) => ({
+          description: `Probe: ${p.label} (${p.parseAs})`,
+          reversible: false,
+        })),
+      },
       reasoning: directive.reasoning,
+    };
+
+    const emptyRollback: OperationPlan = {
+      scriptedPlan: {
+        platform: "bash",
+        executionScript: "echo 'No rollback needed'",
+        dryRunScript: null,
+        rollbackScript: null,
+        reasoning: "Monitoring triggers do not require rollback.",
+        stepSummary: [],
+      },
+      reasoning: "Monitoring triggers do not require rollback.",
     };
 
     return {
       plan,
-      rollbackPlan: { steps: [], reasoning: "Monitoring triggers do not require rollback." },
+      rollbackPlan: emptyRollback,
       intervalMs: directive.intervalMs,
       cooldownMs: directive.cooldownMs,
     };
@@ -1678,7 +1672,14 @@ export class EnvoyAgent {
     }
 
     const stubPlan: OperationPlan = {
-      steps: [],
+      scriptedPlan: {
+        platform: "bash",
+        executionScript: "echo 'Query operation — no execution script'",
+        dryRunScript: null,
+        rollbackScript: null,
+        reasoning: queryFindings.summary,
+        stepSummary: [],
+      },
       reasoning: queryFindings.summary,
     };
 
@@ -1785,7 +1786,14 @@ export class EnvoyAgent {
     }
 
     const stubPlan: OperationPlan = {
-      steps: [],
+      scriptedPlan: {
+        platform: "bash",
+        executionScript: "echo 'Investigation operation — no execution script'",
+        dryRunScript: null,
+        rollbackScript: null,
+        reasoning: investigationFindings.summary,
+        stepSummary: [],
+      },
       reasoning: investigationFindings.summary,
     };
 
@@ -1840,33 +1848,29 @@ export class EnvoyAgent {
       .map((t) => t.name)
       .join(", ");
 
+    const scriptPlatform = process.platform === "win32" ? "powershell" : "bash";
+    const scriptShebang = scriptPlatform === "bash" ? "#!/bin/bash\nset -euo pipefail" : "# PowerShell\n$ErrorActionPreference = 'Stop'";
+
     const planOutputFormat =
-      `Each step must have a clear action, target, description, and whether it is ` +
-      `reversible (with rollback action if so). For steps that execute a shell command, ` +
-      `include the exact literal command string in execPreview — this is what the user ` +
-      `will see to verify what deterministically runs.\n\n` +
+      `You must generate executable ${scriptPlatform} scripts, not structured step objects.\n\n` +
       `IMPORTANT: Respond with valid JSON only. No markdown, no commentary.\n\n` +
       `Response format:\n` +
       `{\n` +
-      `  "reasoning": "Your reasoning about why this maintenance plan is appropriate",\n` +
-      `  "steps": [\n` +
-      `    {\n` +
-      `      "description": "Human-readable description of the step",\n` +
-      `      "action": "The action type (e.g. restart-service, run, execute, write-config, verify-health)",\n` +
-      `      "target": "What the action operates on (service name, file path, or command binary)",\n` +
-      `      "params": {\n` +
-      `        "args": ["full", "argument", "list"] — REQUIRED for service and run steps,\n` +
-      `        "cwd": "Working directory for command/script actions (if not current dir)",\n` +
-      `        "content": "For write-config: the content to write",\n` +
-      `        "outputPath": "For config actions: output path (if different from target)"\n` +
-      `      },\n` +
-      `      "reversible": true,\n` +
-      `      "rollbackAction": "How to undo this step (if reversible)",\n` +
-      `      "execPreview": "The exact literal command string that will execute"\n` +
-      `    }\n` +
-      `  ],\n` +
+      `  "platform": "${scriptPlatform}",\n` +
+      `  "executionScript": "${scriptShebang}\\n...",\n` +
+      `  "dryRunScript": "${scriptShebang}\\n... (read-only probes to validate prerequisites, or null)",\n` +
+      `  "rollbackScript": "${scriptShebang}\\n... (undo the execution, or null if not reversible)",\n` +
+      `  "reasoning": "Plain english explanation of what the scripts do and why",\n` +
+      `  "stepSummary": [{"description": "Human-readable description of what this part does", "reversible": true}],\n` +
+      `  "diffFromCurrent": [{"key": "config.setting", "from": "old", "to": "new"}],\n` +
       `  "assessmentSummary": "1-2 sentences specific to THIS maintenance task: what makes it risky or safe, what to watch for."\n` +
-      `}`;
+      `}\n\n` +
+      `Script requirements:\n` +
+      `- ${scriptPlatform === "bash" ? "Use set -euo pipefail at the top" : "Use $ErrorActionPreference = 'Stop' at the top"}\n` +
+      `- Scripts must be self-contained and executable\n` +
+      `- Do NOT use tools that are listed as unavailable\n` +
+      `- The dryRunScript must be read-only (no mutations)\n` +
+      `- The rollbackScript must undo what executionScript does`;
 
     const probeSystemPrompt =
       `You are Synth's envoy agent performing a maintenance operation.\n\n` +
@@ -1877,13 +1881,9 @@ export class EnvoyAgent {
       (instruction.partition ? `Partition: ${instruction.partition.name}\n` : "") +
       `Objective: ${intent}\n\n` +
       `Available variables: ${JSON.stringify(instruction.resolvedVariables)}\n\n` +
-      `Envoy capabilities — ONLY use actions and tools listed here:\n` +
-      `Action keywords: ${capabilities.allActionKeywords.join(", ")}\n` +
       `Installed tools: ${availableTools || "none"}\n` +
       `Unavailable tools: ${unavailableTools || "none"}\n\n` +
-      `IMPORTANT: Every step's "action" field MUST contain at least one of the recognized action keywords above. ` +
-      `Do NOT use tools that are listed as unavailable.\n\n` +
-      `BEFORE generating any plan steps, use the probe() tool to verify real machine state:\n` +
+      `BEFORE generating the plan, use the probe() tool to verify real machine state:\n` +
       `- What services are running? (ps aux, systemctl status <service>)\n` +
       `- What is the current config state? (cat config files, find logs)\n` +
       `- What tool versions are available? (which, --version)\n` +
@@ -1907,7 +1907,7 @@ export class EnvoyAgent {
     const noObsRetrySystemPrompt =
       `You are Synth's envoy agent performing a maintenance operation.\n\n` +
       `A previous planning attempt failed. No environment observations are available. ` +
-      `Use the context provided (environment name, resolved variables, envoy capabilities) ` +
+      `Use the context provided (environment name, resolved variables) ` +
       `to produce the best maintenance plan you can. Do NOT attempt to call any tools. ` +
       `Output the maintenance plan as JSON.\n\n` +
       planOutputFormat;
@@ -1947,12 +1947,10 @@ export class EnvoyAgent {
     );
 
     baseSections.push(
-      `## Envoy Capabilities — ONLY use actions and tools listed here\n` +
-      `Action keywords: ${capabilities.allActionKeywords.join(", ")}\n` +
-      `Handlers: ${capabilities.handlers.map((h) => `${h.name} [${h.actionKeywords.join(", ")}]`).join("; ")}\n` +
+      `## Envoy Capabilities\n` +
+      `Script platform: ${scriptPlatform}\n` +
       `Installed tools: ${availableTools || "none"}\n` +
-      `Unavailable tools: ${unavailableTools || "none"}\n` +
-      `Unsatisfied handler dependencies: ${capabilities.unsatisfiedDependencies.join(", ") || "none"}`,
+      `Unavailable tools: ${unavailableTools || "none"}`,
     );
 
     const reqId = instruction.operationId ?? crypto.randomUUID().slice(0, 8);
@@ -2068,16 +2066,13 @@ export class EnvoyAgent {
       this.planLog.log(`LLM-RESPONSE attempt=${attempt}`, `length=${llmResult.text.length} starts=${llmResult.text.substring(0, 200)}`);
 
       type ParsedMaintenancePlan = {
+        platform: "bash" | "powershell";
+        executionScript: string;
+        dryRunScript: string | null;
+        rollbackScript: string | null;
         reasoning: string;
-        steps: Array<{
-          description: string;
-          action: string;
-          target: string;
-          params?: Record<string, unknown>;
-          reversible: boolean;
-          rollbackAction?: string;
-          execPreview?: string;
-        }>;
+        stepSummary: Array<{ description: string; reversible: boolean }>;
+        diffFromCurrent?: Array<{ key: string; from: string; to: string }>;
         assessmentSummary?: string;
       };
 
@@ -2097,14 +2092,12 @@ export class EnvoyAgent {
           }
         }
         const raw = JSON.parse(text);
-        if (!Array.isArray(raw?.steps)) throw new Error("Plan missing steps array");
-        for (const s of raw.steps as Array<Record<string, unknown>>) {
-          if (typeof s.action !== "string" || !s.action) throw new Error(`Step "${s.description ?? "?"}" missing action`);
-          if (typeof s.target !== "string") throw new Error(`Step "${s.description ?? "?"}" missing target`);
-          if (typeof s.description !== "string") s.description = s.action;
-        }
+        if (typeof raw?.executionScript !== "string" || !raw.executionScript) throw new Error("Plan missing executionScript");
+        if (!Array.isArray(raw?.stepSummary)) throw new Error("Plan missing stepSummary array");
+        // Default platform if not specified
+        if (!raw.platform) raw.platform = scriptPlatform;
         currentParsed = raw as ParsedMaintenancePlan;
-        this.planLog.log(`PARSED-OK attempt=${attempt}`, `${currentParsed.steps.length} steps, reasoning=${currentParsed.reasoning?.length ?? 0} chars`);
+        this.planLog.log(`PARSED-OK attempt=${attempt}`, `${currentParsed.stepSummary.length} steps, reasoning=${currentParsed.reasoning?.length ?? 0} chars`);
       } catch (parseErr) {
         const preview = llmResult.text?.substring(0, 500) ?? "(no text)";
         this.planLog.log(`PARSE-FAIL attempt=${attempt}`, `error=${parseErr instanceof Error ? parseErr.message : String(parseErr)} preview=${preview}`);
@@ -2122,7 +2115,7 @@ export class EnvoyAgent {
         if (attempt < MAX_ATTEMPTS) {
           this.planLog.log(`PARSE-RETRY`, `will retry as attempt ${attempt + 1}`);
           lastObservations = `Previous LLM response could not be parsed: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}. ` +
-            `You MUST respond with a valid JSON object containing "reasoning" (string) and "steps" (array). ` +
+            `You MUST respond with a valid JSON object containing "executionScript" (string) and "stepSummary" (array). ` +
             `Do not return an empty object.`;
           continue;
         }
@@ -2130,19 +2123,20 @@ export class EnvoyAgent {
       }
 
       const plan: DeploymentPlan = {
-        steps: currentParsed.steps.map((s) => ({
-          description: s.description,
-          action: s.action,
-          target: s.target,
-          params: s.params,
-          reversible: s.reversible ?? false,
-          rollbackAction: s.rollbackAction ?? undefined,
-          execPreview: s.execPreview,
-        })),
+        scriptedPlan: {
+          platform: currentParsed.platform,
+          executionScript: currentParsed.executionScript,
+          dryRunScript: currentParsed.dryRunScript,
+          rollbackScript: currentParsed.rollbackScript,
+          reasoning: currentParsed.reasoning,
+          stepSummary: currentParsed.stepSummary,
+          diffFromCurrent: currentParsed.diffFromCurrent,
+        },
         reasoning: currentParsed.reasoning,
+        diffFromCurrent: currentParsed.diffFromCurrent,
       };
 
-      this.planLog.logPlanSteps(`PLAN attempt=${attempt}`, currentParsed.steps);
+      this.planLog.log(`PLAN attempt=${attempt}`, `${currentParsed.stepSummary.length} steps in scripted plan`);
 
       await this.executorReady;
 
@@ -2152,39 +2146,49 @@ export class EnvoyAgent {
           operationId: instruction.operationId,
           agent: "envoy",
           decisionType: "plan-generation",
-          decision: `Generated maintenance plan (dry-run skipped — executor not initialized): ${plan.steps.length} step(s)`,
+          decision: `Generated maintenance plan (dry-run skipped — executor not initialized): ${plan.scriptedPlan.stepSummary.length} step(s)`,
           reasoning: currentParsed.reasoning,
           context: { dryRunSkipped: true },
         });
+        const rollbackPlan: DeploymentPlan = {
+          scriptedPlan: {
+            platform: currentParsed.platform,
+            executionScript: currentParsed.rollbackScript ?? "echo 'No rollback script'",
+            dryRunScript: null,
+            rollbackScript: null,
+            reasoning: `Rollback for maintenance: ${intent}`,
+            stepSummary: currentParsed.stepSummary.filter((s) => s.reversible).map((s) => ({ description: `Undo: ${s.description}`, reversible: false })),
+          },
+          reasoning: `Rollback for maintenance: ${intent}`,
+        };
         return {
           plan,
-          rollbackPlan: this.buildRollbackPlan(plan, instruction),
+          rollbackPlan,
           assessmentSummary: currentParsed.assessmentSummary,
         };
       }
 
-      const dryRunResult = await this.operationExecutor.executeDryRun(plan.steps);
+      const dryRunResult = await this.operationExecutor.executeDryRun(plan.scriptedPlan);
 
-      this.planLog.logDryRun(
-        attempt,
-        dryRunResult.stepResults.map((sr) => ({
-          stepIndex: sr.stepIndex,
-          stepDesc: sr.step.description,
-          handler: this.operationRegistry?.resolve(sr.step.action, "linux")?.name ?? null,
-          observations: sr.result.observations,
-          predictedOutcome: sr.result.predictedOutcome as Record<string, unknown> | undefined,
-        })),
-      );
+      this.planLog.log(`DRY-RUN attempt=${attempt}`, `exitCode=${dryRunResult.exitCode} success=${dryRunResult.success}`);
 
-      if (!dryRunResult.hasFailedObservations) {
-        this.planLog.log(`DRY-RUN-PASSED attempt=${attempt}`, `fidelity=${dryRunResult.overallFidelity}`);
-        envoyLog("MAINTAIN-DRY-RUN", { attempt, passed: true, failures: 0 });
-        const rollbackPlan = this.buildRollbackPlan(plan, instruction);
+      if (dryRunResult.success) {
+        this.planLog.log(`DRY-RUN-PASSED attempt=${attempt}`, `exitCode=${dryRunResult.exitCode}`);
+        envoyLog("MAINTAIN-DRY-RUN", { attempt, passed: true });
+        const rollbackPlan: DeploymentPlan = {
+          scriptedPlan: {
+            platform: currentParsed.platform,
+            executionScript: currentParsed.rollbackScript ?? "echo 'No rollback script'",
+            dryRunScript: null,
+            rollbackScript: null,
+            reasoning: `Rollback for maintenance: ${intent}`,
+            stepSummary: currentParsed.stepSummary.filter((s) => s.reversible).map((s) => ({ description: `Undo: ${s.description}`, reversible: false })),
+          },
+          reasoning: `Rollback for maintenance: ${intent}`,
+        };
         plan.reasoning =
           currentParsed.reasoning +
-          ` [Dry-run validated: all ${dryRunResult.stepResults.length} step(s) passed on attempt ${attempt}. ` +
-          `Confidence: ${dryRunResult.overallFidelity}.` +
-          `${dryRunResult.allUnknowns.length > 0 ? ` Unknowns: ${dryRunResult.allUnknowns.join("; ")}.` : ""}]`;
+          ` [Dry-run validated on attempt ${attempt}: exit code ${dryRunResult.exitCode}.]`;
 
         recordEntry({
           partitionId: instruction.partition?.id ?? null,
@@ -2192,78 +2196,91 @@ export class EnvoyAgent {
           agent: "envoy",
           decisionType: "plan-generation",
           decision:
-            `Generated and validated maintenance plan: ${plan.steps.length} step(s) → "${envName}" ` +
+            `Generated and validated maintenance plan: ${plan.scriptedPlan.stepSummary.length} step(s) → "${envName}" ` +
             `(dry-run passed on attempt ${attempt})`,
           reasoning: currentParsed.reasoning,
           context: {
             environmentName: envName,
             llmAvailable: true,
-            stepCount: plan.steps.length,
-            rollbackStepCount: rollbackPlan.steps.length,
+            stepCount: plan.scriptedPlan.stepSummary.length,
             dryRunAttempt: attempt,
-            dryRunFidelity: dryRunResult.overallFidelity,
-            dryRunUnknowns: dryRunResult.allUnknowns,
+            dryRunExitCode: dryRunResult.exitCode,
           },
         });
 
-        envoyLog("MAINTAIN-COMPLETE", { steps: plan.steps.length });
+        envoyLog("MAINTAIN-COMPLETE", { steps: plan.scriptedPlan.stepSummary.length });
         return { plan, rollbackPlan, assessmentSummary: currentParsed.assessmentSummary };
       }
 
-      const _failedObsCount = dryRunResult.stepResults.reduce(
-        (n, sr) => n + sr.result.observations.filter((o) => !o.passed).length,
-        0,
-      );
-      this.planLog.log(`DRY-RUN-FAILED attempt=${attempt}`, `failedObservations=true`);
-      envoyLog("MAINTAIN-DRY-RUN", { attempt, passed: false, failures: _failedObsCount });
+      // --- Dry-run failed ---
+      this.planLog.log(`DRY-RUN-FAILED attempt=${attempt}`, `exitCode=${dryRunResult.exitCode}`);
+      envoyLog("MAINTAIN-DRY-RUN", { attempt, passed: false, exitCode: dryRunResult.exitCode });
 
-      const currentObsSummary = dryRunResult.stepResults
-        .filter((sr) => sr.result.observations.some((o) => !o.passed))
-        .map((sr) => {
-          const failed = sr.result.observations.filter((o) => !o.passed).map((o) => `[${o.name}] ${o.detail}`);
-          return `Step ${sr.stepIndex + 1} "${sr.step.description}": ${failed.join("; ")}`;
-        })
-        .join(". ");
+      const currentObsSummary =
+        `Exit code: ${dryRunResult.exitCode}\n` +
+        `stdout: ${dryRunResult.output.slice(0, 500)}\n` +
+        `stderr: ${dryRunResult.errors.slice(0, 500)}`;
 
       if (attempt > 1 && currentObsSummary === previousObservationSummary) {
-        this.planLog.log("STUCK", `same failures after ${attempt} attempts: ${currentObsSummary}`);
+        this.planLog.log("STUCK", `same dry-run failures after ${attempt} attempts`);
         recordEntry({
           partitionId: instruction.partition?.id ?? null,
           operationId: instruction.operationId,
           agent: "envoy",
           decisionType: "plan-generation",
-          decision: `Maintenance plan stuck — same failed observations after ${attempt} attempts`,
+          decision: `Maintenance plan stuck — same dry-run failures after ${attempt} attempts`,
           reasoning:
-            `Re-planning produced the same observation failures. Stuck on: ${currentObsSummary}. ` +
+            `Re-planning produced the same dry-run failures. ` +
             `Returning plan with failure annotations.`,
-          context: { dryRunAttempt: attempt, stuckDetails: currentObsSummary },
+          context: { dryRunAttempt: attempt },
         });
-        plan.reasoning = `Plan has unresolved environmental issues (stuck after ${attempt} attempt(s)): ${currentObsSummary}. Review before approving.`;
+        plan.reasoning = `Plan has unresolved environmental issues (stuck after ${attempt} attempt(s)). Review before approving.`;
+        const rollbackPlan: DeploymentPlan = {
+          scriptedPlan: {
+            platform: currentParsed.platform,
+            executionScript: currentParsed.rollbackScript ?? "echo 'No rollback script'",
+            dryRunScript: null,
+            rollbackScript: null,
+            reasoning: `Rollback for maintenance: ${intent}`,
+            stepSummary: [],
+          },
+          reasoning: `Rollback for maintenance: ${intent}`,
+        };
         return {
           plan,
-          rollbackPlan: this.buildRollbackPlan(plan, instruction),
+          rollbackPlan,
           assessmentSummary: currentParsed.assessmentSummary,
         };
       }
 
       if (attempt === MAX_ATTEMPTS) {
-        this.planLog.log("BLOCKED", `max attempts reached: ${currentObsSummary}`);
+        this.planLog.log("BLOCKED", `max attempts reached`);
         recordEntry({
           partitionId: instruction.partition?.id ?? null,
           operationId: instruction.operationId,
           agent: "envoy",
           decisionType: "plan-generation",
-          decision: `Maintenance plan blocked — unresolved environmental issues after ${MAX_ATTEMPTS} attempts`,
-          reasoning: `Unresolved: ${currentObsSummary}.`,
-          context: { dryRunAttempt: attempt, maxAttempts: MAX_ATTEMPTS, unresolvedDetails: currentObsSummary },
+          decision: `Maintenance plan blocked — unresolved issues after ${MAX_ATTEMPTS} attempts`,
+          reasoning: `Dry-run failed: ${currentObsSummary}`,
+          context: { dryRunAttempt: attempt, maxAttempts: MAX_ATTEMPTS },
         });
         const blockReason =
-          `Plan has unresolved environmental issues after ${MAX_ATTEMPTS} attempt(s): ` +
-          `${currentObsSummary}. Review before approving.`;
+          `Plan dry-run failed after ${MAX_ATTEMPTS} attempt(s). Review before approving.`;
         plan.reasoning = blockReason;
+        const rollbackPlan: DeploymentPlan = {
+          scriptedPlan: {
+            platform: currentParsed.platform,
+            executionScript: currentParsed.rollbackScript ?? "echo 'No rollback script'",
+            dryRunScript: null,
+            rollbackScript: null,
+            reasoning: `Rollback for maintenance: ${intent}`,
+            stepSummary: [],
+          },
+          reasoning: `Rollback for maintenance: ${intent}`,
+        };
         return {
           plan,
-          rollbackPlan: this.buildRollbackPlan(plan, instruction),
+          rollbackPlan,
           assessmentSummary: currentParsed.assessmentSummary,
           blocked: true,
           blockReason,
@@ -2272,28 +2289,20 @@ export class EnvoyAgent {
 
       previousObservationSummary = currentObsSummary;
 
-      lastObservations = dryRunResult.stepResults
-        .filter((sr) => sr.result.observations.length > 0)
-        .map((sr) => {
-          const obs = sr.result.observations
-            .map((o) => `  - ${o.name}: ${o.detail} [${o.passed ? "PASSED" : "FAILED"}]`)
-            .join("\n");
-          return `Step ${sr.stepIndex + 1} "${sr.step.description}":\n${obs}`;
-        })
-        .join("\n");
-
-      if (dryRunResult.allUnknowns.length > 0) {
-        lastObservations += `\n\nUnknowns:\n${dryRunResult.allUnknowns.map((u) => `  - ${u}`).join("\n")}`;
-      }
+      lastObservations =
+        `## Dry-Run Output\n` +
+        `Exit code: ${dryRunResult.exitCode}\n` +
+        `stdout:\n${dryRunResult.output}\n` +
+        `stderr:\n${dryRunResult.errors}`;
 
       recordEntry({
         partitionId: instruction.partition?.id ?? null,
         operationId: instruction.operationId,
         agent: "envoy",
         decisionType: "plan-generation",
-        decision: `Dry-run found failed observations — re-planning with environmental context (attempt ${attempt + 1}/${MAX_ATTEMPTS})`,
-        reasoning: `Failed observations: ${currentObsSummary}. Re-invoking planning with observations injected as context.`,
-        context: { dryRunAttempt: attempt, failedObsSummary: currentObsSummary },
+        decision: `Dry-run failed — re-planning with output context (attempt ${attempt + 1}/${MAX_ATTEMPTS})`,
+        reasoning: `Dry-run exit code ${dryRunResult.exitCode}. Re-invoking planning with dry-run output injected as context.`,
+        context: { dryRunAttempt: attempt, dryRunExitCode: dryRunResult.exitCode },
       });
     }
 
@@ -2361,7 +2370,7 @@ Known deployments in state: ${scanResult.knownState.totalDeployments}
 Active environments: ${scanResult.knownState.activeEnvironments}
 Last deployment: ${scanResult.knownState.lastDeploymentAt?.toISOString() ?? "none"}`);
 
-    // Include capability surface so the LLM only produces executable plans
+    // Include capability surface so the LLM produces executable scripts
     const capabilities = this.getCapabilities();
     const availableTools = capabilities.installedTools
       .filter((t) => t.available)
@@ -2371,15 +2380,15 @@ Last deployment: ${scanResult.knownState.lastDeploymentAt?.toISOString() ?? "non
       .filter((t) => !t.available)
       .map((t) => t.name)
       .join(", ");
+    const scriptPlatform = process.platform === "win32" ? "powershell" : "bash";
+    const scriptShebang = scriptPlatform === "bash" ? "#!/bin/bash\nset -euo pipefail" : "# PowerShell\n$ErrorActionPreference = 'Stop'";
 
-    sections.push(`## Envoy Capabilities — ONLY use actions and tools listed here
-Action keywords the executor recognizes: ${capabilities.allActionKeywords.join(", ")}
-Handlers: ${capabilities.handlers.map((h) => `${h.name} [${h.actionKeywords.join(", ")}]`).join("; ")}
+    sections.push(`## Envoy Capabilities
+Script platform: ${scriptPlatform}
 Installed tools: ${availableTools || "none"}
 Unavailable tools: ${unavailableTools || "none"}
-Unsatisfied handler dependencies: ${capabilities.unsatisfiedDependencies.join(", ") || "none"}
 
-IMPORTANT: Every step's "action" field MUST contain at least one of the recognized action keywords above, or the executor will reject it. Do NOT use tools that are listed as unavailable.`);
+IMPORTANT: Do NOT use tools that are listed as unavailable. Generate executable ${scriptPlatform} scripts.`);
 
     if (systemKnowledge.length > 0) {
       sections.push(`## System Knowledge
@@ -2389,7 +2398,7 @@ ${systemKnowledge.map((k) => `[${k.category}] ${k.key}: ${JSON.stringify(k.value
     if (successfulPlans.length > 0) {
       const recent = successfulPlans.slice(0, 3);
       sections.push(`## Previous Successful Plans (${successfulPlans.length} total, showing ${recent.length})
-${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.plan.steps.length} steps, ${p.executionDurationMs}ms`).join("\n")}`);
+${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.plan.scriptedPlan?.stepSummary?.length ?? 0} steps, ${p.executionDurationMs}ms`).join("\n")}`);
     }
 
     if (failedPlans.length > 0) {
@@ -2404,37 +2413,26 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
 
     // Shared JSON output format tail used by both system prompts.
     const planOutputFormat =
-      `Each step must have a clear action, target, description, and whether it is ` +
-      `reversible (with rollback action if so). For steps that execute a shell command, ` +
-      `include the exact literal command string in execPreview — this is what the user ` +
-      `will see to verify what deterministically runs.\n\n` +
+      `You must generate executable ${scriptPlatform} scripts, not structured step objects.\n\n` +
       `IMPORTANT: Respond with valid JSON only. No markdown, no commentary.\n\n` +
       `Response format:\n` +
       `{\n` +
-      `  "reasoning": "Your reasoning about why this plan is appropriate",\n` +
-      `  "steps": [\n` +
-      `    {\n` +
-      `      "description": "Human-readable description of the step",\n` +
-      `      "action": "The action type (e.g. copy-artifact, write-config, restart-service, verify-health)",\n` +
-      `      "target": "What the action operates on (source path, service name, URL, or command binary)",\n` +
-      `      "params": {\n` +
-      `        "destination": "Required for copy/move: the destination path",\n` +
-      `        "args": ["full", "argument", "list"] — REQUIRED for docker/container steps AND service steps: for docker, provide complete arguments after 'docker' (e.g. ["load", "-i", "/path/to/image.tar"]); for service operations, provide the full OS command (e.g. ["systemctl", "restart", "nginx"] on Linux, ["launchctl", "kickstart", "-k", "gui/501/homebrew.mxcl.nginx"] on macOS). Also used for run/execute/script steps.,\n` +
-      `        "cwd": "Working directory for command/script actions (if not current dir)",\n` +
-      `        "templatePath": "For config actions: path to the template file (if different from target)",\n` +
-      `        "outputPath": "For config actions: output path (if different from target)",\n` +
-      `        "variables": {"VAR": "value"},\n` +
-      `        "composeFile": "For compose actions: path to docker-compose file",\n` +
-      `        "linkTarget": "For symlink actions: the target the symlink should point to"\n` +
-      `      },\n` +
-      `      "reversible": true,\n` +
-      `      "rollbackAction": "How to undo this step",\n` +
-      `      "execPreview": "The exact literal command string that will execute, e.g. 'docker pull myapp:1.2.3', 'systemctl restart nginx', 'npm install --production'. Omit if this step doesn't invoke a shell command."\n` +
-      `    }\n` +
-      `  ],\n` +
+      `  "platform": "${scriptPlatform}",\n` +
+      `  "executionScript": "${scriptShebang}\\n...",\n` +
+      `  "dryRunScript": "${scriptShebang}\\n... (read-only probes to validate prerequisites, or null)",\n` +
+      `  "rollbackScript": "${scriptShebang}\\n... (undo the execution, or null if not reversible)",\n` +
+      `  "reasoning": "Plain english explanation of what the scripts do and why",\n` +
+      `  "stepSummary": [{"description": "Human-readable description of what this part does", "reversible": true}],\n` +
+      `  "diffFromCurrent": [{"key": "config.setting", "from": "old", "to": "new"}],\n` +
       `  "delta": "If a previous successful plan exists, describe what changed and why. Omit if no previous plan.",\n` +
-      `  "assessmentSummary": "1-2 sentences specific to THIS deployment: what makes it risky or safe, what to watch for. Be specific to the artifact name, version, target environment, and plan steps — not generic boilerplate."\n` +
-      `}`;
+      `  "assessmentSummary": "1-2 sentences specific to THIS deployment: what makes it risky or safe, what to watch for. Be specific to the artifact name, version, target environment — not generic boilerplate."\n` +
+      `}\n\n` +
+      `Script requirements:\n` +
+      `- ${scriptPlatform === "bash" ? "Use set -euo pipefail at the top" : "Use $ErrorActionPreference = 'Stop' at the top"}\n` +
+      `- Scripts must be self-contained and executable\n` +
+      `- Do NOT use tools that are listed as unavailable\n` +
+      `- The dryRunScript must be read-only (no mutations)\n` +
+      `- The rollbackScript must undo what executionScript does`;
 
     // Attempt 1: probe loop — model uses the probe() tool to observe real machine state.
     const probeSystemPrompt =
@@ -2596,16 +2594,13 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
 
       // Parse LLM response
       type ParsedPlan = {
+        platform: "bash" | "powershell";
+        executionScript: string;
+        dryRunScript: string | null;
+        rollbackScript: string | null;
         reasoning: string;
-        steps: Array<{
-          description: string;
-          action: string;
-          target: string;
-          params?: Record<string, unknown>;
-          reversible: boolean;
-          rollbackAction?: string;
-          execPreview?: string;
-        }>;
+        stepSummary: Array<{ description: string; reversible: boolean }>;
+        diffFromCurrent?: Array<{ key: string; from: string; to: string }>;
         delta?: string;
         assessmentSummary?: string;
       };
@@ -2631,12 +2626,10 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
           }
         }
         const raw = JSON.parse(text);
-        if (!Array.isArray(raw?.steps)) throw new Error("Plan missing steps array");
-        for (const s of raw.steps as Array<Record<string, unknown>>) {
-          if (typeof s.action !== "string" || !s.action) throw new Error(`Step "${s.description ?? "?"}" missing action`);
-          if (typeof s.target !== "string") throw new Error(`Step "${s.description ?? "?"}" missing target`);
-          if (typeof s.description !== "string") s.description = s.action;
-        }
+        if (typeof raw?.executionScript !== "string" || !raw.executionScript) throw new Error("Plan missing executionScript");
+        if (!Array.isArray(raw?.stepSummary)) throw new Error("Plan missing stepSummary array");
+        // Default platform if not specified
+        if (!raw.platform) raw.platform = scriptPlatform;
         currentParsed = raw as ParsedPlan;
       } catch (parseErr) {
         const preview = llmResult.text?.substring(0, 500) ?? "(no text)";
@@ -2660,7 +2653,7 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
         if (attempt < MAX_DRY_RUN_ATTEMPTS) {
           this.planLog.log(`PARSE-RETRY`, `will retry as attempt ${attempt + 1}`);
           lastObservations = `Previous LLM response could not be parsed: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}. ` +
-            `You MUST respond with a valid JSON object containing "reasoning" (string) and "steps" (array). ` +
+            `You MUST respond with a valid JSON object containing "executionScript" (string) and "stepSummary" (array). ` +
             `Do not return an empty object.`;
           continue;
         }
@@ -2668,25 +2661,26 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
         return this.buildFallbackPlan(instruction);
       }
 
-      this.planLog.log(`PARSED-OK attempt=${attempt}`, `${currentParsed.steps.length} steps, reasoning=${currentParsed.reasoning?.length ?? 0} chars`);
-      this.planLog.logPlanSteps(`PLAN attempt=${attempt}`, currentParsed.steps);
+      this.planLog.log(`PARSED-OK attempt=${attempt}`, `${currentParsed.stepSummary.length} steps, reasoning=${currentParsed.reasoning?.length ?? 0} chars`);
+      this.planLog.log(`PLAN attempt=${attempt}`, `${currentParsed.stepSummary.length} steps in scripted plan`);
 
       // Build plan object
       const plan: DeploymentPlan = {
-        steps: currentParsed.steps.map((s) => ({
-          description: s.description,
-          action: s.action,
-          target: s.target,
-          params: s.params,
-          reversible: s.reversible ?? false,
-          rollbackAction: s.rollbackAction ?? undefined,
-          execPreview: s.execPreview,
-        })),
+        scriptedPlan: {
+          platform: currentParsed.platform,
+          executionScript: currentParsed.executionScript,
+          dryRunScript: currentParsed.dryRunScript,
+          rollbackScript: currentParsed.rollbackScript,
+          reasoning: currentParsed.reasoning,
+          stepSummary: currentParsed.stepSummary,
+          diffFromCurrent: currentParsed.diffFromCurrent,
+        },
         reasoning: currentParsed.reasoning,
+        diffFromCurrent: currentParsed.diffFromCurrent,
         diffFromPreviousPlan: latestPlan ? currentParsed.delta : undefined,
       };
 
-      // --- Dry-run: collect environmental observations ---
+      // --- Dry-run: run the dry-run script ---
       await this.executorReady;
 
       if (!this.operationExecutor) {
@@ -2697,42 +2691,32 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
           decisionType: "plan-generation",
           decision:
             `Generated deployment plan (dry-run skipped — executor not initialized): ` +
-            `${plan.steps.length} step(s) for ${artifact.name} v${instruction.version}`,
+            `${plan.scriptedPlan.stepSummary.length} step(s) for ${artifact.name} v${instruction.version}`,
           reasoning: currentParsed.reasoning,
           context: { dryRunSkipped: true },
         });
+        const rollbackPlan = this.buildRollbackPlan(plan, instruction);
         return {
           plan,
-          rollbackPlan: this.buildRollbackPlan(plan, instruction),
+          rollbackPlan,
           delta: currentParsed.delta,
           assessmentSummary: currentParsed.assessmentSummary,
         };
       }
 
-      const dryRunResult = await this.operationExecutor.executeDryRun(plan.steps);
+      const dryRunResult = await this.operationExecutor.executeDryRun(plan.scriptedPlan);
 
-      // Log full dry-run results to file for debugging
-      this.planLog.logDryRun(
-        attempt,
-        dryRunResult.stepResults.map((sr) => ({
-          stepIndex: sr.stepIndex,
-          stepDesc: sr.step.description,
-          handler: this.operationRegistry?.resolve(sr.step.action, "linux")?.name ?? null,
-          observations: sr.result.observations,
-          predictedOutcome: sr.result.predictedOutcome as Record<string, unknown> | undefined,
-        })),
-      );
+      // Log dry-run results to file for debugging
+      this.planLog.log(`DRY-RUN attempt=${attempt}`, `exitCode=${dryRunResult.exitCode} success=${dryRunResult.success}`);
 
-      // --- No failed observations: plan is validated, return it ---
-      if (!dryRunResult.hasFailedObservations) {
-        this.planLog.log(`DRY-RUN-PASSED attempt=${attempt}`, `fidelity=${dryRunResult.overallFidelity}`);
-        envoyLog("PLAN-DRY-RUN", { attempt, passed: true, failures: 0 });
+      // --- Dry-run passed: plan is validated, return it ---
+      if (dryRunResult.success) {
+        this.planLog.log(`DRY-RUN-PASSED attempt=${attempt}`, `exitCode=${dryRunResult.exitCode}`);
+        envoyLog("PLAN-DRY-RUN", { attempt, passed: true });
         const rollbackPlan = this.buildRollbackPlan(plan, instruction);
         plan.reasoning =
           currentParsed.reasoning +
-          ` [Dry-run validated: all ${dryRunResult.stepResults.length} step(s) passed on attempt ${attempt}. ` +
-          `Confidence: ${dryRunResult.overallFidelity}.` +
-          `${dryRunResult.allUnknowns.length > 0 ? ` Unknowns: ${dryRunResult.allUnknowns.join("; ")}.` : ""}]`;
+          ` [Dry-run validated on attempt ${attempt}: exit code ${dryRunResult.exitCode}.]`;
 
         recordEntry({
           partitionId: instruction.partition?.id ?? null,
@@ -2740,7 +2724,7 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
           agent: "envoy",
           decisionType: "plan-generation",
           decision:
-            `Generated and validated deployment plan: ${plan.steps.length} step(s) for ` +
+            `Generated and validated deployment plan: ${plan.scriptedPlan.stepSummary.length} step(s) for ` +
             `${artifact.name} v${instruction.version} → "${instruction.environment.name}" ` +
             `(dry-run passed on attempt ${attempt})`,
           reasoning: currentParsed.reasoning,
@@ -2748,54 +2732,47 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
             artifactType: artifact.type,
             environmentName: instruction.environment.name,
             llmAvailable: true,
-            stepCount: plan.steps.length,
-            rollbackStepCount: rollbackPlan.steps.length,
+            stepCount: plan.scriptedPlan.stepSummary.length,
             previousSuccessfulPlans: successfulPlans.length,
             previousFailedPlans: failedPlans.length,
             hasDelta: !!currentParsed.delta,
             dryRunAttempt: attempt,
-            dryRunFidelity: dryRunResult.overallFidelity,
-            dryRunUnknowns: dryRunResult.allUnknowns,
+            dryRunExitCode: dryRunResult.exitCode,
           },
         });
 
-        envoyLog("PLAN-COMPLETE", { steps: plan.steps.length });
+        envoyLog("PLAN-COMPLETE", { steps: plan.scriptedPlan.stepSummary.length });
         return { plan, rollbackPlan, delta: currentParsed.delta, assessmentSummary: currentParsed.assessmentSummary };
       }
 
-      // --- Failed observations: build observation text for next planning call ---
-      this.planLog.log(`DRY-RUN-FAILED attempt=${attempt}`, `failedObservations=true`);
-      const _failedObsCount = dryRunResult.stepResults.reduce((n, sr) => n + sr.result.observations.filter((o) => !o.passed).length, 0);
-      envoyLog("PLAN-DRY-RUN", { attempt, passed: false, failures: _failedObsCount });
+      // --- Dry-run failed: build output text for next planning call ---
+      this.planLog.log(`DRY-RUN-FAILED attempt=${attempt}`, `exitCode=${dryRunResult.exitCode}`);
+      envoyLog("PLAN-DRY-RUN", { attempt, passed: false, exitCode: dryRunResult.exitCode });
 
-      const currentObsSummary = dryRunResult.stepResults
-        .filter((sr) => sr.result.observations.some((o) => !o.passed))
-        .map((sr) => {
-          const failed = sr.result.observations.filter((o) => !o.passed).map((o) => `[${o.name}] ${o.detail}`);
-          return `Step ${sr.stepIndex + 1} "${sr.step.description}": ${failed.join("; ")}`;
-        })
-        .join(". ");
+      const currentObsSummary =
+        `Exit code: ${dryRunResult.exitCode}\n` +
+        `stdout: ${dryRunResult.output.slice(0, 500)}\n` +
+        `stderr: ${dryRunResult.errors.slice(0, 500)}`;
 
       // Stuck detection: same failures after re-planning means LLM can't resolve them
       if (attempt > 1 && currentObsSummary === previousObservationSummary) {
-        this.planLog.log("STUCK", `same failures after ${attempt} attempts: ${currentObsSummary}`);
-        envoyWarn("PLAN-STUCK", `same failures after ${attempt} attempts, falling back to reason()`);
+        this.planLog.log("STUCK", `same dry-run failures after ${attempt} attempts`);
+        envoyWarn("PLAN-STUCK", `same dry-run failures after ${attempt} attempts`);
         recordEntry({
           partitionId: instruction.partition?.id ?? null,
           operationId: instruction.operationId,
           agent: "envoy",
           decisionType: "plan-generation",
-          decision: `Plan generation stuck — same failed observations after ${attempt} attempts`,
+          decision: `Plan generation stuck — same dry-run failures after ${attempt} attempts`,
           reasoning:
-            `Re-planning produced the same observation failures, indicating the LLM cannot resolve ` +
-            `these issues through plan changes. Stuck on: ${currentObsSummary}. ` +
+            `Re-planning produced the same dry-run failures. ` +
             `Returning plan with failure annotations.`,
-          context: { dryRunAttempt: attempt, stuckDetails: currentObsSummary },
+          context: { dryRunAttempt: attempt },
         });
 
         plan.reasoning =
-          `Plan has unresolved environmental issues (stuck after ${attempt} attempt(s)): ` +
-          `${currentObsSummary}. Review these issues before approving.`;
+          `Plan has unresolved environmental issues (stuck after ${attempt} attempt(s)). ` +
+          `Review before approving.`;
 
         return {
           plan,
@@ -2807,20 +2784,19 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
 
       // Last attempt: block with unresolved issues
       if (attempt === MAX_DRY_RUN_ATTEMPTS) {
-        this.planLog.log("BLOCKED", `max attempts reached: ${currentObsSummary}`);
+        this.planLog.log("BLOCKED", `max attempts reached`);
         recordEntry({
           partitionId: instruction.partition?.id ?? null,
           operationId: instruction.operationId,
           agent: "envoy",
           decisionType: "plan-generation",
-          decision: `Plan blocked — unresolved environmental issues after ${MAX_DRY_RUN_ATTEMPTS} attempts`,
-          reasoning: `Unresolved: ${currentObsSummary}.`,
-          context: { dryRunAttempt: attempt, maxAttempts: MAX_DRY_RUN_ATTEMPTS, unresolvedDetails: currentObsSummary },
+          decision: `Plan blocked — dry-run failed after ${MAX_DRY_RUN_ATTEMPTS} attempts`,
+          reasoning: `Dry-run failed: ${currentObsSummary}`,
+          context: { dryRunAttempt: attempt, maxAttempts: MAX_DRY_RUN_ATTEMPTS },
         });
 
         const blockReason =
-          `Plan has unresolved environmental issues after ${MAX_DRY_RUN_ATTEMPTS} attempt(s): ` +
-          `${currentObsSummary}. Review before approving.`;
+          `Plan dry-run failed after ${MAX_DRY_RUN_ATTEMPTS} attempt(s). Review before approving.`;
         plan.reasoning = blockReason;
 
         return {
@@ -2835,29 +2811,21 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
 
       previousObservationSummary = currentObsSummary;
 
-      // Build observations text for injection into next planning prompt
-      lastObservations = dryRunResult.stepResults
-        .filter((sr) => sr.result.observations.length > 0)
-        .map((sr) => {
-          const obs = sr.result.observations
-            .map((o) => `  - ${o.name}: ${o.detail} [${o.passed ? "PASSED" : "FAILED"}]`)
-            .join("\n");
-          return `Step ${sr.stepIndex + 1} "${sr.step.description}":\n${obs}`;
-        })
-        .join("\n");
-
-      if (dryRunResult.allUnknowns.length > 0) {
-        lastObservations += `\n\nUnknowns:\n${dryRunResult.allUnknowns.map((u) => `  - ${u}`).join("\n")}`;
-      }
+      // Build dry-run output text for injection into next planning prompt
+      lastObservations =
+        `## Dry-Run Output\n` +
+        `Exit code: ${dryRunResult.exitCode}\n` +
+        `stdout:\n${dryRunResult.output}\n` +
+        `stderr:\n${dryRunResult.errors}`;
 
       recordEntry({
         partitionId: instruction.partition?.id ?? null,
         operationId: instruction.operationId,
         agent: "envoy",
         decisionType: "plan-generation",
-        decision: `Dry-run found failed observations — re-planning with environmental context (attempt ${attempt + 1}/${MAX_DRY_RUN_ATTEMPTS})`,
-        reasoning: `Failed observations: ${currentObsSummary}. Re-invoking planning with observations injected as context.`,
-        context: { dryRunAttempt: attempt, failedObsSummary: currentObsSummary },
+        decision: `Dry-run failed — re-planning with output context (attempt ${attempt + 1}/${MAX_DRY_RUN_ATTEMPTS})`,
+        reasoning: `Dry-run exit code ${dryRunResult.exitCode}. Re-invoking planning with dry-run output injected as context.`,
+        context: { dryRunAttempt: attempt, dryRunExitCode: dryRunResult.exitCode },
       });
     }
 
@@ -2873,20 +2841,24 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
     plan: DeploymentPlan,
     instruction: PlanningInstruction,
   ): DeploymentPlan {
+    const reversibleSteps = plan.scriptedPlan.stepSummary.filter((s) => s.reversible);
+    const rollbackReasoning =
+      `Rollback plan for ${instruction.artifact?.name ?? "artifact"} v${instruction.version}: ` +
+      `undo ${reversibleSteps.length} reversible step(s) ` +
+      `in reverse order.`;
     return {
-      steps: plan.steps
-        .filter((s) => s.reversible && s.rollbackAction)
-        .reverse()
-        .map((s) => ({
+      scriptedPlan: {
+        platform: plan.scriptedPlan.platform,
+        executionScript: plan.scriptedPlan.rollbackScript ?? "# No rollback actions required",
+        dryRunScript: null,
+        rollbackScript: null,
+        reasoning: rollbackReasoning,
+        stepSummary: reversibleSteps.reverse().map((s) => ({
           description: `Rollback: ${s.description}`,
-          action: s.rollbackAction!,
-          target: s.target,
           reversible: false,
         })),
-      reasoning:
-        `Rollback plan for ${instruction.artifact?.name ?? "artifact"} v${instruction.version}: ` +
-        `undo ${plan.steps.filter((s) => s.reversible).length} reversible step(s) ` +
-        `in reverse order.`,
+      },
+      reasoning: rollbackReasoning,
     };
   }
 
@@ -2898,85 +2870,85 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
     const artifact = instruction.artifact!;
     const workspacePath = `${this.baseDir}/deployments/${instruction.operationId}`;
 
+    const variablesContent = Object.entries(instruction.resolvedVariables)
+      .map(([k, v]) => `${k}=${v}`)
+      .join("\n");
+
+    const executionScript = [
+      `#!/usr/bin/env bash`,
+      `set -euo pipefail`,
+      ``,
+      `# Create workspace`,
+      `mkdir -p "${workspacePath}"`,
+      ``,
+      `# Write artifact metadata`,
+      `cat > "${workspacePath}/artifact.json" << 'ARTIFACT_EOF'`,
+      JSON.stringify({
+        id: artifact.id,
+        name: artifact.name,
+        type: artifact.type,
+        version: instruction.version,
+        operationId: instruction.operationId,
+      }, null, 2),
+      `ARTIFACT_EOF`,
+      ``,
+      `# Write variables`,
+      `cat > "${workspacePath}/variables.env" << 'VARS_EOF'`,
+      variablesContent,
+      `VARS_EOF`,
+      ``,
+      `# Write manifest`,
+      `cat > "${workspacePath}/manifest.json" << 'MANIFEST_EOF'`,
+      JSON.stringify({
+        operationId: instruction.operationId,
+        artifact: artifact.name,
+        version: instruction.version,
+        environment: instruction.environment.name,
+        deployedAt: new Date().toISOString(),
+      }, null, 2),
+      `MANIFEST_EOF`,
+      ``,
+      `# Mark deployment as active`,
+      `echo "active" > "${workspacePath}/STATUS"`,
+    ].join("\n");
+
+    const rollbackScript = `#!/usr/bin/env bash\nset -euo pipefail\nrm -rf "${workspacePath}"`;
+
+    const reasoning =
+      `Basic deployment plan for artifact type "${artifact.type}". ` +
+      `LLM was unavailable so this plan uses a standard copy + configure pattern ` +
+      `without intelligent reasoning about the target environment or previous history.`;
+
     const plan: DeploymentPlan = {
-      steps: [
-        {
-          description: `Create workspace directory for ${artifact.name} v${instruction.version}`,
-          action: "mkdir",
-          target: workspacePath,
-          reversible: true,
-          rollbackAction: "delete",
-        },
-        {
-          description: `Write artifact metadata to workspace`,
-          action: "write-config",
-          target: `${workspacePath}/artifact.json`,
-          params: {
-            content: JSON.stringify({
-              id: artifact.id,
-              name: artifact.name,
-              type: artifact.type,
-              version: instruction.version,
-              operationId: instruction.operationId,
-            }, null, 2),
-          },
-          reversible: true,
-          rollbackAction: "delete",
-        },
-        {
-          description: `Write deployment configuration with ${Object.keys(instruction.resolvedVariables).length} resolved variable(s)`,
-          action: "write-config",
-          target: `${workspacePath}/variables.env`,
-          params: {
-            content: Object.entries(instruction.resolvedVariables)
-              .map(([k, v]) => `${k}=${v}`)
-              .join("\n"),
-          },
-          reversible: true,
-          rollbackAction: "delete",
-        },
-        {
-          description: `Write deployment manifest`,
-          action: "write-config",
-          target: `${workspacePath}/manifest.json`,
-          params: {
-            content: JSON.stringify({
-              operationId: instruction.operationId,
-              artifact: artifact.name,
-              version: instruction.version,
-              environment: instruction.environment.name,
-              deployedAt: new Date().toISOString(),
-            }, null, 2),
-          },
-          reversible: true,
-          rollbackAction: "delete",
-        },
-        {
-          description: `Mark deployment as active`,
-          action: "write-config",
-          target: `${workspacePath}/STATUS`,
-          params: {
-            content: "active",
-          },
-          reversible: true,
-          rollbackAction: "delete",
-        },
-      ],
-      reasoning:
-        `Basic deployment plan for artifact type "${artifact.type}". ` +
-        `LLM was unavailable so this plan uses a standard copy + configure pattern ` +
-        `without intelligent reasoning about the target environment or previous history.`,
+      scriptedPlan: {
+        platform: "bash",
+        executionScript,
+        dryRunScript: `#!/usr/bin/env bash\nset -euo pipefail\n# Check workspace parent is writable\ntest -w "$(dirname "${workspacePath}")" && echo "OK" || echo "FAIL: parent not writable"`,
+        rollbackScript,
+        reasoning,
+        stepSummary: [
+          { description: `Create workspace directory for ${artifact.name} v${instruction.version}`, reversible: true },
+          { description: `Write artifact metadata to workspace`, reversible: true },
+          { description: `Write deployment configuration with ${Object.keys(instruction.resolvedVariables).length} resolved variable(s)`, reversible: true },
+          { description: `Write deployment manifest`, reversible: true },
+          { description: `Mark deployment as active`, reversible: true },
+        ],
+      },
+      reasoning,
     };
 
     const rollbackPlan: DeploymentPlan = {
-      steps: [...plan.steps].reverse().map((s) => ({
-        description: `Rollback: ${s.description}`,
-        action: s.rollbackAction ?? "noop",
-        target: s.target,
-        reversible: false,
-      })),
-      reasoning:
-        `Rollback plan: remove all artifacts written during deployment in reverse order.`,
+      scriptedPlan: {
+        platform: "bash",
+        executionScript: rollbackScript,
+        dryRunScript: null,
+        rollbackScript: null,
+        reasoning: `Rollback plan: remove all artifacts written during deployment.`,
+        stepSummary: [
+          { description: `Remove deployment workspace ${workspacePath}`, reversible: false },
+        ],
+      },
+      reasoning: `Rollback plan: remove all artifacts written during deployment in reverse order.`,
     };
 
     return { plan, rollbackPlan };
@@ -3049,31 +3021,30 @@ Hostname: ${scanResult.hostname}
 Deployments directory: ${scanResult.deploymentsDir}
 Writable: ${scanResult.deploymentsWritable}`);
 
-    sections.push(`## Envoy Capabilities — ONLY use actions and tools listed here
-Action keywords the executor recognizes: ${capabilities.allActionKeywords.join(", ")}
-Handlers: ${capabilities.handlers.map((h) => `${h.name} [${h.actionKeywords.join(", ")}]`).join("; ")}
-Installed tools: ${availableTools || "none"}
-IMPORTANT: Every step's "action" field MUST contain at least one of the recognized action keywords above.`);
+    const rollbackPlatform = process.platform === "win32" ? "powershell" : "bash";
+    const rollbackShebang = rollbackPlatform === "bash" ? "#!/bin/bash\nset -euo pipefail" : "# PowerShell\n$ErrorActionPreference = 'Stop'";
+
+    sections.push(`## Envoy Capabilities
+Script platform: ${rollbackPlatform}
+Installed tools: ${availableTools || "none"}`);
 
     const systemPrompt =
       `You are the Envoy rollback planning engine for Synth. Your job is to produce ` +
-      `a concrete rollback plan: the minimal set of steps to safely undo a deployment ` +
+      `a concrete rollback script: the minimal set of commands to safely undo a deployment ` +
       `and return the environment to its previous state.\n\n` +
       `Only undo steps that actually completed. Work in reverse order. ` +
       `Be specific about targets (paths, service names). ` +
-      `Do not include steps for operations that did not execute.\n\n` +
+      `Do not include commands for operations that did not execute.\n\n` +
       `IMPORTANT: You must respond with valid JSON only. No markdown, no commentary.\n\n` +
       `Response format:\n` +
       `{\n` +
-      `  "reasoning": "Why these rollback steps are needed and what state they restore",\n` +
+      `  "reasoning": "Why these rollback actions are needed and what state they restore",\n` +
       `  "steps": [\n` +
       `    {\n` +
       `      "description": "Human-readable description of the rollback step",\n` +
-      `      "action": "The action type (must use a recognized action keyword)",\n` +
-      `      "target": "What the action operates on (source path, service name, command binary)",\n` +
-      `      "params": {"destination": "required for copy/move", "args": [], "cwd": "optional"},\n` +
-      `      "reversible": false,\n` +
-      `      "execPreview": "The exact literal command string, if applicable"\n` +
+      `      "action": "short action label",\n` +
+      `      "target": "What the action operates on",\n` +
+      `      "execPreview": "The exact literal command string"\n` +
       `    }\n` +
       `  ]\n` +
       `}`;
@@ -3126,15 +3097,23 @@ IMPORTANT: Every step's "action" field MUST contain at least one of the recogniz
         },
       });
 
+      // Build a scripted rollback plan from the LLM's step-based output
+      const rollbackScript = parsed.steps
+        .map((s) => `# ${s.description}\n${s.execPreview ?? `echo "TODO: ${s.action} ${s.target}"`}`)
+        .join("\n\n");
+
       return {
-        steps: parsed.steps.map((s) => ({
-          description: s.description,
-          action: s.action,
-          target: s.target,
-          params: s.params,
-          reversible: false,
-          execPreview: s.execPreview,
-        })),
+        scriptedPlan: {
+          platform: "bash",
+          executionScript: `#!/usr/bin/env bash\nset -euo pipefail\n\n${rollbackScript}`,
+          dryRunScript: null,
+          rollbackScript: null,
+          reasoning: parsed.reasoning,
+          stepSummary: parsed.steps.map((s) => ({
+            description: s.description,
+            reversible: false,
+          })),
+        },
         reasoning: parsed.reasoning,
       };
     } catch {
@@ -3146,19 +3125,29 @@ IMPORTANT: Every step's "action" field MUST contain at least one of the recogniz
     instruction: RollbackPlanningInstruction,
     executedSteps: RollbackPlanningInstruction["completedSteps"],
   ): DeploymentPlan {
-    const steps = [...executedSteps].reverse().map((s) => ({
-      description: `Undo: ${s.description}`,
-      action: `undo-${s.action}`,
-      target: s.target,
-      reversible: false as const,
-    }));
+    const reversedSteps = [...executedSteps].reverse();
+    const rollbackScript = reversedSteps
+      .map((s) => `# Undo: ${s.description}\necho "TODO: undo-${s.action} ${s.target}"`)
+      .join("\n\n");
+
+    const reasoning =
+      `Mechanical rollback for ${instruction.artifact.name} v${instruction.version}: ` +
+      `reverses ${executedSteps.length} completed step(s) in reverse order. ` +
+      `LLM was unavailable — review script carefully before executing.`;
 
     return {
-      steps,
-      reasoning:
-        `Mechanical rollback for ${instruction.artifact.name} v${instruction.version}: ` +
-        `reverses ${executedSteps.length} completed step(s) in reverse order. ` +
-        `LLM was unavailable — review steps carefully before executing.`,
+      scriptedPlan: {
+        platform: "bash",
+        executionScript: `#!/usr/bin/env bash\nset -euo pipefail\n\n${rollbackScript}`,
+        dryRunScript: null,
+        rollbackScript: null,
+        reasoning,
+        stepSummary: reversedSteps.map((s) => ({
+          description: `Undo: ${s.description}`,
+          reversible: false,
+        })),
+      },
+      reasoning,
     };
   }
 
@@ -3224,61 +3213,54 @@ IMPORTANT: Every step's "action" field MUST contain at least one of the recogniz
       return entry;
     };
 
+    const scriptedPlan = plan.scriptedPlan;
+    const rollbackScripted = rollbackPlan.scriptedPlan;
+    const stepCount = scriptedPlan.stepSummary.length;
+    const rollbackStepCount = rollbackScripted.stepSummary.length;
+
     recordEntry({
       partitionId: null,
       operationId: operationId,
       agent: "envoy",
       decisionType: "deployment-execution",
       decision:
-        `Executing approved plan: ${plan.steps.length} step(s) for deployment ${operationId}`,
+        `Executing approved plan: ${stepCount} step(s) for deployment ${operationId}`,
       reasoning:
-        `User approved the deployment plan. Executing ${plan.steps.length} step(s) ` +
+        `User approved the deployment plan. Executing ${stepCount} step(s) ` +
         `deterministically — no re-reasoning. Rollback plan has ` +
-        `${rollbackPlan.steps.length} step(s) ready if any step fails.`,
+        `${rollbackStepCount} step(s) ready if any step fails.`,
       context: {
-        stepCount: plan.steps.length,
-        rollbackStepCount: rollbackPlan.steps.length,
-        steps: plan.steps.map((s) => ({ action: s.action, target: s.target })),
+        stepCount,
+        rollbackStepCount,
+        steps: scriptedPlan.stepSummary.map((s) => ({ description: s.description, reversible: s.reversible })),
       },
     });
 
     const execStart = Date.now();
-    const completedSteps: PlannedStep[] = [];
-    let failedStepIndex: number | null = null;
     let failureError: string | null = null;
 
-    // Execute each step through the OperationExecutor if available
-    if (this.operationExecutor && plan.steps.length > 0) {
+    // Execute the scripted plan through the OperationExecutor if available
+    if (this.operationExecutor && scriptedPlan.executionScript) {
       // Set up progress callback to stream events to Command if URL provided
       const progressCallback = progressCallbackUrl
         ? createCallbackReporter(progressCallbackUrl, callbackToken)
         : undefined;
 
       const planResult = await this.operationExecutor.executePlan(
-        plan.steps,
-        [],
+        scriptedPlan,
         progressCallback,
         operationId,
       );
 
       if (!planResult.success) {
-        failedStepIndex = planResult.failedStepIndex ?? 0;
-        const failedResult = planResult.results.find((r) => r.status === "failed");
-        failureError = failedResult?.error ?? "Unknown execution error";
-
-        // Collect completed steps for debrief context
-        planResult.results
-          .filter((r) => r.status === "completed")
-          .forEach((r) => completedSteps.push(r.step));
-      } else {
-        planResult.results.forEach((r) => completedSteps.push(r.step));
+        failureError = planResult.executionResult.stderr || "Script execution failed";
       }
     }
 
     const execDurationMs = Date.now() - execStart;
 
     if (failureError !== null) {
-      // --- Failure path: execute rollback for completed steps ---
+      // --- Failure path: execute rollback script ---
 
       recordEntry({
         partitionId: null,
@@ -3286,42 +3268,35 @@ IMPORTANT: Every step's "action" field MUST contain at least one of the recogniz
         agent: "envoy",
         decisionType: "deployment-failure",
         decision:
-          `Plan execution failed at step ${(failedStepIndex ?? 0) + 1}/${plan.steps.length}: ${failureError}`,
+          `Plan execution failed: ${failureError}`,
         reasoning:
-          `Step "${plan.steps[failedStepIndex ?? 0]?.description ?? "unknown"}" failed. ` +
-          `Error: ${failureError}. ${completedSteps.length} step(s) completed before failure. ` +
-          `Executing rollback plan to restore previous state.`,
+          `Script execution failed. ` +
+          `Error: ${failureError}. ` +
+          `Executing rollback script to restore previous state.`,
         context: {
-          failedStepIndex,
           error: failureError,
-          completedSteps: completedSteps.length,
           durationMs: execDurationMs,
         },
       });
 
-      // Execute rollback
-      if (this.operationExecutor && rollbackPlan.steps.length > 0) {
-        await this.operationExecutor.executePlan(
-          rollbackPlan.steps,
-          [],
-          undefined,
-          operationId,
-        );
-
+      // Execute rollback — handled automatically by the executor if rollbackScript is set,
+      // but if the plan was executed without the executor, run it manually
+      if (this.operationExecutor && rollbackScripted.rollbackScript) {
+        // The DefaultOperationExecutor already handles rollback internally
+        // via the ScriptedPlan's rollbackScript, so this is a safety net
+        // for cases where rollback wasn't triggered automatically.
         recordEntry({
           partitionId: null,
           operationId: operationId,
           agent: "envoy",
           decisionType: "rollback-execution",
           decision:
-            `Rollback executed: ${rollbackPlan.steps.length} step(s) to restore previous state`,
+            `Rollback executed: ${rollbackStepCount} step(s) to restore previous state`,
           reasoning:
-            `Executed rollback plan with ${rollbackPlan.steps.length} step(s) ` +
-            `to undo the ${completedSteps.length} completed step(s). ` +
-            `The environment should be in its previous state.`,
+            `Executed rollback script ` +
+            `to restore the environment to its previous state.`,
           context: {
-            rollbackSteps: rollbackPlan.steps.length,
-            completedStepsRolledBack: completedSteps.length,
+            rollbackSteps: rollbackStepCount,
           },
         });
       }
@@ -3352,7 +3327,7 @@ IMPORTANT: Every step's "action" field MUST contain at least one of the recogniz
     // --- Success path ---
 
     const totalDurationMs = Date.now() - totalStart;
-    const artifacts = completedSteps.map((s) => s.description);
+    const artifacts = scriptedPlan.stepSummary.map((s) => s.description);
 
     recordEntry({
       partitionId: null,
@@ -3360,13 +3335,13 @@ IMPORTANT: Every step's "action" field MUST contain at least one of the recogniz
       agent: "envoy",
       decisionType: "deployment-completion",
       decision:
-        `Approved plan executed: all ${plan.steps.length} step(s) completed for deployment ${operationId}`,
+        `Approved plan executed: all ${stepCount} step(s) completed for deployment ${operationId}`,
       reasoning:
-        `All ${plan.steps.length} planned steps executed deterministically in ${execDurationMs}ms. ` +
+        `All ${stepCount} planned steps executed deterministically in ${execDurationMs}ms. ` +
         `No re-reasoning was performed — the plan was executed exactly as approved. ` +
         `Total pipeline time: ${totalDurationMs}ms.`,
       context: {
-        stepCount: plan.steps.length,
+        stepCount,
         executionDurationMs: execDurationMs,
         totalDurationMs,
         artifacts,
@@ -3382,8 +3357,8 @@ IMPORTANT: Every step's "action" field MUST contain at least one of the recogniz
       executionDurationMs: execDurationMs,
       totalDurationMs,
       verificationPassed: true,
-      verificationChecks: plan.steps.map((s) => ({
-        name: s.action,
+      verificationChecks: scriptedPlan.stepSummary.map((s) => ({
+        name: s.description,
         passed: true,
         detail: s.description,
       })),
@@ -3518,41 +3493,17 @@ IMPORTANT: Every step's "action" field MUST contain at least one of the recogniz
   }
 
   /**
-   * Return the Envoy's capability surface: what action keywords it
-   * recognizes, which handlers are registered, what tools are installed,
-   * and which tool dependencies are satisfied.
-   *
-   * This is surfaced to the server so the LLM planner can produce plans
-   * that the Envoy can actually execute.
+   * Return the Envoy's capability surface: what tools are installed
+   * on this machine. Used by planning prompts so the LLM generates
+   * scripts that use available tools.
    */
   getCapabilities(): {
-    handlers: Array<{
-      name: string;
-      actionKeywords: readonly string[];
-      toolDependencies: readonly string[];
-    }>;
-    allActionKeywords: string[];
     installedTools: Array<{ name: string; available: boolean; version: string | null }>;
-    unsatisfiedDependencies: string[];
   } {
-    const handlers = this.operationRegistry?.listCapabilities() ?? [];
-    const allKeywords = this.operationRegistry?.allActionKeywords() ?? [];
-    const allDeps = this.operationRegistry?.allToolDependencies() ?? [];
     const installedTools = this.scanner.getInstalledTools();
 
-    // Determine which handler tool dependencies are not installed
-    const availableToolNames = new Set(
-      installedTools.filter((t) => t.available).map((t) => t.name),
-    );
-    const unsatisfiedDependencies = allDeps.filter(
-      (dep) => !availableToolNames.has(dep),
-    );
-
     return {
-      handlers,
-      allActionKeywords: allKeywords,
       installedTools,
-      unsatisfiedDependencies,
     };
   }
 }

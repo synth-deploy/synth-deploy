@@ -24,8 +24,8 @@ vi.mock("../src/agent/envoy-client.js", () => ({
   EnvoyClient: vi.fn().mockImplementation(function (this: any) {
     this.requestPlan = vi.fn().mockResolvedValue({
       blocked: false,
-      plan: { steps: [{ description: "Step 1", action: "run", target: "/app", reversible: false }], reasoning: "test plan" },
-      rollbackPlan: { steps: [], reasoning: "no rollback" },
+      plan: { scriptedPlan: { platform: "bash", executionScript: "echo test", dryRunScript: null, rollbackScript: null, reasoning: "test plan", stepSummary: [{ description: "Step 1", reversible: false }] }, reasoning: "test plan" },
+      rollbackPlan: { scriptedPlan: { platform: "bash", executionScript: "echo rollback", dryRunScript: null, rollbackScript: null, reasoning: "no rollback", stepSummary: [] }, reasoning: "no rollback" },
     });
     this.executeApprovedPlan = vi.fn().mockResolvedValue({});
     this.removeMonitoringDirective = vi.fn().mockResolvedValue({});
@@ -63,7 +63,7 @@ const MOCK_REGISTRY: EnvoyRegistry = {
 } as unknown as EnvoyRegistry;
 
 const MOCK_PLAN: OperationPlan = {
-  steps: [{ description: "Check services", action: "shell", target: "systemctl status", reversible: false }],
+  scriptedPlan: { platform: "bash", executionScript: "systemctl status", dryRunScript: null, rollbackScript: null, reasoning: "standard maintenance check", stepSummary: [{ description: "Check services", reversible: false }] },
   reasoning: "standard maintenance check",
 };
 
@@ -284,8 +284,8 @@ describe("Composite Operations — planning via envoy registry", () => {
       this.requestPlan = vi.fn().mockResolvedValue({
         blocked: true,
         blockReason: "insufficient permissions",
-        plan: { steps: [], reasoning: "" },
-        rollbackPlan: { steps: [], reasoning: "" },
+        plan: { scriptedPlan: { platform: "bash", executionScript: "", dryRunScript: null, rollbackScript: null, reasoning: "", stepSummary: [] }, reasoning: "" },
+        rollbackPlan: { scriptedPlan: { platform: "bash", executionScript: "", dryRunScript: null, rollbackScript: null, reasoning: "", stepSummary: [] }, reasoning: "" },
       });
     });
 
@@ -409,7 +409,7 @@ describe("Composite Operations — approval and execution", () => {
     // Child has a plan but no envoyId, and this ctx has no envoy registry
     seedChild(ctx.deployments, parent.id, {
       plan: MOCK_PLAN,
-      rollbackPlan: { steps: [], reasoning: "" },
+      rollbackPlan: { scriptedPlan: { platform: "bash", executionScript: "", dryRunScript: null, rollbackScript: null, reasoning: "", stepSummary: [] }, reasoning: "" },
     });
 
     await ctx.app.inject({

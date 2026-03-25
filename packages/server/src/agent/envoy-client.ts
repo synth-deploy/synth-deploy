@@ -3,7 +3,7 @@ import type {
   HealthCheckResult,
 } from "./health-checker.js";
 import { serverLog, serverWarn, serverError } from "../logger.js";
-import type { DecisionType, DeploymentPlan, PlannedStep, SecurityBoundary, MonitoringDirective } from "@synth-deploy/core";
+import type { DecisionType, DeploymentPlan, ScriptedPlan, SecurityBoundary, MonitoringDirective } from "@synth-deploy/core";
 
 // ---------------------------------------------------------------------------
 // Types — Envoy API responses
@@ -212,7 +212,7 @@ export class EnvoyClient {
     progressCallbackUrl?: string;
     callbackToken?: string;
   }): Promise<EnvoyDeployResult> {
-    serverLog("ENVOY-EXECUTE", { operationId: params.operationId, envoyUrl: this.baseUrl, artifact: params.artifactName, steps: params.plan?.steps?.length ?? 0 });
+    serverLog("ENVOY-EXECUTE", { operationId: params.operationId, envoyUrl: this.baseUrl, artifact: params.artifactName, steps: params.plan?.scriptedPlan?.stepSummary?.length ?? 0 });
     const execStart = Date.now();
     const response = await fetchWithRetry(
       `${this.baseUrl}/execute`,
@@ -278,7 +278,7 @@ export class EnvoyClient {
     blocked?: boolean;
     blockReason?: string;
     queryFindings?: { targetsSurveyed: string[]; summary: string; findings: Array<{ target: string; observations: string[] }> };
-    investigationFindings?: { targetsSurveyed: string[]; summary: string; findings: Array<{ target: string; observations: string[] }>; rootCause?: string; proposedResolution?: { intent: string; operationType: "deploy" | "maintain"; parameters?: Record<string, unknown> } };
+    investigationFindings?: { targetsSurveyed: string[]; summary: string; findings: Array<{ target: string; observations: string[] }>; rootCause?: string; proposedResolution?: { intent: string; operationType: "deploy" | "maintain" } };
     intervalMs?: number;
     cooldownMs?: number;
   }> {
@@ -304,7 +304,7 @@ export class EnvoyClient {
     }
 
     const planResult = (await response.json()) as Awaited<ReturnType<typeof this.requestPlan>>;
-    serverLog("ENVOY-PLAN-RECEIVED", { operationId: params.operationId, steps: planResult.plan?.steps?.length ?? 0, blocked: planResult.blocked ?? false, durationMs: Date.now() - planStart });
+    serverLog("ENVOY-PLAN-RECEIVED", { operationId: params.operationId, steps: planResult.plan?.scriptedPlan?.stepSummary?.length ?? 0, blocked: planResult.blocked ?? false, durationMs: Date.now() - planStart });
     return planResult;
   }
 
@@ -361,18 +361,18 @@ export class EnvoyClient {
   /**
    * Validate a modified plan against the Envoy's security boundaries.
    */
-  async validatePlan(steps: PlannedStep[]): Promise<{ valid: boolean; violations: Array<{ step: string; reason: string }> }> {
+  async validatePlan(plan: ScriptedPlan): Promise<{ valid: boolean; violations: string[] }> {
     const response = await fetchWithRetry(
       `${this.baseUrl}/validate-plan`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ steps }),
+        body: JSON.stringify({ plan }),
       },
       this.timeoutMs,
     );
 
-    return (await response.json()) as { valid: boolean; violations: Array<{ step: string; reason: string }> };
+    return (await response.json()) as { valid: boolean; violations: string[] };
   }
 
   /**
@@ -382,7 +382,7 @@ export class EnvoyClient {
    */
   async validateRefinementFeedback(params: {
     feedback: string;
-    currentPlanSteps: Array<{ description: string; action: string; target: string }>;
+    currentPlanSummary: Array<{ description: string; reversible: boolean }>;
     artifactName: string;
     environmentName: string;
   }): Promise<{ mode: "replan" | "rejection" | "response"; message: string }> {
