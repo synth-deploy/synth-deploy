@@ -106,7 +106,23 @@ All 6 operation types have playbooks: deploy (1), maintain (4), query (3), inves
 
 ---
 
-## Layer 3: Scenario & Fault-Injection Tests
+## Layer 3: Integration & E2E Tests
+
+Cross-package tests that verify the full stack works together. These boot real server + envoy instances in-process and exercise actual API calls.
+
+```
+tests/integration/
+  cross-package.test.ts   # Server → Envoy dispatch, store persistence, partition isolation
+
+tests/e2e/
+  deployment-workflow.test.ts  # Full deployment lifecycle end-to-end
+```
+
+Run with `npm run test:integration` (also includes scenario tests below).
+
+---
+
+## Layer 4: Scenario & Fault-Injection Tests
 
 Hand-written vitest tests for complex multi-step user journeys and failure modes.
 
@@ -130,7 +146,7 @@ import { createHarness, teardownHarness, maintain, queryOp, investigate,
 
 ---
 
-## Layer 4: UI Component Tests
+## Layer 5: UI Component Tests
 
 React Testing Library tests covering the operation authoring panel, debrief rendering, and theme compliance.
 
@@ -149,7 +165,7 @@ packages/ui/tests/
 
 ---
 
-## Layer 5: Autonomous CI Pipeline
+## Layer 6: Autonomous CI Pipeline
 
 The CI pipeline runs automatically on every push and on a schedule. No manual intervention needed.
 
