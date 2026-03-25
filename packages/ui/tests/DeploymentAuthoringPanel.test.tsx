@@ -2,7 +2,7 @@
  * Operation authoring panel tests — verifies the form logic and field visibility
  * for all 6 operation types (deploy, maintain, query, investigate, trigger, composite).
  */
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { CanvasProvider } from "../src/context/CanvasContext";
@@ -73,8 +73,16 @@ vi.mock("../src/api", () => ({
   listDeployments: vi.fn(),
   createOperation: vi.fn().mockResolvedValue({ deployment: { id: "op-123" } }),
   recordPreFlightResponse: vi.fn().mockResolvedValue({}),
+  getPreFlightContext: vi.fn().mockResolvedValue({
+    recommendation: { action: "proceed", reasoning: "All clear", confidence: 0.95 },
+    targetHealth: { status: "healthy", details: "All targets healthy" },
+    recentHistory: { recentFailures: 0, deploymentsToday: 0 },
+    crossSystemContext: [],
+    llmAvailable: true,
+  }),
 }));
 
+import { createOperation } from "../src/api";
 import OperationAuthoringPanel from "../src/components/canvas/DeploymentAuthoringPanel";
 
 // ---------------------------------------------------------------------------
@@ -282,6 +290,199 @@ describe("OperationAuthoringPanel", () => {
       renderPanel({ preselectedOpType: "maintain", preselectedIntent: "Rotate API keys" });
       const textarea = screen.getByRole("textbox");
       expect((textarea as HTMLTextAreaElement).value).toBe("Rotate API keys");
+    });
+  });
+
+  describe("submission journeys", () => {
+    // 1. Deploy happy path
+    it("deploy: selecting artifact + environment + submitting calls createOperation and navigates to plan-review", async () => {
+      const user = userEvent.setup();
+      renderPanel();
+      // Select artifact
+      await user.click(screen.getByText("web-app"));
+      // Switch scope from envoy (default) to environment, then select
+      await user.click(screen.getByText("Environment"));
+      await user.click(screen.getByText("production"));
+      // Click submit
+      await user.click(screen.getByText("Request Plan"));
+      await waitFor(() => {
+        expect(createOperation).toHaveBeenCalledWith(
+          expect.objectContaining({
+            artifactId: "art-1",
+            environmentId: "env-1",
+            type: "deploy",
+          }),
+        );
+      });
+      expect(mockPushPanel).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "plan-review",
+          params: { id: "op-123" },
+        }),
+      );
+    });
+
+    // 2. Deploy missing artifact — action bar not rendered
+    it("deploy: action bar is not shown without artifact selection", () => {
+      renderPanel();
+      expect(screen.queryByText("Request Plan")).not.toBeInTheDocument();
+    });
+
+    // 3. Maintain happy path
+    it("maintain: filling objective + selecting target + submitting calls createOperation", async () => {
+      const user = userEvent.setup();
+      renderPanel();
+      await user.click(screen.getByText("maintain"));
+      // Type objective
+      await user.type(screen.getByRole("textbox"), "Rotate API keys");
+      // Switch scope from envoy (default) to environment, then select target
+      await user.click(screen.getByText("Environment"));
+      await user.click(screen.getByText("production"));
+      // Submit
+      await user.click(screen.getByText("Plan Maintenance"));
+      await waitFor(() => {
+        expect(createOperation).toHaveBeenCalledWith(
+          expect.objectContaining({
+            type: "maintain",
+            intent: "Rotate API keys",
+            environmentId: "env-1",
+          }),
+        );
+      });
+      expect(mockPushPanel).toHaveBeenCalledWith(
+        expect.objectContaining({ type: "plan-review" }),
+      );
+    });
+
+    // 4. Maintain empty objective — action bar not shown (canDeploy is false)
+    it("maintain: action bar not shown with empty objective", async () => {
+      const user = userEvent.setup();
+      renderPanel();
+      await user.click(screen.getByText("maintain"));
+      // Don't type anything — canDeploy requires intent.trim().length > 0
+      expect(screen.queryByText("Plan Maintenance")).not.toBeInTheDocument();
+    });
+
+    // 5. Query happy path
+    it("query: filling objective + selecting target + submitting calls createOperation with type query", async () => {
+      const user = userEvent.setup();
+      renderPanel();
+      await user.click(screen.getByText("query"));
+      await user.type(screen.getByRole("textbox"), "Check disk usage");
+      await user.click(screen.getByText("Environment"));
+      await user.click(screen.getByText("production"));
+      await user.click(screen.getByText("Run Query"));
+      await waitFor(() => {
+        expect(createOperation).toHaveBeenCalledWith(
+          expect.objectContaining({
+            type: "query",
+            intent: "Check disk usage",
+          }),
+        );
+      });
+    });
+
+    // 6. Investigate with allowWrite toggle
+    it("investigate: toggling allowWrite sends it in the payload", async () => {
+      const user = userEvent.setup();
+      renderPanel();
+      await user.click(screen.getByText("investigate"));
+      await user.type(screen.getByRole("textbox"), "Check 502 errors");
+      const checkbox = screen.getByRole("checkbox");
+      await user.click(checkbox);
+      await user.click(screen.getByText("Environment"));
+      await user.click(screen.getByText("production"));
+      await user.click(screen.getByText("Begin Investigation"));
+      await waitFor(() => {
+        expect(createOperation).toHaveBeenCalledWith(
+          expect.objectContaining({
+            type: "investigate",
+            intent: "Check 502 errors",
+            allowWrite: true,
+          }),
+        );
+      });
+    });
+
+    // 7. Trigger happy path
+    it("trigger: filling condition + response + submitting sends trigger payload", async () => {
+      const user = userEvent.setup();
+      renderPanel();
+      await user.click(screen.getByText("trigger"));
+      // Two textareas: condition and response
+      const textareas = screen.getAllByRole("textbox");
+      await user.type(textareas[0], "disk_usage > 85");
+      await user.type(textareas[1], "Run cleanup");
+      await user.click(screen.getByText("Create Trigger"));
+      await waitFor(() => {
+        expect(createOperation).toHaveBeenCalledWith(
+          expect.objectContaining({
+            type: "trigger",
+            condition: "disk_usage > 85",
+            responseIntent: "Run cleanup",
+          }),
+        );
+      });
+    });
+
+    // 8. Trigger empty condition — action bar not shown
+    it("trigger: action bar not shown with empty condition", async () => {
+      const user = userEvent.setup();
+      renderPanel();
+      await user.click(screen.getByText("trigger"));
+      // Only fill response, leave condition empty
+      const textareas = screen.getAllByRole("textbox");
+      await user.type(textareas[1], "Run cleanup");
+      expect(screen.queryByText("Create Trigger")).not.toBeInTheDocument();
+    });
+
+    // 9. API failure shows error message
+    it("API failure during submission shows error message", async () => {
+      (createOperation as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error("Network error"));
+      const user = userEvent.setup();
+      renderPanel();
+      await user.click(screen.getByText("web-app"));
+      await user.click(screen.getByText("Environment"));
+      await user.click(screen.getByText("production"));
+      await user.click(screen.getByText("Request Plan"));
+      await waitFor(() => {
+        expect(screen.getByText("Network error")).toBeInTheDocument();
+      });
+      expect(mockPushPanel).not.toHaveBeenCalled();
+    });
+
+    // 10. Submitting state disables button
+    it("submit button shows loading state while request is in flight", async () => {
+      (createOperation as ReturnType<typeof vi.fn>).mockReturnValueOnce(new Promise(() => {})); // never resolves
+      const user = userEvent.setup();
+      renderPanel();
+      await user.click(screen.getByText("web-app"));
+      await user.click(screen.getByText("Environment"));
+      await user.click(screen.getByText("production"));
+      await user.click(screen.getByText("Request Plan"));
+      await waitFor(() => {
+        expect(screen.getByText("Requesting…")).toBeInTheDocument();
+      });
+      expect(screen.getByText("Requesting…").closest("button")).toBeDisabled();
+    });
+
+    // 11. Force manual approval — query type defaults to auto-approve, so the toggle appears
+    it("toggling require approval sends requireApproval in payload", async () => {
+      const user = userEvent.setup();
+      renderPanel();
+      await user.click(screen.getByText("query"));
+      await user.type(screen.getByRole("textbox"), "Check disk usage");
+      await user.click(screen.getByText("Environment"));
+      await user.click(screen.getByText("production"));
+      // Query defaults to auto-approve, so "Require approval" link should appear
+      const requireLink = screen.getByText("Require approval");
+      await user.click(requireLink);
+      await user.click(screen.getByText("Run Query"));
+      await waitFor(() => {
+        expect(createOperation).toHaveBeenCalledWith(
+          expect.objectContaining({ type: "query", requireApproval: true }),
+        );
+      });
     });
   });
 });
