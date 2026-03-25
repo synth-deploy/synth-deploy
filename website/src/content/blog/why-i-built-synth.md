@@ -2,7 +2,7 @@
 title: "Why I Built Synth"
 description: "I started using Claude at my day job as a DevOps Engineer. It let me step beyond the build-configure-deploy loop into real software engineering. That curiosity snowballed into something I couldn't stop working on."
 pubDate: 2026-03-18
-updatedDate: 2026-03-19
+updatedDate: 2026-03-24
 author: "Joe Fullerton"
 tags: ["deployment", "devops", "architecture", "building-in-public"]
 ---
@@ -65,4 +65,4 @@ Synth has a free Community tier (up to 10 Envoys). If you want more, I'm running
 
 I want to learn how your teams deploy. What works, what's missing, what I got wrong. If you're managing deployments across environments and tired of maintaining the automation that's supposed to save you time, I'd like to hear from you.
 
-[synthdeploy.com](https://synthdeploy.com)
+[synthops.app](https://synthops.app)

@@ -109,6 +109,16 @@ import SynthMark from "../components/SynthMark.astro";
                 <p class="text-[10px] text-ds-text-muted" style="margin: 0;">Select what and where. Synth figures out how.</p>
               </div>
 
+              <!-- Operation type selector -->
+              <div class="demo-op-selector">
+                <span id="demo-op-deploy" class="demo-op-pill active">Deploy</span>
+                <span class="demo-op-pill">Maintain</span>
+                <span class="demo-op-pill">Query</span>
+                <span class="demo-op-pill">Investigate</span>
+                <span class="demo-op-pill">Trigger</span>
+                <span class="demo-op-pill">Composite</span>
+              </div>
+
               <!-- Two-column layout -->
               <div style="display: grid; grid-template-columns: 3fr 2fr; gap: 14px;">
                 <!-- What column -->
@@ -1591,6 +1601,33 @@ import SynthMark from "../components/SynthMark.astro";
     font-weight: 500;
     color: #e4e2de;
     line-height: 1.45;
+  }
+
+  /* ---- Operation type selector ---- */
+  .demo-op-selector {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+  }
+  .demo-op-pill {
+    font-size: 9px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 4px;
+    border: 1px solid rgba(255,255,255,0.07);
+    background: transparent;
+    color: #4a4845;
+    cursor: default;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    transition: none;
+  }
+  .demo-op-pill.active {
+    border-color: rgba(107,138,255,0.35);
+    background: rgba(107,138,255,0.1);
+    color: #6b8aff;
   }
 
   /* ---- Pause overlay ---- */

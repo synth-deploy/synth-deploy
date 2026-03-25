@@ -2,6 +2,7 @@
 title: "The Rest of the Job"
 description: "Deployments are only a fraction of what ops engineers actually do. The same planning intelligence that makes Synth's deployments valuable applies to all of it — the fixes, the investigations, the maintenance, all the work that doesn't start with an artifact."
 pubDate: 2026-03-23
+updatedDate: 2026-03-24
 author: "Joe Fullerton"
 tags: ["deployment", "devops", "operations", "building-in-public"]
 draft: false
@@ -49,4 +50,4 @@ Synth now extends the same planning model to operational work that doesn't start
 
 This isn't a new product or a new pricing tier. It's the same intelligence, applied to the rest of the job.
 
-If you're building deployment automation and spending most of your time maintaining everything around it, [the conversation is at synthdeploy.com](https://synthdeploy.com).
+If you're building deployment automation and spending most of your time maintaining everything around it, [the conversation is at synthops.app](https://synthops.app).
