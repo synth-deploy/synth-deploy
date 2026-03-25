@@ -92,24 +92,28 @@ Synth runs as two services:
 | **Synth** (server) | Your infrastructure | LLM agent, REST API, MCP server, Debrief store |
 | **Envoy** | Your target machines | Execution engine — 5 handlers: file, process, config, container, verify |
 
-```
-                  ┌───────────────────────────────────────┐
-                  │              Synth Server              │
-                  │                                       │
-  Web UI     ────►│  REST API ──┐                        │
-  MCP clients────►│  MCP Server ─┼──► LLM Agent          │
-                  │             │         │               │
-                  │             └─────────▼               │
-                  │                   Debrief             │
-                  └──────────────────────┬────────────────┘
-                                         │ HTTP
-                  ┌──────────────────────▼────────────────┐
-                  │                  Envoy                 │
-                  │         (on your infrastructure)       │
-                  │                                       │
-                  │  file · process · config              │
-                  │  container · verify                   │
-                  └───────────────────────────────────────┘
+```mermaid
+flowchart TD
+    UI(["Web UI"])
+    MCP(["MCP Clients"])
+
+    subgraph server["Synth Server"]
+        REST["REST API"]
+        MCPS["MCP Server"]
+        Agent["LLM Agent"]
+        Debrief["Debrief"]
+        REST --> Agent
+        MCPS --> Agent
+        Agent --> Debrief
+    end
+
+    subgraph envoy["Envoy — your infrastructure"]
+        Handlers["file · process · config · container · verify"]
+    end
+
+    UI --> REST
+    MCP --> MCPS
+    Agent -- HTTP --> Handlers
 ```
 
 **Synth (server)** is the brain. It holds artifacts, operations, environments, and partitions. When an operation is triggered, the LLM agent reasons about what needs to happen — it does not run a pre-built template. Every decision is written to the Debrief.
