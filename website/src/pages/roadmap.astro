@@ -2,7 +2,7 @@
 import Layout from "../layouts/Layout.astro";
 ---
 
-<Layout title="Synth — Roadmap" description="Synth product roadmap: v1.0 foundation, v1.1 operations model (just shipped), v1.2 in development, and the long-term vision for operations intelligence.">
+<Layout title="Synth — Roadmap" description="Synth product roadmap: v1.2 just shipped with scripted plans — LLM-generated bash and powershell execution for universal target support. See what's available, what's next, and the long-term vision.">
   <!-- Hero -->
   <section class="relative overflow-hidden">
     <div class="absolute inset-0 pointer-events-none">
@@ -23,208 +23,113 @@ import Layout from "../layouts/Layout.astro";
     </div>
   </section>
 
-  <!-- Available Now (v1.0) -->
-  <section class="py-28 border-t border-ds-border">
-    <div class="mx-auto max-w-6xl px-6">
+  <!-- Just Shipped (v1.2) -->
+  <section class="py-28 border-t border-ds-border relative overflow-hidden">
+    <div class="absolute inset-0 pointer-events-none">
+      <div class="absolute top-1/3 right-1/4 w-96 h-96 bg-ds-accent/5 rounded-full blur-[120px]"></div>
+      <div class="absolute bottom-1/4 left-1/3 w-72 h-72 bg-ds-partition/5 rounded-full blur-[100px]"></div>
+    </div>
+
+    <div class="relative mx-auto max-w-6xl px-6">
       <div class="text-center mb-16 scroll-reveal">
-        <p class="section-heading">Available Now</p>
-        <h2 class="text-3xl md:text-4xl font-display font-bold mb-4">v1.0 — Shipping today</h2>
+        <p class="section-heading text-ds-accent">Just Shipped</p>
+        <h2 class="text-3xl md:text-4xl font-display font-bold mb-4">v1.2 — Scripted Plans</h2>
         <p class="text-ds-text-secondary text-lg max-w-2xl mx-auto">
-          The foundation is built and proven. Every feature below is live, tested, and ready
-          for production use.
+          A fundamental architecture shift. The envoy no longer relies on built-in handlers &mdash;
+          the LLM generates bash and powershell scripts tailored to each operation. If your shell
+          can do it, Synth can plan, validate, and execute it.
         </p>
       </div>
 
       <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-        <!-- Intelligent Deployment Planning -->
         <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-1">
-          <div class="flex items-center gap-2 mb-3">
-            <span class="dt-dot bg-ds-dt-plan"></span>
-            <span class="text-xs font-semibold uppercase tracking-wide text-ds-dt-plan">Core</span>
+          <div class="flex items-center gap-3 mb-3">
+            <div class="entity-badge border-ds-accent/30 bg-ds-accent/10 text-ds-accent text-[10px] py-0.5">
+              v1.2
+            </div>
           </div>
-          <h3 class="text-base font-semibold mb-2">Intelligent Deployment Planning</h3>
+          <h3 class="text-base font-semibold mb-2">LLM-Generated Execution Scripts</h3>
           <p class="text-sm text-ds-text-secondary leading-relaxed">
-            LLM-powered pipeline planning with plain-language reasoning. The agent analyzes
-            artifacts, reasons about target systems, and produces deployment plans with full
-            explanations.
+            Planning produces bash or powershell scripts for every step. No hard-coded handlers,
+            no format limitations. The agent reasons about your target and writes the exact
+            commands needed &mdash; approved verbatim, executed deterministically.
           </p>
         </div>
 
-        <!-- Artifact Analysis -->
         <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-2">
-          <div class="flex items-center gap-2 mb-3">
-            <span class="dt-dot bg-ds-dt-config"></span>
-            <span class="text-xs font-semibold uppercase tracking-wide text-ds-dt-config">Core</span>
+          <div class="flex items-center gap-3 mb-3">
+            <div class="entity-badge border-ds-accent/30 bg-ds-accent/10 text-ds-accent text-[10px] py-0.5">
+              v1.2
+            </div>
           </div>
-          <h3 class="text-base font-semibold mb-2">Artifact Analysis</h3>
+          <h3 class="text-base font-semibold mb-2">Universal Target Support</h3>
           <p class="text-sm text-ds-text-secondary leading-relaxed">
-            Deterministic extractors for container images, Helm charts, npm/NuGet packages,
-            plus LLM fallback for unknown formats. Hand Synth whatever you produce &mdash; it
-            figures out the rest.
+            Kubernetes, Terraform, Ansible, cloud CLIs, database migrations, custom toolchains &mdash;
+            if it has a CLI, Synth can operate on it. No handler needed. No plugin required.
+            The shell is the interface.
           </p>
         </div>
 
-        <!-- Plan Review -->
         <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-3">
-          <div class="flex items-center gap-2 mb-3">
-            <span class="dt-dot bg-ds-dt-plan"></span>
-            <span class="text-xs font-semibold uppercase tracking-wide text-ds-dt-plan">Planning</span>
+          <div class="flex items-center gap-3 mb-3">
+            <div class="entity-badge border-ds-accent/30 bg-ds-accent/10 text-ds-accent text-[10px] py-0.5">
+              v1.2
+            </div>
           </div>
-          <h3 class="text-base font-semibold mb-2">Plan Review</h3>
+          <h3 class="text-base font-semibold mb-2">Boundary Validation</h3>
           <p class="text-sm text-ds-text-secondary leading-relaxed">
-            Approve, reject, or modify deployment plans. Three-mode refinement with LLM
-            assessment. The agent explains every recommendation.
+            Every generated script is audited against the approved plan before execution.
+            LLM-powered boundary checks ensure scripts stay within scope &mdash; no unexpected
+            mutations, no scope creep, no surprises at 2am.
           </p>
         </div>
 
-        <!-- Debrief -->
         <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-1">
-          <div class="flex items-center gap-2 mb-3">
-            <span class="dt-dot bg-ds-debrief"></span>
-            <span class="text-xs font-semibold uppercase tracking-wide text-ds-debrief">Transparency</span>
+          <div class="flex items-center gap-3 mb-3">
+            <div class="entity-badge border-ds-accent/30 bg-ds-accent/10 text-ds-accent text-[10px] py-0.5">
+              v1.2
+            </div>
           </div>
-          <h3 class="text-base font-semibold mb-2">Debrief (Decision Record)</h3>
+          <h3 class="text-base font-semibold mb-2">Dry-Run Scripts</h3>
           <p class="text-sm text-ds-text-secondary leading-relaxed">
-            Every agent decision logged in plain language. Failed deployments generate automatic
-            postmortems. Audit-ready from day one.
+            Preview exactly what will execute before approving. Dry-run scripts probe target
+            state and surface conflicts without side effects &mdash; the same intelligence that
+            plans the operation validates its feasibility.
           </p>
         </div>
 
-        <!-- Environment & Partition Management -->
         <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-2">
-          <div class="flex items-center gap-2 mb-3">
-            <span class="dt-dot bg-ds-partition"></span>
-            <span class="text-xs font-semibold uppercase tracking-wide text-ds-partition">Isolation</span>
+          <div class="flex items-center gap-3 mb-3">
+            <div class="entity-badge border-ds-accent/30 bg-ds-accent/10 text-ds-accent text-[10px] py-0.5">
+              v1.2
+            </div>
           </div>
-          <h3 class="text-base font-semibold mb-2">Environment & Partition Management</h3>
+          <h3 class="text-base font-semibold mb-2">Automatic Rollback Generation</h3>
           <p class="text-sm text-ds-text-secondary leading-relaxed">
-            Isolated deployment contexts with scoped variables. Configurable conflict resolution
-            policies. No cross-partition data access.
+            Every mutating script gets a paired rollback script generated alongside it.
+            If execution fails mid-plan, rollback runs automatically &mdash; returning
+            the environment to a known state with no manual intervention.
           </p>
         </div>
 
-        <!-- LLM-Agnostic -->
         <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-3">
-          <div class="flex items-center gap-2 mb-3">
-            <span class="dt-dot bg-ds-accent"></span>
-            <span class="text-xs font-semibold uppercase tracking-wide text-ds-accent">Infrastructure</span>
+          <div class="flex items-center gap-3 mb-3">
+            <div class="entity-badge border-ds-accent/30 bg-ds-accent/10 text-ds-accent text-[10px] py-0.5">
+              v1.2
+            </div>
           </div>
-          <h3 class="text-base font-semibold mb-2">LLM-Agnostic</h3>
+          <h3 class="text-base font-semibold mb-2">Cross-Platform Execution</h3>
           <p class="text-sm text-ds-text-secondary leading-relaxed">
-            Claude, GPT, Gemini, Grok, DeepSeek, Ollama, or any OpenAI-compatible endpoint.
-            Runs entirely on your infrastructure, including the AI.
-          </p>
-        </div>
-
-        <!-- CI/CD Integration -->
-        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-1">
-          <div class="flex items-center gap-2 mb-3">
-            <span class="dt-dot bg-ds-dt-execution"></span>
-            <span class="text-xs font-semibold uppercase tracking-wide text-ds-dt-execution">Integration</span>
-          </div>
-          <h3 class="text-base font-semibold mb-2">CI/CD Integration</h3>
-          <p class="text-sm text-ds-text-secondary leading-relaxed">
-            Webhook intake for GitHub Actions, GitLab CI, Azure DevOps, Jenkins, CircleCI.
-            Docker/npm/NuGet registry polling. Your CI produces the artifact &mdash; Synth takes
-            it from there.
-          </p>
-        </div>
-
-        <!-- Fleet Deployment -->
-        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-2">
-          <div class="flex items-center gap-2 mb-3">
-            <span class="dt-dot bg-ds-envoy"></span>
-            <span class="text-xs font-semibold uppercase tracking-wide text-ds-envoy">Scale</span>
-          </div>
-          <h3 class="text-base font-semibold mb-2">Fleet Deployment</h3>
-          <p class="text-sm text-ds-text-secondary leading-relaxed">
-            Multi-envoy orchestration with representative planning. Deploy across multiple
-            targets from a single operation.
-          </p>
-        </div>
-
-        <!-- Enterprise Identity -->
-        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-3">
-          <div class="flex items-center gap-2 mb-3">
-            <span class="dt-dot bg-ds-dt-health"></span>
-            <span class="text-xs font-semibold uppercase tracking-wide text-ds-dt-health">Enterprise</span>
-          </div>
-          <h3 class="text-base font-semibold mb-2">Enterprise Identity</h3>
-          <p class="text-sm text-ds-text-secondary leading-relaxed">
-            SAML, OIDC, LDAP provider support with automatic role mapping. Local auth with
-            role-based access control.
-          </p>
-        </div>
-
-        <!-- Deployment Graphs -->
-        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-1">
-          <div class="flex items-center gap-2 mb-3">
-            <span class="dt-dot bg-ds-dt-plan"></span>
-            <span class="text-xs font-semibold uppercase tracking-wide text-ds-dt-plan">Orchestration</span>
-          </div>
-          <h3 class="text-base font-semibold mb-2">Deployment Graphs</h3>
-          <p class="text-sm text-ds-text-secondary leading-relaxed">
-            Multi-artifact DAG orchestration with LLM-inferred dependencies. Complex
-            deployments modeled as directed graphs with intelligent ordering.
-          </p>
-        </div>
-
-        <!-- Cross-Deployment Pattern Learning -->
-        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-2">
-          <div class="flex items-center gap-2 mb-3">
-            <span class="dt-dot bg-ds-dt-diagnostic"></span>
-            <span class="text-xs font-semibold uppercase tracking-wide text-ds-dt-diagnostic">Intelligence</span>
-          </div>
-          <h3 class="text-base font-semibold mb-2">Cross-Deployment Pattern Learning</h3>
-          <p class="text-sm text-ds-text-secondary leading-relaxed">
-            Automatic correction tracking and reapplication across deployments. The agent
-            learns from past decisions to improve future plans.
-          </p>
-        </div>
-
-        <!-- Security Hardened -->
-        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-3">
-          <div class="flex items-center gap-2 mb-3">
-            <span class="dt-dot bg-ds-dt-failure"></span>
-            <span class="text-xs font-semibold uppercase tracking-wide text-ds-dt-failure">Security</span>
-          </div>
-          <h3 class="text-base font-semibold mb-2">Security Hardened</h3>
-          <p class="text-sm text-ds-text-secondary leading-relaxed">
-            Prompt injection protection, SSRF validation, path traversal guards, secrets
-            masking, webhook HMAC verification.
-          </p>
-        </div>
-
-        <!-- MCP-Native -->
-        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-1">
-          <div class="flex items-center gap-2 mb-3">
-            <span class="dt-dot bg-ds-server"></span>
-            <span class="text-xs font-semibold uppercase tracking-wide text-ds-server">Protocol</span>
-          </div>
-          <h3 class="text-base font-semibold mb-2">MCP-Native</h3>
-          <p class="text-sm text-ds-text-secondary leading-relaxed">
-            Built on Model Context Protocol from the foundation. Connect external data sources
-            and tools through standardized MCP servers.
-          </p>
-        </div>
-
-        <!-- Co-Branding -->
-        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-2">
-          <div class="flex items-center gap-2 mb-3">
-            <span class="dt-dot bg-ds-order"></span>
-            <span class="text-xs font-semibold uppercase tracking-wide text-ds-order">Enterprise</span>
-          </div>
-          <h3 class="text-base font-semibold mb-2">Co-Branding</h3>
-          <p class="text-sm text-ds-text-secondary leading-relaxed">
-            White-label support for managed service providers. Rebrand the UI and deployment
-            reports with your organization's identity.
+            Bash for Linux and macOS targets. PowerShell for Windows. The agent detects the
+            target platform and generates scripts in the right language &mdash; same operation
+            intent, native execution on every OS.
           </p>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- Just Shipped (v1.1) -->
+  <!-- v1.1 — The Operations Model -->
   <section class="py-28 border-t border-ds-border relative overflow-hidden">
     <div class="absolute inset-0 pointer-events-none">
       <div class="absolute top-1/3 right-1/4 w-96 h-96 bg-ds-dt-plan/5 rounded-full blur-[120px]"></div>
@@ -233,10 +138,10 @@ import Layout from "../layouts/Layout.astro";
 
     <div class="relative mx-auto max-w-6xl px-6">
       <div class="text-center mb-16 scroll-reveal">
-        <p class="section-heading text-ds-accent">Just Shipped</p>
+        <p class="section-heading">Previously Released</p>
         <h2 class="text-3xl md:text-4xl font-display font-bold mb-4">v1.1 — The Operations Model</h2>
         <p class="text-ds-text-secondary text-lg max-w-2xl mx-auto">
-          Deployment was always just one type of operational work. v1.1 generalizes the entire
+          Deployment was always just one type of operational work. v1.1 generalized the entire
           Synth model &mdash; the same intelligence that planned deployments now handles the full
           scope of what operations engineers actually do.
         </p>
@@ -245,7 +150,7 @@ import Layout from "../layouts/Layout.astro";
       <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
         <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-1">
           <div class="flex items-center gap-3 mb-3">
-            <div class="entity-badge border-ds-accent/30 bg-ds-accent/10 text-ds-accent text-[10px] py-0.5">
+            <div class="entity-badge border-ds-border/50 bg-ds-surface/50 text-ds-text-secondary text-[10px] py-0.5">
               v1.1
             </div>
           </div>
@@ -259,7 +164,7 @@ import Layout from "../layouts/Layout.astro";
 
         <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-2">
           <div class="flex items-center gap-3 mb-3">
-            <div class="entity-badge border-ds-accent/30 bg-ds-accent/10 text-ds-accent text-[10px] py-0.5">
+            <div class="entity-badge border-ds-border/50 bg-ds-surface/50 text-ds-text-secondary text-[10px] py-0.5">
               v1.1
             </div>
           </div>
@@ -273,7 +178,7 @@ import Layout from "../layouts/Layout.astro";
 
         <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-3">
           <div class="flex items-center gap-3 mb-3">
-            <div class="entity-badge border-ds-accent/30 bg-ds-accent/10 text-ds-accent text-[10px] py-0.5">
+            <div class="entity-badge border-ds-border/50 bg-ds-surface/50 text-ds-text-secondary text-[10px] py-0.5">
               v1.1
             </div>
           </div>
@@ -287,7 +192,7 @@ import Layout from "../layouts/Layout.astro";
 
         <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-1">
           <div class="flex items-center gap-3 mb-3">
-            <div class="entity-badge border-ds-accent/30 bg-ds-accent/10 text-ds-accent text-[10px] py-0.5">
+            <div class="entity-badge border-ds-border/50 bg-ds-surface/50 text-ds-text-secondary text-[10px] py-0.5">
               v1.1
             </div>
           </div>
@@ -301,7 +206,7 @@ import Layout from "../layouts/Layout.astro";
 
         <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-2">
           <div class="flex items-center gap-3 mb-3">
-            <div class="entity-badge border-ds-accent/30 bg-ds-accent/10 text-ds-accent text-[10px] py-0.5">
+            <div class="entity-badge border-ds-border/50 bg-ds-surface/50 text-ds-text-secondary text-[10px] py-0.5">
               v1.1
             </div>
           </div>
@@ -315,7 +220,7 @@ import Layout from "../layouts/Layout.astro";
 
         <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-3">
           <div class="flex items-center gap-3 mb-3">
-            <div class="entity-badge border-ds-accent/30 bg-ds-accent/10 text-ds-accent text-[10px] py-0.5">
+            <div class="entity-badge border-ds-border/50 bg-ds-surface/50 text-ds-text-secondary text-[10px] py-0.5">
               v1.1
             </div>
           </div>
@@ -329,7 +234,7 @@ import Layout from "../layouts/Layout.astro";
 
         <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-1">
           <div class="flex items-center gap-3 mb-3">
-            <div class="entity-badge border-ds-accent/30 bg-ds-accent/10 text-ds-accent text-[10px] py-0.5">
+            <div class="entity-badge border-ds-border/50 bg-ds-surface/50 text-ds-text-secondary text-[10px] py-0.5">
               v1.1
             </div>
           </div>
@@ -343,7 +248,7 @@ import Layout from "../layouts/Layout.astro";
 
         <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-2">
           <div class="flex items-center gap-3 mb-3">
-            <div class="entity-badge border-ds-accent/30 bg-ds-accent/10 text-ds-accent text-[10px] py-0.5">
+            <div class="entity-badge border-ds-border/50 bg-ds-surface/50 text-ds-text-secondary text-[10px] py-0.5">
               v1.1
             </div>
           </div>
@@ -357,7 +262,7 @@ import Layout from "../layouts/Layout.astro";
 
         <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-3">
           <div class="flex items-center gap-3 mb-3">
-            <div class="entity-badge border-ds-accent/30 bg-ds-accent/10 text-ds-accent text-[10px] py-0.5">
+            <div class="entity-badge border-ds-border/50 bg-ds-surface/50 text-ds-text-secondary text-[10px] py-0.5">
               v1.1
             </div>
           </div>
@@ -372,7 +277,135 @@ import Layout from "../layouts/Layout.astro";
     </div>
   </section>
 
-  <!-- Coming Soon (v1.2) -->
+  <!-- v1.0 — The Foundation (compact) -->
+  <section class="py-28 border-t border-ds-border">
+    <div class="mx-auto max-w-6xl px-6">
+      <div class="text-center mb-16 scroll-reveal">
+        <p class="section-heading">The Foundation</p>
+        <h2 class="text-3xl md:text-4xl font-display font-bold mb-4">v1.0 — Where it all started</h2>
+        <p class="text-ds-text-secondary text-lg max-w-2xl mx-auto">
+          The core that everything builds on. Intelligent planning, artifact analysis,
+          fleet execution, and enterprise-ready identity &mdash; all shipping since day one.
+        </p>
+      </div>
+
+      <div class="max-w-4xl mx-auto grid md:grid-cols-2 gap-4">
+        <div class="glass-card px-6 py-4 flex items-center gap-4 scroll-reveal scroll-reveal-delay-1">
+          <span class="dt-dot bg-ds-dt-plan"></span>
+          <div>
+            <h3 class="text-sm font-semibold">Intelligent Deployment Planning</h3>
+            <p class="text-xs text-ds-text-muted mt-0.5">LLM-powered pipeline planning with plain-language reasoning. The agent analyzes artifacts, reasons about targets, and explains every decision.</p>
+          </div>
+        </div>
+
+        <div class="glass-card px-6 py-4 flex items-center gap-4 scroll-reveal scroll-reveal-delay-2">
+          <span class="dt-dot bg-ds-dt-config"></span>
+          <div>
+            <h3 class="text-sm font-semibold">Artifact Analysis</h3>
+            <p class="text-xs text-ds-text-muted mt-0.5">Deterministic extractors for container images, Helm charts, npm/NuGet packages, plus LLM fallback for unknown formats.</p>
+          </div>
+        </div>
+
+        <div class="glass-card px-6 py-4 flex items-center gap-4 scroll-reveal scroll-reveal-delay-3">
+          <span class="dt-dot bg-ds-dt-plan"></span>
+          <div>
+            <h3 class="text-sm font-semibold">Plan Review</h3>
+            <p class="text-xs text-ds-text-muted mt-0.5">Approve, reject, or modify deployment plans. Three-mode refinement with LLM assessment.</p>
+          </div>
+        </div>
+
+        <div class="glass-card px-6 py-4 flex items-center gap-4 scroll-reveal scroll-reveal-delay-4">
+          <span class="dt-dot bg-ds-debrief"></span>
+          <div>
+            <h3 class="text-sm font-semibold">Debrief (Decision Record)</h3>
+            <p class="text-xs text-ds-text-muted mt-0.5">Every agent decision logged in plain language. Failed deployments generate automatic postmortems. Audit-ready from day one.</p>
+          </div>
+        </div>
+
+        <div class="glass-card px-6 py-4 flex items-center gap-4 scroll-reveal scroll-reveal-delay-1">
+          <span class="dt-dot bg-ds-partition"></span>
+          <div>
+            <h3 class="text-sm font-semibold">Environment & Partition Management</h3>
+            <p class="text-xs text-ds-text-muted mt-0.5">Isolated deployment contexts with scoped variables and configurable conflict resolution policies.</p>
+          </div>
+        </div>
+
+        <div class="glass-card px-6 py-4 flex items-center gap-4 scroll-reveal scroll-reveal-delay-2">
+          <span class="dt-dot bg-ds-accent"></span>
+          <div>
+            <h3 class="text-sm font-semibold">LLM-Agnostic</h3>
+            <p class="text-xs text-ds-text-muted mt-0.5">Claude, GPT, Gemini, Grok, DeepSeek, Ollama, or any OpenAI-compatible endpoint. Runs entirely on your infrastructure.</p>
+          </div>
+        </div>
+
+        <div class="glass-card px-6 py-4 flex items-center gap-4 scroll-reveal scroll-reveal-delay-3">
+          <span class="dt-dot bg-ds-dt-execution"></span>
+          <div>
+            <h3 class="text-sm font-semibold">CI/CD Integration</h3>
+            <p class="text-xs text-ds-text-muted mt-0.5">Webhook intake for GitHub Actions, GitLab CI, Azure DevOps, Jenkins, CircleCI. Docker/npm/NuGet registry polling.</p>
+          </div>
+        </div>
+
+        <div class="glass-card px-6 py-4 flex items-center gap-4 scroll-reveal scroll-reveal-delay-4">
+          <span class="dt-dot bg-ds-envoy"></span>
+          <div>
+            <h3 class="text-sm font-semibold">Fleet Deployment</h3>
+            <p class="text-xs text-ds-text-muted mt-0.5">Multi-envoy orchestration with representative planning. Deploy across multiple targets from a single operation.</p>
+          </div>
+        </div>
+
+        <div class="glass-card px-6 py-4 flex items-center gap-4 scroll-reveal scroll-reveal-delay-1">
+          <span class="dt-dot bg-ds-dt-health"></span>
+          <div>
+            <h3 class="text-sm font-semibold">Enterprise Identity</h3>
+            <p class="text-xs text-ds-text-muted mt-0.5">SAML, OIDC, LDAP provider support with automatic role mapping. Local auth with role-based access control.</p>
+          </div>
+        </div>
+
+        <div class="glass-card px-6 py-4 flex items-center gap-4 scroll-reveal scroll-reveal-delay-2">
+          <span class="dt-dot bg-ds-dt-plan"></span>
+          <div>
+            <h3 class="text-sm font-semibold">Deployment Graphs</h3>
+            <p class="text-xs text-ds-text-muted mt-0.5">Multi-artifact DAG orchestration with LLM-inferred dependencies and intelligent ordering.</p>
+          </div>
+        </div>
+
+        <div class="glass-card px-6 py-4 flex items-center gap-4 scroll-reveal scroll-reveal-delay-3">
+          <span class="dt-dot bg-ds-dt-diagnostic"></span>
+          <div>
+            <h3 class="text-sm font-semibold">Cross-Deployment Pattern Learning</h3>
+            <p class="text-xs text-ds-text-muted mt-0.5">Automatic correction tracking and reapplication. The agent learns from past decisions to improve future plans.</p>
+          </div>
+        </div>
+
+        <div class="glass-card px-6 py-4 flex items-center gap-4 scroll-reveal scroll-reveal-delay-4">
+          <span class="dt-dot bg-ds-dt-failure"></span>
+          <div>
+            <h3 class="text-sm font-semibold">Security Hardened</h3>
+            <p class="text-xs text-ds-text-muted mt-0.5">Prompt injection protection, SSRF validation, path traversal guards, secrets masking, webhook HMAC verification.</p>
+          </div>
+        </div>
+
+        <div class="glass-card px-6 py-4 flex items-center gap-4 scroll-reveal scroll-reveal-delay-1">
+          <span class="dt-dot bg-ds-server"></span>
+          <div>
+            <h3 class="text-sm font-semibold">MCP-Native</h3>
+            <p class="text-xs text-ds-text-muted mt-0.5">Built on Model Context Protocol from the foundation. Connect external data sources and tools through standardized MCP servers.</p>
+          </div>
+        </div>
+
+        <div class="glass-card px-6 py-4 flex items-center gap-4 scroll-reveal scroll-reveal-delay-2">
+          <span class="dt-dot bg-ds-order"></span>
+          <div>
+            <h3 class="text-sm font-semibold">Co-Branding</h3>
+            <p class="text-xs text-ds-text-muted mt-0.5">White-label support for managed service providers. Rebrand the UI and deployment reports with your organization's identity.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Coming Soon (v1.3) -->
   <section class="py-28 border-t border-ds-border relative overflow-hidden">
     <div class="absolute inset-0 pointer-events-none">
       <div class="absolute top-1/3 right-1/4 w-96 h-96 bg-ds-dt-plan/5 rounded-full blur-[120px]"></div>
@@ -382,212 +415,56 @@ import Layout from "../layouts/Layout.astro";
     <div class="relative mx-auto max-w-6xl px-6">
       <div class="text-center mb-16 scroll-reveal">
         <p class="section-heading text-ds-partition">Coming Soon</p>
-        <h2 class="text-3xl md:text-4xl font-display font-bold mb-4">v1.2 — In active development</h2>
+        <h2 class="text-3xl md:text-4xl font-display font-bold mb-4">v1.3 — What's next</h2>
         <p class="text-ds-text-secondary text-lg max-w-2xl mx-auto">
-          Expanding execution targets and compliance workflows. The operations model is in place &mdash;
-          these extend what it can act on.
-        </p>
-      </div>
-
-      <div class="grid md:grid-cols-2 gap-6 max-w-4xl mx-auto">
-        <div class="glass-card p-6 border-ds-partition/20 scroll-reveal scroll-reveal-delay-1">
-          <div class="flex items-center gap-3 mb-3">
-            <div class="entity-badge border-ds-partition/30 bg-ds-partition/10 text-ds-partition text-[10px] py-0.5">
-              v1.2
-            </div>
-          </div>
-          <h3 class="text-base font-semibold mb-2">Kubernetes Deployment</h3>
-          <p class="text-sm text-ds-text-secondary leading-relaxed">
-            Native kubectl execution, Helm install orchestration, and rollout management.
-            The agent understands Kubernetes resources and manages rollbacks intelligently.
-          </p>
-        </div>
-
-        <div class="glass-card p-6 border-ds-partition/20 scroll-reveal scroll-reveal-delay-2">
-          <div class="flex items-center gap-3 mb-3">
-            <div class="entity-badge border-ds-partition/30 bg-ds-partition/10 text-ds-partition text-[10px] py-0.5">
-              v1.2
-            </div>
-          </div>
-          <h3 class="text-base font-semibold mb-2">Terraform / CloudFormation</h3>
-          <p class="text-sm text-ds-text-secondary leading-relaxed">
-            Infrastructure-as-code execution with plan analysis. Synth reviews Terraform plans
-            and CloudFormation changesets before applying.
-          </p>
-        </div>
-
-        <div class="glass-card p-6 border-ds-partition/20 scroll-reveal scroll-reveal-delay-3">
-          <div class="flex items-center gap-3 mb-3">
-            <div class="entity-badge border-ds-partition/30 bg-ds-partition/10 text-ds-partition text-[10px] py-0.5">
-              v1.2
-            </div>
-          </div>
-          <h3 class="text-base font-semibold mb-2">Blue-Green Deployment Strategy</h3>
-          <p class="text-sm text-ds-text-secondary leading-relaxed">
-            Zero-downtime deployment strategy with intelligent traffic switching. The agent
-            manages environment promotion and rollback decisions.
-          </p>
-        </div>
-
-        <div class="glass-card p-6 border-ds-partition/20 scroll-reveal scroll-reveal-delay-4">
-          <div class="flex items-center gap-3 mb-3">
-            <div class="entity-badge border-ds-partition/30 bg-ds-partition/10 text-ds-partition text-[10px] py-0.5">
-              v1.2
-            </div>
-          </div>
-          <h3 class="text-base font-semibold mb-2">Compliance-Ready Audit Export</h3>
-          <p class="text-sm text-ds-text-secondary leading-relaxed">
-            Debrief export formatted for SOC2, HIPAA, and FedRAMP audit requirements.
-            Every operation decision already logged &mdash; now exportable in the right format.
-          </p>
-        </div>
-
-        <div class="glass-card p-6 border-ds-partition/20 scroll-reveal scroll-reveal-delay-1">
-          <div class="flex items-center gap-3 mb-3">
-            <div class="entity-badge border-ds-partition/30 bg-ds-partition/10 text-ds-partition text-[10px] py-0.5">
-              v1.2
-            </div>
-          </div>
-          <h3 class="text-base font-semibold mb-2">Handler Plugin System</h3>
-          <p class="text-sm text-ds-text-secondary leading-relaxed">
-            Extend the envoy with custom operation handlers via npm packages or local modules.
-            The OperationHandler interface becomes a public plugin contract &mdash; add support for
-            any target without touching core code.
-          </p>
-        </div>
-
-        <div class="glass-card p-6 border-ds-partition/20 scroll-reveal scroll-reveal-delay-2">
-          <div class="flex items-center gap-3 mb-3">
-            <div class="entity-badge border-ds-partition/30 bg-ds-partition/10 text-ds-partition text-[10px] py-0.5">
-              v1.2
-            </div>
-          </div>
-          <h3 class="text-base font-semibold mb-2">Source Code Integration</h3>
-          <p class="text-sm text-ds-text-secondary leading-relaxed">
-            The envoy reads your source code during planning &mdash; dependency trees, build configs,
-            migration files, Dockerfiles. It doesn't just deploy your artifact. It understands
-            where it came from.
-          </p>
-        </div>
-
-        <div class="glass-card p-6 border-ds-partition/20 scroll-reveal scroll-reveal-delay-3">
-          <div class="flex items-center gap-3 mb-3">
-            <div class="entity-badge border-ds-partition/30 bg-ds-partition/10 text-ds-partition text-[10px] py-0.5">
-              v1.2
-            </div>
-          </div>
-          <h3 class="text-base font-semibold mb-2">Deployment Runbook Import</h3>
-          <p class="text-sm text-ds-text-secondary leading-relaxed">
-            Feed natural-language deployment guides into planning. Hand-written by engineers,
-            generated by external agents with source access, or produced automatically by CI.
-            Your tribal knowledge becomes intelligent planning input.
-          </p>
-        </div>
-
-        <div class="glass-card p-6 border-ds-partition/20 scroll-reveal scroll-reveal-delay-4">
-          <div class="flex items-center gap-3 mb-3">
-            <div class="entity-badge border-ds-partition/30 bg-ds-partition/10 text-ds-partition text-[10px] py-0.5">
-              v1.2
-            </div>
-          </div>
-          <h3 class="text-base font-semibold mb-2">Plan Export to Source Control</h3>
-          <p class="text-sm text-ds-text-secondary leading-relaxed">
-            Serialize approved plans and debriefs to your repo. JSON for tooling, markdown for
-            humans. Diff plans between releases, maintain audit trails in git, and keep operation
-            state outside of Synth.
-          </p>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- On the Horizon (v1.3+) -->
-  <section class="py-28 border-t border-ds-border">
-    <div class="mx-auto max-w-6xl px-6">
-      <div class="text-center mb-16 scroll-reveal">
-        <p class="section-heading text-ds-text-muted">On the Horizon</p>
-        <h2 class="text-3xl md:text-4xl font-display font-bold mb-4">v1.3+ — What's next</h2>
-        <p class="text-ds-text-secondary text-lg max-w-2xl mx-auto">
-          Longer-term initiatives that build on the core. Priorities shift as we learn
-          from production usage.
+          Deeper planning intelligence, compliance workflows, and scale validation.
+          Priorities shift as we learn from production usage.
         </p>
       </div>
 
       <div class="max-w-2xl mx-auto space-y-4">
-        <!-- Handler extensions -->
+        <!-- Promoted from old v1.2 aspirational items -->
         <div class="glass-card px-6 py-4 flex items-center gap-4 scroll-reveal scroll-reveal-delay-1">
-          <span class="dt-dot bg-ds-dt-execution"></span>
+          <span class="dt-dot bg-ds-partition"></span>
           <div>
-            <h3 class="text-sm font-semibold">Database Handler</h3>
-            <p class="text-xs text-ds-text-muted mt-0.5">Migration execution (Flyway, Liquibase, Alembic, raw SQL) with backup-before-migrate, schema diff dry-runs, and automatic rollback on failure.</p>
+            <h3 class="text-sm font-semibold">Blue-Green Deployment Strategy</h3>
+            <p class="text-xs text-ds-text-muted mt-0.5">Zero-downtime deployment strategy with intelligent traffic switching. The agent manages environment promotion and rollback decisions.</p>
           </div>
         </div>
 
         <div class="glass-card px-6 py-4 flex items-center gap-4 scroll-reveal scroll-reveal-delay-2">
-          <span class="dt-dot bg-ds-dt-execution"></span>
+          <span class="dt-dot bg-ds-partition"></span>
           <div>
-            <h3 class="text-sm font-semibold">Secret Handler</h3>
-            <p class="text-xs text-ds-text-muted mt-0.5">HashiCorp Vault, AWS Secrets Manager, Azure Key Vault, and SOPS integration. Inject secrets at deploy time without writing to disk.</p>
+            <h3 class="text-sm font-semibold">Compliance-Ready Audit Export</h3>
+            <p class="text-xs text-ds-text-muted mt-0.5">Debrief export formatted for SOC2, HIPAA, and FedRAMP audit requirements. Every operation decision already logged &mdash; now exportable in the right format.</p>
           </div>
         </div>
 
         <div class="glass-card px-6 py-4 flex items-center gap-4 scroll-reveal scroll-reveal-delay-3">
-          <span class="dt-dot bg-ds-dt-execution"></span>
+          <span class="dt-dot bg-ds-partition"></span>
           <div>
-            <h3 class="text-sm font-semibold">Network Handler</h3>
-            <p class="text-xs text-ds-text-muted mt-0.5">DNS updates, load balancer configuration, firewall rules, and SSL/TLS certificate deployment with propagation-aware verification.</p>
+            <h3 class="text-sm font-semibold">Source Code Integration</h3>
+            <p class="text-xs text-ds-text-muted mt-0.5">The envoy reads your source code during planning &mdash; dependency trees, build configs, migration files, Dockerfiles. It understands where the artifact came from.</p>
           </div>
         </div>
 
         <div class="glass-card px-6 py-4 flex items-center gap-4 scroll-reveal scroll-reveal-delay-4">
-          <span class="dt-dot bg-ds-dt-execution"></span>
+          <span class="dt-dot bg-ds-partition"></span>
           <div>
-            <h3 class="text-sm font-semibold">Cloud Provider Handler</h3>
-            <p class="text-xs text-ds-text-muted mt-0.5">EC2/VM lifecycle, auto-scaling group updates, and AMI promotion. Imperative cloud operations beyond what Terraform covers.</p>
+            <h3 class="text-sm font-semibold">Deployment Runbook Import</h3>
+            <p class="text-xs text-ds-text-muted mt-0.5">Feed natural-language deployment guides into planning. Hand-written, agent-generated, or produced by CI. Tribal knowledge becomes intelligent planning input.</p>
           </div>
         </div>
 
         <div class="glass-card px-6 py-4 flex items-center gap-4 scroll-reveal scroll-reveal-delay-1">
-          <span class="dt-dot bg-ds-dt-execution"></span>
+          <span class="dt-dot bg-ds-partition"></span>
           <div>
-            <h3 class="text-sm font-semibold">Package Handler</h3>
-            <p class="text-xs text-ds-text-muted mt-0.5">System package management across apt, yum, brew, and npm with version pinning, dependency awareness, and snapshot rollback.</p>
+            <h3 class="text-sm font-semibold">Plan Export to Source Control</h3>
+            <p class="text-xs text-ds-text-muted mt-0.5">Serialize approved plans and debriefs to your repo. JSON for tooling, markdown for humans. Diff plans between releases and maintain audit trails in git.</p>
           </div>
         </div>
 
-        <div class="glass-card px-6 py-4 flex items-center gap-4 scroll-reveal scroll-reveal-delay-2">
-          <span class="dt-dot bg-ds-dt-execution"></span>
-          <div>
-            <h3 class="text-sm font-semibold">Notification Handler</h3>
-            <p class="text-xs text-ds-text-muted mt-0.5">Slack, PagerDuty, email, and webhook callbacks at deployment milestones. Delivery confirmation recorded in the debrief.</p>
-          </div>
-        </div>
-
-        <div class="glass-card px-6 py-4 flex items-center gap-4 scroll-reveal scroll-reveal-delay-3">
-          <span class="dt-dot bg-ds-dt-execution"></span>
-          <div>
-            <h3 class="text-sm font-semibold">Registry Handler</h3>
-            <p class="text-xs text-ds-text-muted mt-0.5">Container registry and artifact repository operations &mdash; tag promotion, image scanning gates, and retention policy enforcement for ECR, GCR, and Artifactory.</p>
-          </div>
-        </div>
-
-        <div class="glass-card px-6 py-4 flex items-center gap-4 scroll-reveal scroll-reveal-delay-4">
-          <span class="dt-dot bg-ds-dt-execution"></span>
-          <div>
-            <h3 class="text-sm font-semibold">Windows Handler</h3>
-            <p class="text-xs text-ds-text-muted mt-0.5">PowerShell execution, IIS management, Windows Service lifecycle, and MSI/MSIX deployment for Windows-native targets.</p>
-          </div>
-        </div>
-
-        <div class="glass-card px-6 py-4 flex items-center gap-4 scroll-reveal scroll-reveal-delay-1">
-          <span class="dt-dot bg-ds-dt-execution"></span>
-          <div>
-            <h3 class="text-sm font-semibold">Feature Flag Handler</h3>
-            <p class="text-xs text-ds-text-muted mt-0.5">LaunchDarkly, Split, and Unleash integration. Coordinate flag flips with deployment stages &mdash; deploy dark, flip, verify, auto-kill-switch on failure.</p>
-          </div>
-        </div>
-
-        <!-- Existing horizon items -->
+        <!-- Scale & intelligence -->
         <div class="glass-card px-6 py-4 flex items-center gap-4 scroll-reveal scroll-reveal-delay-2">
           <span class="dt-dot bg-ds-text-muted"></span>
           <div>
