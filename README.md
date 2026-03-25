@@ -18,6 +18,12 @@
   <a href="https://synthops.app/roadmap">Roadmap</a>
 </p>
 
+<p align="center">
+  <img src="https://img.shields.io/badge/license-BSL_1.1-blue" alt="License: BSL 1.1" />
+  <img src="https://img.shields.io/badge/node-%3E%3D22-brightgreen" alt="Node.js 22+" />
+  <img src="https://img.shields.io/badge/docker-ready-2496ED?logo=docker&logoColor=white" alt="Docker ready" />
+</p>
+
 ---
 
 Every operational tool in production today is, at its core, a script runner. It does what you told it to do when you wrote the script. When something unexpected happens — a service on a different port, a target in a different state than assumed, a conflict between what the runbook says and what the system actually is — it hands you an exit code and waits for you to figure it out.
@@ -26,7 +32,7 @@ Synth is built differently. The intelligence is the product, not a feature added
 
 ## The Problem
 
-Every deployment tool in production today is, at its core, a script runner. It does what you told it to do at the time you wrote the script. When things go wrong, it generates output like this:
+When things go wrong, most tools generate output like this:
 
 | Your pipeline says | Synth's Debrief says |
 |---|---|
@@ -135,13 +141,15 @@ docker compose up -d
 
 Synth server at `http://localhost:3000`, Envoy at `http://localhost:3001`.
 
+Open `http://localhost:3000`, register your first artifact, and run your first operation. The [quick start guide](https://synthops.app/docs/quick-start) walks through a complete deploy in under five minutes.
+
 ### From Source
 
 Requires Node.js 22+.
 
 ```bash
 git clone https://github.com/synth-deploy/synth.git
-cd synth-deploy
+cd synth
 npm install && npm run build
 
 # Start the server
@@ -155,7 +163,7 @@ npm run dev --workspace=packages/envoy
 
 ### Community (Free)
 
-- Intelligent operation planning — all five operation types
+- Intelligent operation planning — all six operation types
 - Artifact analysis with LLM reasoning
 - 5 execution handlers (file, process, config, container, verify)
 - Debrief — plain-language decision log across 21 decision types
@@ -198,17 +206,6 @@ Contact [licensing@synthops.app](mailto:licensing@synthops.app) for enterprise l
 | `SYNTH_LICENSE_KEY` | Base64-encoded enterprise license key | — |
 | `SYNTH_LICENSE_FILE` | Path to license key file | `./synth.license` |
 
-## Project Structure
-
-```
-packages/
-  core/       Shared types, edition gating, utilities
-  server/     Synth server — API, agent, MCP server
-  envoy/      Envoy agent — execution handlers, reporting
-  ui/         Web UI — canvas-based panel system
-website/      Product website (Astro)
-```
-
 ## License
 
 Business Source License 1.1. See [LICENSE](LICENSE).
@@ -217,9 +214,9 @@ Business Source License 1.1. See [LICENSE](LICENSE).
 
 ## Pioneer Program
 
-We're looking for engineering teams running Synth in real environments. In exchange for feedback and real-world scenarios: full Enterprise access at no cost, and direct input into the roadmap.
+Engineering teams running Synth against real infrastructure get full Enterprise access at no cost. In exchange: production feedback and direct roadmap input.
 
-Email [pioneers@synthops.app](mailto:pioneers@synthops.app).
+If your team is doing real operational work and wants a seat at the table — [pioneers@synthops.app](mailto:pioneers@synthops.app).
 
 ---
 
