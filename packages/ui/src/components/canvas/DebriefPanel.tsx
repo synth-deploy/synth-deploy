@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { getRecentDebrief, getDeployment, listDeployments, listPartitions, listArtifacts, listEnvironments, getWhatsNew, requestRollbackPlan, executeRollback, retryDeployment, getPostmortem, pinOperation, unpinOperation, getPinnedOperations, pauseTrigger, resumeTrigger, disableTrigger } from "../../api.js";
+import { getRecentDebrief, getDeployment, listDeployments, listPartitions, listArtifacts, listEnvironments, getWhatsNew, requestRollbackPlan, executeRollback, retryDeployment, getPostmortem, pinOperation, unpinOperation, getPinnedOperations, pauseTrigger, resumeTrigger, disableTrigger, createOperation } from "../../api.js";
 import type { WhatsNewResult, LlmPostmortem } from "../../api.js";
 import type { DebriefEntry, Partition, Deployment, Artifact, Environment, DecisionType } from "../../types.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
@@ -129,6 +129,23 @@ function DeploymentDebriefDetail({ deploymentId, onBack, onNavigate }: { deploym
       setRetryError(err instanceof Error ? err.message : "Failed to retry deployment");
     } finally {
       setRetrying(false);
+    }
+  }
+
+  async function handleApplyFix() {
+    const res = deployment?.investigationFindings?.proposedResolution;
+    if (!res || !deployment) return;
+    try {
+      const result = await createOperation({
+        type: res.operationType,
+        intent: res.intent,
+        environmentId: deployment.environmentId,
+        partitionId: deployment.partitionId,
+        parentOperationId: deployment.id,
+      });
+      pushPanel({ type: "plan-review", title: "Review Resolution Plan", params: { id: result.deployment.id } });
+    } catch (e) {
+      console.error("Failed to launch resolution:", e);
     }
   }
 
@@ -531,18 +548,20 @@ function DeploymentDebriefDetail({ deploymentId, onBack, onNavigate }: { deploym
         const outcomeStatus = deployment.status;
         const failedStepIndex = deployment.executionRecord?.steps.findIndex((s) => s.status === "failed") ?? -1;
         const failedStep = failedStepIndex >= 0 ? deployment.executionRecord!.steps[failedStepIndex] : null;
+        const opType = deployment.input?.type ?? "deploy";
+        const opLabel = opType === "query" ? "Query" : opType === "investigate" ? "Investigation" : opType === "maintain" ? "Maintenance" : opType === "trigger" ? "Trigger" : opType === "composite" ? "Composite operation" : "Deployment";
         let outcomeLine: string;
         if (outcomeStatus === "succeeded") {
-          outcomeLine = `Deployment succeeded${durationLabel !== "—" ? ` in ${durationLabel}` : ""}`;
+          outcomeLine = `${opLabel} succeeded${durationLabel !== "—" ? ` in ${durationLabel}` : ""}`;
         } else if (outcomeStatus === "failed") {
           const reason = failedStep
             ? `at step ${failedStepIndex + 1}: ${failedStep.error || failedStep.description}`
             : deployment.failureReason || "unknown error";
-          outcomeLine = `Deployment failed ${reason}`;
+          outcomeLine = `${opLabel} failed ${reason}`;
         } else if (outcomeStatus === "rolled_back") {
-          outcomeLine = `Deployment rolled back${deployment.failureReason ? ` — ${deployment.failureReason}` : ""}`;
+          outcomeLine = `${opLabel} rolled back${deployment.failureReason ? ` — ${deployment.failureReason}` : ""}`;
         } else {
-          outcomeLine = `Deployment ${statusLabel(outcomeStatus).toLowerCase()}`;
+          outcomeLine = `${opLabel} ${statusLabel(outcomeStatus).toLowerCase()}`;
         }
 
         // LLM reasoning (strip dry-run suffix)
@@ -605,6 +624,85 @@ function DeploymentDebriefDetail({ deploymentId, onBack, onNavigate }: { deploym
                 <div style={{ color: "var(--text)" }}>{assessmentEntry.reasoning || assessmentEntry.decision}</div>
               )}
             </div>
+          </div>
+        );
+      })()}
+
+      {/* ── Query / Investigation Findings ── */}
+      {(deployment.queryFindings || deployment.investigationFindings) && (() => {
+        const findings = deployment.investigationFindings ?? deployment.queryFindings!;
+        const isInvestigation = !!deployment.investigationFindings;
+
+        return (
+          <div className="canvas-section">
+            <h3 className="canvas-section-title">{isInvestigation ? "Investigation Findings" : "Query Results"}</h3>
+
+            {/* Narrative summary */}
+            {findings.summary && (
+              <div style={{ fontSize: 13, color: "var(--text)", lineHeight: 1.6, marginBottom: 16, padding: "12px 16px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8 }}>
+                {findings.summary}
+              </div>
+            )}
+
+            {/* Per-target observations */}
+            {findings.findings.length > 0 && (
+              <div style={{ marginBottom: 16 }}>
+                {findings.findings.map((f, i) => (
+                  <div key={i} style={{ marginBottom: 8, padding: "10px 14px", background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 6 }}>
+                    <div style={{ fontSize: 11, fontWeight: 600, fontFamily: "var(--font-mono)", color: "var(--text-muted)", marginBottom: 6 }}>
+                      {f.target}
+                    </div>
+                    <ul style={{ margin: 0, paddingLeft: 18 }}>
+                      {f.observations.map((obs, j) => (
+                        <li key={j} style={{ fontSize: 13, color: "var(--text)", marginBottom: 3, lineHeight: 1.5 }}>{obs}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Root cause (investigate only) */}
+            {isInvestigation && deployment.investigationFindings?.rootCause && (
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontSize: 10, fontFamily: "var(--font-mono)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--status-warning)", marginBottom: 6 }}>
+                  Root Cause
+                </div>
+                <div style={{ fontSize: 13, color: "var(--text)", lineHeight: 1.6, padding: "10px 14px", background: "var(--surface-2)", border: "1px solid color-mix(in srgb, var(--status-warning) 30%, var(--border))", borderRadius: 6 }}>
+                  {deployment.investigationFindings.rootCause}
+                </div>
+              </div>
+            )}
+
+            {/* Proposed resolution (investigate only) */}
+            {isInvestigation && deployment.investigationFindings?.proposedResolution && (
+              <div style={{ padding: "14px 16px", background: "var(--surface-2)", border: "1px solid var(--accent)", borderRadius: 6 }}>
+                <div style={{ fontSize: 10, fontFamily: "var(--font-mono)", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--accent)", marginBottom: 8 }}>
+                  Proposed Resolution
+                </div>
+                <div style={{ fontSize: 13, color: "var(--text)", lineHeight: 1.5, marginBottom: 10 }}>
+                  {deployment.investigationFindings.proposedResolution.intent}
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontSize: 11, fontFamily: "var(--font-mono)", color: "var(--text-muted)" }}>
+                    Type: {deployment.investigationFindings.proposedResolution.operationType}
+                  </span>
+                  <button
+                    onClick={handleApplyFix}
+                    style={{ padding: "6px 14px", fontSize: 12, fontWeight: 600, fontFamily: "var(--font-mono)", background: "var(--accent)", color: "var(--bg)", border: "none", borderRadius: 4, cursor: "pointer" }}
+                  >
+                    Apply Fix
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* No resolution (investigate only) */}
+            {isInvestigation && !deployment.investigationFindings?.proposedResolution && (
+              <div style={{ padding: "10px 14px", background: "var(--surface-2)", borderRadius: 6, fontSize: 13, color: "var(--text-muted)" }}>
+                No resolution proposed — investigation found no actionable root cause.
+              </div>
+            )}
           </div>
         );
       })()}
