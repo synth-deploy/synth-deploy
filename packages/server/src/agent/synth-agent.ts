@@ -345,15 +345,21 @@ export class SynthAgent {
 
     // Initial plan — the Envoy generates the real deployment plan during execution
     const initialPlan = {
-      steps: [
-        {
-          description: `Deploy ${artifact.name} v${version}`,
-          action: "deploy",
-          target: environment.name,
-          reversible: true,
-          rollbackAction: "rollback to previous version",
-        },
-      ],
+      scriptedPlan: {
+        platform: "bash" as const,
+        executionScript: `echo "Placeholder — envoy will generate the real plan"`,
+        dryRunScript: null,
+        rollbackScript: null,
+        reasoning: `Initial plan for "${artifact.name}". ` +
+          `Deployment intent: ${artifact.analysis.deploymentIntent ?? "standard deployment"}. ` +
+          `The Envoy will generate a detailed execution plan based on artifact analysis and environment state.`,
+        stepSummary: [
+          {
+            description: `Deploy ${artifact.name} v${version}`,
+            reversible: true,
+          },
+        ],
+      },
       reasoning: `Initial plan for "${artifact.name}". ` +
         `Deployment intent: ${artifact.analysis.deploymentIntent ?? "standard deployment"}. ` +
         `The Envoy will generate a detailed execution plan based on artifact analysis and environment state.`,
@@ -364,10 +370,10 @@ export class SynthAgent {
       operationId: deploymentId,
       agent: "server",
       decisionType: "plan-generation",
-      decision: `Generated deployment plan for "${artifact.name}" v${version} — ${initialPlan.steps.length} step(s)`,
+      decision: `Generated deployment plan for "${artifact.name}" v${version} — ${initialPlan.scriptedPlan.stepSummary.length} step(s)`,
       reasoning: initialPlan.reasoning,
       context: {
-        stepCount: initialPlan.steps.length,
+        stepCount: initialPlan.scriptedPlan.stepSummary.length,
         artifactName: artifact.name,
         version,
       },

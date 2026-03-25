@@ -98,12 +98,12 @@ export class FleetExecutor {
 
       const client = this.createEnvoyClient(entry.url, entry.token);
       try {
-        const validation = await client.validatePlan(plan.steps);
+        const validation = await client.validatePlan(plan.scriptedPlan);
         results.push({
           envoyId,
           envoyName: entry.name,
           validated: validation.valid,
-          issues: validation.violations?.map((v) => v.reason),
+          issues: validation.violations,
         });
       } catch (err) {
         results.push({

@@ -480,7 +480,7 @@ export default function EnvoyDetailPanel({ envoyId, title }: Props) {
           <div style={{ borderRadius: 10, overflow: "hidden", border: "1px solid var(--border)", background: "var(--surface)" }}>
             {recentPlans.map((d, i, arr) => {
               const artifactName = (d.artifactId ? artifactMap.get(d.artifactId) : undefined) ?? d.artifactId ?? d.intent ?? "—";
-              const stepCount = d.plan?.steps.length;
+              const stepCount = d.plan?.scriptedPlan?.stepSummary.length;
               const execStart = d.executionRecord?.startedAt;
               const execEnd = d.executionRecord?.completedAt;
               const durationMs = execStart && execEnd

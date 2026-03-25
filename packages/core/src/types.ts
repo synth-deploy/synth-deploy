@@ -38,11 +38,11 @@ export type DeploymentStatus = OperationStatus;
 // OperationInput — discriminated union describing what the operation does
 export type OperationInput =
   | { type: "deploy"; artifactId: string; artifactVersionId?: string }
-  | { type: "maintain"; intent: string; parameters?: Record<string, unknown> }
+  | { type: "maintain"; intent: string }
   | { type: "query"; intent: string }
   | { type: "investigate"; intent: string; allowWrite?: boolean }
-  | { type: "trigger"; condition: string; responseIntent: string; parameters?: Record<string, unknown> }
-  | { type: "composite"; operations: OperationInput[] }; // not yet implemented
+  | { type: "trigger"; condition: string; responseIntent: string }
+  | { type: "composite"; operations: OperationInput[] };
 
 export type OperationType = OperationInput["type"];
 
@@ -63,8 +63,35 @@ export interface ConfigChange {
   to: string;
 }
 
+/** Human-readable description of what a portion of the script does */
+export interface StepSummary {
+  /** Human-readable description of what this portion of the script does */
+  description: string;
+  /** Whether this step is reversible (reflected in rollback script) */
+  reversible: boolean;
+}
+
+/** LLM-generated scripted plan — replaces structured PlannedStep[] */
+export interface ScriptedPlan {
+  /** Platform the scripts target */
+  platform: "bash" | "powershell";
+  /** The executable script — approved and run verbatim */
+  executionScript: string;
+  /** Read-only probes predicting execution outcome. Null for ops that don't need it */
+  dryRunScript: string | null;
+  /** Reversal script. Null for read-only operations */
+  rollbackScript: string | null;
+  /** Plain-english explanation of what the scripts do and why */
+  reasoning: string;
+  /** Structured summary for UI display — derived from the script, not a parallel data structure */
+  stepSummary: StepSummary[];
+  /** What configuration will change */
+  diffFromCurrent?: ConfigChange[];
+}
+
 export interface OperationPlan {
-  steps: PlannedStep[];
+  /** Scripted plan — LLM-generated scripts for execution */
+  scriptedPlan: ScriptedPlan;
   reasoning: string;
   diffFromCurrent?: ConfigChange[];
   diffFromPreviousPlan?: string;
@@ -72,11 +99,11 @@ export interface OperationPlan {
 /** @deprecated Use OperationPlan */
 export type DeploymentPlan = OperationPlan;
 
+/** @deprecated Replaced by ScriptedPlan — kept for migration compatibility */
 export interface PlannedStep {
   description: string;
   action: string;
   target: string;
-  /** Operation-specific parameters (e.g. destination for copy, args for commands) */
   params?: Record<string, unknown>;
   reversible: boolean;
   rollbackAction?: string;
@@ -143,7 +170,6 @@ export interface InvestigationFindings extends QueryFindings {
   proposedResolution?: {
     intent: string;
     operationType: "maintain" | "deploy";
-    parameters?: Record<string, unknown>;
   };
 }
 
@@ -161,7 +187,6 @@ export const InvestigationFindingsSchema = QueryFindingsSchema.extend({
   proposedResolution: z.object({
     intent: z.string(),
     operationType: z.enum(["maintain", "deploy"]),
-    parameters: z.record(z.unknown()).optional(),
   }).optional(),
 });
 
@@ -187,8 +212,6 @@ export interface MonitoringDirective {
   responseIntent: string;
   /** Operation type for the spawned child operation */
   responseType: "deploy" | "maintain";
-  /** Optional parameters for the spawned child operation */
-  responseParameters?: Record<string, unknown>;
   /** Target scope */
   environmentId?: string;
   partitionId?: string;
@@ -262,7 +285,6 @@ export const MonitoringDirectiveSchema = z.object({
   condition: z.string(),
   responseIntent: z.string(),
   responseType: z.enum(["deploy", "maintain"]),
-  responseParameters: z.record(z.unknown()).optional(),
   environmentId: z.string().optional(),
   partitionId: z.string().optional(),
   status: z.enum(["active", "paused", "disabled"]),
