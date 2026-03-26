@@ -102,7 +102,7 @@ export default function OperationAuthoringPanel({ title, preselectedArtifactId, 
   async function handleRequestPlan() {
     if (opType === "deploy" && (!primaryArtifactId || (environmentsEnabled && !hasTarget))) return;
     if (opType === "trigger" && (!triggerCondition.trim() || !triggerResponseIntent.trim())) return;
-    if (opType === "composite" && compositeChildren.length === 0) return;
+    if (opType === "composite" && (compositeChildren.length === 0 || !hasTarget)) return;
     if (opType === "composite" && compositeChildren.some((c) => !c.intent.trim() && c.type !== "deploy")) return;
     if (opType !== "deploy" && opType !== "trigger" && opType !== "composite" && !intent.trim()) return;
     setSubmitting(true);
@@ -234,7 +234,7 @@ export default function OperationAuthoringPanel({ title, preselectedArtifactId, 
     : opType === "trigger"
       ? triggerCondition.trim().length > 0 && triggerResponseIntent.trim().length > 0
       : opType === "composite"
-        ? compositeChildren.length > 0 && compositeChildren.every((c) => c.type === "deploy" ? !!c.artifactId : c.intent.trim().length > 0)
+        ? compositeChildren.length > 0 && hasTarget && compositeChildren.every((c) => c.type === "deploy" ? !!c.artifactId : c.intent.trim().length > 0)
         : intent.trim().length > 0;
   const contextHint = getContextHint();
 
@@ -737,8 +737,8 @@ export default function OperationAuthoringPanel({ title, preselectedArtifactId, 
               </div>
             )}
           </div>
-        ) : (opType === "maintain" || opType === "query" || opType === "investigate" || opType === "trigger") ? (
-          /* Single-column Where section for maintain/query/investigate/trigger */
+        ) : (opType === "maintain" || opType === "query" || opType === "investigate" || opType === "trigger" || opType === "composite") ? (
+          /* Single-column Where section for maintain/query/investigate/trigger/composite */
           <div style={{ marginBottom: 20 }}>
             <div className="section-label" style={{ marginBottom: 10 }}>Where</div>
 
@@ -1088,6 +1088,51 @@ export default function OperationAuthoringPanel({ title, preselectedArtifactId, 
               </button>
             </div>
             {/* Approval mode */}
+            <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{
+                fontSize: 11,
+                fontWeight: 600,
+                padding: "2px 8px",
+                borderRadius: 4,
+                color: effectiveApprovalMode === "auto" ? "var(--status-succeeded)" : "var(--text-muted)",
+                background: effectiveApprovalMode === "auto"
+                  ? "color-mix(in srgb, var(--status-succeeded) 12%, transparent)"
+                  : "color-mix(in srgb, var(--text-muted) 12%, transparent)",
+              }}>
+                {effectiveApprovalMode === "auto" ? "Auto-approved" : "Requires approval"}
+              </span>
+              {resolvedApprovalMode === "auto" && (
+                <button
+                  onClick={() => setForceManualApproval((v) => !v)}
+                  style={{ fontSize: 11, color: "var(--text-muted)", background: "none", border: "none", cursor: "pointer", padding: 0, textDecoration: "underline" }}
+                >
+                  {forceManualApproval ? "Allow auto-approve" : "Require approval"}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Composite action bar */}
+        {canDeploy && opType === "composite" && (
+          <div className="nd-action-bar">
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>
+                  {compositeChildren.length} operation{compositeChildren.length !== 1 ? "s" : ""} → {getTargetName()}
+                </div>
+                <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2 }}>
+                  Sequential execution
+                </div>
+              </div>
+              <button
+                className="nd-request-plan-btn"
+                disabled={submitting}
+                onClick={handleRequestPlan}
+              >
+                {submitting ? "Planning…" : "Plan Sequence"}
+              </button>
+            </div>
             <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 8 }}>
               <span style={{
                 fontSize: 11,
