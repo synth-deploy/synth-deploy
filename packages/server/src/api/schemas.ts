@@ -283,6 +283,10 @@ export const RejectDeploymentSchema = z.object({
   reason: z.string().min(1),
 });
 
+export const ShelveDeploymentSchema = z.object({
+  reason: z.string().optional(),
+});
+
 export const ModifyDeploymentPlanSchema = z.object({
   executionScript: z.string().min(1, "Execution script must not be empty"),
   rollbackScript: z.string().optional(),

@@ -149,6 +149,16 @@ export interface PlanningInstruction {
    * When set, the LLM incorporates this feedback into the new plan.
    */
   refinementFeedback?: string;
+  /**
+   * Prior shelved plan for this same artifact+environment combination.
+   * Injected as soft context — the LLM can use it to avoid re-reasoning from scratch
+   * but must still re-validate against current infrastructure state.
+   */
+  shelvedPlanContext?: {
+    reasoning: string;
+    shelvedAt: string;
+    shelvedReason?: string;
+  };
   /** Trigger-specific: the condition expression (e.g. "disk_usage > 85") */
   triggerCondition?: string;
   /** Trigger-specific: what to do when the condition fires */
@@ -2405,6 +2415,16 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.plan.script
       const recent = failedPlans.slice(0, 3);
       sections.push(`## Previous Failed Plans (${failedPlans.length} total, showing ${recent.length}) — AVOID THESE PATTERNS
 ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnalysis ?? "no analysis"}`).join("\n")}`);
+    }
+
+    if (instruction.shelvedPlanContext) {
+      const shelvedDate = new Date(instruction.shelvedPlanContext.shelvedAt);
+      const daysSinceShelved = Math.round((Date.now() - shelvedDate.getTime()) / (1000 * 60 * 60 * 24));
+      const staleness = daysSinceShelved === 0 ? "today" : daysSinceShelved === 1 ? "1 day ago" : `${daysSinceShelved} days ago`;
+      const reasonNote = instruction.shelvedPlanContext.shelvedReason
+        ? ` Reason given: "${instruction.shelvedPlanContext.shelvedReason}".`
+        : "";
+      sections.push(`## Prior Shelved Plan (shelved ${staleness}${reasonNote})\nThe following reasoning was produced for a previous plan that was shelved rather than executed. Use it as context to inform your current plan, but re-validate all assumptions against current infrastructure state — conditions may have changed since this was shelved.\n\n${instruction.shelvedPlanContext.reasoning}`);
     }
 
     if (instruction.refinementFeedback) {

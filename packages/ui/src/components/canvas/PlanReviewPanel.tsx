@@ -4,6 +4,7 @@ import {
   getDeploymentEnrichment,
   approveDeployment,
   rejectDeployment,
+  shelveDeployment,
   modifyDeploymentPlan,
   replanDeployment,
   listEnvironments,
@@ -197,7 +198,7 @@ interface Props {
   title: string;
 }
 
-type ReviewMode = "review" | "refine" | "modify" | "reject-prompt";
+type ReviewMode = "review" | "refine" | "modify" | "shelve-prompt";
 
 function verdictToConfidence(verdict: string): number {
   return verdict === "proceed" ? 0.9 : verdict === "caution" ? 0.65 : 0.3;
@@ -387,7 +388,7 @@ export default function PlanReviewPanel({ deploymentId }: Props) {
   }, [deployment?.status, deploymentId]);
   const [scriptExpanded, setScriptExpanded] = useState(false);
   const [rollbackScriptExpanded, setRollbackScriptExpanded] = useState(false);
-  const [rejectReason, setRejectReason] = useState("");
+  const [shelveReason, setShelveReason] = useState("");
   const [modifiedScript, setModifiedScript] = useState("");
   const [modifiedRollbackScript, setModifiedRollbackScript] = useState("");
   const [modifiedSummary, setModifiedSummary] = useState<StepSummary[]>([]);
@@ -521,22 +522,18 @@ export default function PlanReviewPanel({ deploymentId }: Props) {
     }
   }
 
-  async function handleReject() {
-    if (!rejectReason.trim()) {
-      setError("A rejection reason is required");
-      return;
-    }
+  async function handleShelve() {
     setActionLoading(true);
     setError(null);
     try {
-      const res = await rejectDeployment(deploymentId, { reason: rejectReason.trim() });
+      const res = await shelveDeployment(deploymentId, { reason: shelveReason.trim() || undefined });
       replacePanel({
         type: "deployment-detail",
         title: `Deployment ${res.deployment.id.slice(0, 8)}`,
         params: { id: res.deployment.id },
       });
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Failed to reject deployment");
+      setError(err instanceof Error ? err.message : "Failed to shelve deployment");
       setActionLoading(false);
     }
   }
@@ -1017,16 +1014,16 @@ export default function PlanReviewPanel({ deploymentId }: Props) {
         </div>
       )}
 
-      {/* ── Reject prompt ── */}
-      {mode === "reject-prompt" && (
+      {/* ── Shelve prompt ── */}
+      {mode === "shelve-prompt" && (
         <div style={{ marginBottom: 16 }}>
           <label style={{ fontSize: 12, color: "var(--text-muted)", display: "block", marginBottom: 4 }}>
-            Reason for rejection
+            Reason (optional)
           </label>
           <textarea
-            value={rejectReason}
-            onChange={(e) => setRejectReason(e.target.value)}
-            placeholder="Why is this plan being rejected?"
+            value={shelveReason}
+            onChange={(e) => setShelveReason(e.target.value)}
+            placeholder="Why are you shelving this? (e.g. maintenance window, not the right time)"
             className="v2-input"
             rows={3}
             style={{ resize: "vertical" }}
@@ -1074,33 +1071,32 @@ export default function PlanReviewPanel({ deploymentId }: Props) {
             </button>
           )}
           <button
-            className="plan-btn plan-btn-reject"
-            onClick={() => { setMode("reject-prompt"); setError(null); }}
+            className="plan-btn plan-btn-shelve"
+            onClick={() => { setMode("shelve-prompt"); setError(null); }}
             disabled={actionLoading}
           >
-            Reject
+            Shelve
           </button>
         </div>
       )}
 
-      {mode === "reject-prompt" && (
+      {mode === "shelve-prompt" && (
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
           <button
-            className="plan-btn plan-btn-reject"
-            onClick={() => { setMode("review"); setError(null); setRejectReason(""); }}
+            className="plan-btn plan-btn-shelve"
+            onClick={() => { setMode("review"); setError(null); setShelveReason(""); }}
             disabled={actionLoading}
           >
             Cancel
           </button>
-          {/* --text-on-dark does not exist; color: #fff left as-is until var is added to app.css */}
           <button
-            onClick={handleReject}
+            onClick={handleShelve}
             disabled={actionLoading}
             style={{
               padding: "13px 20px",
               borderRadius: 8,
               border: "none",
-              background: "var(--status-failed)",
+              background: "var(--status-shelved, #b45309)",
               color: "#fff",
               fontSize: 14,
               fontFamily: "var(--font-mono)",
@@ -1109,7 +1105,7 @@ export default function PlanReviewPanel({ deploymentId }: Props) {
               opacity: actionLoading ? 0.5 : 1,
             }}
           >
-            {actionLoading ? "Rejecting..." : "Confirm Rejection"}
+            {actionLoading ? "Shelving..." : "Shelve Plan"}
           </button>
         </div>
       )}

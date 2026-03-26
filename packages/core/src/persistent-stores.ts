@@ -51,7 +51,7 @@ import { DEFAULT_APP_SETTINGS } from "./types.js";
 // Schema version — bump when table definitions change
 // ---------------------------------------------------------------------------
 
-const SCHEMA_VERSION = 8;
+const SCHEMA_VERSION = 9;
 
 // ---------------------------------------------------------------------------
 // Safe JSON parse — returns fallback on corruption instead of crashing
@@ -580,6 +580,14 @@ export function openEntityDatabase(dbPath: string): Database.Database {
     console.log("[Synth] Migrated database schema from v7 to v8 (operation type generalization)");
   }
 
+  // Migrate from v8 to v9: add shelved_at and shelved_reason columns
+  if (versionRow && versionRow.version < 9) {
+    try { db.exec(`ALTER TABLE deployments ADD COLUMN shelved_at TEXT`); } catch { /* column may already exist */ }
+    try { db.exec(`ALTER TABLE deployments ADD COLUMN shelved_reason TEXT`); } catch { /* column may already exist */ }
+    db.prepare(`UPDATE schema_version SET version = ?`).run(9);
+    console.log("[Synth] Migrated database schema from v8 to v9 (shelved plan support)");
+  }
+
   if (!versionRow) {
     db.prepare(`INSERT INTO schema_version (version) VALUES (?)`).run(SCHEMA_VERSION);
   } else if (versionRow.version !== SCHEMA_VERSION) {
@@ -803,8 +811,8 @@ export class PersistentDeploymentStore {
   constructor(private db: Database.Database) {
     this.stmts = {
       upsert: db.prepare(
-        `INSERT INTO deployments (id, operation_type, artifact_id, artifact_version_id, input_json, intent, lineage, findings, retry_of, envoy_id, environment_id, partition_id, version, status, variables, plan, rollback_plan, execution_record, approved_by, approved_at, debrief_entry_ids, created_at, completed_at, failure_reason)
-         VALUES (@id, @operation_type, @artifact_id, @artifact_version_id, @input_json, @intent, @lineage, @findings, @retry_of, @envoy_id, @environment_id, @partition_id, @version, @status, @variables, @plan, @rollback_plan, @execution_record, @approved_by, @approved_at, @debrief_entry_ids, @created_at, @completed_at, @failure_reason)
+        `INSERT INTO deployments (id, operation_type, artifact_id, artifact_version_id, input_json, intent, lineage, findings, retry_of, envoy_id, environment_id, partition_id, version, status, variables, plan, rollback_plan, execution_record, approved_by, approved_at, debrief_entry_ids, created_at, completed_at, failure_reason, shelved_at, shelved_reason)
+         VALUES (@id, @operation_type, @artifact_id, @artifact_version_id, @input_json, @intent, @lineage, @findings, @retry_of, @envoy_id, @environment_id, @partition_id, @version, @status, @variables, @plan, @rollback_plan, @execution_record, @approved_by, @approved_at, @debrief_entry_ids, @created_at, @completed_at, @failure_reason, @shelved_at, @shelved_reason)
          ON CONFLICT(id) DO UPDATE SET
            status = excluded.status,
            variables = excluded.variables,
@@ -817,7 +825,9 @@ export class PersistentDeploymentStore {
            completed_at = excluded.completed_at,
            failure_reason = excluded.failure_reason,
            intent = excluded.intent,
-           findings = excluded.findings`
+           findings = excluded.findings,
+           shelved_at = excluded.shelved_at,
+           shelved_reason = excluded.shelved_reason`
       // lineage and retry_of are immutable after creation; not included in ON CONFLICT UPDATE
       ),
       getById: db.prepare(`SELECT * FROM deployments WHERE id = ?`),
@@ -876,6 +886,8 @@ export class PersistentDeploymentStore {
       created_at: deployment.createdAt.toISOString(),
       completed_at: deployment.completedAt?.toISOString() ?? null,
       failure_reason: deployment.failureReason ?? null,
+      shelved_at: deployment.shelvedAt?.toISOString() ?? null,
+      shelved_reason: deployment.shelvedReason ?? null,
     });
   }
 
@@ -922,6 +934,13 @@ export class PersistentDeploymentStore {
     const row = this.stmts.findLatestByEnv.get(envId) as DeploymentRow | undefined;
     return row ? rowToOperation(row) : undefined;
   }
+
+  findShelvedByContext(artifactId: string | undefined, environmentId: string | undefined, operationType: string): Operation[] {
+    const rows = this.db.prepare(
+      `SELECT * FROM deployments WHERE status = 'shelved' AND operation_type = ? AND (artifact_id IS ? OR ? IS NULL) AND (environment_id IS ? OR ? IS NULL) ORDER BY shelved_at DESC`
+    ).all(operationType, artifactId ?? null, artifactId ?? null, environmentId ?? null, environmentId ?? null) as DeploymentRow[];
+    return rows.map(rowToOperation);
+  }
 }
 
 interface DeploymentRow {
@@ -949,6 +968,8 @@ interface DeploymentRow {
   created_at: string;
   completed_at: string | null;
   failure_reason: string | null;
+  shelved_at: string | null;
+  shelved_reason: string | null;
 }
 
 function rowToOperation(row: DeploymentRow): Operation {
@@ -987,6 +1008,8 @@ function rowToOperation(row: DeploymentRow): Operation {
   if (row.approved_at) operation.approvedAt = new Date(row.approved_at);
   if (row.completed_at) operation.completedAt = new Date(row.completed_at);
   if (row.failure_reason) operation.failureReason = row.failure_reason;
+  if (row.shelved_at) operation.shelvedAt = new Date(row.shelved_at);
+  if (row.shelved_reason) operation.shelvedReason = row.shelved_reason;
   return operation;
 }
 

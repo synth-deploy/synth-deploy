@@ -351,6 +351,26 @@ export async function rejectDeployment(
   });
 }
 
+export async function shelveDeployment(
+  id: string,
+  data: { reason?: string },
+): Promise<{ deployment: Deployment; shelved: boolean }> {
+  return fetchJson(`/api/operations/${id}/shelve`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function activateDeployment(
+  id: string,
+  data: { feedback?: string },
+): Promise<{ deployment: Deployment; activated: boolean }> {
+  return fetchJson(`/api/operations/${id}/activate`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
 export async function modifyDeploymentPlan(
   id: string,
   data: { scriptedPlan: ScriptedPlan; stepSummary: StepSummary[]; reason: string },

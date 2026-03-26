@@ -232,7 +232,7 @@ export interface SecurityBoundary {
 
 // --- Deployment ---
 
-export type DeploymentStatus = "pending" | "planning" | "awaiting_approval" | "approved" | "rejected" | "running" | "succeeded" | "failed" | "rolled_back";
+export type DeploymentStatus = "pending" | "planning" | "awaiting_approval" | "approved" | "rejected" | "shelved" | "running" | "succeeded" | "failed" | "rolled_back" | "cancelled";
 
 export interface ConfigChange {
   key: string;
@@ -305,6 +305,8 @@ export interface Deployment {
   approvedBy?: string;
   approvedAt?: string;
   rejectionReason?: string;
+  shelvedAt?: string;
+  shelvedReason?: string;
   enrichment?: DeploymentEnrichment;
   recommendation?: DeploymentRecommendation;
   /** Discriminated union describing what triggered this operation */

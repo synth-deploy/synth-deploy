@@ -9,7 +9,9 @@ const labels: Record<DeploymentStatus, string> = {
   approved: "Approved",
   awaiting_approval: "Awaiting Approval",
   rejected: "Rejected",
+  shelved: "Shelved",
   rolled_back: "Rolled Back",
+  cancelled: "Cancelled",
 };
 
 export default function StatusBadge({ status }: { status: DeploymentStatus }) {

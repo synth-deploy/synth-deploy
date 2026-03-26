@@ -23,6 +23,7 @@ export const OperationStatus = z.enum([
   "awaiting_approval",
   "approved",
   "rejected",
+  "shelved",
   "running",
   "succeeded",
   "failed",
@@ -136,6 +137,12 @@ export interface OperationEnrichment {
     status: string;
     version: string;
     completedAt?: Date;
+  };
+  /** Prior shelved plan for the same artifact+environment+type — injected as context during replanning */
+  shelvedPlan?: {
+    reasoning: string;
+    shelvedAt: string;
+    shelvedReason?: string;
   };
 }
 /** @deprecated Use OperationEnrichment */
@@ -317,6 +324,8 @@ export interface Operation {
   approvedBy?: string;
   approvedAt?: Date;
   rejectionReason?: string;
+  shelvedAt?: Date;
+  shelvedReason?: string;
   enrichment?: OperationEnrichment;
   recommendation?: OperationRecommendation;
   retryOf?: OperationId;
@@ -680,6 +689,8 @@ export type TelemetryAction =
   | "operation.created"
   | "operation.approved"
   | "operation.rejected"
+  | "operation.shelved"
+  | "operation.activated"
   | "operation.modified"
   | "artifact.created"
   | "artifact.annotated"

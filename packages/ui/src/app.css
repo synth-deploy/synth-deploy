@@ -40,6 +40,8 @@
   --status-awaiting-approval-bg: rgba(139, 92, 246, 0.08);
   --status-rejected: #c43030;
   --status-rejected-bg: rgba(196, 48, 48, 0.06);
+  --status-shelved: #b45309;
+  --status-shelved-bg: rgba(180, 83, 9, 0.07);
   --status-warning: #b85c14;
   --status-warning-bg: rgba(184, 92, 20, 0.07);
   --status-warning-border: rgba(184, 92, 20, 0.2);
@@ -112,6 +114,8 @@
   --status-awaiting-approval-bg: rgba(167, 139, 250, 0.1);
   --status-rejected: #e05555;
   --status-rejected-bg: rgba(224, 85, 85, 0.08);
+  --status-shelved: #d97706;
+  --status-shelved-bg: rgba(217, 119, 6, 0.1);
   --status-warning: #e0923a;
   --status-warning-bg: rgba(224, 146, 58, 0.1);
   --status-warning-border: rgba(224, 146, 58, 0.22);
@@ -335,6 +339,16 @@ table a:hover {
 .badge-rejected {
   color: var(--status-rejected);
   background: var(--status-rejected-bg);
+}
+
+.badge-shelved {
+  color: var(--status-shelved);
+  background: var(--status-shelved-bg);
+}
+
+.badge-cancelled {
+  color: var(--text-muted);
+  background: var(--status-pending-bg);
 }
 
 /* Environment badges */
@@ -5659,6 +5673,17 @@ table a:hover {
 .plan-btn-reject:hover:not(:disabled) {
   color: var(--text);
   border-color: var(--text-muted);
+}
+
+.plan-btn-shelve {
+  background: var(--surface);
+  color: var(--status-shelved);
+  border: 1px solid var(--status-shelved-bg);
+}
+
+.plan-btn-shelve:hover:not(:disabled) {
+  background: var(--status-shelved-bg);
+  border-color: var(--status-shelved);
 }
 
 /* ---- Plan step row ---- */

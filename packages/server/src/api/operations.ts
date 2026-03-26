@@ -6,6 +6,7 @@ import {
   CreateOperationSchema,
   ApproveDeploymentSchema,
   RejectDeploymentSchema,
+  ShelveDeploymentSchema,
   ModifyDeploymentPlanSchema,
   SubmitPlanSchema,
   DeploymentListQuerySchema,
@@ -140,6 +141,13 @@ export function registerOperationRoutes(
           return;
         }
 
+        // Look for a prior shelved plan for the same context — inject as soft context for the LLM
+        const shelvedForContext = deployments.findShelvedByContext(
+          deployment.input.type === "deploy" ? (deployment.input as { artifactId: string }).artifactId : undefined,
+          deployment.environmentId,
+          deployment.input.type,
+        )[0];
+
         planningClient.requestPlan({
           operationId: deployment.id,
           operationType: deployment.input.type as "deploy" | "query" | "investigate" | "maintain" | "trigger",
@@ -173,6 +181,13 @@ export function registerOperationRoutes(
             : undefined,
           version: deployment.version ?? "",
           resolvedVariables: resolved,
+          ...(shelvedForContext?.plan?.reasoning ? {
+            shelvedPlanContext: {
+              reasoning: shelvedForContext.plan.reasoning,
+              shelvedAt: shelvedForContext.shelvedAt?.toISOString() ?? new Date().toISOString(),
+              shelvedReason: shelvedForContext.shelvedReason,
+            },
+          } : {}),
         }).then((result) => {
           const dep = deployments.get(deployment.id);
           if (!dep || dep.status !== "pending") return;
@@ -615,6 +630,169 @@ export function registerOperationRoutes(
     },
   );
 
+  // Shelve a deployment plan — preserve plan/reasoning for later, mark as "not now"
+  app.post<{ Params: { id: string } }>(
+    "/api/operations/:id/shelve",
+    { preHandler: [requirePermission("deployment.reject")] },
+    async (request, reply) => {
+      const deployment = deployments.get(request.params.id);
+      if (!deployment) {
+        return reply.status(404).send({ error: "Operation not found" });
+      }
+
+      const parsed = ShelveDeploymentSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.status(400).send({ error: parsed.error.message });
+      }
+
+      if (deployment.status !== "awaiting_approval") {
+        return reply.status(409).send({ error: `Cannot shelve operation in "${deployment.status}" status — must be "awaiting_approval"` });
+      }
+
+      deployment.status = "shelved" as typeof deployment.status;
+      deployment.shelvedAt = new Date();
+      if (parsed.data.reason) deployment.shelvedReason = parsed.data.reason;
+      deployments.save(deployment);
+
+      const actor = (request.user?.email) ?? "anonymous";
+
+      debrief.record({
+        partitionId: deployment.partitionId ?? null,
+        operationId: deployment.id,
+        agent: "server",
+        decisionType: "system",
+        decision: "Operation plan shelved",
+        reasoning: parsed.data.reason ?? "Shelved without a reason — plan preserved for future use",
+        context: { reason: parsed.data.reason ?? null },
+        actor: request.user?.email,
+      });
+      telemetry.record({ actor, action: "operation.shelved", target: { type: "deployment", id: deployment.id }, details: { reason: parsed.data.reason } });
+
+      return { deployment, shelved: true };
+    },
+  );
+
+  // Activate a shelved operation — triggers replanning with the prior plan as context
+  app.post<{ Params: { id: string } }>(
+    "/api/operations/:id/activate",
+    { preHandler: [requirePermission("deployment.approve")] },
+    async (request, reply) => {
+      const deploymentId = request.params.id;
+      const deployment = deployments.get(deploymentId);
+      if (!deployment) {
+        return reply.status(404).send({ error: "Operation not found" });
+      }
+
+      if (deployment.status !== "shelved") {
+        return reply.status(409).send({ error: `Cannot activate operation in "${deployment.status}" status — must be "shelved"` });
+      }
+
+      const parsed = ReplanDeploymentSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.status(400).send({ error: parsed.error.message });
+      }
+
+      const artifact = artifactStore.get(getArtifactId(deployment) ?? "");
+      const environment = deployment.environmentId ? environments.get(deployment.environmentId) : undefined;
+      const partition = deployment.partitionId ? partitions.get(deployment.partitionId) : undefined;
+
+      const planningEnvoy = deployment.envoyId ? envoyRegistry?.get(deployment.envoyId) : envoyRegistry?.list()[0];
+      if (!planningEnvoy) {
+        return reply.status(422).send({ error: "No envoy available for replanning" });
+      }
+
+      const priorReasoning = deployment.plan?.reasoning;
+
+      deployment.status = "planning" as typeof deployment.status;
+      deployments.save(deployment);
+
+      const planningClient = new EnvoyClient(planningEnvoy.url);
+      const environmentForPlanning = environment
+        ? { id: environment.id, name: environment.name, variables: environment.variables }
+        : { id: `direct:${planningEnvoy.id}`, name: planningEnvoy.name, variables: {} };
+
+      let result: Awaited<ReturnType<typeof planningClient.requestPlan>>;
+      try {
+        result = await planningClient.requestPlan({
+          operationId: deploymentId,
+          operationType: deployment.input.type as "deploy" | "query" | "investigate" | "maintain" | "trigger",
+          intent: deployment.intent,
+          ...(artifact ? {
+            artifact: {
+              id: artifact.id,
+              name: artifact.name,
+              type: artifact.type,
+              analysis: {
+                summary: artifact.analysis.summary,
+                dependencies: artifact.analysis.dependencies,
+                configurationExpectations: artifact.analysis.configurationExpectations,
+                deploymentIntent: artifact.analysis.deploymentIntent,
+                confidence: artifact.analysis.confidence,
+              },
+            },
+          } : {}),
+          environment: environmentForPlanning,
+          partition: partition ? { id: partition.id, name: partition.name, variables: partition.variables } : undefined,
+          version: deployment.version ?? "",
+          resolvedVariables: deployment.variables,
+          refinementFeedback: parsed.data.feedback,
+          ...(priorReasoning ? {
+            shelvedPlanContext: {
+              reasoning: priorReasoning,
+              shelvedAt: deployment.shelvedAt?.toISOString() ?? new Date().toISOString(),
+              shelvedReason: deployment.shelvedReason,
+            },
+          } : {}),
+        });
+      } catch (err) {
+        const dep = deployments.get(deploymentId);
+        if (dep) {
+          dep.status = "shelved" as typeof dep.status;
+          deployments.save(dep);
+        }
+        return reply.status(500).send({ error: err instanceof Error ? err.message : "Replanning failed" });
+      }
+
+      const dep = deployments.get(deploymentId);
+      if (!dep) {
+        return reply.status(404).send({ error: "Operation not found after replanning" });
+      }
+
+      dep.plan = result.plan;
+      dep.rollbackPlan = result.rollbackPlan;
+      dep.recommendation = computeRecommendation(dep, deployments, result.assessmentSummary);
+      dep.status = "awaiting_approval" as typeof dep.status;
+      deployments.save(dep);
+
+      const actor = (request.user?.email) ?? "anonymous";
+
+      debrief.record({
+        partitionId: dep.partitionId ?? null,
+        operationId: dep.id,
+        agent: "server",
+        decisionType: "system",
+        decision: "Shelved operation re-activated",
+        reasoning: parsed.data.feedback
+          ? `Re-activated from shelf with refinement feedback: ${parsed.data.feedback}`
+          : "Re-activated from shelf — plan regenerated against current infrastructure state",
+        context: { feedback: parsed.data.feedback ?? null },
+        actor: request.user?.email,
+      });
+      debrief.record({
+        partitionId: dep.partitionId ?? null,
+        operationId: dep.id,
+        agent: "envoy",
+        decisionType: "plan-generation",
+        decision: `Plan regenerated from shelf (${result.plan.scriptedPlan.stepSummary.length} steps)`,
+        reasoning: result.plan.reasoning,
+        context: { stepCount: result.plan.scriptedPlan.stepSummary.length, envoyId: planningEnvoy.id, activatedFromShelf: true },
+      });
+      telemetry.record({ actor, action: "operation.activated", target: { type: "deployment", id: dep.id }, details: { feedback: parsed.data.feedback } });
+
+      return { deployment: dep, activated: true };
+    },
+  );
+
   // Modify a deployment plan (user edits steps before approval)
   app.post<{ Params: { id: string } }>(
     "/api/operations/:id/modify",
@@ -721,8 +899,8 @@ export function registerOperationRoutes(
         return reply.status(404).send({ error: "Operation not found" });
       }
 
-      if ((deployment.status) !== "awaiting_approval") {
-        return reply.status(409).send({ error: `Cannot replan operation in "${deployment.status}" status — must be "awaiting_approval"` });
+      if (deployment.status !== "awaiting_approval" && deployment.status !== "shelved") {
+        return reply.status(409).send({ error: `Cannot replan operation in "${deployment.status}" status — must be "awaiting_approval" or "shelved"` });
       }
 
       const parsed = ReplanDeploymentSchema.safeParse(request.body);
@@ -766,6 +944,9 @@ export function registerOperationRoutes(
         // Validation call failed — proceed with replan rather than blocking the user
       }
 
+      const priorStatus = deployment.status;
+      const priorReasoning = deployment.plan?.reasoning;
+
       deployment.status = "planning" as typeof deployment.status;
       deployments.save(deployment);
 
@@ -797,11 +978,18 @@ export function registerOperationRoutes(
           version: deployment.version ?? "",
           resolvedVariables: deployment.variables,
           refinementFeedback: parsed.data.feedback,
+          ...(priorStatus === "shelved" && priorReasoning ? {
+            shelvedPlanContext: {
+              reasoning: priorReasoning,
+              shelvedAt: deployment.shelvedAt?.toISOString() ?? new Date().toISOString(),
+              shelvedReason: deployment.shelvedReason,
+            },
+          } : {}),
         });
       } catch (err) {
         const dep = deployments.get(deploymentId);
         if (dep) {
-          dep.status = "awaiting_approval" as typeof dep.status;
+          dep.status = priorStatus as typeof dep.status;
           deployments.save(dep);
         }
         return reply.status(500).send({ error: err instanceof Error ? err.message : "Replanning failed" });

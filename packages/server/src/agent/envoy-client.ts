@@ -270,6 +270,11 @@ export class EnvoyClient {
     version: string;
     resolvedVariables: Record<string, string>;
     refinementFeedback?: string;
+    shelvedPlanContext?: {
+      reasoning: string;
+      shelvedAt: string;
+      shelvedReason?: string;
+    };
   }): Promise<{
     plan: DeploymentPlan;
     rollbackPlan: DeploymentPlan;

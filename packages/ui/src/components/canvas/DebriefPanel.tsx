@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { getRecentDebrief, getDeployment, listDeployments, listPartitions, listArtifacts, listEnvironments, getWhatsNew, requestRollbackPlan, executeRollback, retryDeployment, getPostmortem, pinOperation, unpinOperation, getPinnedOperations, pauseTrigger, resumeTrigger, disableTrigger, createOperation } from "../../api.js";
+import { getRecentDebrief, getDeployment, listDeployments, listPartitions, listArtifacts, listEnvironments, getWhatsNew, requestRollbackPlan, executeRollback, retryDeployment, activateDeployment, getPostmortem, pinOperation, unpinOperation, getPinnedOperations, pauseTrigger, resumeTrigger, disableTrigger, createOperation } from "../../api.js";
 import type { WhatsNewResult, LlmPostmortem } from "../../api.js";
 import type { DebriefEntry, Partition, Deployment, Artifact, Environment, DecisionType } from "../../types.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
@@ -58,6 +58,8 @@ function statusLabel(status: string): string {
     awaiting_approval: "Awaiting Approval",
     approved: "Approved",
     rejected: "Rejected",
+    shelved: "Shelved",
+    cancelled: "Cancelled",
   };
   return map[status] ?? status;
 }
@@ -75,6 +77,10 @@ function DeploymentDebriefDetail({ deploymentId, onBack, onNavigate }: { deploym
   const [rollbackError, setRollbackError] = useState<string | null>(null);
   const [retrying, setRetrying] = useState(false);
   const [retryError, setRetryError] = useState<string | null>(null);
+  const [activating, setActivating] = useState(false);
+  const [activateError, setActivateError] = useState<string | null>(null);
+  const [shelvedRefineMode, setShelvedRefineMode] = useState(false);
+  const [shelvedRefineFeedback, setShelvedRefineFeedback] = useState("");
   const [llmPostmortem, setLlmPostmortem] = useState<LlmPostmortem | null>(null);
   const { data: artifacts } = useQuery<Artifact[]>("list:artifacts", listArtifacts);
   const { data: environments } = useQuery<Environment[]>("list:environments", listEnvironments);
@@ -129,6 +135,20 @@ function DeploymentDebriefDetail({ deploymentId, onBack, onNavigate }: { deploym
       setRetryError(err instanceof Error ? err.message : "Failed to retry deployment");
     } finally {
       setRetrying(false);
+    }
+  }
+
+  async function handleActivate(feedback?: string) {
+    if (!deployment) return;
+    setActivating(true);
+    setActivateError(null);
+    try {
+      const { deployment: updated } = await activateDeployment(deployment.id, { feedback });
+      onNavigate(updated.id);
+    } catch (err) {
+      setActivateError(err instanceof Error ? err.message : "Failed to activate plan");
+    } finally {
+      setActivating(false);
     }
   }
 
@@ -390,6 +410,56 @@ function DeploymentDebriefDetail({ deploymentId, onBack, onNavigate }: { deploym
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           {retryError && (
             <span style={{ fontSize: 12, color: "var(--status-failed)" }}>{retryError}</span>
+          )}
+          {activateError && (
+            <span style={{ fontSize: 12, color: "var(--status-failed)" }}>{activateError}</span>
+          )}
+          {deployment.status === "shelved" && !shelvedRefineMode && (
+            <>
+              <button
+                className="btn-secondary"
+                style={{ fontSize: 12, padding: "4px 12px", color: "var(--status-shelved)" }}
+                disabled={activating}
+                onClick={() => handleActivate()}
+              >
+                {activating ? "Re-activating…" : "Run this plan"}
+              </button>
+              <button
+                className="btn-secondary"
+                style={{ fontSize: 12, padding: "4px 12px" }}
+                onClick={() => setShelvedRefineMode(true)}
+              >
+                Refine
+              </button>
+            </>
+          )}
+          {deployment.status === "shelved" && shelvedRefineMode && (
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <input
+                type="text"
+                className="v2-input"
+                style={{ fontSize: 12, padding: "4px 10px", width: 240 }}
+                placeholder="What should change from the shelved plan?"
+                value={shelvedRefineFeedback}
+                onChange={(e) => setShelvedRefineFeedback(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter" && shelvedRefineFeedback.trim()) { handleActivate(shelvedRefineFeedback.trim()); setShelvedRefineMode(false); setShelvedRefineFeedback(""); } }}
+              />
+              <button
+                className="btn-secondary"
+                style={{ fontSize: 12, padding: "4px 12px" }}
+                disabled={activating || !shelvedRefineFeedback.trim()}
+                onClick={() => { handleActivate(shelvedRefineFeedback.trim()); setShelvedRefineMode(false); setShelvedRefineFeedback(""); }}
+              >
+                {activating ? "Re-activating…" : "Apply & Replan"}
+              </button>
+              <button
+                className="btn-secondary"
+                style={{ fontSize: 12, padding: "4px 12px" }}
+                onClick={() => { setShelvedRefineMode(false); setShelvedRefineFeedback(""); }}
+              >
+                Cancel
+              </button>
+            </div>
           )}
           {isFinished && (
             <button

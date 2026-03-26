@@ -79,6 +79,7 @@ export interface IDeploymentStore {
   findByArtifactVersion(artifactId: string, version: string, status?: string): Deployment[];
   findRecentByArtifact(artifactId: string, since: Date, status?: string): Deployment[];
   findLatestByEnvironment(envId: EnvironmentId): Deployment | undefined;
+  findShelvedByContext(artifactId: string | undefined, environmentId: string | undefined, operationType: string): Deployment[];
 }
 
 export interface ISettingsStore {

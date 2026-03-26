@@ -116,7 +116,7 @@ function useDeploymentStream(deploymentId: string, isRunning: boolean) {
   return { events, stale, completed };
 }
 
-const TERMINAL_STATUSES = new Set(["succeeded", "failed", "rolled_back", "rejected"]);
+const TERMINAL_STATUSES = new Set(["succeeded", "failed", "rolled_back", "rejected", "shelved"]);
 
 // ---------------------------------------------------------------------------
 // Main component
