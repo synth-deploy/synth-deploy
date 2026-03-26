@@ -1,22 +1,75 @@
 import type { ExecutionProgressEvent, ProgressCallback } from "./operation-executor.js";
 
+// ---------------------------------------------------------------------------
+// Schema translation — maps envoy's script-phase events to the step-based
+// format the server's ProgressEventSchema expects.
+// ---------------------------------------------------------------------------
+
+const PHASE_STEP: Record<string, { stepIndex: number; stepDescription: string }> = {
+  "dry-run":  { stepIndex: 0, stepDescription: "Dry run" },
+  "execution": { stepIndex: 1, stepDescription: "Executing" },
+  "rollback":  { stepIndex: 2, stepDescription: "Rolling back" },
+};
+
+interface ServerProgressEvent {
+  deploymentId: string;
+  type: string;
+  stepIndex: number;
+  stepDescription: string;
+  status: "in_progress" | "completed" | "failed";
+  output?: string;
+  error?: string;
+  timestamp: string;
+  overallProgress: number;
+}
+
+function toServerEvent(event: ExecutionProgressEvent): ServerProgressEvent | null {
+  const step = PHASE_STEP[event.phase] ?? { stepIndex: 0, stepDescription: event.phase };
+  const ts = event.timestamp instanceof Date
+    ? event.timestamp.toISOString()
+    : (event.timestamp as string);
+
+  switch (event.type) {
+    case "script-started":
+      return { deploymentId: event.deploymentId, type: "step-started", ...step, status: "in_progress", timestamp: ts, overallProgress: event.overallProgress };
+    case "script-completed":
+      return { deploymentId: event.deploymentId, type: "step-completed", ...step, status: "completed", output: event.output, timestamp: ts, overallProgress: event.overallProgress };
+    case "script-failed":
+      return { deploymentId: event.deploymentId, type: "step-failed", ...step, status: "failed", error: event.error, output: event.output, timestamp: ts, overallProgress: event.overallProgress };
+    case "rollback-started":
+      return { deploymentId: event.deploymentId, type: "rollback-started", ...PHASE_STEP["rollback"], status: "in_progress", timestamp: ts, overallProgress: event.overallProgress };
+    case "rollback-completed":
+      return { deploymentId: event.deploymentId, type: "rollback-completed", ...PHASE_STEP["rollback"], status: "completed", timestamp: ts, overallProgress: event.overallProgress };
+    case "deployment-completed":
+      return { deploymentId: event.deploymentId, type: "deployment-completed", stepIndex: 99, stepDescription: "Done", status: event.status, timestamp: ts, overallProgress: 100 };
+    case "script-output":
+      return null; // stdout lines — not forwarded individually
+    default:
+      return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// createCallbackReporter
+// ---------------------------------------------------------------------------
+
 /**
  * Creates a ProgressCallback that POSTs events to a callback URL.
  *
- * Buffers output at 500ms intervals to avoid overwhelming the receiver.
- * On POST failure, buffers events and retries with exponential backoff
- * (capped at 30s). Failures are non-fatal — the synchronous result
- * delivery remains the guaranteed fallback.
+ * Translates the envoy's script-phase event model to the step-based format
+ * the server's ProgressEventSchema expects. Buffers at 500ms intervals.
+ * On POST failure, retries with exponential backoff (capped at 30s).
+ * Failures are non-fatal — the synchronous result delivery is the fallback.
  */
 export function createCallbackReporter(callbackUrl: string, token?: string): ProgressCallback {
-  let pendingEvents: ExecutionProgressEvent[] = [];
+  let pendingEvents: ServerProgressEvent[] = [];
   let flushTimer: ReturnType<typeof setTimeout> | null = null;
   let sending = false;
   let backoffMs = 500;
   const MAX_BACKOFF_MS = 30_000;
   const BUFFER_INTERVAL_MS = 500;
 
-  async function sendEvent(event: ExecutionProgressEvent): Promise<boolean> {
+  async function sendEvent(event: ServerProgressEvent): Promise<boolean> {
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 5_000);
@@ -27,19 +80,14 @@ export function createCallbackReporter(callbackUrl: string, token?: string): Pro
       const response = await fetch(callbackUrl, {
         method: "POST",
         headers,
-        body: JSON.stringify({
-          ...event,
-          timestamp: event.timestamp instanceof Date
-            ? event.timestamp.toISOString()
-            : event.timestamp,
-        }),
+        body: JSON.stringify(event),
         signal: controller.signal,
       });
 
       clearTimeout(timeout);
 
       if (response.ok) {
-        backoffMs = 500; // Reset backoff on success
+        backoffMs = 500;
         return true;
       }
 
@@ -60,10 +108,8 @@ export function createCallbackReporter(callbackUrl: string, token?: string): Pro
       if (ok) {
         pendingEvents.shift();
       } else {
-        // Exponential backoff, capped
         backoffMs = Math.min(backoffMs * 2, MAX_BACKOFF_MS);
         await new Promise((resolve) => setTimeout(resolve, backoffMs));
-        // Try again on next flush cycle — don't block forever
         break;
       }
     }
@@ -72,10 +118,13 @@ export function createCallbackReporter(callbackUrl: string, token?: string): Pro
   }
 
   return (event: ExecutionProgressEvent): void => {
-    pendingEvents.push(event);
+    const translated = toServerEvent(event);
+    if (!translated) return; // script-output and unmapped events are skipped
 
-    // For terminal events, flush immediately
-    if (event.type === "deployment-completed" || event.type === "script-failed") {
+    pendingEvents.push(translated);
+
+    const isTerminal = translated.type === "deployment-completed" || translated.type === "step-failed";
+    if (isTerminal) {
       if (flushTimer) {
         clearTimeout(flushTimer);
         flushTimer = null;
@@ -84,7 +133,6 @@ export function createCallbackReporter(callbackUrl: string, token?: string): Pro
       return;
     }
 
-    // Buffer at 500ms intervals for non-terminal events
     if (!flushTimer) {
       flushTimer = setTimeout(() => {
         flushTimer = null;

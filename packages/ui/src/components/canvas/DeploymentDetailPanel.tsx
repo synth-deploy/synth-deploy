@@ -93,6 +93,7 @@ function useDeploymentStream(deploymentId: string, isRunning: boolean) {
         resetStaleTimer();
 
         if (event.type === "deployment-completed") {
+          completedRef.current = true;
           setCompleted(true);
           es.close();
           if (staleTimerRef.current) clearTimeout(staleTimerRef.current);
@@ -102,8 +103,9 @@ function useDeploymentStream(deploymentId: string, isRunning: boolean) {
       }
     };
 
+    const completedRef = { current: false };
     es.onerror = () => {
-      setStale(true);
+      if (!completedRef.current) setStale(true);
     };
 
     return () => {
