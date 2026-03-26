@@ -1,6 +1,8 @@
 import { useState } from "react";
 import {
   getEnvoyHealth,
+  probeEnvoy,
+  deleteEnvoy,
   getEnvoySecurityBoundaries,
   getEnvoyKnowledge,
   listEnvironments,
@@ -150,7 +152,7 @@ const KnowledgeCard = ({ label, value, color }: { label: string; value: React.Re
 );
 
 export default function EnvoyDetailPanel({ envoyId, title }: Props) {
-  const { pushPanel } = useCanvas();
+  const { pushPanel, popPanel } = useCanvas();
   const { data: envoy, loading: l1, error } = useQuery<EnvoyRegistryEntry>(`envoyHealth:${envoyId}`, () => getEnvoyHealth(envoyId));
   const { data: environments, loading: l2 } = useQuery<Environment[]>("list:environments", listEnvironments);
   const { data: partitions, loading: l3 } = useQuery<Partition[]>("list:partitions", listPartitions);
@@ -163,6 +165,9 @@ export default function EnvoyDetailPanel({ envoyId, title }: Props) {
   const [showPartPicker, setShowPartPicker] = useState(false);
   const [localEnvIds, setLocalEnvIds] = useState<string[] | null>(null);
   const [localPartIds, setLocalPartIds] = useState<string[] | null>(null);
+  const [pinging, setPinging] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   if (loading) {
     return (
@@ -236,6 +241,29 @@ export default function EnvoyDetailPanel({ envoyId, title }: Props) {
     }
   }
 
+  async function handlePing() {
+    setPinging(true);
+    try {
+      await probeEnvoy(envoyId);
+      invalidateExact(`envoyHealth:${envoyId}`);
+    } finally {
+      setPinging(false);
+    }
+  }
+
+  async function handleDelete() {
+    setDeleting(true);
+    try {
+      await deleteEnvoy(envoyId);
+      popPanel();
+    } catch {
+      setDeleting(false);
+      setConfirmDelete(false);
+    }
+  }
+
+  const isStale = !envoy.lastSeen || Date.now() - new Date(envoy.lastSeen).getTime() > 60 * 60 * 1000;
+
   const envLabel = envoy.assignedEnvironments[0] ?? "No environment";
 
   // Build artifact name lookup
@@ -286,7 +314,30 @@ export default function EnvoyDetailPanel({ envoyId, title }: Props) {
             {envLabel} environment · {envoy.os ?? "Unknown OS"}
           </p>
         </div>
-        <HealthBadge health={envoy.health} />
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <HealthBadge health={envoy.health} />
+          {isStale && (
+            <span style={{ fontSize: 10, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>stale</span>
+          )}
+          <button className="btn-secondary" style={{ padding: "3px 10px", fontSize: 11 }} onClick={handlePing} disabled={pinging}>
+            {pinging ? "Pinging…" : "Ping"}
+          </button>
+          {!confirmDelete ? (
+            <button className="btn-secondary" style={{ padding: "3px 10px", fontSize: 11, color: "var(--status-failed)" }} onClick={() => setConfirmDelete(true)}>
+              Delete
+            </button>
+          ) : (
+            <>
+              <span style={{ fontSize: 11, color: "var(--status-failed)", whiteSpace: "nowrap" }}>Remove this envoy?</span>
+              <button className="btn btn-danger btn-sm" onClick={handleDelete} disabled={deleting}>
+                {deleting ? "Removing…" : "Confirm"}
+              </button>
+              <button className="btn-secondary" style={{ padding: "3px 10px", fontSize: 11 }} onClick={() => setConfirmDelete(false)}>
+                Cancel
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
       {/* ── Identity & System Info ── */}

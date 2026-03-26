@@ -862,6 +862,10 @@ app.delete("/mcp", async (request, reply) => {
   return reply.status(200).send({ status: "session closed" });
 });
 
+// Periodic Envoy health probe (every 5 minutes by default)
+const ENVOY_PROBE_INTERVAL_MS = Number(process.env.SYNTH_ENVOY_PROBE_INTERVAL_MS ?? 5 * 60 * 1000);
+setInterval(() => { envoyRegistry.probeAll().catch(() => {}); }, ENVOY_PROBE_INTERVAL_MS);
+
 // Periodic MCP session cleanup (every 10 minutes)
 const MCP_CLEANUP_INTERVAL_MS = Number(process.env.SYNTH_MCP_CLEANUP_INTERVAL_MS ?? 10 * 60 * 1000);
 const mcpCleanupInterval = setInterval(async () => {

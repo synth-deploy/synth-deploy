@@ -671,6 +671,15 @@ export async function getEnvoyHealth(id: string): Promise<EnvoyRegistryEntry> {
   return data.envoy;
 }
 
+export async function probeEnvoy(id: string): Promise<EnvoyRegistryEntry> {
+  const data = await fetchJson<{ envoy: EnvoyRegistryEntry }>(`/api/envoys/${id}/probe`, { method: "POST" });
+  return data.envoy;
+}
+
+export async function deleteEnvoy(id: string): Promise<void> {
+  await fetchJson<void>(`/api/envoys/${id}`, { method: "DELETE" });
+}
+
 export async function updateEnvoy(
   id: string,
   updates: { assignedEnvironments?: string[]; assignedPartitions?: string[]; name?: string; url?: string },

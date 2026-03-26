@@ -117,6 +117,32 @@ export function registerEnvoyRoutes(
     };
   });
 
+  // Live-probe a specific Envoy and update cached health
+  app.post("/api/envoys/:id/probe", { preHandler: [requirePermission("envoy.view")] }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const entry = await registry.probe(id);
+
+    if (!entry) {
+      return reply.status(404).send({ error: "Envoy not found" });
+    }
+
+    return {
+      envoy: {
+        id: entry.id,
+        name: entry.name,
+        url: entry.url,
+        health: entry.health,
+        hostname: entry.hostname,
+        os: entry.os,
+        lastSeen: entry.lastSeen,
+        summary: entry.summary,
+        readiness: entry.readiness,
+        assignedEnvironments: entry.assignedEnvironments,
+        assignedPartitions: entry.assignedPartitions,
+      },
+    };
+  });
+
   // Update an Envoy's configuration
   app.put("/api/envoys/:id", { preHandler: [requirePermission("envoy.configure")] }, async (request, reply) => {
     const { id } = request.params as { id: string };
