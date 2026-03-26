@@ -60,6 +60,7 @@ vi.mock("../src/components/ConfidenceIndicator", () => ({
 vi.mock("../src/hooks/useQuery", () => ({
   useQuery: vi.fn(),
   invalidateExact: vi.fn(),
+  setQueryData: vi.fn(),
 }));
 
 vi.mock("../src/api", () => ({
@@ -67,6 +68,7 @@ vi.mock("../src/api", () => ({
   getDeploymentEnrichment: vi.fn(),
   approveDeployment: vi.fn(),
   rejectDeployment: vi.fn(),
+  shelveDeployment: vi.fn(),
   modifyDeploymentPlan: vi.fn(),
   replanDeployment: vi.fn(),
   listEnvironments: vi.fn(),
@@ -79,6 +81,7 @@ import PlanReviewPanel from "../src/components/canvas/PlanReviewPanel";
 import {
   approveDeployment,
   rejectDeployment,
+  shelveDeployment,
   replanDeployment,
   getDeployment,
   getDeploymentEnrichment,
@@ -189,6 +192,9 @@ function setupDefaultApiMocks() {
   (rejectDeployment as ReturnType<typeof vi.fn>).mockResolvedValue({
     deployment: { id: "op-123", status: "rejected" },
   });
+  (shelveDeployment as ReturnType<typeof vi.fn>).mockResolvedValue({
+    deployment: { id: "op-123", status: "shelved" },
+  });
   (replanDeployment as ReturnType<typeof vi.fn>).mockResolvedValue({
     deployment: { ...mockDeployment, plan: { ...mockPlan, reasoning: "Revised plan." } },
   });
@@ -225,11 +231,11 @@ describe("PlanReviewPanel", () => {
       expect(screen.getByText("Start new container")).toBeInTheDocument();
     });
 
-    it("shows Greenlight, Refine, and Reject buttons when awaiting approval", () => {
+    it("shows Greenlight, Refine, and Shelve buttons when awaiting approval", () => {
       renderPanel();
       expect(screen.getByText(/Greenlight/)).toBeInTheDocument();
       expect(screen.getByText("Refine")).toBeInTheDocument();
-      expect(screen.getByText("Reject")).toBeInTheDocument();
+      expect(screen.getByText("Shelve")).toBeInTheDocument();
     });
 
     it("displays artifact name in the heading and environment in sub-heading", () => {
@@ -271,20 +277,18 @@ describe("PlanReviewPanel", () => {
     });
   });
 
-  describe("rejection journey", () => {
-    it("clicking Reject -> entering reason -> confirming calls rejectDeployment and navigates", async () => {
+  describe("shelve journey", () => {
+    it("clicking Shelve -> confirming calls shelveDeployment and navigates", async () => {
       const user = userEvent.setup();
       renderPanel();
-      // Click Reject to enter reject-prompt mode
-      await user.click(screen.getByText("Reject"));
-      // Textarea for reason should appear
-      const textarea = screen.getByPlaceholderText("Why is this plan being rejected?");
+      await user.click(screen.getByText("Shelve"));
+      // Textarea for optional reason should appear
+      const textarea = screen.getByPlaceholderText("Why are you shelving this? (e.g. maintenance window, not the right time)");
       expect(textarea).toBeInTheDocument();
-      await user.type(textarea, "Too risky for production");
-      // Click confirm
-      await user.click(screen.getByText("Confirm Rejection"));
+      await user.type(textarea, "Not the right time");
+      await user.click(screen.getByText("Shelve Plan"));
       await waitFor(() => {
-        expect(rejectDeployment).toHaveBeenCalledWith("op-123", { reason: "Too risky for production" });
+        expect(shelveDeployment).toHaveBeenCalledWith("op-123", { reason: "Not the right time" });
       });
       expect(mockReplacePanel).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -294,38 +298,33 @@ describe("PlanReviewPanel", () => {
       );
     });
 
-    it("rejecting with empty reason shows validation error", async () => {
+    it("shelving with no reason still calls shelveDeployment (reason is optional)", async () => {
       const user = userEvent.setup();
       renderPanel();
-      await user.click(screen.getByText("Reject"));
-      // Don't type any reason, just confirm
-      await user.click(screen.getByText("Confirm Rejection"));
+      await user.click(screen.getByText("Shelve"));
+      await user.click(screen.getByText("Shelve Plan"));
       await waitFor(() => {
-        expect(screen.getByText("A rejection reason is required")).toBeInTheDocument();
+        expect(shelveDeployment).toHaveBeenCalledWith("op-123", { reason: undefined });
       });
-      expect(rejectDeployment).not.toHaveBeenCalled();
     });
 
-    it("cancelling from reject mode returns to review without calling API", async () => {
+    it("cancelling from shelve mode returns to review without calling API", async () => {
       const user = userEvent.setup();
       renderPanel();
-      await user.click(screen.getByText("Reject"));
-      // Should be in reject-prompt mode
-      expect(screen.getByText("Confirm Rejection")).toBeInTheDocument();
-      // Cancel
+      await user.click(screen.getByText("Shelve"));
+      expect(screen.getByText("Shelve Plan")).toBeInTheDocument();
       await user.click(screen.getByText("Cancel"));
-      // Should return to review mode — Greenlight should be visible again
       expect(screen.getByText(/Greenlight/)).toBeInTheDocument();
-      expect(rejectDeployment).not.toHaveBeenCalled();
+      expect(shelveDeployment).not.toHaveBeenCalled();
     });
 
-    it("reject API failure shows error message without navigating", async () => {
-      (rejectDeployment as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error("Server error"));
+    it("shelve API failure shows error message without navigating", async () => {
+      (shelveDeployment as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error("Server error"));
       const user = userEvent.setup();
       renderPanel();
-      await user.click(screen.getByText("Reject"));
-      await user.type(screen.getByPlaceholderText("Why is this plan being rejected?"), "Bad plan");
-      await user.click(screen.getByText("Confirm Rejection"));
+      await user.click(screen.getByText("Shelve"));
+      await user.type(screen.getByPlaceholderText("Why are you shelving this? (e.g. maintenance window, not the right time)"), "Bad timing");
+      await user.click(screen.getByText("Shelve Plan"));
       await waitFor(() => {
         expect(screen.getByText("Server error")).toBeInTheDocument();
       });
