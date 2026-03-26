@@ -545,18 +545,38 @@ export function registerOperationRoutes(
         }
       }
       // Normal operations: dispatch approved plan to envoy for execution
-      else if (envoyClient && deployment.plan && deployment.rollbackPlan) {
+      else if (deployment.plan && deployment.rollbackPlan) {
+        // Resolve the envoy that planned this deployment; fall back to default
+        const registryEnvoy = deployment.envoyId ? envoyRegistry?.get(deployment.envoyId) : undefined;
+        const execClient = registryEnvoy ? new EnvoyClient(registryEnvoy.url) : envoyClient;
+
+        if (!execClient) {
+          deployment.status = "failed" as typeof deployment.status;
+          deployment.failureReason = "No envoy client available for dispatch";
+          deployments.save(deployment);
+          debrief.record({
+            partitionId: deployment.partitionId ?? null,
+            operationId: deployment.id,
+            agent: "server",
+            decisionType: "deployment-failure",
+            decision: "Failed to dispatch approved plan to envoy",
+            reasoning: deployment.failureReason,
+            context: { error: deployment.failureReason },
+          });
+          return reply.send({ deployment, approved: true });
+        }
+
         const artifact = artifactStore.get(getArtifactId(deployment) ?? "");
         const serverPort = process.env.PORT ?? "9410";
         const serverUrl = process.env.SYNTH_SERVER_URL ?? `http://localhost:${serverPort}`;
         const progressCallbackUrl = `${serverUrl}/api/operations/${deployment.id}/progress`;
-        const callbackToken = envoyRegistry?.list().find(r => r.url === envoyClient.url)?.token;
+        const callbackToken = envoyRegistry?.list().find(r => r.url === execClient.url)?.token;
 
         deployment.status = "running" as typeof deployment.status;
         deployments.save(deployment);
 
         // Fire-and-forget: execution runs async, progress comes via callback
-        envoyClient.executeApprovedPlan({
+        execClient.executeApprovedPlan({
           operationId: deployment.id,
           plan: deployment.plan,
           rollbackPlan: deployment.rollbackPlan,

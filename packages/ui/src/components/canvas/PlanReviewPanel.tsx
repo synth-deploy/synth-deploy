@@ -387,6 +387,7 @@ export default function PlanReviewPanel({ deploymentId }: Props) {
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [deployment?.status, deploymentId]);
   const [scriptExpanded, setScriptExpanded] = useState(false);
+  const [dryRunScriptExpanded, setDryRunScriptExpanded] = useState(false);
   const [rollbackScriptExpanded, setRollbackScriptExpanded] = useState(false);
   const [shelveReason, setShelveReason] = useState("");
   const [modifiedScript, setModifiedScript] = useState("");
@@ -757,6 +758,50 @@ export default function PlanReviewPanel({ deploymentId }: Props) {
             }}>
               {plan.scriptedPlan.executionScript}
             </pre>
+          )}
+
+          {/* Simulation script toggle (only if dryRunScript exists) */}
+          {plan.scriptedPlan.dryRunScript && (
+            <>
+              <button
+                onClick={() => setDryRunScriptExpanded((p) => !p)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  background: "none",
+                  border: "1px solid var(--border)",
+                  borderRadius: 6,
+                  padding: "6px 12px",
+                  marginTop: 8,
+                  cursor: "pointer",
+                  color: "var(--text-muted)",
+                  fontSize: 12,
+                  fontFamily: "var(--font-mono)",
+                }}
+              >
+                {dryRunScriptExpanded ? "▲ Hide Simulation Script" : "▼ Simulation Script"}
+              </button>
+              {dryRunScriptExpanded && (
+                <pre style={{
+                  marginTop: 8,
+                  padding: "14px 16px",
+                  borderRadius: 8,
+                  background: "var(--surface-alt)",
+                  border: "1px solid color-mix(in srgb, var(--status-running) 30%, var(--border))",
+                  fontSize: 12,
+                  fontFamily: "var(--font-mono)",
+                  color: "var(--text)",
+                  overflow: "auto",
+                  maxHeight: 400,
+                  whiteSpace: "pre-wrap",
+                  wordBreak: "break-word",
+                  lineHeight: 1.5,
+                }}>
+                  {plan.scriptedPlan.dryRunScript}
+                </pre>
+              )}
+            </>
           )}
 
           {/* Rollback script toggle (only if exists) */}
