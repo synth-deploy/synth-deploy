@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { listArtifacts, createArtifact } from "../../api.js";
+import { listArtifacts, createArtifact, getArtifact } from "../../api.js";
 import type { Artifact } from "../../types.js";
 import { useCanvas } from "../../context/CanvasContext.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
@@ -33,6 +33,16 @@ export default function ArtifactCatalogPanel({ title }: Props) {
   const [showAddForm, setShowAddForm] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedArtifact, setSelectedArtifact] = useState<Artifact | null>(null);
+  // Fetch fresh artifact data when one is selected — shares the "artifact:${id}" cache key with
+  // ArtifactDetailPanel so both surfaces always reflect the same confidence value.
+  const { data: freshSelectedArt } = useQuery<Artifact | null>(
+    selectedArtifact ? `artifact:${selectedArtifact.id}` : "artifact:__none__",
+    async () => {
+      if (!selectedArtifact) return null;
+      const data = await getArtifact(selectedArtifact.id);
+      return data.artifact;
+    },
+  );
   const [newName, setNewName] = useState("");
   const [newType, setNewType] = useState("docker");
   const [creating, setCreating] = useState(false);
@@ -181,8 +191,8 @@ export default function ArtifactCatalogPanel({ title }: Props) {
     );
   }
 
-  const technologies = selectedArtifact?.analysis.dependencies ?? [];
-  const sidePanelConfidence = selectedArtifact?.analysis.confidence ?? 0;
+  const technologies = (freshSelectedArt ?? selectedArtifact)?.analysis.dependencies ?? [];
+  const sidePanelConfidence = (freshSelectedArt ?? selectedArtifact)?.analysis.confidence ?? 0;
 
   return (
     <CanvasPanelHost title={title} noBreadcrumb>
