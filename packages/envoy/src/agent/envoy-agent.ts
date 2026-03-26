@@ -3480,11 +3480,13 @@ Installed tools: ${availableTools || "none"}`);
     this.reporter.reportDeploymentResult(result, tokenOverride).catch((err) => {
       // Log but don't fail — the synchronous response already went back.
       // Command can also pull this data via GET /deployments/:id.
-      const cause = err instanceof Error && (err as NodeJS.ErrnoException).cause;
+      const cause = err instanceof Error ? (err as NodeJS.ErrnoException).cause : undefined;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const causeInfo = cause != null ? (() => { const c = cause as any; return `code=${c.code ?? "?"} msg=${c.message ?? ""} addr=${c.address ?? ""}:${c.port ?? ""}`; })() : "none";
       console.error(
         `[Envoy] Failed to report deployment ${result.operationId} to Command:`,
         err instanceof Error ? err.message : err,
-        cause ? `(cause: ${cause instanceof Error ? cause.message : cause})` : "",
+        `| cause: ${causeInfo}`,
       );
     });
   }

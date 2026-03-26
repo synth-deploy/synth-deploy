@@ -112,9 +112,13 @@ export class ServerReporter {
           `Command rejected report: HTTP ${response.status} ${response.statusText}`,
         );
       }
-    } finally {
+    } catch (err) {
       clearTimeout(timeout);
+      // Re-throw with the target URL included so the caller can diagnose connectivity issues
+      const target = `${this.serverUrl}/api/envoy/report`;
+      throw new Error(`fetch to ${target} failed: ${err instanceof Error ? err.message : err}`, { cause: err instanceof Error ? err.cause ?? err : err });
     }
+    clearTimeout(timeout);
   }
 }
 
