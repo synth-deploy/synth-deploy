@@ -2,7 +2,7 @@
 import Layout from "../layouts/Layout.astro";
 ---
 
-<Layout title="Synth — Roadmap" description="Synth product roadmap: v1.2 just shipped with scripted plans — LLM-generated bash and powershell execution for universal target support. See what's available, what's next, and the long-term vision.">
+<Layout title="Synth — Roadmap" description="Synth product roadmap: v1.3 just shipped with plan fidelity improvements — simulation scripts in plan review, Shelve action, envoy dispatch routing, and composite WHERE selector. See what's available, what's next, and the long-term vision.">
   <!-- Hero -->
   <section class="relative overflow-hidden">
     <div class="absolute inset-0 pointer-events-none">
@@ -23,7 +23,7 @@ import Layout from "../layouts/Layout.astro";
     </div>
   </section>
 
-  <!-- Just Shipped (v1.2) -->
+  <!-- Just Shipped (v1.3) -->
   <section class="py-28 border-t border-ds-border relative overflow-hidden">
     <div class="absolute inset-0 pointer-events-none">
       <div class="absolute top-1/3 right-1/4 w-96 h-96 bg-ds-accent/5 rounded-full blur-[120px]"></div>
@@ -33,6 +33,97 @@ import Layout from "../layouts/Layout.astro";
     <div class="relative mx-auto max-w-6xl px-6">
       <div class="text-center mb-16 scroll-reveal">
         <p class="section-heading text-ds-accent">Just Shipped</p>
+        <h2 class="text-3xl md:text-4xl font-display font-bold mb-4">v1.3 — Plan Fidelity</h2>
+        <p class="text-ds-text-secondary text-lg max-w-2xl mx-auto">
+          More visibility before you approve, better routing after you do. Plan review,
+          simulation scripts, and envoy dispatch &mdash; all tightened up.
+        </p>
+      </div>
+
+      <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-1">
+          <div class="flex items-center gap-3 mb-3">
+            <div class="entity-badge border-ds-accent/30 bg-ds-accent/10 text-ds-accent text-[10px] py-0.5">
+              v1.3
+            </div>
+          </div>
+          <h3 class="text-base font-semibold mb-2">Shelve Action</h3>
+          <p class="text-sm text-ds-text-secondary leading-relaxed">
+            Replace hard rejection with Shelve &mdash; the plan reasoning is preserved and
+            injected as context when the operation is re-planned. The agent knows why the
+            prior plan was set aside and starts from there.
+          </p>
+        </div>
+
+        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-2">
+          <div class="flex items-center gap-3 mb-3">
+            <div class="entity-badge border-ds-accent/30 bg-ds-accent/10 text-ds-accent text-[10px] py-0.5">
+              v1.3
+            </div>
+          </div>
+          <h3 class="text-base font-semibold mb-2">Simulation Script in Plan Review</h3>
+          <p class="text-sm text-ds-text-secondary leading-relaxed">
+            The dry-run script is now visible in the plan review panel alongside the execution
+            and rollback scripts. See exactly what probed your target before you approve what
+            changes it.
+          </p>
+        </div>
+
+        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-3">
+          <div class="flex items-center gap-3 mb-3">
+            <div class="entity-badge border-ds-accent/30 bg-ds-accent/10 text-ds-accent text-[10px] py-0.5">
+              v1.3
+            </div>
+          </div>
+          <h3 class="text-base font-semibold mb-2">Envoy Ping &amp; Delete</h3>
+          <p class="text-sm text-ds-text-secondary leading-relaxed">
+            Envoy detail now has live Ping and Delete actions, with background health probing
+            that keeps status current without a page refresh. Dead envoys are easy to identify
+            and clean up.
+          </p>
+        </div>
+
+        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-1">
+          <div class="flex items-center gap-3 mb-3">
+            <div class="entity-badge border-ds-accent/30 bg-ds-accent/10 text-ds-accent text-[10px] py-0.5">
+              v1.3
+            </div>
+          </div>
+          <h3 class="text-base font-semibold mb-2">Execute on Planning Envoy</h3>
+          <p class="text-sm text-ds-text-secondary leading-relaxed">
+            Approved plans are dispatched to the envoy that generated them, not the default
+            client. The envoy that probed and reasoned about your target is the one that
+            runs the plan. Falls back to default if unavailable.
+          </p>
+        </div>
+
+        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-2">
+          <div class="flex items-center gap-3 mb-3">
+            <div class="entity-badge border-ds-accent/30 bg-ds-accent/10 text-ds-accent text-[10px] py-0.5">
+              v1.3
+            </div>
+          </div>
+          <h3 class="text-base font-semibold mb-2">Composite WHERE Selector</h3>
+          <p class="text-sm text-ds-text-secondary leading-relaxed">
+            Composite operations can now specify a scoped destination target via a WHERE
+            field. Child operations run against the right envoy without manual coordination
+            or ambiguous routing.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- v1.2 — Scripted Plans (Previously Released) -->
+  <section class="py-28 border-t border-ds-border relative overflow-hidden">
+    <div class="absolute inset-0 pointer-events-none">
+      <div class="absolute top-1/3 right-1/4 w-96 h-96 bg-ds-dt-plan/5 rounded-full blur-[120px]"></div>
+      <div class="absolute bottom-1/4 left-1/3 w-72 h-72 bg-ds-partition/5 rounded-full blur-[100px]"></div>
+    </div>
+
+    <div class="relative mx-auto max-w-6xl px-6">
+      <div class="text-center mb-16 scroll-reveal">
+        <p class="section-heading">Previously Released</p>
         <h2 class="text-3xl md:text-4xl font-display font-bold mb-4">v1.2 — Scripted Plans</h2>
         <p class="text-ds-text-secondary text-lg max-w-2xl mx-auto">
           A fundamental architecture shift. The envoy no longer relies on built-in handlers &mdash;
@@ -44,7 +135,7 @@ import Layout from "../layouts/Layout.astro";
       <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
         <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-1">
           <div class="flex items-center gap-3 mb-3">
-            <div class="entity-badge border-ds-accent/30 bg-ds-accent/10 text-ds-accent text-[10px] py-0.5">
+            <div class="entity-badge border-ds-border/50 bg-ds-surface/50 text-ds-text-secondary text-[10px] py-0.5">
               v1.2
             </div>
           </div>
@@ -58,7 +149,7 @@ import Layout from "../layouts/Layout.astro";
 
         <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-2">
           <div class="flex items-center gap-3 mb-3">
-            <div class="entity-badge border-ds-accent/30 bg-ds-accent/10 text-ds-accent text-[10px] py-0.5">
+            <div class="entity-badge border-ds-border/50 bg-ds-surface/50 text-ds-text-secondary text-[10px] py-0.5">
               v1.2
             </div>
           </div>
@@ -72,7 +163,7 @@ import Layout from "../layouts/Layout.astro";
 
         <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-3">
           <div class="flex items-center gap-3 mb-3">
-            <div class="entity-badge border-ds-accent/30 bg-ds-accent/10 text-ds-accent text-[10px] py-0.5">
+            <div class="entity-badge border-ds-border/50 bg-ds-surface/50 text-ds-text-secondary text-[10px] py-0.5">
               v1.2
             </div>
           </div>
@@ -86,7 +177,7 @@ import Layout from "../layouts/Layout.astro";
 
         <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-1">
           <div class="flex items-center gap-3 mb-3">
-            <div class="entity-badge border-ds-accent/30 bg-ds-accent/10 text-ds-accent text-[10px] py-0.5">
+            <div class="entity-badge border-ds-border/50 bg-ds-surface/50 text-ds-text-secondary text-[10px] py-0.5">
               v1.2
             </div>
           </div>
@@ -100,7 +191,7 @@ import Layout from "../layouts/Layout.astro";
 
         <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-2">
           <div class="flex items-center gap-3 mb-3">
-            <div class="entity-badge border-ds-accent/30 bg-ds-accent/10 text-ds-accent text-[10px] py-0.5">
+            <div class="entity-badge border-ds-border/50 bg-ds-surface/50 text-ds-text-secondary text-[10px] py-0.5">
               v1.2
             </div>
           </div>
@@ -114,7 +205,7 @@ import Layout from "../layouts/Layout.astro";
 
         <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-3">
           <div class="flex items-center gap-3 mb-3">
-            <div class="entity-badge border-ds-accent/30 bg-ds-accent/10 text-ds-accent text-[10px] py-0.5">
+            <div class="entity-badge border-ds-border/50 bg-ds-surface/50 text-ds-text-secondary text-[10px] py-0.5">
               v1.2
             </div>
           </div>
@@ -123,154 +214,6 @@ import Layout from "../layouts/Layout.astro";
             Bash for Linux and macOS targets. PowerShell for Windows. The agent detects the
             target platform and generates scripts in the right language &mdash; same operation
             intent, native execution on every OS.
-          </p>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- v1.1 — The Operations Model -->
-  <section class="py-28 border-t border-ds-border relative overflow-hidden">
-    <div class="absolute inset-0 pointer-events-none">
-      <div class="absolute top-1/3 right-1/4 w-96 h-96 bg-ds-dt-plan/5 rounded-full blur-[120px]"></div>
-      <div class="absolute bottom-1/4 left-1/3 w-72 h-72 bg-ds-partition/5 rounded-full blur-[100px]"></div>
-    </div>
-
-    <div class="relative mx-auto max-w-6xl px-6">
-      <div class="text-center mb-16 scroll-reveal">
-        <p class="section-heading">Previously Released</p>
-        <h2 class="text-3xl md:text-4xl font-display font-bold mb-4">v1.1 — The Operations Model</h2>
-        <p class="text-ds-text-secondary text-lg max-w-2xl mx-auto">
-          Deployment was always just one type of operational work. v1.1 generalized the entire
-          Synth model &mdash; the same intelligence that planned deployments now handles the full
-          scope of what operations engineers actually do.
-        </p>
-      </div>
-
-      <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-1">
-          <div class="flex items-center gap-3 mb-3">
-            <div class="entity-badge border-ds-border/50 bg-ds-surface/50 text-ds-text-secondary text-[10px] py-0.5">
-              v1.1
-            </div>
-          </div>
-          <h3 class="text-base font-semibold mb-2">Query Operations</h3>
-          <p class="text-sm text-ds-text-secondary leading-relaxed">
-            Read-only fleet interrogation as a first-class operation type. Ask questions about
-            infrastructure state &mdash; cert expiry, service versions, configuration drift &mdash; and
-            get structured findings in the debrief. No plan approval needed.
-          </p>
-        </div>
-
-        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-2">
-          <div class="flex items-center gap-3 mb-3">
-            <div class="entity-badge border-ds-border/50 bg-ds-surface/50 text-ds-text-secondary text-[10px] py-0.5">
-              v1.1
-            </div>
-          </div>
-          <h3 class="text-base font-semibold mb-2">Investigation Operations</h3>
-          <p class="text-sm text-ds-text-secondary leading-relaxed">
-            Diagnostic deep-dives where each finding informs what to check next. The agent
-            probes iteratively, produces a root cause analysis, and proposes a resolution
-            operation ready for approval.
-          </p>
-        </div>
-
-        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-3">
-          <div class="flex items-center gap-3 mb-3">
-            <div class="entity-badge border-ds-border/50 bg-ds-surface/50 text-ds-text-secondary text-[10px] py-0.5">
-              v1.1
-            </div>
-          </div>
-          <h3 class="text-base font-semibold mb-2">Maintenance Operations</h3>
-          <p class="text-sm text-ds-text-secondary leading-relaxed">
-            Mutating operations without an artifact: certificate rotation, configuration changes,
-            credential updates, tooling upgrades. Describe the intent &mdash; the agent probes
-            current state and plans accordingly.
-          </p>
-        </div>
-
-        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-1">
-          <div class="flex items-center gap-3 mb-3">
-            <div class="entity-badge border-ds-border/50 bg-ds-surface/50 text-ds-text-secondary text-[10px] py-0.5">
-              v1.1
-            </div>
-          </div>
-          <h3 class="text-base font-semibold mb-2">Trigger Operations</h3>
-          <p class="text-sm text-ds-text-secondary leading-relaxed">
-            Persistent monitoring directives authored as operations. Set a condition and a
-            response intent &mdash; the envoy watches on schedule and spawns child operations
-            with full lineage when thresholds are crossed.
-          </p>
-        </div>
-
-        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-2">
-          <div class="flex items-center gap-3 mb-3">
-            <div class="entity-badge border-ds-border/50 bg-ds-surface/50 text-ds-text-secondary text-[10px] py-0.5">
-              v1.1
-            </div>
-          </div>
-          <h3 class="text-base font-semibold mb-2">Composite Operations</h3>
-          <p class="text-sm text-ds-text-secondary leading-relaxed">
-            Multiple operation types in one planned sequence with dependency ordering. Deploy,
-            rotate credentials, and run post-deploy verification as a single coherent plan &mdash;
-            approved once, executed sequentially.
-          </p>
-        </div>
-
-        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-3">
-          <div class="flex items-center gap-3 mb-3">
-            <div class="entity-badge border-ds-border/50 bg-ds-surface/50 text-ds-text-secondary text-[10px] py-0.5">
-              v1.1
-            </div>
-          </div>
-          <h3 class="text-base font-semibold mb-2">Built-in Health Monitoring</h3>
-          <p class="text-sm text-ds-text-secondary leading-relaxed">
-            Envoys already deployed on targets now run lightweight scheduled health checks.
-            Threshold crossings auto-spawn response operations. The same system that executes
-            fixes detects the need for them.
-          </p>
-        </div>
-
-        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-1">
-          <div class="flex items-center gap-3 mb-3">
-            <div class="entity-badge border-ds-border/50 bg-ds-surface/50 text-ds-text-secondary text-[10px] py-0.5">
-              v1.1
-            </div>
-          </div>
-          <h3 class="text-base font-semibold mb-2">External Alert Webhooks</h3>
-          <p class="text-sm text-ds-text-secondary leading-relaxed">
-            Prometheus, PagerDuty, Datadog, and Grafana can trigger Synth operations directly.
-            Your existing monitoring stack becomes the detection layer &mdash; Synth handles
-            the intelligent response.
-          </p>
-        </div>
-
-        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-2">
-          <div class="flex items-center gap-3 mb-3">
-            <div class="entity-badge border-ds-border/50 bg-ds-surface/50 text-ds-text-secondary text-[10px] py-0.5">
-              v1.1
-            </div>
-          </div>
-          <h3 class="text-base font-semibold mb-2">Debrief Reuse</h3>
-          <p class="text-sm text-ds-text-secondary leading-relaxed">
-            Full-text search across all debriefs. Pin operations for quick access. Run Again
-            pre-fills the authoring form from any past operation. Create Trigger shortcuts
-            from successful debriefs. No separate recipe system needed.
-          </p>
-        </div>
-
-        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-3">
-          <div class="flex items-center gap-3 mb-3">
-            <div class="entity-badge border-ds-border/50 bg-ds-surface/50 text-ds-text-secondary text-[10px] py-0.5">
-              v1.1
-            </div>
-          </div>
-          <h3 class="text-base font-semibold mb-2">Configurable Approval Model</h3>
-          <p class="text-sm text-ds-text-secondary leading-relaxed">
-            Read-only operations auto-approve by default. Mutating operations require explicit
-            approval. Environment overrides tighten defaults for sensitive targets. Overridable
-            per request at authoring time.
           </p>
         </div>
       </div>
@@ -415,7 +358,7 @@ import Layout from "../layouts/Layout.astro";
     <div class="relative mx-auto max-w-6xl px-6">
       <div class="text-center mb-16 scroll-reveal">
         <p class="section-heading text-ds-partition">Coming Soon</p>
-        <h2 class="text-3xl md:text-4xl font-display font-bold mb-4">v1.3 — What's next</h2>
+        <h2 class="text-3xl md:text-4xl font-display font-bold mb-4">v1.4 — What's next</h2>
         <p class="text-ds-text-secondary text-lg max-w-2xl mx-auto">
           Deeper planning intelligence, compliance workflows, and scale validation.
           Priorities shift as we learn from production usage.
