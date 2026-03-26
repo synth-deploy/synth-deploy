@@ -12,9 +12,9 @@ export default function ConfidenceIndicator({
   const pct = Math.round(value * 100);
   const w = wide ? 72 : 44;
   const level =
-    pct >= 90
+    pct >= 70
       ? { cls: "ci-high", word: "High" }
-      : pct >= 70
+      : pct >= 50
         ? { cls: "ci-medium", word: "Medium" }
         : { cls: "ci-low", word: "Low" };
 
