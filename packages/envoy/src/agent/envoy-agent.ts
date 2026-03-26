@@ -3480,9 +3480,11 @@ Installed tools: ${availableTools || "none"}`);
     this.reporter.reportDeploymentResult(result, tokenOverride).catch((err) => {
       // Log but don't fail — the synchronous response already went back.
       // Command can also pull this data via GET /deployments/:id.
+      const cause = err instanceof Error && (err as NodeJS.ErrnoException).cause;
       console.error(
         `[Envoy] Failed to report deployment ${result.operationId} to Command:`,
         err instanceof Error ? err.message : err,
+        cause ? `(cause: ${cause instanceof Error ? cause.message : cause})` : "",
       );
     });
   }

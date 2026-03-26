@@ -13,7 +13,7 @@ const DebriefEntrySchema = z.object({
   id: z.string(),
   timestamp: z.string(),
   partitionId: z.string().nullable(),
-  deploymentId: z.string().nullable(),
+  operationId: z.string().nullable(),
   agent: z.enum(["server", "envoy"]),
   decisionType: DecisionTypeEnum,
   decision: z.string(),
@@ -85,21 +85,21 @@ export function registerEnvoyReportRoutes(
     // Validate partition boundary: each debrief entry's deploymentId must
     // belong to the claimed partitionId. Reject cross-partition reports.
     for (const entry of report.debriefEntries) {
-      if (entry.deploymentId && entry.partitionId) {
-        const deployment = deployments.get(entry.deploymentId);
+      if (entry.operationId && entry.partitionId) {
+        const deployment = deployments.get(entry.operationId);
         if (!deployment || deployment.partitionId !== entry.partitionId) {
           debrief.record({
             partitionId: entry.partitionId,
-            operationId: entry.deploymentId,
+            operationId: entry.operationId,
             agent: "server",
             decisionType: "system",
             decision: "Rejected Envoy report: partition boundary violation",
-            reasoning: `Deployment ${entry.deploymentId} does not belong to partition ${entry.partitionId}. Report from envoy ${report.envoyId} rejected.`,
+            reasoning: `Deployment ${entry.operationId} does not belong to partition ${entry.partitionId}. Report from envoy ${report.envoyId} rejected.`,
             context: { envoyId: report.envoyId, reportedPartitionId: entry.partitionId },
           });
           return reply.status(403).send({
             error: "Partition boundary violation",
-            detail: `Deployment ${entry.deploymentId} does not belong to partition ${entry.partitionId}`,
+            detail: `Deployment ${entry.operationId} does not belong to partition ${entry.partitionId}`,
           });
         }
       }
@@ -114,7 +114,7 @@ export function registerEnvoyReportRoutes(
     for (const entry of report.debriefEntries) {
       debrief.record({
         partitionId: entry.partitionId,
-        operationId: entry.deploymentId,
+        operationId: entry.operationId,
         agent: entry.agent as "server" | "envoy",
         decisionType: entry.decisionType as DecisionType,
         decision: entry.decision,
