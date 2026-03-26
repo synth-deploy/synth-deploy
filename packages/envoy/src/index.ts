@@ -58,7 +58,10 @@ let reporter: import("./agent/server-reporter.js").ServerReporter | undefined;
 if (COMMAND_URL) {
   const { ServerReporter } = await import("./agent/server-reporter.js");
   const envoyToken = process.env.SYNTH_ENVOY_TOKEN;
+  console.log(`[Envoy] Reporter configured: server=${COMMAND_URL} token=${envoyToken ? "set" : "NOT SET"}`);
   reporter = new ServerReporter(COMMAND_URL, envoyId, 5_000, envoyToken);
+} else {
+  console.log("[Envoy] Reporter not configured — SYNTH_SERVER_URL is not set, reports will be skipped");
 }
 
 // LLM client for diagnostic enhancement — gracefully degrades if no API key

@@ -570,7 +570,7 @@ export function registerOperationRoutes(
         const serverPort = process.env.PORT ?? "9410";
         const serverUrl = process.env.SYNTH_SERVER_URL ?? `http://localhost:${serverPort}`;
         const progressCallbackUrl = `${serverUrl}/api/operations/${deployment.id}/progress`;
-        const callbackToken = envoyRegistry?.list().find(r => r.url === execClient.url)?.token;
+        const callbackToken = registryEnvoy?.token;
 
         deployment.status = "running" as typeof deployment.status;
         deployments.save(deployment);
@@ -2280,7 +2280,7 @@ export function registerOperationRoutes(
       const serverPort = process.env.PORT ?? "9410";
       const serverUrl = process.env.SYNTH_SERVER_URL ?? `http://localhost:${serverPort}`;
       const progressCallbackUrl = `${serverUrl}/api/operations/${child.id}/progress`;
-      const callbackToken = envoyRegistry?.list().find((r) => r.url === (targetEnvoy as { url: string }).url)?.token;
+      const callbackToken = targetEnvoy?.token;
 
       const childEnvoyClient = new EnvoyClient((targetEnvoy as { url: string }).url);
 
