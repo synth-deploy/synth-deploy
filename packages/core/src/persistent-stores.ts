@@ -140,7 +140,9 @@ export function openEntityDatabase(dbPath: string): Database.Database {
       debrief_entry_ids TEXT NOT NULL DEFAULT '[]',
       created_at TEXT NOT NULL,
       completed_at TEXT,
-      failure_reason TEXT
+      failure_reason TEXT,
+      shelved_at TEXT,
+      shelved_reason TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_deployments_partition ON deployments(partition_id);
     CREATE INDEX IF NOT EXISTS idx_deployments_artifact ON deployments(artifact_id);

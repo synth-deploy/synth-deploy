@@ -96,12 +96,12 @@ describe("Database integrity check on open", () => {
   it("creates schema_version table with correct version", () => {
     const db = openEntityDatabase(dbPath);
     const row = db.prepare("SELECT version FROM schema_version LIMIT 1").get() as { version: number };
-    expect(row.version).toBe(8);
+    expect(row.version).toBe(9);
     db.close();
   });
 
   it("warns on schema version mismatch without crashing", () => {
-    // First open creates version 8
+    // First open creates version 9
     const db1 = openEntityDatabase(dbPath);
     // Manually bump the stored version to simulate a future schema
     db1.prepare("UPDATE schema_version SET version = 999").run();
