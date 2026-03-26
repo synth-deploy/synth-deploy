@@ -29,6 +29,11 @@ export function invalidateExact(key: string): void {
   notify(key);
 }
 
+export function setQueryData<T>(key: string, data: T): void {
+  cache.set(key, { data, timestamp: Date.now() });
+  notify(key);
+}
+
 interface UseQueryResult<T> {
   data: T | null;
   loading: boolean;

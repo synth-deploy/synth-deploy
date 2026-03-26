@@ -12,7 +12,7 @@ import {
   listPartitions,
   createOperation,
 } from "../../api.js";
-import { invalidateExact } from "../../hooks/useQuery.js";
+import { setQueryData } from "../../hooks/useQuery.js";
 import type {
   Deployment,
   DeploymentEnrichment,
@@ -511,7 +511,9 @@ export default function PlanReviewPanel({ deploymentId }: Props) {
     setError(null);
     try {
       const res = await approveDeployment(deploymentId, { approvedBy: "user" });
-      invalidateExact(`deployment:${deploymentId}`);
+      // Seed cache with the running deployment so the detail panel opens SSE
+      // immediately without waiting for a fetch that might see "succeeded" already.
+      setQueryData(`deployment:${deploymentId}`, { deployment: res.deployment, debrief: [] });
       replacePanel({
         type: "deployment-detail",
         title: `Deployment ${res.deployment.id.slice(0, 8)}`,
