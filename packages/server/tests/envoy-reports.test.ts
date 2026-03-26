@@ -25,7 +25,7 @@ function makeReport(overrides: Record<string, unknown> = {}) {
         id: "entry-1",
         timestamp: new Date().toISOString(),
         partitionId: "part-1",
-        deploymentId: "dep-1",
+        operationId: "dep-1",
         agent: "envoy",
         decisionType: "deployment-execution",
         decision: "Ran step",
