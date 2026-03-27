@@ -170,7 +170,7 @@ npm run dev --workspace=packages/envoy
 
 ## Features
 
-### Community (Free)
+Self-hosted Synth is free, with no feature restrictions.
 
 - Intelligent operation planning — all six operation types
 - Artifact analysis with LLM reasoning
@@ -182,26 +182,18 @@ npm run dev --workspace=packages/envoy
 - Any LLM provider (Claude, GPT, Gemini, Ollama, and any OpenAI-compatible endpoint)
 - Artifact annotations — operator corrections that improve future analysis
 - Partitions — isolated configuration and history per team or customer
-- Up to 10 registered Envoys
-
-### Enterprise
-
-Everything in Community, plus:
-
-- **Unlimited Envoys** — scale beyond 10 registered agents
-- **Fleet Deployments** — batched rollouts and canary strategies across envoy groups
-- **Deployment Graphs** — multi-artifact dependency graphs with intelligent ordering
-- **SSO** — OIDC, SAML, and LDAP authentication
-- **Custom Roles** — granular permissions beyond the built-in roles
-- **Multi-Provider LLM** — fallback chains across multiple LLM providers
-- **Task Model Routing** — route different tasks to different models
-- **LLM Postmortems** — auto-generated postmortem analysis for failed operations
-- **External MCP Servers** — register third-party MCP servers as agent tools
-- **Co-Branding** — custom operator name, logo, and accent color
-- **Telemetry Export** — export operation telemetry to external systems
-- **Configurable Retention** — custom Debrief and history retention policies
-
-Contact [licensing@synthops.app](mailto:licensing@synthops.app) for enterprise licensing.
+- Unlimited Envoys
+- Fleet Deployments — batched rollouts and canary strategies across envoy groups
+- Deployment Graphs — multi-artifact dependency graphs with intelligent ordering
+- SSO — OIDC, SAML, and LDAP authentication
+- Custom Roles — granular permissions beyond the built-in roles
+- Multi-Provider LLM — fallback chains across multiple LLM providers
+- Task Model Routing — route different tasks to different models
+- LLM Postmortems — auto-generated postmortem analysis for failed operations
+- External MCP Servers — register third-party MCP servers as agent tools
+- Co-Branding — custom operator name, logo, and accent color
+- Telemetry Export — export operation telemetry to external systems
+- Configurable Retention — custom Debrief and history retention policies
 
 ## Configuration
 
@@ -212,20 +204,12 @@ Contact [licensing@synthops.app](mailto:licensing@synthops.app) for enterprise l
 | `SYNTH_JWT_SECRET` | Secret for JWT token signing | *required* |
 | `SYNTH_DATA_DIR` | Data directory for persistence | `./data` |
 | `SYNTH_SERVER_URL` | Server URL (for Envoy configuration) | `http://localhost:3000` |
-| `SYNTH_LICENSE_KEY` | Base64-encoded enterprise license key | — |
-| `SYNTH_LICENSE_FILE` | Path to license key file | `./synth.license` |
 
 ## License
 
 Business Source License 1.1. See [LICENSE](LICENSE).
 
-**Community use** is free for operations with up to 10 registered Envoy agents. **Production use** beyond 10 Envoys, or offering Synth as a managed service, requires a commercial license.
-
-## Pioneer Program
-
-Engineering teams running Synth against real infrastructure get full Enterprise access at no cost. In exchange: production feedback and direct roadmap input.
-
-If your team is doing real operational work and wants a seat at the table — [pioneers@synthops.app](mailto:pioneers@synthops.app).
+Self-hosted use is free with no feature restrictions. You bring the infrastructure and the LLM API key — Synth costs nothing to run.
 
 ---
 
