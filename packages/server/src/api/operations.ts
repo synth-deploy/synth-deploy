@@ -1187,6 +1187,7 @@ export function registerOperationRoutes(
           deployedVariables: deployment.variables,
           version: deployment.version ?? "",
           failureReason: deployment.failureReason ?? undefined,
+          envoyContext: targetEnvoy.envoyContext ?? undefined,
         });
 
         // Store the generated rollback plan on the deployment
@@ -1990,7 +1991,7 @@ export function registerOperationRoutes(
   async function planCompositeChildren(
     parentOp: import("@synth-deploy/core").Operation,
     _registry: EnvoyRegistry,
-    planningEnvoy: { id: string; name: string; url: string },
+    planningEnvoy: { id: string; name: string; url: string; envoyContext?: string | null },
   ): Promise<void> {
     const compositeInput = parentOp.input as { type: "composite"; operations: import("@synth-deploy/core").OperationInput[] };
     const childInputs = compositeInput.operations;

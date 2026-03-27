@@ -713,7 +713,8 @@ export type TelemetryAction =
   | "trigger.resumed"
   | "trigger.disabled"
   | "alert-webhook.created"
-  | "alert-webhook.fired";
+  | "alert-webhook.fired"
+  | "envoy.context.updated";
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
   environmentsEnabled: true,

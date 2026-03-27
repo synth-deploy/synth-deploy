@@ -343,6 +343,7 @@ export class EnvoyClient {
     deployedVariables: Record<string, string>;
     version: string;
     failureReason?: string;
+    envoyContext?: string;
   }): Promise<DeploymentPlan> {
     const llmApiKey = process.env.SYNTH_LLM_API_KEY;
     const response = await fetchWithRetry(

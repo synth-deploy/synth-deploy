@@ -82,6 +82,8 @@ const PlanRequestSchema = z.object({
   triggerCondition: z.string().optional(),
   /** Trigger-specific: what to do when the condition fires */
   triggerResponseIntent: z.string().optional(),
+  /** User-provided context about this envoy's environment */
+  envoyContext: z.string().optional(),
 });
 
 const StepSummarySchema = z.object({
@@ -259,6 +261,8 @@ export function createEnvoyServer(
     failureReason: z.string().optional(),
     /** Forwarded from Server runtime config — never logged or persisted */
     llmApiKey: z.string().optional(),
+    /** User-provided context about this envoy's environment */
+    envoyContext: z.string().optional(),
   });
 
   app.post("/rollback-plan", async (request, reply) => {

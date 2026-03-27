@@ -237,6 +237,8 @@ export interface RollbackPlanningInstruction {
    * Never recorded in debrief or persisted — used for this call only.
    */
   llmApiKey?: string;
+  /** User-provided context about this envoy's environment */
+  envoyContext?: string;
 }
 
 /**
@@ -3049,6 +3051,10 @@ ${skippedSteps.map((s, i) => `${i + 1}. [${s.status}] ${s.action} → ${s.target
 
     sections.push(`## Active Variables at Deploy Time
 ${Object.entries(instruction.deployedVariables).map(([k, v]) => `${k}=${v}`).join("\n") || "(none)"}`);
+
+    if (instruction.envoyContext) {
+      sections.push(`## Envoy Context\nThe following context was provided by the operator for this envoy. Use it to understand environment nuances and operational knowledge.\n\n${instruction.envoyContext}`);
+    }
 
     sections.push(`## Local System State
 Hostname: ${scanResult.hostname}
