@@ -261,6 +261,8 @@ export class ScriptRunner {
       let stderr = "";
       let timedOut = false;
 
+      // CodeQL[js/command-line-injection]: scripts are LLM-generated and require
+      // explicit user approval before execution — this is the intentional execution surface.
       const child = spawn(shell, args, {
         stdio: ["ignore", "pipe", "pipe"],
         timeout: this.timeoutMs,

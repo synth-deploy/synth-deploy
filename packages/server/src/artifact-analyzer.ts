@@ -106,7 +106,8 @@ Produce a JSON analysis of this artifact for deployment planning purposes.`;
   });
 
   if (!result.ok) {
-    console.warn(`[artifact-analyzer] LLM analysis failed for "${artifact.name}": ${result.reason}`);
+    const safeName = artifact.name.replace(/[\r\n]/g, " ");
+    console.warn(`[artifact-analyzer] LLM analysis failed for "${safeName}": ${result.reason}`);
     return null;
   }
 

@@ -102,7 +102,8 @@ export class IntakeProcessor {
         });
       } catch (err) {
         // Analysis failure should not block intake
-        console.error(`[IntakeProcessor] Analysis failed for ${payload.artifactName}:`, err);
+        const safeName = payload.artifactName.replace(/[\r\n]/g, " ");
+        console.error(`[IntakeProcessor] Analysis failed for ${safeName}:`, err);
       }
     }
 

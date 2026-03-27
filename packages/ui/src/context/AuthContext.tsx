@@ -55,7 +55,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const params = new URLSearchParams(window.location.search);
         const oidcToken = params.get("oidc_token");
         const oidcRefresh = params.get("oidc_refresh");
-        if (oidcToken && oidcRefresh) {
+        const isJwt = (s: string) => /^[\w-]+\.[\w-]+\.[\w-]+$/.test(s);
+        if (oidcToken && oidcRefresh && isJwt(oidcToken) && isJwt(oidcRefresh)) {
           // Clean the URL
           window.history.replaceState({}, "", window.location.pathname);
           setToken(oidcToken);
@@ -80,7 +81,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         // Try to restore session from stored refresh token
         const storedRefresh = sessionStorage.getItem("synth_refresh_token");
-        if (storedRefresh) {
+        if (storedRefresh && /^[\w-]+\.[\w-]+\.[\w-]+$/.test(storedRefresh)) {
           try {
             const result = await authRefresh(storedRefresh);
             setToken(result.token);
