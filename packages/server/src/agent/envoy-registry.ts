@@ -25,6 +25,8 @@ export interface EnvoyRegistration {
   cachedOs: string | null;
   cachedSummary: EnvoyHealthResponse["summary"] | null;
   cachedReadiness: EnvoyHealthResponse["readiness"] | null;
+  /** User-provided context about this envoy's environment, injected into LLM planning prompts */
+  envoyContext: string | null;
 }
 
 export interface EnvoyRegistryEntry extends EnvoyRegistration {
@@ -55,6 +57,7 @@ function fromPersisted(p: PersistedEnvoyRegistration): EnvoyRegistration {
     cachedOs: p.cachedOs,
     cachedSummary: p.cachedSummary as EnvoyHealthResponse["summary"] | null,
     cachedReadiness: p.cachedReadiness as EnvoyHealthResponse["readiness"] | null,
+    envoyContext: p.envoyContext,
   };
 }
 
@@ -73,6 +76,7 @@ function toPersisted(r: EnvoyRegistration): PersistedEnvoyRegistration {
     cachedOs: r.cachedOs,
     cachedSummary: r.cachedSummary,
     cachedReadiness: r.cachedReadiness,
+    envoyContext: r.envoyContext,
   };
 }
 
@@ -109,6 +113,7 @@ export class EnvoyRegistry {
       cachedOs: null,
       cachedSummary: null,
       cachedReadiness: null,
+      envoyContext: null,
     };
 
     this.store?.insert(toPersisted(registration));
@@ -185,6 +190,7 @@ export class EnvoyRegistry {
       cachedOs: null,
       cachedSummary: null,
       cachedReadiness: null,
+      envoyContext: null,
     };
     this.store?.insert(toPersisted(registration));
     return registration;
@@ -217,6 +223,17 @@ export class EnvoyRegistry {
    */
   updateHealth(id: string, status: "healthy" | "degraded" | "unreachable"): void {
     this.store?.updateHealth(id, status, new Date().toISOString());
+  }
+
+  /**
+   * Update the envoy context for an Envoy.
+   */
+  updateEnvoyContext(id: string, envoyContext: string | null): boolean {
+    if (!this.store) return false;
+    const existing = this.store.getById(id);
+    if (!existing) return false;
+    this.store.updateEnvoyContext(id, envoyContext);
+    return true;
   }
 
   /**

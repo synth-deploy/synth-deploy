@@ -51,7 +51,7 @@ import { DEFAULT_APP_SETTINGS } from "./types.js";
 // Schema version — bump when table definitions change
 // ---------------------------------------------------------------------------
 
-const SCHEMA_VERSION = 9;
+const SCHEMA_VERSION = 10;
 
 // ---------------------------------------------------------------------------
 // Safe JSON parse — returns fallback on corruption instead of crashing
@@ -318,7 +318,8 @@ export function openEntityDatabase(dbPath: string): Database.Database {
       cached_hostname TEXT,
       cached_os TEXT,
       cached_summary TEXT,
-      cached_readiness TEXT
+      cached_readiness TEXT,
+      envoy_context TEXT
     );
 
     CREATE TABLE IF NOT EXISTS intake_channels (
@@ -588,6 +589,13 @@ export function openEntityDatabase(dbPath: string): Database.Database {
     try { db.exec(`ALTER TABLE deployments ADD COLUMN shelved_reason TEXT`); } catch { /* column may already exist */ }
     db.prepare(`UPDATE schema_version SET version = ?`).run(9);
     console.log("[Synth] Migrated database schema from v8 to v9 (shelved plan support)");
+  }
+
+  // Migrate from v9 to v10: add envoy_context column for user-provided envoy context
+  if (versionRow && versionRow.version < 10) {
+    try { db.exec(`ALTER TABLE envoy_registrations ADD COLUMN envoy_context TEXT`); } catch { /* column may already exist */ }
+    db.prepare(`UPDATE schema_version SET version = ?`).run(10);
+    console.log("[Synth] Migrated database schema from v9 to v10 (envoy context)");
   }
 
   if (!versionRow) {
@@ -2308,6 +2316,7 @@ interface EnvoyRegistrationRow {
   cached_os: string | null;
   cached_summary: string | null;
   cached_readiness: string | null;
+  envoy_context: string | null;
 }
 
 /** Shape of an envoy registration persisted to SQLite. */
@@ -2325,6 +2334,7 @@ export interface PersistedEnvoyRegistration {
   cachedOs: string | null;
   cachedSummary: unknown | null;
   cachedReadiness: unknown | null;
+  envoyContext: string | null;
 }
 
 function rowToEnvoyRegistration(row: EnvoyRegistrationRow): PersistedEnvoyRegistration {
@@ -2342,6 +2352,7 @@ function rowToEnvoyRegistration(row: EnvoyRegistrationRow): PersistedEnvoyRegist
     cachedOs: row.cached_os,
     cachedSummary: safeJsonParse(row.cached_summary, null, { table: "envoy_registrations", rowId: row.id, column: "cached_summary" }),
     cachedReadiness: safeJsonParse(row.cached_readiness, null, { table: "envoy_registrations", rowId: row.id, column: "cached_readiness" }),
+    envoyContext: row.envoy_context,
   };
 }
 
@@ -2356,13 +2367,14 @@ export class PersistentEnvoyRegistryStore {
     updateCachedProbe: Database.Statement;
     deleteById: Database.Statement;
     getByToken: Database.Statement;
+    updateEnvoyContext: Database.Statement;
   };
 
   constructor(private db: Database.Database) {
     this.stmts = {
       insert: db.prepare(
-        `INSERT INTO envoy_registrations (id, name, url, token, assigned_environments, assigned_partitions, registered_at, last_health_check, last_health_status, cached_hostname, cached_os, cached_summary, cached_readiness)
-         VALUES (@id, @name, @url, @token, @assigned_environments, @assigned_partitions, @registered_at, @last_health_check, @last_health_status, @cached_hostname, @cached_os, @cached_summary, @cached_readiness)`,
+        `INSERT INTO envoy_registrations (id, name, url, token, assigned_environments, assigned_partitions, registered_at, last_health_check, last_health_status, cached_hostname, cached_os, cached_summary, cached_readiness, envoy_context)
+         VALUES (@id, @name, @url, @token, @assigned_environments, @assigned_partitions, @registered_at, @last_health_check, @last_health_status, @cached_hostname, @cached_os, @cached_summary, @cached_readiness, @envoy_context)`,
       ),
       getById: db.prepare(`SELECT * FROM envoy_registrations WHERE id = ?`),
       list: db.prepare(`SELECT * FROM envoy_registrations ORDER BY registered_at ASC`),
@@ -2378,6 +2390,7 @@ export class PersistentEnvoyRegistryStore {
       ),
       deleteById: db.prepare(`DELETE FROM envoy_registrations WHERE id = ?`),
       getByToken: db.prepare(`SELECT * FROM envoy_registrations WHERE token = ?`),
+      updateEnvoyContext: db.prepare(`UPDATE envoy_registrations SET envoy_context = @envoy_context WHERE id = @id`),
     };
   }
 
@@ -2396,6 +2409,7 @@ export class PersistentEnvoyRegistryStore {
       cached_os: reg.cachedOs,
       cached_summary: reg.cachedSummary ? JSON.stringify(reg.cachedSummary) : null,
       cached_readiness: reg.cachedReadiness ? JSON.stringify(reg.cachedReadiness) : null,
+      envoy_context: reg.envoyContext,
     });
   }
 
@@ -2456,6 +2470,10 @@ export class PersistentEnvoyRegistryStore {
   getByToken(token: string): PersistedEnvoyRegistration | undefined {
     const row = this.stmts.getByToken.get(token) as EnvoyRegistrationRow | undefined;
     return row ? rowToEnvoyRegistration(row) : undefined;
+  }
+
+  updateEnvoyContext(id: string, envoyContext: string | null): void {
+    this.stmts.updateEnvoyContext.run({ id, envoy_context: envoyContext });
   }
 }
 

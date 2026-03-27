@@ -317,6 +317,7 @@ export function registerAlertWebhookRoutes(
                 : undefined,
               version: "",
               resolvedVariables: resolved,
+              envoyContext: targetEnvoy.envoyContext ?? undefined,
             }).then((result) => {
               const dep = deployments.get(operation.id);
               if (!dep || dep.status !== "pending") return;

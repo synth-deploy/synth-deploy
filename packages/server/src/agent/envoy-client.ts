@@ -275,6 +275,7 @@ export class EnvoyClient {
       shelvedAt: string;
       shelvedReason?: string;
     };
+    envoyContext?: string;
   }): Promise<{
     plan: DeploymentPlan;
     rollbackPlan: DeploymentPlan;

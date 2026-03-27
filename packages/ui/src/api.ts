@@ -671,6 +671,7 @@ export interface EnvoyRegistryEntry {
     ready: boolean;
     reason: string;
   } | null;
+  envoyContext: string | null;
 }
 
 export async function listEnvoys(): Promise<EnvoyRegistryEntry[]> {
@@ -732,6 +733,13 @@ export interface EnvoyKnowledgeItem {
 export async function getEnvoyKnowledge(envoyId: string): Promise<EnvoyKnowledgeItem[]> {
   const data = await fetchJson<{ knowledge: EnvoyKnowledgeItem[] }>(`/api/envoys/${envoyId}/knowledge`);
   return data.knowledge;
+}
+
+export async function updateEnvoyContext(envoyId: string, context: string | null): Promise<void> {
+  await fetchJson<{ ok: boolean }>(`/api/envoys/${envoyId}/context`, {
+    method: "PUT",
+    body: JSON.stringify({ context }),
+  });
 }
 
 // --- Identity Providers ---

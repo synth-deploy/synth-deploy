@@ -41,6 +41,7 @@ export function registerEnvoyRoutes(
         readiness: e.readiness,
         assignedEnvironments: e.assignedEnvironments,
         assignedPartitions: e.assignedPartitions,
+        envoyContext: e.envoyContext,
       })),
     };
   });
@@ -106,6 +107,7 @@ export function registerEnvoyRoutes(
         readiness: entry.readiness,
         assignedEnvironments: entry.assignedEnvironments,
         assignedPartitions: entry.assignedPartitions,
+        envoyContext: entry.envoyContext,
       },
     };
   });
@@ -132,6 +134,7 @@ export function registerEnvoyRoutes(
         readiness: entry.readiness,
         assignedEnvironments: entry.assignedEnvironments,
         assignedPartitions: entry.assignedPartitions,
+        envoyContext: entry.envoyContext,
       },
     };
   });
@@ -207,6 +210,29 @@ export function registerEnvoyRoutes(
     }
 
     return { token: newToken };
+  });
+
+  // Update an Envoy's context — user-provided information injected into LLM planning prompts
+  app.put("/api/envoys/:id/context", { preHandler: [requirePermission("envoy.configure")] }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const body = request.body as { context?: string | null };
+
+    const context = body.context ?? null;
+    if (context !== null && typeof context !== "string") {
+      return reply.status(400).send({ error: "context must be a string or null" });
+    }
+    if (context !== null && context.length > 50_000) {
+      return reply.status(400).send({ error: "context must not exceed 50,000 characters" });
+    }
+
+    const success = registry.updateEnvoyContext(id, context);
+    if (!success) {
+      return reply.status(404).send({ error: "Envoy not found" });
+    }
+
+    telemetry.record({ actor: (request.user?.email) ?? "anonymous", action: "envoy.context.updated", target: { type: "envoy", id }, details: { contextLength: context?.length ?? 0 } });
+
+    return { ok: true };
   });
 
   // Get accumulated knowledge for an Envoy — system observations from environment scans

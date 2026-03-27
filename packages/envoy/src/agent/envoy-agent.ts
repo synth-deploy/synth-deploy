@@ -159,6 +159,12 @@ export interface PlanningInstruction {
     shelvedAt: string;
     shelvedReason?: string;
   };
+  /**
+   * User-provided context about this envoy's environment — injected into the
+   * LLM planning prompt so the model understands environment nuances, variable
+   * meanings, and operational knowledge before probing.
+   */
+  envoyContext?: string;
   /** Trigger-specific: the condition expression (e.g. "disk_usage > 85") */
   triggerCondition?: string;
   /** Trigger-specific: what to do when the condition fires */
@@ -1480,6 +1486,7 @@ export class EnvoyAgent {
       `Condition to monitor: ${condition}\n` +
       `Response when triggered: ${responseIntent || "(not specified)"}\n` +
       `Available variables: ${JSON.stringify(instruction.resolvedVariables)}\n\n` +
+      (instruction.envoyContext ? `Envoy Context:\n${instruction.envoyContext}\n\n` : "") +
       `Use the probe tool to explore the target system and verify your monitoring commands work:\n` +
       `- Identify what tools are available (df, free, ps, netstat, etc.)\n` +
       `- Test commands that produce the values needed to evaluate the condition\n` +
@@ -1625,6 +1632,7 @@ export class EnvoyAgent {
       (instruction.partition ? `Partition: ${instruction.partition.name}\n` : "") +
       `Objective: ${intent}\n\n` +
       `Available variables: ${JSON.stringify(instruction.resolvedVariables)}\n\n` +
+      (instruction.envoyContext ? `Envoy Context:\n${instruction.envoyContext}\n\n` : "") +
       `Use the probe tool to run read-only shell commands and gather information. ` +
       `Then summarize your findings.\n\n` +
       `When you have enough information, respond with ONLY a JSON object matching this schema:\n` +
@@ -1729,6 +1737,7 @@ export class EnvoyAgent {
         ? `Write access: authorized (you may suggest write operations in proposed resolution)\n`
         : `Write access: not authorized (read-only investigation)\n`) +
       `\nAvailable variables: ${JSON.stringify(instruction.resolvedVariables)}\n\n` +
+      (instruction.envoyContext ? `Envoy Context:\n${instruction.envoyContext}\n\n` : "") +
       `Use the probe tool to run read-only shell commands. Probe iteratively — let each ` +
       `finding guide your next probe. Correlate findings to identify root causes.\n\n` +
       `When you have completed your investigation, respond with ONLY a JSON object matching this schema:\n` +
@@ -1891,6 +1900,7 @@ export class EnvoyAgent {
       (instruction.partition ? `Partition: ${instruction.partition.name}\n` : "") +
       `Objective: ${intent}\n\n` +
       `Available variables: ${JSON.stringify(instruction.resolvedVariables)}\n\n` +
+      (instruction.envoyContext ? `Envoy Context:\n${instruction.envoyContext}\n\n` : "") +
       `Installed tools: ${availableTools || "none"}\n` +
       `Unavailable tools: ${unavailableTools || "none"}\n\n` +
       `BEFORE generating the plan, use the probe() tool to verify real machine state:\n` +
@@ -2369,6 +2379,10 @@ Variables: ${Object.keys(instruction.partition.variables).length} defined`);
 
     sections.push(`## Resolved Variables
 ${Object.entries(instruction.resolvedVariables).map(([k, v]) => `${k}=${maskIfSecret(k, v)}`).join("\n")}`);
+
+    if (instruction.envoyContext) {
+      sections.push(`## Envoy Context\nThe following context was provided by the operator for this envoy. Use it to understand environment nuances, variable meanings, and operational knowledge.\n\n${instruction.envoyContext}`);
+    }
 
     sections.push(`## Local System State
 Hostname: ${scanResult.hostname}

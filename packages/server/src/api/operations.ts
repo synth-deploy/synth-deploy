@@ -188,6 +188,7 @@ export function registerOperationRoutes(
               shelvedReason: shelvedForContext.shelvedReason,
             },
           } : {}),
+          envoyContext: planningEnvoy.envoyContext ?? undefined,
         }).then((result) => {
           const dep = deployments.get(deployment.id);
           if (!dep || dep.status !== "pending") return;
@@ -763,6 +764,7 @@ export function registerOperationRoutes(
               shelvedReason: deployment.shelvedReason,
             },
           } : {}),
+          envoyContext: planningEnvoy.envoyContext ?? undefined,
         });
       } catch (err) {
         const dep = deployments.get(deploymentId);
@@ -1005,6 +1007,7 @@ export function registerOperationRoutes(
               shelvedReason: deployment.shelvedReason,
             },
           } : {}),
+          envoyContext: planningEnvoy.envoyContext ?? undefined,
         });
       } catch (err) {
         const dep = deployments.get(deploymentId);
@@ -1452,6 +1455,7 @@ export function registerOperationRoutes(
               : undefined,
             version: deployment.version ?? "",
             resolvedVariables: resolved,
+            envoyContext: planningEnvoy.envoyContext ?? undefined,
           }).then((result) => {
             const dep = deployments.get(deployment.id);
             if (!dep || dep.status !== "pending") return;
@@ -1822,6 +1826,7 @@ export function registerOperationRoutes(
           environment: environmentForPlanning,
           version: "",
           resolvedVariables: childOp.variables,
+          envoyContext: childEnvoy.envoyContext ?? undefined,
         }).then((result) => {
           const dep = deployments.get(childOp.id);
           if (!dep || dep.status !== "pending") return;
@@ -2077,6 +2082,7 @@ export function registerOperationRoutes(
           partition: partition ? { id: partition.id, name: partition.name, variables: partition.variables } : undefined,
           version: parentOp.version ?? "",
           resolvedVariables: parentOp.variables,
+          envoyContext: planningEnvoy.envoyContext ?? undefined,
         });
 
         const childDep = deployments.get(childId);

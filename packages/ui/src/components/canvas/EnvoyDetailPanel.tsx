@@ -10,6 +10,7 @@ import {
   listDeployments,
   listArtifacts,
   updateEnvoy,
+  updateEnvoyContext,
 } from "../../api.js";
 import type {
   EnvoyRegistryEntry,
@@ -168,6 +169,9 @@ export default function EnvoyDetailPanel({ envoyId, title }: Props) {
   const [pinging, setPinging] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [editingContext, setEditingContext] = useState(false);
+  const [contextDraft, setContextDraft] = useState("");
+  const [savingContext, setSavingContext] = useState(false);
 
   if (loading) {
     return (
@@ -356,6 +360,76 @@ export default function EnvoyDetailPanel({ envoyId, title }: Props) {
           <KnowledgeCard label="Failed Plans" value={envoy.summary?.failed ?? 0} color="var(--status-failed)" />
           <KnowledgeCard label="System Observations" value={l5 ? "…" : (knowledge?.length ?? 0)} color="var(--accent)" />
           <KnowledgeCard label="Total Knowledge Items" value={envoy.summary?.totalDeployments ?? 0} color="var(--text)" />
+        </div>
+      </div>
+
+      {/* ── Envoy Context ── */}
+      <div style={{ marginBottom: 24 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+          <div className="section-label" style={{ margin: 0 }}>Envoy Context</div>
+          {!editingContext && (
+            <button
+              className="btn-accent-outline"
+              style={{ padding: "3px 10px", fontSize: 10 }}
+              onClick={() => { setEditingContext(true); setContextDraft(envoy.envoyContext ?? ""); }}
+            >
+              {envoy.envoyContext ? "Edit" : "+ Add Context"}
+            </button>
+          )}
+        </div>
+        <div style={{ padding: "14px 18px", borderRadius: 10, background: "var(--surface)", border: "1px solid var(--border)" }}>
+          {editingContext ? (
+            <div>
+              <textarea
+                value={contextDraft}
+                onChange={(e) => setContextDraft(e.target.value)}
+                placeholder="Add context about this envoy's environment — variable meanings, deployment quirks, infrastructure notes..."
+                style={{
+                  width: "100%", minHeight: 120, padding: 10, borderRadius: 6,
+                  background: "var(--bg)", border: "1px solid var(--border)", color: "var(--text)",
+                  fontFamily: "var(--font-mono)", fontSize: 12, resize: "vertical", boxSizing: "border-box",
+                }}
+                maxLength={50000}
+              />
+              <div style={{ display: "flex", gap: 8, marginTop: 8, justifyContent: "flex-end" }}>
+                <button
+                  className="btn-secondary"
+                  style={{ padding: "4px 12px", fontSize: 11 }}
+                  onClick={() => setEditingContext(false)}
+                  disabled={savingContext}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="btn-accent-outline"
+                  style={{ padding: "4px 12px", fontSize: 11 }}
+                  disabled={savingContext}
+                  onClick={async () => {
+                    setSavingContext(true);
+                    try {
+                      await updateEnvoyContext(envoyId, contextDraft.trim() || null);
+                      invalidateExact(`envoyHealth:${envoyId}`);
+                      setEditingContext(false);
+                    } finally {
+                      setSavingContext(false);
+                    }
+                  }}
+                >
+                  {savingContext ? "Saving…" : "Save"}
+                </button>
+              </div>
+            </div>
+          ) : envoy.envoyContext ? (
+            <pre style={{
+              margin: 0, fontSize: 12, color: "var(--text)", fontFamily: "var(--font-mono)",
+              whiteSpace: "pre-wrap", wordBreak: "break-word", lineHeight: 1.5,
+              maxHeight: 200, overflowY: "auto",
+            }}>
+              {envoy.envoyContext}
+            </pre>
+          ) : (
+            <div style={{ fontSize: 12, color: "var(--text-muted)" }}>No envoy context configured</div>
+          )}
         </div>
       </div>
 
