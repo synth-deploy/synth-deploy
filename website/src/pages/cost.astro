@@ -1,0 +1,78 @@
+---
+import Layout from "../layouts/Layout.astro";
+---
+
+<Layout title="Synth — Cost" description="Synth is free, forever. Self-hosted with your own infrastructure and LLM API key.">
+  <section class="relative overflow-hidden min-h-[80vh] flex items-center">
+    <div class="absolute inset-0 pointer-events-none">
+      <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px] bg-ds-accent/5 rounded-full blur-[160px]"></div>
+    </div>
+    <div class="relative mx-auto max-w-4xl px-6 py-24 text-center w-full">
+      <p class="section-heading mb-8">Cost</p>
+      <p class="text-[8rem] md:text-[12rem] font-display font-bold leading-none text-ds-text tracking-tight animate-fade-in-up">Free.</p>
+      <p class="text-[8rem] md:text-[12rem] font-display font-bold leading-none text-ds-accent tracking-tight mb-12 animate-fade-in-up" style="animation-delay: 0.1s;">Forever.</p>
+      <p class="text-ds-text-secondary text-xl max-w-2xl mx-auto leading-relaxed animate-fade-in-up mb-12" style="animation-delay: 0.2s;">
+        You're running this on your own infrastructure with your own LLM API key.
+        There's nothing to charge you for.
+      </p>
+      <div class="flex items-center justify-center gap-4 animate-fade-in-up" style="animation-delay: 0.3s;">
+        <a
+          href="https://github.com/synth-deploy/synth"
+          target="_blank"
+          rel="noopener"
+          class="rounded-md bg-ds-accent px-8 py-3 text-ds-bg font-semibold hover:bg-ds-accent/90 transition-colors"
+        >
+          Get Started
+        </a>
+        <a
+          href="/docs/installation"
+          class="rounded-md border border-ds-border px-6 py-3 text-ds-text hover:border-ds-accent-border hover:bg-ds-surface transition-colors"
+        >
+          Installation Guide
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- What's included -->
+  <section class="py-20 border-t border-ds-border">
+    <div class="mx-auto max-w-3xl px-6">
+      <p class="text-center text-ds-text-muted text-sm uppercase tracking-widest font-semibold mb-10">Everything. All of it. No asterisks.</p>
+      <div class="grid md:grid-cols-2 gap-3">
+        {[
+          "Intelligent operation planning — all six operation types",
+          "Artifact analysis with LLM reasoning",
+          "Dry-run observations before any execution",
+          "Debrief — plain-language decision log",
+          "Unlimited registered Envoys",
+          "Fleet deployments — batched rollouts and canary strategies",
+          "Deployment graphs — multi-artifact dependency ordering",
+          "SSO — OIDC, SAML, and LDAP",
+          "Custom roles and granular permissions",
+          "Multi-provider LLM with fallback chains",
+          "External MCP server registration",
+          "Co-branding and custom operator identity",
+          "Telemetry export",
+          "Configurable retention policies",
+          "REST API and MCP server",
+          "Any LLM provider — Claude, GPT, Gemini, Ollama, and more",
+        ].map((f) => (
+          <div class="flex items-start gap-2.5 text-sm text-ds-text-secondary py-2 border-b border-ds-border/40">
+            <span class="text-ds-succeeded mt-0.5 shrink-0">&#10003;</span>
+            <span>{f}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  </section>
+
+  <!-- License -->
+  <section class="py-20 border-t border-ds-border">
+    <div class="mx-auto max-w-2xl px-6 text-center">
+      <p class="text-ds-text-muted text-sm leading-relaxed">
+        Licensed under the <strong class="text-ds-text">Business Source License 1.1</strong>.
+        Source-available and self-hosted — bring your own infrastructure and LLM API key.
+      </p>
+    </div>
+  </section>
+</Layout>

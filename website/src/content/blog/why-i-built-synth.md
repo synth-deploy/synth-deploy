@@ -4,7 +4,7 @@ description: "I started using Claude at my day job as a DevOps Engineer. It let 
 pubDate: 2026-03-18
 updatedDate: 2026-03-24
 author: "Joe Fullerton"
-tags: ["deployment", "devops", "architecture", "building-in-public"]
+tags: ["operations", "devops", "architecture", "building-in-public"]
 ---
 
 I started using Claude at my day job as a DevOps Engineer. I've spent years writing deployment scripts, maintaining runbooks, debugging infrastructure. Claude allowed me to step into more traditional software engineering tasks beyond the build, configure, deploy, automate side of things. Using Claude at work made me curious to see what it could really do.
@@ -39,11 +39,13 @@ What if you could just say *"deploy this to production"* and the system actually
 
 I started calling it DeployStack. It's called Synth now.
 
-The core idea: you declare **what** you're deploying and **where**. Synth figures out **how**.
+The core idea: you declare **what** needs to happen and **where**. Synth figures out **how**.
+
+Deployments are the most obvious use case, but the same model applies to maintenance, investigation, queries against live infrastructure, and composite operations that span multiple types. Whatever the objective, the shape is the same:
 
 There are two distinct phases, and the separation is the whole point:
 
-**Planning:** The LLM reasons freely, analyzing artifacts, probing infrastructure, detecting conflicts, and producing a deployment plan. This phase is read-only. No side effects. It can think as hard as it needs to.
+**Planning:** The LLM reasons freely, analyzing artifacts, probing infrastructure, detecting conflicts, and producing an operation plan. This phase is read-only. No side effects. It can think as hard as it needs to.
 
 **Execution:** Once you approve the plan, the system executes it deterministically — the exact plan the LLM created, possibly with your input. No re-reasoning, no improvisation. If something fails mid-execution, it rolls back. It doesn't try to be clever.
 
@@ -61,8 +63,8 @@ This is me doing it anyway.
 
 ## What's Next
 
-Synth has a free Community tier (up to 10 Envoys). If you want more, I'm running a Pioneer Program — free Enterprise access in exchange for real-world feedback.
+Synth is free. Self-hosted, no feature limits, no Envoy caps. You bring the infrastructure and the LLM API key — that's it.
 
-I want to learn how your teams deploy. What works, what's missing, what I got wrong. If you're managing deployments across environments and tired of maintaining the automation that's supposed to save you time, I'd like to hear from you.
+I want to learn how your teams run operations — deployments, maintenance, incident investigation, whatever the day brings. What works, what's missing, what I got wrong. If you're managing operational work across environments and tired of maintaining the automation that's supposed to save you time, I'd like to hear from you.
 
 [synthops.app](https://synthops.app)

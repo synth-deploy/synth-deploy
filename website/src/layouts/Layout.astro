@@ -16,6 +16,15 @@ const {
 
 const canonicalURL = new URL(Astro.url.pathname, Astro.site);
 const imageURL = new URL(image, Astro.site);
+const pathname = Astro.url.pathname;
+
+function navLink(href: string, extra = "") {
+  const isActive = href === "/" ? pathname === "/" : pathname.startsWith(href);
+  const base = `flex items-center border-b-2 -mb-px pb-px transition-colors ${extra}`;
+  return isActive
+    ? `${base} text-ds-text border-ds-accent`
+    : `${base} text-ds-text-secondary border-transparent hover:text-ds-text`;
+}
 ---
 
 <!doctype html>
@@ -58,21 +67,23 @@ const imageURL = new URL(image, Astro.site);
   </head>
   <body class="min-h-screen">
     <nav class="fixed top-0 left-0 right-0 z-50 border-b border-ds-border bg-ds-header-bg backdrop-blur-lg">
-      <div class="mx-auto max-w-6xl flex items-center justify-between px-6 py-4">
-        <a href="/" class="flex items-center gap-2.5 text-lg font-bold text-ds-text">
+      <div class="mx-auto max-w-6xl flex items-stretch px-6 py-4 gap-8">
+        <a href="/" class={navLink("/", "gap-2.5 text-lg font-bold mr-2")}>
           <SynthMark size={72} />
           <span>Synth</span>
         </a>
-        <div class="flex items-center gap-6 text-sm">
-          <a href="/guide" class="text-ds-text-secondary hover:text-ds-text transition-colors">Guide</a>
-          <a href="/roadmap" class="text-ds-text-secondary hover:text-ds-text transition-colors">Roadmap</a>
-          <a href="/docs" class="text-ds-text-secondary hover:text-ds-text transition-colors">Docs</a>
-          <a href="/blog" class="text-ds-text-secondary hover:text-ds-text transition-colors">Blog</a>
+        <div class="flex items-stretch gap-6 text-sm flex-1">
+          <a href="/guide" class={navLink("/guide")}>Guide</a>
+          <a href="/roadmap" class={navLink("/roadmap")}>Roadmap</a>
+          <a href="/docs" class={navLink("/docs")}>Docs</a>
+          <a href="/blog" class={navLink("/blog")}>Blog</a>
+        </div>
+        <div class="flex items-center">
           <a
             href="https://github.com/synth-deploy/synth"
             target="_blank"
             rel="noopener"
-            class="rounded-md border border-ds-accent-border bg-ds-accent-dim px-4 py-1.5 text-ds-accent hover:bg-ds-accent-hover transition-colors font-medium"
+            class="rounded-md border border-ds-accent-border bg-ds-accent-dim px-4 py-1.5 text-ds-accent hover:bg-ds-accent-hover transition-colors font-medium text-sm"
           >
             GitHub
           </a>
@@ -97,6 +108,7 @@ const imageURL = new URL(image, Astro.site);
           <a href="/roadmap" class="hover:text-ds-text transition-colors">Roadmap</a>
           <a href="/guide" class="hover:text-ds-text transition-colors">Guide</a>
           <a href="/blog" class="hover:text-ds-text transition-colors">Blog</a>
+          <a href="/cost" class="hover:text-ds-text transition-colors">Cost</a>
           <a href="https://github.com/synth-deploy/synth" target="_blank" rel="noopener" class="hover:text-ds-text transition-colors">GitHub</a>
         </div>
       </div>

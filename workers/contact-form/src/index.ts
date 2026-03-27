@@ -2,19 +2,14 @@ interface Env {
   RESEND_API_KEY: string;
   FROM_EMAIL: string;
   NOTIFICATION_EMAIL: string;
-  PIONEER_NOTIFICATION_EMAIL: string;
 }
 
 interface FormSubmission {
-  formType: 'enterprise' | 'pioneer' | 'general';
+  formType: 'enterprise' | 'general';
   name: string;
   email: string;
   company?: string;
-  role?: string;
   teamSize?: string;
-  infrastructure?: string;
-  environments?: string;
-  tooling?: string;
   message?: string;
 }
 
@@ -41,7 +36,7 @@ function validateSubmission(data: unknown): { valid: true; submission: FormSubmi
 
   const d = data as Record<string, unknown>;
 
-  if (!d.formType || !['enterprise', 'pioneer', 'general'].includes(d.formType as string)) {
+  if (!d.formType || !['enterprise', 'general'].includes(d.formType as string)) {
     return { valid: false, error: 'Invalid or missing formType' };
   }
 
@@ -61,15 +56,6 @@ function validateSubmission(data: unknown): { valid: true; submission: FormSubmi
     }
   }
 
-  if (formType === 'pioneer') {
-    if (!d.company || typeof d.company !== 'string' || d.company.trim().length === 0) {
-      return { valid: false, error: 'Company is required for Pioneer Program applications' };
-    }
-    if (!d.role || typeof d.role !== 'string' || d.role.trim().length === 0) {
-      return { valid: false, error: 'Role/Title is required for Pioneer Program applications' };
-    }
-  }
-
   if (formType === 'general') {
     if (!d.message || typeof d.message !== 'string' || d.message.trim().length === 0) {
       return { valid: false, error: 'Message is required' };
@@ -83,11 +69,7 @@ function validateSubmission(data: unknown): { valid: true; submission: FormSubmi
       name: (d.name as string).trim(),
       email: (d.email as string).trim(),
       company: d.company ? (d.company as string).trim() : undefined,
-      role: d.role ? (d.role as string).trim() : undefined,
       teamSize: d.teamSize ? (d.teamSize as string).trim() : undefined,
-      infrastructure: d.infrastructure ? (d.infrastructure as string).trim() : undefined,
-      environments: d.environments ? (d.environments as string).trim() : undefined,
-      tooling: d.tooling ? (d.tooling as string).trim() : undefined,
       message: d.message ? (d.message as string).trim() : undefined,
     },
   };
@@ -105,8 +87,6 @@ function buildSubject(submission: FormSubmission): string {
   switch (submission.formType) {
     case 'enterprise':
       return `Enterprise Inquiry from ${submission.name} at ${submission.company}`;
-    case 'pioneer':
-      return `Pioneer Program Application from ${submission.name} at ${submission.company}`;
     case 'general':
       return `Contact Form Submission from ${submission.name}`;
   }
@@ -132,7 +112,6 @@ function buildNotificationHtml(submission: FormSubmission): string {
   addRow('Message', submission.message);
 
   const typeLabel = submission.formType === 'enterprise' ? 'Enterprise Inquiry'
-    : submission.formType === 'pioneer' ? 'Pioneer Program Application'
     : 'General Contact';
 
   return `
@@ -158,8 +137,6 @@ function buildNotificationHtml(submission: FormSubmission): string {
 function buildConfirmationHtml(submission: FormSubmission): string {
   const typeMessage = submission.formType === 'enterprise'
     ? "We've received your enterprise licensing inquiry and will be in touch within 48 hours."
-    : submission.formType === 'pioneer'
-    ? "We've received your Pioneer Program application. We'll review it and get back to you within 48 hours."
     : "We've received your message and will get back to you within 48 hours.";
 
   return `
@@ -252,9 +229,7 @@ export default {
     const subject = buildSubject(submission);
 
     // Determine notification recipient
-    const notificationEmail = submission.formType === 'pioneer'
-      ? env.PIONEER_NOTIFICATION_EMAIL
-      : env.NOTIFICATION_EMAIL;
+    const notificationEmail = env.NOTIFICATION_EMAIL;
 
     // Send notification email to team
     const notificationSent = await sendEmail(
@@ -273,9 +248,7 @@ export default {
     }
 
     // Send confirmation email to submitter (best-effort, don't fail if this doesn't send)
-    const confirmSubject = submission.formType === 'pioneer'
-      ? 'Thanks for applying to the Synth Pioneer Program'
-      : submission.formType === 'enterprise'
+    const confirmSubject = submission.formType === 'enterprise'
       ? 'Thanks for your Synth enterprise inquiry'
       : 'Thanks for contacting Synth';
 
