@@ -2,7 +2,6 @@ import type { FastifyInstance } from "fastify";
 import type { ISettingsStore, ITelemetryStore, IDeploymentStore, DebriefReader } from "@synth-deploy/core";
 import type { EnvoyRegistry } from "../agent/envoy-registry.js";
 import { requirePermission } from "../middleware/permissions.js";
-import { getMaxEnvoys, EditionError } from "@synth-deploy/core";
 
 export function registerEnvoyRoutes(
   app: FastifyInstance,
@@ -57,12 +56,6 @@ export function registerEnvoyRoutes(
 
     if (!body.name || !body.url) {
       return reply.status(400).send({ error: "name and url are required" });
-    }
-
-    // Enforce envoy count limit (Community: 10, Enterprise: license value)
-    const maxEnvoys = getMaxEnvoys();
-    if (maxEnvoys > 0 && registry.listEntries().length >= maxEnvoys) {
-      throw new EditionError("unlimited-envoys");
     }
 
     const registration = registry.register({

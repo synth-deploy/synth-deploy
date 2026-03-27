@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import type { IArtifactStore, ITelemetryStore } from "@synth-deploy/core";
-import { requirePermission, requireEdition } from "../middleware/permissions.js";
+import { requirePermission } from "../middleware/permissions.js";
 import {
   CreateArtifactSchema,
   UpdateArtifactSchema,

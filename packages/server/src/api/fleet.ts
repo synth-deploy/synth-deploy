@@ -5,7 +5,7 @@ import type { EnvoyRegistry } from "../agent/envoy-registry.js";
 import type { FleetDeploymentStore } from "../fleet/fleet-store.js";
 import type { FleetExecutor, FleetProgressEvent } from "../fleet/fleet-executor.js";
 import { selectRepresentatives } from "../fleet/representative-selector.js";
-import { requirePermission, requireEdition } from "../middleware/permissions.js";
+import { requirePermission } from "../middleware/permissions.js";
 
 /**
  * REST API routes for fleet (large-scale) deployments.

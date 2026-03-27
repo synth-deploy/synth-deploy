@@ -214,16 +214,7 @@ export {
   initEdition,
   getEdition,
   isEnterprise,
-  requireEnterprise,
   getMaxEnvoys,
   isPartnership,
   getLicenseInfo,
-  EditionError,
-  ENTERPRISE_FEATURES,
-} from "./edition.js";
-export type {
-  Edition,
-  LicensePayload,
-  LicenseInfo,
-  EnterpriseFeature,
 } from "./edition.js";

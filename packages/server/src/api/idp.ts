@@ -13,7 +13,7 @@ import type {
   UserId,
   RoleId,
 } from "@synth-deploy/core";
-import { requirePermission, requireEdition } from "../middleware/permissions.js";
+import { requirePermission } from "../middleware/permissions.js";
 import { generateTokens } from "../middleware/auth.js";
 import { OidcAdapter } from "../auth/idp/oidc.js";
 import { SamlAdapter } from "../auth/idp/saml.js";

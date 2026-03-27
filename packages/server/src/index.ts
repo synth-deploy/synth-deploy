@@ -9,7 +9,7 @@ import fastifyStatic from "@fastify/static";
 import fastifyFormBody from "@fastify/formbody";
 import fastifyMultipart from "@fastify/multipart";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { PersistentDecisionDebrief, openEntityDatabase, PersistentPartitionStore, PersistentEnvironmentStore, PersistentSettingsStore, PersistentDeploymentStore, PersistentArtifactStore, PersistentSecurityBoundaryStore, PersistentTelemetryStore, PersistentUserStore, PersistentRoleStore, PersistentUserRoleStore, PersistentSessionStore, PersistentIdpProviderStore, PersistentRoleMappingStore, PersistentApiKeyStore, PersistentEnvoyRegistryStore, PersistentRegistryPollerVersionStore, PersistentAlertWebhookStore, LlmClient, buildLlmConfigFromSettings, initEdition, EditionError } from "@synth-deploy/core";
+import { PersistentDecisionDebrief, openEntityDatabase, PersistentPartitionStore, PersistentEnvironmentStore, PersistentSettingsStore, PersistentDeploymentStore, PersistentArtifactStore, PersistentSecurityBoundaryStore, PersistentTelemetryStore, PersistentUserStore, PersistentRoleStore, PersistentUserRoleStore, PersistentSessionStore, PersistentIdpProviderStore, PersistentRoleMappingStore, PersistentApiKeyStore, PersistentEnvoyRegistryStore, PersistentRegistryPollerVersionStore, PersistentAlertWebhookStore, LlmClient, buildLlmConfigFromSettings, initEdition } from "@synth-deploy/core";
 import type { Deployment, Artifact, ArtifactVersion, SecurityBoundary, Permission, RoleId } from "@synth-deploy/core";
 import { SynthAgent } from "./agent/synth-agent.js";
 import { EnvoyHealthChecker } from "./agent/health-checker.js";
@@ -116,7 +116,7 @@ if (!process.env.SYNTH_DATA_DIR) {
   console.warn("[Synth] WARNING: SYNTH_DATA_DIR is not set. Using default ./data directory.");
 }
 
-// --- Resolve edition (Community or Enterprise) ---
+// Initialize edition system
 initEdition();
 
 const envoyRegistryStore = new PersistentEnvoyRegistryStore(entityDb);
@@ -674,16 +674,9 @@ const mcp = createMcpServer({ agent, debrief, partitions, environments, deployme
 
 const app = Fastify({ logger: true });
 
-// Map EditionError → 402 Payment Required
+// Fastify error handler
 app.setErrorHandler((error, _request, reply) => {
-  if (error instanceof EditionError) {
-    return reply.status(402).send({
-      error: "Enterprise feature",
-      feature: error.featureName,
-      message: error.message,
-    });
-  }
-  // Let Fastify handle everything else
+  // Let Fastify handle all errors
   reply.send(error);
 });
 
