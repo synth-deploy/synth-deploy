@@ -2,7 +2,7 @@
 import Layout from "../layouts/Layout.astro";
 ---
 
-<Layout title="Synth — Roadmap" description="Synth product roadmap: v1.3 just shipped with plan fidelity improvements — simulation scripts in plan review, Shelve action, envoy dispatch routing, and composite WHERE selector. See what's available, what's next, and the long-term vision.">
+<Layout title="Synth — Roadmap" description="Synth product roadmap: v2.0 just shipped — free forever, no edition tiers, no license keys, no feature gates. See what's available, what's next, and the long-term vision.">
   <!-- Hero -->
   <section class="relative overflow-hidden">
     <div class="absolute inset-0 pointer-events-none">
@@ -23,7 +23,7 @@ import Layout from "../layouts/Layout.astro";
     </div>
   </section>
 
-  <!-- Just Shipped (v1.3) -->
+  <!-- Just Shipped (v2.0) -->
   <section class="py-28 border-t border-ds-border relative overflow-hidden">
     <div class="absolute inset-0 pointer-events-none">
       <div class="absolute top-1/3 right-1/4 w-96 h-96 bg-ds-accent/5 rounded-full blur-[120px]"></div>
@@ -33,6 +33,59 @@ import Layout from "../layouts/Layout.astro";
     <div class="relative mx-auto max-w-6xl px-6">
       <div class="text-center mb-16 scroll-reveal">
         <p class="section-heading text-ds-accent">Just Shipped</p>
+        <h2 class="text-3xl md:text-4xl font-display font-bold mb-4">v2.0 — Free Forever</h2>
+      </div>
+
+      <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-1">
+          <div class="flex items-center gap-3 mb-3">
+            <div class="entity-badge border-ds-accent/30 bg-ds-accent/10 text-ds-accent text-[10px] py-0.5">
+              v2.0
+            </div>
+          </div>
+          <h3 class="text-base font-semibold mb-2">Free Forever</h3>
+          <p class="text-sm text-ds-text-secondary leading-relaxed">
+            No edition tiers, no license keys, no envoy caps. Self-hosted Synth includes everything.
+          </p>
+        </div>
+
+        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-2">
+          <div class="flex items-center gap-3 mb-3">
+            <div class="entity-badge border-ds-accent/30 bg-ds-accent/10 text-ds-accent text-[10px] py-0.5">
+              v2.0
+            </div>
+          </div>
+          <h3 class="text-base font-semibold mb-2">No Feature Gates</h3>
+          <p class="text-sm text-ds-text-secondary leading-relaxed">
+            Fleet deployments, SSO, deployment graphs, co-branding — all available without a license.
+          </p>
+        </div>
+
+        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-3">
+          <div class="flex items-center gap-3 mb-3">
+            <div class="entity-badge border-ds-accent/30 bg-ds-accent/10 text-ds-accent text-[10px] py-0.5">
+              v2.0
+            </div>
+          </div>
+          <h3 class="text-base font-semibold mb-2">Simplified Licensing</h3>
+          <p class="text-sm text-ds-text-secondary leading-relaxed">
+            BSL 1.1 with a single restriction — no offering Synth as a managed service.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- v1.3 — Plan Fidelity (Previously Released) -->
+  <section class="py-28 border-t border-ds-border relative overflow-hidden">
+    <div class="absolute inset-0 pointer-events-none">
+      <div class="absolute top-1/3 right-1/4 w-96 h-96 bg-ds-accent/5 rounded-full blur-[120px]"></div>
+      <div class="absolute bottom-1/4 left-1/3 w-72 h-72 bg-ds-partition/5 rounded-full blur-[100px]"></div>
+    </div>
+
+    <div class="relative mx-auto max-w-6xl px-6">
+      <div class="text-center mb-16 scroll-reveal">
+        <p class="section-heading">Previously Released</p>
         <h2 class="text-3xl md:text-4xl font-display font-bold mb-4">v1.3 — Plan Fidelity</h2>
         <p class="text-ds-text-secondary text-lg max-w-2xl mx-auto">
           More visibility before you approve, better routing after you do. Plan review,
@@ -43,7 +96,7 @@ import Layout from "../layouts/Layout.astro";
       <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
         <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-1">
           <div class="flex items-center gap-3 mb-3">
-            <div class="entity-badge border-ds-accent/30 bg-ds-accent/10 text-ds-accent text-[10px] py-0.5">
+            <div class="entity-badge border-ds-border/50 bg-ds-surface/50 text-ds-text-secondary text-[10px] py-0.5">
               v1.3
             </div>
           </div>
@@ -57,7 +110,7 @@ import Layout from "../layouts/Layout.astro";
 
         <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-2">
           <div class="flex items-center gap-3 mb-3">
-            <div class="entity-badge border-ds-accent/30 bg-ds-accent/10 text-ds-accent text-[10px] py-0.5">
+            <div class="entity-badge border-ds-border/50 bg-ds-surface/50 text-ds-text-secondary text-[10px] py-0.5">
               v1.3
             </div>
           </div>
@@ -71,7 +124,7 @@ import Layout from "../layouts/Layout.astro";
 
         <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-3">
           <div class="flex items-center gap-3 mb-3">
-            <div class="entity-badge border-ds-accent/30 bg-ds-accent/10 text-ds-accent text-[10px] py-0.5">
+            <div class="entity-badge border-ds-border/50 bg-ds-surface/50 text-ds-text-secondary text-[10px] py-0.5">
               v1.3
             </div>
           </div>
@@ -85,7 +138,7 @@ import Layout from "../layouts/Layout.astro";
 
         <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-1">
           <div class="flex items-center gap-3 mb-3">
-            <div class="entity-badge border-ds-accent/30 bg-ds-accent/10 text-ds-accent text-[10px] py-0.5">
+            <div class="entity-badge border-ds-border/50 bg-ds-surface/50 text-ds-text-secondary text-[10px] py-0.5">
               v1.3
             </div>
           </div>
@@ -99,7 +152,7 @@ import Layout from "../layouts/Layout.astro";
 
         <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-2">
           <div class="flex items-center gap-3 mb-3">
-            <div class="entity-badge border-ds-accent/30 bg-ds-accent/10 text-ds-accent text-[10px] py-0.5">
+            <div class="entity-badge border-ds-border/50 bg-ds-surface/50 text-ds-text-secondary text-[10px] py-0.5">
               v1.3
             </div>
           </div>
@@ -114,111 +167,6 @@ import Layout from "../layouts/Layout.astro";
     </div>
   </section>
 
-  <!-- v1.2 — Scripted Plans (Previously Released) -->
-  <section class="py-28 border-t border-ds-border relative overflow-hidden">
-    <div class="absolute inset-0 pointer-events-none">
-      <div class="absolute top-1/3 right-1/4 w-96 h-96 bg-ds-dt-plan/5 rounded-full blur-[120px]"></div>
-      <div class="absolute bottom-1/4 left-1/3 w-72 h-72 bg-ds-partition/5 rounded-full blur-[100px]"></div>
-    </div>
-
-    <div class="relative mx-auto max-w-6xl px-6">
-      <div class="text-center mb-16 scroll-reveal">
-        <p class="section-heading">Previously Released</p>
-        <h2 class="text-3xl md:text-4xl font-display font-bold mb-4">v1.2 — Scripted Plans</h2>
-        <p class="text-ds-text-secondary text-lg max-w-2xl mx-auto">
-          A fundamental architecture shift. The envoy no longer relies on built-in handlers &mdash;
-          the LLM generates bash and powershell scripts tailored to each operation. If your shell
-          can do it, Synth can plan, validate, and execute it.
-        </p>
-      </div>
-
-      <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-1">
-          <div class="flex items-center gap-3 mb-3">
-            <div class="entity-badge border-ds-border/50 bg-ds-surface/50 text-ds-text-secondary text-[10px] py-0.5">
-              v1.2
-            </div>
-          </div>
-          <h3 class="text-base font-semibold mb-2">LLM-Generated Execution Scripts</h3>
-          <p class="text-sm text-ds-text-secondary leading-relaxed">
-            Planning produces bash or powershell scripts for every step. No hard-coded handlers,
-            no format limitations. The agent reasons about your target and writes the exact
-            commands needed &mdash; approved verbatim, executed deterministically.
-          </p>
-        </div>
-
-        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-2">
-          <div class="flex items-center gap-3 mb-3">
-            <div class="entity-badge border-ds-border/50 bg-ds-surface/50 text-ds-text-secondary text-[10px] py-0.5">
-              v1.2
-            </div>
-          </div>
-          <h3 class="text-base font-semibold mb-2">Universal Target Support</h3>
-          <p class="text-sm text-ds-text-secondary leading-relaxed">
-            Kubernetes, Terraform, Ansible, cloud CLIs, database migrations, custom toolchains &mdash;
-            if it has a CLI, Synth can operate on it. No handler needed. No plugin required.
-            The shell is the interface.
-          </p>
-        </div>
-
-        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-3">
-          <div class="flex items-center gap-3 mb-3">
-            <div class="entity-badge border-ds-border/50 bg-ds-surface/50 text-ds-text-secondary text-[10px] py-0.5">
-              v1.2
-            </div>
-          </div>
-          <h3 class="text-base font-semibold mb-2">Boundary Validation</h3>
-          <p class="text-sm text-ds-text-secondary leading-relaxed">
-            Every generated script is audited against the approved plan before execution.
-            LLM-powered boundary checks ensure scripts stay within scope &mdash; no unexpected
-            mutations, no scope creep, no surprises at 2am.
-          </p>
-        </div>
-
-        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-1">
-          <div class="flex items-center gap-3 mb-3">
-            <div class="entity-badge border-ds-border/50 bg-ds-surface/50 text-ds-text-secondary text-[10px] py-0.5">
-              v1.2
-            </div>
-          </div>
-          <h3 class="text-base font-semibold mb-2">Dry-Run Scripts</h3>
-          <p class="text-sm text-ds-text-secondary leading-relaxed">
-            Preview exactly what will execute before approving. Dry-run scripts probe target
-            state and surface conflicts without side effects &mdash; the same intelligence that
-            plans the operation validates its feasibility.
-          </p>
-        </div>
-
-        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-2">
-          <div class="flex items-center gap-3 mb-3">
-            <div class="entity-badge border-ds-border/50 bg-ds-surface/50 text-ds-text-secondary text-[10px] py-0.5">
-              v1.2
-            </div>
-          </div>
-          <h3 class="text-base font-semibold mb-2">Automatic Rollback Generation</h3>
-          <p class="text-sm text-ds-text-secondary leading-relaxed">
-            Every mutating script gets a paired rollback script generated alongside it.
-            If execution fails mid-plan, rollback runs automatically &mdash; returning
-            the environment to a known state with no manual intervention.
-          </p>
-        </div>
-
-        <div class="glass-card p-6 scroll-reveal scroll-reveal-delay-3">
-          <div class="flex items-center gap-3 mb-3">
-            <div class="entity-badge border-ds-border/50 bg-ds-surface/50 text-ds-text-secondary text-[10px] py-0.5">
-              v1.2
-            </div>
-          </div>
-          <h3 class="text-base font-semibold mb-2">Cross-Platform Execution</h3>
-          <p class="text-sm text-ds-text-secondary leading-relaxed">
-            Bash for Linux and macOS targets. PowerShell for Windows. The agent detects the
-            target platform and generates scripts in the right language &mdash; same operation
-            intent, native execution on every OS.
-          </p>
-        </div>
-      </div>
-    </div>
-  </section>
 
   <!-- v1.0 — The Foundation (compact) -->
   <section class="py-28 border-t border-ds-border">
@@ -348,7 +296,7 @@ import Layout from "../layouts/Layout.astro";
     </div>
   </section>
 
-  <!-- Coming Soon (v1.3) -->
+  <!-- Coming Soon (v2.1) -->
   <section class="py-28 border-t border-ds-border relative overflow-hidden">
     <div class="absolute inset-0 pointer-events-none">
       <div class="absolute top-1/3 right-1/4 w-96 h-96 bg-ds-dt-plan/5 rounded-full blur-[120px]"></div>
@@ -358,7 +306,7 @@ import Layout from "../layouts/Layout.astro";
     <div class="relative mx-auto max-w-6xl px-6">
       <div class="text-center mb-16 scroll-reveal">
         <p class="section-heading text-ds-partition">Coming Soon</p>
-        <h2 class="text-3xl md:text-4xl font-display font-bold mb-4">v1.4 — What's next</h2>
+        <h2 class="text-3xl md:text-4xl font-display font-bold mb-4">v2.1 — What's next</h2>
         <p class="text-ds-text-secondary text-lg max-w-2xl mx-auto">
           Deeper planning intelligence, compliance workflows, and scale validation.
           Priorities shift as we learn from production usage.
