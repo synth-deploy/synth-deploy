@@ -24,7 +24,7 @@ export function registerGraphRoutes(
   // Create a deployment graph (triggers inference)
   app.post(
     "/api/deployment-graphs",
-    { preHandler: [requireEdition("deployment-graphs"), requirePermission("deployment.create")] },
+    { preHandler: [requirePermission("deployment.create")] },
     async (request, reply) => {
       const body = request.body as {
         name?: string;
@@ -104,7 +104,7 @@ export function registerGraphRoutes(
   // List all deployment graphs
   app.get(
     "/api/deployment-graphs",
-    { preHandler: [requireEdition("deployment-graphs"), requirePermission("deployment.view")] },
+    { preHandler: [requirePermission("deployment.view")] },
     async () => {
       return { graphs: graphStore.list() };
     },
@@ -113,7 +113,7 @@ export function registerGraphRoutes(
   // Get a specific deployment graph with node statuses
   app.get(
     "/api/deployment-graphs/:id",
-    { preHandler: [requireEdition("deployment-graphs"), requirePermission("deployment.view")] },
+    { preHandler: [requirePermission("deployment.view")] },
     async (request, reply) => {
       const { id } = request.params as { id: string };
       const graph = graphStore.getById(id);
@@ -140,7 +140,7 @@ export function registerGraphRoutes(
   // Update a deployment graph (user corrections to inferred structure)
   app.put(
     "/api/deployment-graphs/:id",
-    { preHandler: [requireEdition("deployment-graphs"), requirePermission("deployment.create")] },
+    { preHandler: [requirePermission("deployment.create")] },
     async (request, reply) => {
       const { id } = request.params as { id: string };
       const graph = graphStore.getById(id);
@@ -186,7 +186,7 @@ export function registerGraphRoutes(
   // Delete a deployment graph
   app.delete(
     "/api/deployment-graphs/:id",
-    { preHandler: [requireEdition("deployment-graphs"), requirePermission("deployment.create")] },
+    { preHandler: [requirePermission("deployment.create")] },
     async (request, reply) => {
       const { id } = request.params as { id: string };
 
@@ -209,7 +209,7 @@ export function registerGraphRoutes(
   // Execute a deployment graph
   app.post(
     "/api/deployment-graphs/:id/execute",
-    { preHandler: [requireEdition("deployment-graphs"), requirePermission("deployment.approve")] },
+    { preHandler: [requirePermission("deployment.approve")] },
     async (request, reply) => {
       const { id } = request.params as { id: string };
       const body = request.body as {
@@ -331,7 +331,7 @@ export function registerGraphRoutes(
   // Rollback a deployment graph
   app.post(
     "/api/deployment-graphs/:id/rollback",
-    { preHandler: [requireEdition("deployment-graphs"), requirePermission("deployment.rollback")] },
+    { preHandler: [requirePermission("deployment.rollback")] },
     async (request, reply) => {
       const { id } = request.params as { id: string };
       const body = request.body as {
@@ -382,7 +382,7 @@ export function registerGraphRoutes(
   // Per-node approval (for per-node approval mode)
   app.post(
     "/api/deployment-graphs/:id/nodes/:nodeId/approve",
-    { preHandler: [requireEdition("deployment-graphs"), requirePermission("deployment.approve")] },
+    { preHandler: [requirePermission("deployment.approve")] },
     async (request, reply) => {
       const { id, nodeId } = request.params as { id: string; nodeId: string };
 
@@ -418,7 +418,7 @@ export function registerGraphRoutes(
   // Approve remaining nodes — switch from per-node to graph approval mid-execution
   app.post(
     "/api/deployment-graphs/:id/approve-remaining",
-    { preHandler: [requireEdition("deployment-graphs"), requirePermission("deployment.approve")] },
+    { preHandler: [requirePermission("deployment.approve")] },
     async (request, reply) => {
       const { id } = request.params as { id: string };
 
@@ -442,7 +442,7 @@ export function registerGraphRoutes(
   // Retry a failed node
   app.post(
     "/api/deployment-graphs/:id/nodes/:nodeId/retry",
-    { preHandler: [requireEdition("deployment-graphs"), requirePermission("deployment.approve")] },
+    { preHandler: [requirePermission("deployment.approve")] },
     async (request, reply) => {
       const { id, nodeId } = request.params as { id: string; nodeId: string };
 
@@ -478,7 +478,7 @@ export function registerGraphRoutes(
   // Skip a failed node — allows downstream to proceed
   app.post(
     "/api/deployment-graphs/:id/nodes/:nodeId/skip",
-    { preHandler: [requireEdition("deployment-graphs"), requirePermission("deployment.approve")] },
+    { preHandler: [requirePermission("deployment.approve")] },
     async (request, reply) => {
       const { id, nodeId } = request.params as { id: string; nodeId: string };
 

@@ -81,13 +81,13 @@ export function registerIdpRoutes(
   // ─── IdP Provider CRUD (admin only) ───────────────────────────────
 
   // GET /api/idp/providers — list configured IdPs
-  app.get("/api/idp/providers", { preHandler: [requireEdition("sso"), requirePermission("settings.manage")] }, async () => {
+  app.get("/api/idp/providers", { preHandler: [requirePermission("settings.manage")] }, async () => {
     const providers = idpProviderStore.list();
     return { providers: providers.map(toPublicProvider) };
   });
 
   // POST /api/idp/providers — create new IdP
-  app.post("/api/idp/providers", { preHandler: [requireEdition("sso"), requirePermission("settings.manage")] }, async (request, reply) => {
+  app.post("/api/idp/providers", { preHandler: [requirePermission("settings.manage")] }, async (request, reply) => {
     if (!hasDedicatedEncryptionKey) {
       return reply.status(503).send({
         error: "Encryption key not configured. Set SYNTH_ENCRYPTION_KEY environment variable before configuring identity providers.",
@@ -116,7 +116,7 @@ export function registerIdpRoutes(
   });
 
   // PUT /api/idp/providers/:id — update IdP config
-  app.put<{ Params: { id: string } }>("/api/idp/providers/:id", { preHandler: [requireEdition("sso"), requirePermission("settings.manage")] }, async (request, reply) => {
+  app.put<{ Params: { id: string } }>("/api/idp/providers/:id", { preHandler: [requirePermission("settings.manage")] }, async (request, reply) => {
     if (!hasDedicatedEncryptionKey) {
       return reply.status(503).send({
         error: "Encryption key not configured. Set SYNTH_ENCRYPTION_KEY environment variable before configuring identity providers.",
@@ -156,7 +156,7 @@ export function registerIdpRoutes(
   });
 
   // DELETE /api/idp/providers/:id — remove IdP
-  app.delete<{ Params: { id: string } }>("/api/idp/providers/:id", { preHandler: [requireEdition("sso"), requirePermission("settings.manage")] }, async (request, reply) => {
+  app.delete<{ Params: { id: string } }>("/api/idp/providers/:id", { preHandler: [requirePermission("settings.manage")] }, async (request, reply) => {
     const existing = idpProviderStore.getById(request.params.id);
     if (!existing) {
       return reply.status(404).send({ error: "IdP provider not found" });
@@ -166,7 +166,7 @@ export function registerIdpRoutes(
   });
 
   // POST /api/idp/providers/:id/test — test connection
-  app.post<{ Params: { id: string } }>("/api/idp/providers/:id/test", { preHandler: [requireEdition("sso"), requirePermission("settings.manage")] }, async (request, reply) => {
+  app.post<{ Params: { id: string } }>("/api/idp/providers/:id/test", { preHandler: [requirePermission("settings.manage")] }, async (request, reply) => {
     const provider = idpProviderStore.getById(request.params.id);
     if (!provider) {
       return reply.status(404).send({ error: "IdP provider not found" });
@@ -193,7 +193,7 @@ export function registerIdpRoutes(
   // ─── Role Mapping CRUD ────────────────────────────────────────────
 
   // GET /api/idp/providers/:id/mappings — list role mapping rules
-  app.get<{ Params: { id: string } }>("/api/idp/providers/:id/mappings", { preHandler: [requireEdition("sso"), requirePermission("settings.manage")] }, async (request, reply) => {
+  app.get<{ Params: { id: string } }>("/api/idp/providers/:id/mappings", { preHandler: [requirePermission("settings.manage")] }, async (request, reply) => {
     const provider = idpProviderStore.getById(request.params.id);
     if (!provider) {
       return reply.status(404).send({ error: "IdP provider not found" });
@@ -203,7 +203,7 @@ export function registerIdpRoutes(
   });
 
   // POST /api/idp/providers/:id/mappings — add role mapping rule
-  app.post<{ Params: { id: string } }>("/api/idp/providers/:id/mappings", { preHandler: [requireEdition("sso"), requirePermission("settings.manage")] }, async (request, reply) => {
+  app.post<{ Params: { id: string } }>("/api/idp/providers/:id/mappings", { preHandler: [requirePermission("settings.manage")] }, async (request, reply) => {
     const provider = idpProviderStore.getById(request.params.id);
     if (!provider) {
       return reply.status(404).send({ error: "IdP provider not found" });
@@ -225,7 +225,7 @@ export function registerIdpRoutes(
   });
 
   // DELETE /api/idp/mappings/:id — remove mapping rule
-  app.delete<{ Params: { id: string } }>("/api/idp/mappings/:id", { preHandler: [requireEdition("sso"), requirePermission("settings.manage")] }, async (request, reply) => {
+  app.delete<{ Params: { id: string } }>("/api/idp/mappings/:id", { preHandler: [requirePermission("settings.manage")] }, async (request, reply) => {
     const existing = roleMappingStore.getById(request.params.id);
     if (!existing) {
       return reply.status(404).send({ error: "Role mapping not found" });
@@ -697,7 +697,7 @@ export function registerIdpRoutes(
   // POST /api/idp/providers/:id/test-ldap-user — test user search (admin only)
   app.post<{ Params: { id: string } }>(
     "/api/idp/providers/:id/test-ldap-user",
-    { preHandler: [requireEdition("sso"), requirePermission("settings.manage")] },
+    { preHandler: [requirePermission("settings.manage")] },
     async (request, reply) => {
       const provider = idpProviderStore.getById(request.params.id);
       if (!provider) {

@@ -24,7 +24,7 @@ export function registerFleetRoutes(
   // -----------------------------------------------------------------------
   app.post(
     "/api/fleet-deployments",
-    { preHandler: [requireEdition("fleet-deployments"), requirePermission("deployment.create")] },
+    { preHandler: [requirePermission("deployment.create")] },
     async (request, reply) => {
       const body = request.body as {
         artifactId?: string;
@@ -119,7 +119,7 @@ export function registerFleetRoutes(
   // -----------------------------------------------------------------------
   app.post<{ Params: { id: string } }>(
     "/api/fleet-deployments/:id/plan",
-    { preHandler: [requireEdition("fleet-deployments"), requirePermission("deployment.create")] },
+    { preHandler: [requirePermission("deployment.create")] },
     async (request, reply) => {
       const fleet = fleetStore.getById(request.params.id);
       if (!fleet) {
@@ -178,7 +178,7 @@ export function registerFleetRoutes(
   // -----------------------------------------------------------------------
   app.get(
     "/api/fleet-deployments",
-    { preHandler: [requireEdition("fleet-deployments"), requirePermission("deployment.view")] },
+    { preHandler: [requirePermission("deployment.view")] },
     async () => {
       return { fleetDeployments: fleetStore.list() };
     },
@@ -189,7 +189,7 @@ export function registerFleetRoutes(
   // -----------------------------------------------------------------------
   app.get<{ Params: { id: string } }>(
     "/api/fleet-deployments/:id",
-    { preHandler: [requireEdition("fleet-deployments"), requirePermission("deployment.view")] },
+    { preHandler: [requirePermission("deployment.view")] },
     async (request, reply) => {
       const fleet = fleetStore.getById(request.params.id);
       if (!fleet) {
@@ -204,7 +204,7 @@ export function registerFleetRoutes(
   // -----------------------------------------------------------------------
   app.post<{ Params: { id: string } }>(
     "/api/fleet-deployments/:id/approve",
-    { preHandler: [requireEdition("fleet-deployments"), requirePermission("deployment.approve")] },
+    { preHandler: [requirePermission("deployment.approve")] },
     async (request, reply) => {
       const fleet = fleetStore.getById(request.params.id);
       if (!fleet) {
@@ -295,7 +295,7 @@ export function registerFleetRoutes(
   // -----------------------------------------------------------------------
   app.post<{ Params: { id: string } }>(
     "/api/fleet-deployments/:id/execute",
-    { preHandler: [requireEdition("fleet-deployments"), requirePermission("deployment.approve")] },
+    { preHandler: [requirePermission("deployment.approve")] },
     async (request, reply) => {
       const fleet = fleetStore.getById(request.params.id);
       if (!fleet) {
@@ -435,7 +435,7 @@ export function registerFleetRoutes(
   // -----------------------------------------------------------------------
   app.post<{ Params: { id: string } }>(
     "/api/fleet-deployments/:id/pause",
-    { preHandler: [requireEdition("fleet-deployments"), requirePermission("deployment.approve")] },
+    { preHandler: [requirePermission("deployment.approve")] },
     async (request, reply) => {
       const fleet = fleetStore.getById(request.params.id);
       if (!fleet) {
@@ -473,7 +473,7 @@ export function registerFleetRoutes(
   // -----------------------------------------------------------------------
   app.post<{ Params: { id: string } }>(
     "/api/fleet-deployments/:id/resume",
-    { preHandler: [requireEdition("fleet-deployments"), requirePermission("deployment.approve")] },
+    { preHandler: [requirePermission("deployment.approve")] },
     async (request, reply) => {
       const fleet = fleetStore.getById(request.params.id);
       if (!fleet) {
