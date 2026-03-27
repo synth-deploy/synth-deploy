@@ -333,6 +333,10 @@ export interface Deployment {
     cooldownMs: number;
     status: "active" | "paused" | "disabled";
   };
+  /** Dependencies that must be satisfied before this operation executes */
+  waitFor?: WaitCondition[];
+  /** Parent operation that spawned this one */
+  lineage?: string;
   debriefEntryIds: string[];
   createdAt: string;
   completedAt: string | null;
@@ -374,7 +378,19 @@ export type OperationInput =
   | { type: "query"; intent: string }
   | { type: "investigate"; intent: string; allowWrite?: boolean }
   | { type: "trigger"; condition: string; responseIntent: string; parameters?: Record<string, unknown> }
-  | { type: "composite"; operations: OperationInput[] };
+  | { type: "composite"; steps: CompositeStep[] };
+
+export interface CompositeStep {
+  input: OperationInput;
+  envoyId?: string;
+  waitForSteps?: number[];
+  waitFor?: WaitCondition[];
+}
+
+export interface WaitCondition {
+  operationId: string;
+  status: string;
+}
 
 // --- Debrief ---
 

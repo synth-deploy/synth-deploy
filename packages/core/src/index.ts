@@ -14,6 +14,8 @@ export type {
   OperationStatus,
   Operation,
   OperationInput,
+  CompositeStep,
+  WaitCondition,
   OperationType,
   OperationTrigger,
   OperationPlan,

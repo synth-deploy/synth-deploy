@@ -120,7 +120,7 @@ function seedComposite(
 ): Operation {
   const op: any = {
     id: crypto.randomUUID(),
-    input: { type: "composite", operations: [] },
+    input: { type: "composite", steps: [] },
     status,
     variables: {},
     debriefEntryIds: [],
@@ -188,7 +188,7 @@ describe("Composite Operations — creation via HTTP (no envoy registry)", () =>
     expect(body.deployment).toBeDefined();
     expect(body.deployment.status).toBe("pending");
     expect(body.deployment.input.type).toBe("composite");
-    expect(body.deployment.input.operations).toHaveLength(2);
+    expect(body.deployment.input.steps).toHaveLength(2);
   });
 
   it("creates a composite with empty operations array", async () => {
@@ -201,7 +201,7 @@ describe("Composite Operations — creation via HTTP (no envoy registry)", () =>
     expect(res.statusCode).toBe(201);
     const body = JSON.parse(res.payload);
     expect(body.deployment.input.type).toBe("composite");
-    expect(body.deployment.input.operations).toHaveLength(0);
+    expect(body.deployment.input.steps).toHaveLength(0);
   });
 
   it("stores the composite operation in the deployment store", async () => {

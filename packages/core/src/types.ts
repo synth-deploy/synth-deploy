@@ -43,9 +43,27 @@ export type OperationInput =
   | { type: "query"; intent: string }
   | { type: "investigate"; intent: string; allowWrite?: boolean }
   | { type: "trigger"; condition: string; responseIntent: string }
-  | { type: "composite"; operations: OperationInput[] };
+  | { type: "composite"; steps: CompositeStep[] };
 
 export type OperationType = OperationInput["type"];
+
+/** A single step within a composite operation */
+export interface CompositeStep {
+  /** The operation to execute for this step */
+  input: OperationInput;
+  /** Target a specific envoy for this step (overrides parent's envoy) */
+  envoyId?: EnvoyId;
+  /** Step indices within this composite that must succeed before this step starts */
+  waitForSteps?: number[];
+  /** External operation dependencies — this step blocks until all conditions are met */
+  waitFor?: WaitCondition[];
+}
+
+/** A dependency on another operation reaching a specific status */
+export interface WaitCondition {
+  operationId: OperationId;
+  status: OperationStatus;
+}
 
 // OperationTrigger — who/what initiated this operation and where it targets
 export const OperationTriggerSchema = z.object({
@@ -306,6 +324,8 @@ export interface Operation {
   intent?: string;
   /** Parent operation that spawned this one (e.g. trigger → child operation) */
   lineage?: OperationId;
+  /** Dependencies that must be satisfied before this operation executes */
+  waitFor?: WaitCondition[];
   /** Who/what initiated this operation */
   triggeredBy?: "user" | "agent" | "webhook" | "trigger";
   /** Structured findings — populated by investigate operations */

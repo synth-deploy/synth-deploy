@@ -48,7 +48,7 @@ export function registerOperationRoutes(
       return reply.status(400).send({ error: parsed.error.message });
     }
 
-    const { artifactId, environmentId, partitionId, envoyId, version, type: operationType, intent, allowWrite, condition, responseIntent, parentOperationId, requireApproval } = parsed.data;
+    const { artifactId, environmentId, partitionId, envoyId, version, type: operationType, intent, allowWrite, condition, responseIntent, parentOperationId, requireApproval, steps } = parsed.data;
 
     // Validate artifact exists (required for deploy operations)
     if (operationType === "deploy" && !artifactId) {
@@ -87,7 +87,7 @@ export function registerOperationRoutes(
       : operationType === "trigger"
         ? { type: "trigger" as const, condition: condition ?? intent ?? "", responseIntent: responseIntent ?? intent ?? "" }
         : operationType === "composite"
-          ? { type: "composite" as const, operations: (parsed.data.operations ?? []) as import("@synth-deploy/core").OperationInput[] }
+          ? { type: "composite" as const, steps: (steps ?? (parsed.data.operations ?? []).map((op: import("@synth-deploy/core").OperationInput) => ({ input: op }))) as import("@synth-deploy/core").CompositeStep[] }
           : operationType === "investigate"
             ? { type: "investigate" as const, intent: intent ?? "", ...(allowWrite !== undefined ? { allowWrite } : {}) }
             : { type: operationType as "maintain" | "query", intent: intent ?? "" };
@@ -470,7 +470,7 @@ export function registerOperationRoutes(
           : { planStepCount: deployment.plan?.scriptedPlan.stepSummary.length ?? 0 },
       });
 
-      // Composite operations: execute children sequentially
+      // Composite operations: execute children (sequentially or as DAG)
       if (deployment.input.type === "composite") {
         deployment.status = "running" as typeof deployment.status;
         deployments.save(deployment);
@@ -487,7 +487,7 @@ export function registerOperationRoutes(
           deployments.save(child);
         }
 
-        executeCompositeSequentially(deployment.id, compositeChildren.map((c) => c.id)).catch((err) => {
+        executeCompositeChildren(deployment.id, compositeChildren.map((c) => c.id)).catch((err) => {
           const dep = deployments.get(deployment.id);
           if (dep && dep.status === "running") {
             dep.status = "failed" as typeof dep.status;
@@ -1990,13 +1990,13 @@ export function registerOperationRoutes(
 
   async function planCompositeChildren(
     parentOp: import("@synth-deploy/core").Operation,
-    _registry: EnvoyRegistry,
-    planningEnvoy: { id: string; name: string; url: string; envoyContext?: string | null },
+    registry: EnvoyRegistry,
+    defaultEnvoy: { id: string; name: string; url: string; envoyContext?: string | null },
   ): Promise<void> {
-    const compositeInput = parentOp.input as { type: "composite"; operations: import("@synth-deploy/core").OperationInput[] };
-    const childInputs = compositeInput.operations;
+    const compositeInput = parentOp.input as { type: "composite"; steps: import("@synth-deploy/core").CompositeStep[] };
+    const compositeSteps = compositeInput.steps;
 
-    if (childInputs.length === 0) {
+    if (compositeSteps.length === 0) {
       const dep = deployments.get(parentOp.id);
       if (dep) {
         dep.status = "failed" as typeof dep.status;
@@ -2010,8 +2010,15 @@ export function registerOperationRoutes(
     const environment = parentOp.environmentId ? environments.get(parentOp.environmentId) : undefined;
     const partition = parentOp.partitionId ? partitions.get(parentOp.partitionId) : undefined;
 
-    for (let seqIdx = 0; seqIdx < childInputs.length; seqIdx++) {
-      const childInput = childInputs[seqIdx];
+    // Phase 1: Create all child operations so IDs are known for waitFor resolution
+    for (let seqIdx = 0; seqIdx < compositeSteps.length; seqIdx++) {
+      const step = compositeSteps[seqIdx];
+      const childInput = step.input;
+      // Resolve per-step envoy: step.envoyId → registered envoy, fallback to parent's envoy
+      const stepEnvoy = step.envoyId ? registry.get(step.envoyId) : undefined;
+      const resolvedEnvoy = stepEnvoy ?? defaultEnvoy;
+
+      // Resolve waitFor: translate step-index references to operation IDs (deferred until all IDs exist)
       const childOp = {
         id: crypto.randomUUID(),
         input: childInput,
@@ -2022,7 +2029,7 @@ export function registerOperationRoutes(
         triggeredBy: "agent" as const,
         environmentId: parentOp.environmentId,
         partitionId: parentOp.partitionId,
-        envoyId: planningEnvoy.id,
+        envoyId: resolvedEnvoy.id,
         version: parentOp.version ?? "",
         status: "pending" as const,
         variables: parentOp.variables,
@@ -2034,32 +2041,68 @@ export function registerOperationRoutes(
       childIds.push(childOp.id);
     }
 
+    // Phase 1b: Now that all child IDs exist, resolve waitForSteps → waitFor with real operation IDs
+    for (let seqIdx = 0; seqIdx < compositeSteps.length; seqIdx++) {
+      const step = compositeSteps[seqIdx];
+      const waitConditions: import("@synth-deploy/core").WaitCondition[] = [];
+
+      // Translate step-index references to operation IDs
+      if (step.waitForSteps?.length) {
+        for (const depIdx of step.waitForSteps) {
+          if (depIdx >= 0 && depIdx < childIds.length && depIdx !== seqIdx) {
+            waitConditions.push({ operationId: childIds[depIdx], status: "succeeded" });
+          }
+        }
+      }
+      // Include any explicit external waitFor conditions
+      if (step.waitFor?.length) {
+        waitConditions.push(...step.waitFor);
+      }
+
+      if (waitConditions.length > 0) {
+        const child = deployments.get(childIds[seqIdx]);
+        if (child) {
+          child.waitFor = waitConditions;
+          deployments.save(child);
+        }
+      }
+    }
+
+    const hasAnyDependencies = compositeSteps.some((s) => (s.waitForSteps?.length ?? 0) > 0 || (s.waitFor?.length ?? 0) > 0);
+
     debrief.record({
       partitionId: parentOp.partitionId ?? null,
       operationId: parentOp.id,
       agent: "server",
       decisionType: "composite-started",
-      decision: `Composite operation started — planning ${childIds.length} child operation(s) sequentially`,
-      reasoning: `Sequential composite: ${childInputs.map((c) => c.type).join(" → ")}`,
-      context: { childIds, childCount: childIds.length, sequence: childInputs.map((c) => c.type) },
+      decision: `Composite operation started — planning ${childIds.length} child operation(s)${hasAnyDependencies ? " with dependency graph" : " sequentially"}`,
+      reasoning: `Composite: ${compositeSteps.map((s) => s.input.type).join(" → ")}`,
+      context: { childIds, childCount: childIds.length, sequence: compositeSteps.map((s) => s.input.type), hasWaitConditions: hasAnyDependencies },
     });
-
-    const environmentForPlanning = environment
-      ? { id: environment.id, name: environment.name, variables: environment.variables }
-      : { id: `direct:${planningEnvoy.id}`, name: planningEnvoy.name, variables: {} };
 
     let anyFailed = false;
 
-    for (const childId of childIds) {
+    // Phase 2: Plan each child against its target envoy
+    for (let i = 0; i < childIds.length; i++) {
+      const childId = childIds[i];
       const child = deployments.get(childId);
       if (!child) continue;
       const childInput = child.input;
+      const step = compositeSteps[i];
+
+      // Resolve the envoy for this step
+      const stepEnvoy = step.envoyId ? registry.get(step.envoyId) : undefined;
+      const resolvedEnvoy = stepEnvoy ?? defaultEnvoy;
 
       const childArtifact = childInput.type === "deploy"
         ? artifactStore.get((childInput as { artifactId: string }).artifactId)
         : undefined;
 
-      const planningClient = new EnvoyClient(planningEnvoy.url);
+      const environmentForPlanning = environment
+        ? { id: environment.id, name: environment.name, variables: environment.variables }
+        : { id: `direct:${resolvedEnvoy.id}`, name: resolvedEnvoy.name, variables: {} };
+
+      const planningClient = new EnvoyClient(resolvedEnvoy.url);
 
       try {
         const result = await planningClient.requestPlan({
@@ -2083,7 +2126,7 @@ export function registerOperationRoutes(
           partition: partition ? { id: partition.id, name: partition.name, variables: partition.variables } : undefined,
           version: parentOp.version ?? "",
           resolvedVariables: parentOp.variables,
-          envoyContext: planningEnvoy.envoyContext ?? undefined,
+          envoyContext: resolvedEnvoy.envoyContext ?? undefined,
         });
 
         const childDep = deployments.get(childId);
@@ -2115,7 +2158,7 @@ export function registerOperationRoutes(
 
         childDep.plan = result.plan;
         childDep.rollbackPlan = result.rollbackPlan;
-        childDep.envoyId = planningEnvoy.id;
+        childDep.envoyId = resolvedEnvoy.id;
         if (childInput.type === "query" && result.queryFindings) childDep.queryFindings = result.queryFindings;
         if (childInput.type === "investigate" && result.investigationFindings) childDep.investigationFindings = result.investigationFindings;
         childDep.status = "awaiting_approval" as typeof childDep.status;
@@ -2128,7 +2171,7 @@ export function registerOperationRoutes(
           decisionType: "plan-generation",
           decision: `Child operation plan generated with ${result.plan.scriptedPlan.stepSummary.length} steps`,
           reasoning: result.plan.reasoning,
-          context: { stepCount: result.plan.scriptedPlan.stepSummary.length, envoyId: planningEnvoy.id, parentOperationId: parentOp.id },
+          context: { stepCount: result.plan.scriptedPlan.stepSummary.length, envoyId: resolvedEnvoy.id, parentOperationId: parentOp.id },
         });
       } catch (err) {
         const childDep = deployments.get(childId);
@@ -2164,15 +2207,18 @@ export function registerOperationRoutes(
 
       const combinedStepSummary = allChildren.flatMap((c, idx) => {
         if (!c.plan?.scriptedPlan) return [];
+        const envoyLabel = c.envoyId && c.envoyId !== defaultEnvoy.id ? ` @${c.envoyId}` : "";
         return c.plan.scriptedPlan.stepSummary.map((step) => ({
           ...step,
-          description: `[${idx + 1}/${allChildren.length}: ${c.input.type}] ${step.description}`,
+          description: `[${idx + 1}/${allChildren.length}: ${c.input.type}${envoyLabel}] ${step.description}`,
         }));
       });
 
-      const combinedReasoning = allChildren.map((c, idx) =>
-        `Step ${idx + 1} (${c.input.type}): ${c.plan?.reasoning ?? "no reasoning"}`
-      ).join("\n\n");
+      const combinedReasoning = allChildren.map((c, idx) => {
+        const envoyLabel = c.envoyId && c.envoyId !== defaultEnvoy.id ? ` (envoy: ${c.envoyId})` : "";
+        const waitLabel = c.waitFor?.length ? ` [waits for: ${c.waitFor.map((w) => w.operationId.slice(0, 8)).join(", ")}]` : "";
+        return `Step ${idx + 1} (${c.input.type}${envoyLabel}${waitLabel}): ${c.plan?.reasoning ?? "no reasoning"}`;
+      }).join("\n\n");
 
       // Combine child execution scripts into a single composite script
       const combinedScript = allChildren
@@ -2214,59 +2260,237 @@ export function registerOperationRoutes(
           decisionType: "composite-plan-ready",
           decision: `All ${allChildren.length} child plans ready — composite awaiting approval`,
           reasoning: combinedReasoning,
-          context: { childIds, totalSteps: combinedStepSummary.length },
+          context: { childIds, totalSteps: combinedStepSummary.length, hasWaitConditions: hasAnyDependencies },
         });
       }
     }
   }
 
-  async function executeCompositeSequentially(
+  /**
+   * Check whether all waitFor conditions for an operation are satisfied.
+   * Returns true if the operation has no waitFor or all referenced operations
+   * have reached their required status.
+   */
+  function areWaitConditionsMet(op: import("@synth-deploy/core").Operation): boolean {
+    if (!op.waitFor?.length) return true;
+    for (const cond of op.waitFor) {
+      const dep = deployments.get(cond.operationId);
+      if (!dep || dep.status !== cond.status) return false;
+    }
+    return true;
+  }
+
+  /**
+   * Execute composite children as a DAG. Steps with no unmet dependencies are
+   * dispatched concurrently; steps with waitFor/waitForSteps block until their
+   * dependencies reach the required status. Falls back to sequential execution
+   * when no dependencies are declared.
+   */
+  async function executeCompositeChildren(
     parentId: string,
     childIds: string[],
   ): Promise<void> {
     const parentOp = deployments.get(parentId);
     if (!parentOp) return;
 
+    const hasAnyDeps = childIds.some((id) => {
+      const c = deployments.get(id);
+      return c?.waitFor && c.waitFor.length > 0;
+    });
+
     debrief.record({
       partitionId: parentOp.partitionId ?? null,
       operationId: parentOp.id,
       agent: "server",
       decisionType: "composite-started",
-      decision: `Composite execution started — running ${childIds.length} child operations sequentially`,
-      reasoning: `Composite operation approved — executing children in order`,
-      context: { childIds, totalChildren: childIds.length },
+      decision: `Composite execution started — running ${childIds.length} child operations${hasAnyDeps ? " as dependency graph" : " sequentially"}`,
+      reasoning: `Composite operation approved — executing children${hasAnyDeps ? " respecting wait conditions" : " in order"}`,
+      context: { childIds, totalChildren: childIds.length, hasWaitConditions: hasAnyDeps },
     });
 
+    // If no child has waitFor conditions, execute sequentially (backward compatible)
+    if (!hasAnyDeps) {
+      await executeChildrenSequentially(parentId, childIds);
+      return;
+    }
+
+    // DAG execution: track status per child
+    const completed = new Set<string>();
+    const failed = new Set<string>();
+    const running = new Set<string>();
+    const pending = new Set(childIds);
+
+    const pollIntervalMs = 2_000;
+    const timeoutMs = 300_000; // 5-minute timeout per individual child
+
+    while (pending.size > 0 || running.size > 0) {
+      // Check for parent cancellation
+      const parentNow = deployments.get(parentId);
+      if (!parentNow || parentNow.status === "failed" || parentNow.status === "cancelled") return;
+
+      // Find ready children: pending, have plans, and all wait conditions met
+      const readyIds: string[] = [];
+      for (const childId of pending) {
+        const child = deployments.get(childId);
+        if (!child) { pending.delete(childId); continue; }
+        if (areWaitConditionsMet(child)) {
+          readyIds.push(childId);
+        }
+      }
+
+      // Dispatch all ready children
+      for (const childId of readyIds) {
+        const child = deployments.get(childId);
+        if (!child) continue;
+        const childIdx = childIds.indexOf(childId);
+
+        if (!child.plan || !child.rollbackPlan) {
+          failComposite(parentId, `Child operation ${childIdx + 1} has no plan — cannot execute`, childId, childIdx);
+          return;
+        }
+
+        const targetEnvoy = child.envoyId ? envoyRegistry?.get(child.envoyId) : envoyRegistry?.list()[0];
+        if (!targetEnvoy) {
+          failComposite(parentId, `No envoy available for child operation ${childIdx + 1}`, childId, childIdx);
+          return;
+        }
+
+        pending.delete(childId);
+        running.add(childId);
+
+        child.status = "running" as typeof child.status;
+        deployments.save(child);
+
+        debrief.record({
+          partitionId: child.partitionId ?? null,
+          operationId: child.id,
+          agent: "server",
+          decisionType: "composite-child-started",
+          decision: `Executing child operation ${childIdx + 1}/${childIds.length} (${child.input.type})${child.envoyId ? ` on envoy ${child.envoyId}` : ""}`,
+          reasoning: `Composite DAG execution — all dependencies satisfied`,
+          context: { childId, childIndex: childIdx, parentOperationId: parentId, childType: child.input.type, envoyId: child.envoyId },
+        });
+
+        const artifact = artifactStore.get(getArtifactId(child) ?? "");
+        const serverPort = process.env.PORT ?? "9410";
+        const serverUrl = process.env.SYNTH_SERVER_URL ?? `http://localhost:${serverPort}`;
+        const progressCallbackUrl = `${serverUrl}/api/operations/${child.id}/progress`;
+
+        const childEnvoyClient = new EnvoyClient(targetEnvoy.url);
+        try {
+          await childEnvoyClient.executeApprovedPlan({
+            operationId: child.id,
+            plan: child.plan,
+            rollbackPlan: child.rollbackPlan,
+            artifactType: artifact?.type ?? "unknown",
+            artifactName: artifact?.name ?? "unknown",
+            environmentId: child.environmentId ?? "",
+            progressCallbackUrl,
+            callbackToken: targetEnvoy.token,
+          });
+        } catch (err) {
+          failComposite(
+            parentId,
+            `Child operation ${childIdx + 1} (${child.input.type}) execution dispatch failed: ${err instanceof Error ? err.message : "unknown error"}`,
+            childId,
+            childIdx,
+          );
+          return;
+        }
+      }
+
+      if (running.size === 0 && pending.size > 0) {
+        // Deadlock: nothing running, nothing ready, but still pending
+        const pendingList = [...pending].map((id) => childIds.indexOf(id) + 1).join(", ");
+        failComposite(parentId, `Composite deadlocked — steps [${pendingList}] have unsatisfiable wait conditions`, "", -1);
+        return;
+      }
+
+      // Poll running children
+      await new Promise<void>((resolve) => setTimeout(resolve, pollIntervalMs));
+
+      for (const childId of [...running]) {
+        const updated = deployments.get(childId);
+        const childIdx = childIds.indexOf(childId);
+        if (!updated) { running.delete(childId); failed.add(childId); continue; }
+
+        if (updated.status === "succeeded") {
+          running.delete(childId);
+          completed.add(childId);
+          debrief.record({
+            partitionId: updated.partitionId ?? null,
+            operationId: childId,
+            agent: "server",
+            decisionType: "composite-child-completed",
+            decision: `Child operation ${childIdx + 1}/${childIds.length} (${updated.input.type}) completed successfully`,
+            reasoning: `Child execution succeeded`,
+            context: { childId, childIndex: childIdx, parentOperationId: parentId },
+          });
+        } else if (updated.status === "failed" || updated.status === "rolled_back" || updated.status === "cancelled") {
+          running.delete(childId);
+          failed.add(childId);
+          const reason = updated.failureReason ?? `Child operation ${childIdx + 1} failed`;
+          failComposite(parentId, `Composite stopped: step ${childIdx + 1}/${childIds.length} (${updated.input.type}): ${reason}`, childId, childIdx);
+          return;
+        }
+        // Still running — continue polling
+      }
+    }
+
+    // All children succeeded
+    const dep = deployments.get(parentId);
+    if (dep) {
+      dep.status = "succeeded" as typeof dep.status;
+      dep.completedAt = new Date();
+      deployments.save(dep);
+      debrief.record({
+        partitionId: dep.partitionId ?? null,
+        operationId: dep.id,
+        agent: "server",
+        decisionType: "composite-completed",
+        decision: `Composite operation completed — all ${childIds.length} child operations succeeded`,
+        reasoning: `All child operations executed successfully`,
+        context: { childIds, totalChildren: childIds.length },
+      });
+    }
+  }
+
+  /** Helper: mark parent composite as failed with debrief */
+  function failComposite(parentId: string, reason: string, childId: string, childIndex: number): void {
+    const dep = deployments.get(parentId);
+    if (dep) {
+      dep.status = "failed" as typeof dep.status;
+      dep.failureReason = reason;
+      dep.completedAt = new Date();
+      deployments.save(dep);
+      debrief.record({
+        partitionId: dep.partitionId ?? null,
+        operationId: dep.id,
+        agent: "server",
+        decisionType: "composite-failed",
+        decision: reason,
+        reasoning: reason,
+        context: { childId, childIndex },
+      });
+    }
+  }
+
+  /** Sequential fallback for composites with no wait conditions (backward compatible) */
+  async function executeChildrenSequentially(
+    parentId: string,
+    childIds: string[],
+  ): Promise<void> {
     for (let i = 0; i < childIds.length; i++) {
       const childId = childIds[i];
       const child = deployments.get(childId);
       if (!child || !child.plan || !child.rollbackPlan) {
-        const dep = deployments.get(parentId);
-        if (dep) {
-          dep.status = "failed" as typeof dep.status;
-          dep.failureReason = `Child operation ${i + 1} has no plan — cannot execute`;
-          deployments.save(dep);
-          debrief.record({
-            partitionId: dep.partitionId ?? null,
-            operationId: dep.id,
-            agent: "server",
-            decisionType: "composite-failed",
-            decision: `Child operation ${i + 1} missing plan — composite failed`,
-            reasoning: dep.failureReason!,
-            context: { childId, childIndex: i },
-          });
-        }
+        failComposite(parentId, `Child operation ${i + 1} has no plan — cannot execute`, childId, i);
         return;
       }
 
       const targetEnvoy = child.envoyId ? envoyRegistry?.get(child.envoyId) : envoyRegistry?.list()[0];
       if (!targetEnvoy) {
-        const dep = deployments.get(parentId);
-        if (dep) {
-          dep.status = "failed" as typeof dep.status;
-          dep.failureReason = `No envoy available for child operation ${i + 1}`;
-          deployments.save(dep);
-        }
+        failComposite(parentId, `No envoy available for child operation ${i + 1}`, childId, i);
         return;
       }
 
@@ -2278,18 +2502,17 @@ export function registerOperationRoutes(
         operationId: child.id,
         agent: "server",
         decisionType: "composite-child-started",
-        decision: `Executing child operation ${i + 1}/${childIds.length} (${child.input.type})`,
+        decision: `Executing child operation ${i + 1}/${childIds.length} (${child.input.type})${child.envoyId ? ` on envoy ${child.envoyId}` : ""}`,
         reasoning: `Sequential composite execution — child ${i + 1} of ${childIds.length}`,
-        context: { childId, childIndex: i, parentOperationId: parentId, childType: child.input.type },
+        context: { childId, childIndex: i, parentOperationId: parentId, childType: child.input.type, envoyId: child.envoyId },
       });
 
       const artifact = artifactStore.get(getArtifactId(child) ?? "");
       const serverPort = process.env.PORT ?? "9410";
       const serverUrl = process.env.SYNTH_SERVER_URL ?? `http://localhost:${serverPort}`;
       const progressCallbackUrl = `${serverUrl}/api/operations/${child.id}/progress`;
-      const callbackToken = targetEnvoy?.token;
 
-      const childEnvoyClient = new EnvoyClient((targetEnvoy as { url: string }).url);
+      const childEnvoyClient = new EnvoyClient(targetEnvoy.url);
 
       try {
         await childEnvoyClient.executeApprovedPlan({
@@ -2300,25 +2523,15 @@ export function registerOperationRoutes(
           artifactName: artifact?.name ?? "unknown",
           environmentId: child.environmentId ?? "",
           progressCallbackUrl,
-          callbackToken,
+          callbackToken: targetEnvoy.token,
         });
       } catch (err) {
-        const dep = deployments.get(parentId);
-        if (dep) {
-          dep.status = "failed" as typeof dep.status;
-          dep.failureReason = `Child operation ${i + 1} (${child.input.type}) execution dispatch failed: ${err instanceof Error ? err.message : "unknown error"}`;
-          dep.completedAt = new Date();
-          deployments.save(dep);
-          debrief.record({
-            partitionId: dep.partitionId ?? null,
-            operationId: dep.id,
-            agent: "server",
-            decisionType: "composite-failed",
-            decision: `Child operation ${i + 1} execution dispatch failed`,
-            reasoning: dep.failureReason!,
-            context: { childId, childIndex: i, error: dep.failureReason },
-          });
-        }
+        failComposite(
+          parentId,
+          `Child operation ${i + 1} (${child.input.type}) execution dispatch failed: ${err instanceof Error ? err.message : "unknown error"}`,
+          childId,
+          i,
+        );
         return;
       }
 
@@ -2338,7 +2551,6 @@ export function registerOperationRoutes(
         if (updated?.status === "failed" || updated?.status === "rolled_back" || updated?.status === "cancelled") {
           break;
         }
-        // Stop if the parent was externally cancelled or failed while we were waiting
         const parentNow = deployments.get(parentId);
         if (!parentNow || parentNow.status === "failed" || parentNow.status === "cancelled") {
           return;
@@ -2348,22 +2560,7 @@ export function registerOperationRoutes(
       const finalChild = deployments.get(childId);
       if (!childSucceeded) {
         const reason = finalChild?.failureReason ?? `Child operation ${i + 1} did not complete in time`;
-        const dep = deployments.get(parentId);
-        if (dep) {
-          dep.status = "failed" as typeof dep.status;
-          dep.failureReason = `Composite stopped at step ${i + 1}/${childIds.length} (${child.input.type}): ${reason}`;
-          dep.completedAt = new Date();
-          deployments.save(dep);
-          debrief.record({
-            partitionId: dep.partitionId ?? null,
-            operationId: dep.id,
-            agent: "server",
-            decisionType: "composite-failed",
-            decision: `Composite stopped at child ${i + 1}/${childIds.length} — ${child.input.type} failed`,
-            reasoning: dep.failureReason!,
-            context: { childId, childIndex: i, failedChildType: child.input.type, completedChildren: i },
-          });
-        }
+        failComposite(parentId, `Composite stopped at step ${i + 1}/${childIds.length} (${child.input.type}): ${reason}`, childId, i);
         return;
       }
 

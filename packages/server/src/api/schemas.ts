@@ -251,6 +251,18 @@ const ChildOperationInputSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("trigger"), condition: z.string().min(1), responseIntent: z.string().min(1) }),
 ]);
 
+const WaitConditionSchema = z.object({
+  operationId: z.string().min(1),
+  status: z.string().min(1),
+});
+
+const CompositeStepSchema = z.object({
+  input: ChildOperationInputSchema,
+  envoyId: z.string().optional(),
+  waitForSteps: z.array(z.number().int().min(0)).optional(),
+  waitFor: z.array(WaitConditionSchema).optional(),
+});
+
 // --- Operations ---
 
 export const CreateOperationSchema = z.object({
@@ -270,8 +282,10 @@ export const CreateOperationSchema = z.object({
   parentOperationId: z.string().optional(),
   /** Override to require manual approval even when auto-approve would apply */
   requireApproval: z.boolean().optional(),
-  /** Composite-specific: child operations to execute sequentially */
+  /** Composite-specific: child operations (legacy flat list, sequential execution) */
   operations: z.array(ChildOperationInputSchema).optional(),
+  /** Composite-specific: child steps with per-step envoy targeting and wait conditions */
+  steps: z.array(CompositeStepSchema).optional(),
 });
 
 export const ApproveDeploymentSchema = z.object({

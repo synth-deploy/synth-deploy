@@ -51,7 +51,7 @@ import { DEFAULT_APP_SETTINGS } from "./types.js";
 // Schema version — bump when table definitions change
 // ---------------------------------------------------------------------------
 
-const SCHEMA_VERSION = 10;
+const SCHEMA_VERSION = 11;
 
 // ---------------------------------------------------------------------------
 // Safe JSON parse — returns fallback on corruption instead of crashing
@@ -142,7 +142,8 @@ export function openEntityDatabase(dbPath: string): Database.Database {
       completed_at TEXT,
       failure_reason TEXT,
       shelved_at TEXT,
-      shelved_reason TEXT
+      shelved_reason TEXT,
+      wait_for TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_deployments_partition ON deployments(partition_id);
     CREATE INDEX IF NOT EXISTS idx_deployments_artifact ON deployments(artifact_id);
@@ -598,6 +599,13 @@ export function openEntityDatabase(dbPath: string): Database.Database {
     console.log("[Synth] Migrated database schema from v9 to v10 (envoy context)");
   }
 
+  // Migrate from v10 to v11: add wait_for column for cross-envoy operation dependencies
+  if (versionRow && versionRow.version < 11) {
+    try { db.exec(`ALTER TABLE deployments ADD COLUMN wait_for TEXT`); } catch { /* column may already exist */ }
+    db.prepare(`UPDATE schema_version SET version = ?`).run(11);
+    console.log("[Synth] Migrated database schema from v10 to v11 (operation wait conditions)");
+  }
+
   if (!versionRow) {
     db.prepare(`INSERT INTO schema_version (version) VALUES (?)`).run(SCHEMA_VERSION);
   } else if (versionRow.version !== SCHEMA_VERSION) {
@@ -821,8 +829,8 @@ export class PersistentDeploymentStore {
   constructor(private db: Database.Database) {
     this.stmts = {
       upsert: db.prepare(
-        `INSERT INTO deployments (id, operation_type, artifact_id, artifact_version_id, input_json, intent, lineage, findings, retry_of, envoy_id, environment_id, partition_id, version, status, variables, plan, rollback_plan, execution_record, approved_by, approved_at, debrief_entry_ids, created_at, completed_at, failure_reason, shelved_at, shelved_reason)
-         VALUES (@id, @operation_type, @artifact_id, @artifact_version_id, @input_json, @intent, @lineage, @findings, @retry_of, @envoy_id, @environment_id, @partition_id, @version, @status, @variables, @plan, @rollback_plan, @execution_record, @approved_by, @approved_at, @debrief_entry_ids, @created_at, @completed_at, @failure_reason, @shelved_at, @shelved_reason)
+        `INSERT INTO deployments (id, operation_type, artifact_id, artifact_version_id, input_json, intent, lineage, findings, retry_of, envoy_id, environment_id, partition_id, version, status, variables, plan, rollback_plan, execution_record, approved_by, approved_at, debrief_entry_ids, created_at, completed_at, failure_reason, shelved_at, shelved_reason, wait_for)
+         VALUES (@id, @operation_type, @artifact_id, @artifact_version_id, @input_json, @intent, @lineage, @findings, @retry_of, @envoy_id, @environment_id, @partition_id, @version, @status, @variables, @plan, @rollback_plan, @execution_record, @approved_by, @approved_at, @debrief_entry_ids, @created_at, @completed_at, @failure_reason, @shelved_at, @shelved_reason, @wait_for)
          ON CONFLICT(id) DO UPDATE SET
            status = excluded.status,
            variables = excluded.variables,
@@ -837,7 +845,8 @@ export class PersistentDeploymentStore {
            intent = excluded.intent,
            findings = excluded.findings,
            shelved_at = excluded.shelved_at,
-           shelved_reason = excluded.shelved_reason`
+           shelved_reason = excluded.shelved_reason,
+           wait_for = excluded.wait_for`
       // lineage and retry_of are immutable after creation; not included in ON CONFLICT UPDATE
       ),
       getById: db.prepare(`SELECT * FROM deployments WHERE id = ?`),
@@ -898,6 +907,7 @@ export class PersistentDeploymentStore {
       failure_reason: deployment.failureReason ?? null,
       shelved_at: deployment.shelvedAt?.toISOString() ?? null,
       shelved_reason: deployment.shelvedReason ?? null,
+      wait_for: deployment.waitFor ? JSON.stringify(deployment.waitFor) : null,
     });
   }
 
@@ -980,6 +990,7 @@ interface DeploymentRow {
   failure_reason: string | null;
   shelved_at: string | null;
   shelved_reason: string | null;
+  wait_for: string | null;
 }
 
 function rowToOperation(row: DeploymentRow): Operation {
@@ -1020,6 +1031,7 @@ function rowToOperation(row: DeploymentRow): Operation {
   if (row.failure_reason) operation.failureReason = row.failure_reason;
   if (row.shelved_at) operation.shelvedAt = new Date(row.shelved_at);
   if (row.shelved_reason) operation.shelvedReason = row.shelved_reason;
+  if (row.wait_for) operation.waitFor = safeJsonParse(row.wait_for, undefined, { table: "deployments", rowId: row.id, column: "wait_for" });
   return operation;
 }
 
