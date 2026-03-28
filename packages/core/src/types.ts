@@ -82,11 +82,17 @@ export interface ConfigChange {
   to: string;
 }
 
-/** Human-readable description of what a portion of the script does */
-export interface StepSummary {
-  /** Human-readable description of what this portion of the script does */
+/** A single executable step within a scripted plan */
+export interface PlanStep {
+  /** Human-readable description of what this step does */
   description: string;
-  /** Whether this step is reversible (reflected in rollback script) */
+  /** The executable script for this step */
+  script: string;
+  /** Read-only validation script for this step. Null if no validation needed */
+  dryRunScript: string | null;
+  /** Reversal script for this step. Null if non-reversible */
+  rollbackScript: string | null;
+  /** Whether this step can be rolled back */
   reversible: boolean;
 }
 
@@ -94,18 +100,21 @@ export interface StepSummary {
 export interface ScriptedPlan {
   /** Platform the scripts target */
   platform: "bash" | "powershell";
-  /** The executable script — approved and run verbatim */
-  executionScript: string;
-  /** Read-only probes predicting execution outcome. Null for ops that don't need it */
-  dryRunScript: string | null;
-  /** Reversal script. Null for read-only operations */
-  rollbackScript: string | null;
-  /** Plain-english explanation of what the scripts do and why */
+  /** Plain-english explanation of the plan */
   reasoning: string;
-  /** Structured summary for UI display — derived from the script, not a parallel data structure */
-  stepSummary: StepSummary[];
+  /** Ordered sequence of execution steps */
+  steps: PlanStep[];
   /** What configuration will change */
   diffFromCurrent?: ConfigChange[];
+}
+
+export interface StepDiff {
+  stepIndex: number;
+  status: "unchanged" | "changed" | "added" | "removed";
+  /** Previous version of the step (null if added) */
+  previous: PlanStep | null;
+  /** Current version of the step (null if removed) */
+  current: PlanStep | null;
 }
 
 export interface OperationPlan {
@@ -113,7 +122,8 @@ export interface OperationPlan {
   scriptedPlan: ScriptedPlan;
   reasoning: string;
   diffFromCurrent?: ConfigChange[];
-  diffFromPreviousPlan?: string;
+  /** Per-step diff from refinement. Null on first plan, populated after feedback. */
+  stepDiffs?: StepDiff[];
 }
 /** @deprecated Use OperationPlan */
 export type DeploymentPlan = OperationPlan;
