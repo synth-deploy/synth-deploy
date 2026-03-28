@@ -69,7 +69,7 @@ function useDeploymentStream(deploymentId: string, isRunning: boolean) {
   const resetStaleTimer = useCallback(() => {
     setStale(false);
     if (staleTimerRef.current) clearTimeout(staleTimerRef.current);
-    staleTimerRef.current = setTimeout(() => setStale(true), 10_000);
+    staleTimerRef.current = setTimeout(() => setStale(true), 30_000);
   }, []);
 
   useEffect(() => {
@@ -235,6 +235,29 @@ export default function DeploymentDetailPanel({ deploymentId, title }: Props) {
     } else if (event.type === "step-output" && event.output) {
       if (!stepLogs.has(event.stepIndex)) stepLogs.set(event.stepIndex, []);
       stepLogs.get(event.stepIndex)!.push(event.output);
+    }
+  }
+  // If a later step has started, all earlier steps without events are implicitly completed.
+  // This handles cases where the LLM skips markers for some steps.
+  if (planStepMap.size > 0) {
+    let maxStartedIndex = -1;
+    for (const [idx, evt] of planStepMap) {
+      if (evt.type === "plan-step-started" || evt.type === "plan-step-completed" || evt.type === "plan-step-failed") {
+        maxStartedIndex = Math.max(maxStartedIndex, idx);
+      }
+    }
+    for (let i = 0; i < maxStartedIndex; i++) {
+      if (!planStepMap.has(i)) {
+        planStepMap.set(i, {
+          deploymentId: "",
+          type: "plan-step-completed",
+          stepIndex: i,
+          stepDescription: "",
+          status: "completed",
+          timestamp: "",
+          overallProgress: 0,
+        });
+      }
     }
   }
   const stepMap = planStepMap.size > 0 ? planStepMap : phaseStepMap;
