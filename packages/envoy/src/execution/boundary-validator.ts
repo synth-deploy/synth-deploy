@@ -43,10 +43,9 @@ export class BoundaryValidator {
     }
 
     const violations: string[] = [];
-    const scriptText = [
-      plan.executionScript,
-      plan.rollbackScript ?? "",
-    ].join("\n");
+    const scriptText = plan.steps
+      .flatMap((s) => [s.script, s.rollbackScript ?? ""])
+      .join("\n");
 
     for (const boundary of boundaries) {
       const result = this.checkBoundary(scriptText, boundary);

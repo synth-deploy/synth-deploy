@@ -232,10 +232,10 @@ function rowToStoredPlan(row: StoredPlanRow): StoredPlan {
     artifactType: row.artifact_type,
     artifactName: row.artifact_name,
     environmentId: row.environment_id,
-    plan: safeJsonParse(row.plan, { scriptedPlan: { platform: "bash", executionScript: "", dryRunScript: null, rollbackScript: null, reasoning: "", stepSummary: [] }, reasoning: "" }, {
+    plan: safeJsonParse(row.plan, { scriptedPlan: { platform: "bash", reasoning: "", steps: [] }, reasoning: "" }, {
       table: "stored_plans", rowId: row.id, column: "plan",
     }),
-    rollbackPlan: safeJsonParse(row.rollback_plan, { scriptedPlan: { platform: "bash", executionScript: "", dryRunScript: null, rollbackScript: null, reasoning: "", stepSummary: [] }, reasoning: "" }, {
+    rollbackPlan: safeJsonParse(row.rollback_plan, { scriptedPlan: { platform: "bash", reasoning: "", steps: [] }, reasoning: "" }, {
       table: "stored_plans", rowId: row.id, column: "rollback_plan",
     }),
     outcome: row.outcome as StoredPlan["outcome"],

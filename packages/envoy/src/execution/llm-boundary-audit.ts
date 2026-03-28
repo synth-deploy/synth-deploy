@@ -81,11 +81,14 @@ Respond with valid JSON only:
 If there are no violations, respond with:
 { "passed": true, "violations": [], "reasoning": "All scripts comply with declared boundaries." }`;
 
-  const scripts = [
-    plan.executionScript ? `## Execution Script\n\`\`\`${plan.platform}\n${plan.executionScript}\n\`\`\`` : null,
-    plan.dryRunScript ? `## Dry-Run Script\n\`\`\`${plan.platform}\n${plan.dryRunScript}\n\`\`\`` : null,
-    plan.rollbackScript ? `## Rollback Script\n\`\`\`${plan.platform}\n${plan.rollbackScript}\n\`\`\`` : null,
-  ].filter(Boolean).join("\n\n");
+  const scripts = plan.steps.map((s, i) => {
+    const parts: string[] = [
+      `## Step ${i + 1}: ${s.description}\n\`\`\`${plan.platform}\n${s.script}\n\`\`\``,
+    ];
+    if (s.dryRunScript) parts.push(`### Dry-Run\n\`\`\`${plan.platform}\n${s.dryRunScript}\n\`\`\``);
+    if (s.rollbackScript) parts.push(`### Rollback\n\`\`\`${plan.platform}\n${s.rollbackScript}\n\`\`\``);
+    return parts.join("\n");
+  }).join("\n\n");
 
   const userPrompt = `Review the following scripts for security boundary violations:\n\n${scripts}`;
 
