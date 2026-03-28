@@ -19,7 +19,11 @@ export interface ProgressEvent {
     | "step-failed"
     | "rollback-started"
     | "rollback-completed"
-    | "deployment-completed";
+    | "deployment-completed"
+    | "plan-step-started"
+    | "plan-step-completed"
+    | "plan-step-failed"
+    | "step-output";
   stepIndex: number;
   stepDescription: string;
   status: "in_progress" | "completed" | "failed";
@@ -31,7 +35,7 @@ export interface ProgressEvent {
 
 export type ProgressListener = (event: ProgressEvent) => void;
 
-const MAX_EVENTS = 100;
+const MAX_EVENTS = 200;
 const CLEANUP_DELAY_MS = 60_000; // 1 minute after completion
 
 export class ProgressEventStore {

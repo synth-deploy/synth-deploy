@@ -24,7 +24,11 @@ export interface ExecutionProgressEvent {
     | "script-failed"
     | "rollback-started"
     | "rollback-completed"
-    | "deployment-completed";
+    | "deployment-completed"
+    | "plan-step-started"
+    | "plan-step-completed"
+    | "plan-step-failed"
+    | "step-output";
   phase: "dry-run" | "execution" | "rollback";
   status: "in_progress" | "completed" | "failed";
   output?: string;
@@ -33,6 +37,12 @@ export interface ExecutionProgressEvent {
   timestamp: Date;
   /** 0–100 percentage of overall progress */
   overallProgress: number;
+  /** 0-based index of the plan step (for plan-step-* and step-output events) */
+  stepIndex?: number;
+  /** Human-readable step description (for plan-step-started events) */
+  stepDescription?: string;
+  /** Total number of plan steps (for plan-step-* events) */
+  totalSteps?: number;
 }
 
 /**
@@ -158,6 +168,9 @@ export class DefaultOperationExecutor {
             exitCode: event.exitCode,
             timestamp: event.timestamp,
             overallProgress: event.overallProgress,
+            stepIndex: event.stepIndex,
+            stepDescription: event.stepDescription,
+            totalSteps: event.totalSteps,
           });
         }
       : undefined;

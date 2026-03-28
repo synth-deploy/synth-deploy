@@ -52,13 +52,23 @@ export interface ScriptProgressEvent {
     | "script-failed"
     | "rollback-started"
     | "rollback-completed"
-    | "execution-completed";
+    | "execution-completed"
+    | "plan-step-started"
+    | "plan-step-completed"
+    | "plan-step-failed"
+    | "step-output";
   phase: "dry-run" | "execution" | "rollback";
   output?: string;
   error?: string;
   exitCode?: number;
   timestamp: Date;
   overallProgress: number;
+  /** 0-based index of the plan step (for plan-step-* and step-output events) */
+  stepIndex?: number;
+  /** Human-readable step description (for plan-step-started events) */
+  stepDescription?: string;
+  /** Total number of plan steps (for plan-step-* events) */
+  totalSteps?: number;
 }
 
 export type ScriptProgressCallback = (event: ScriptProgressEvent) => void;
@@ -97,6 +107,7 @@ export class ScriptRunner {
     onProgress?: ScriptProgressCallback,
   ): Promise<ScriptedPlanResult> {
     const planStart = Date.now();
+    const totalSteps = plan.stepSummary.length;
 
     // Run execution script
     onProgress?.({
@@ -107,22 +118,80 @@ export class ScriptRunner {
       overallProgress: 10,
     });
 
+    // Track current plan step for marker-based progress
+    const STEP_MARKER_RE = /^##SYNTH_STEP:(\d+):(.+)$/;
+    let currentStep: number | null = null;
+    let lineBuffer = "";
+
     const executionResult = await this.runScript(
       plan.executionScript,
       plan.platform,
-      (output) => {
-        onProgress?.({
-          operationId,
-          type: "script-output",
-          phase: "execution",
-          output,
-          timestamp: new Date(),
-          overallProgress: 50,
-        });
+      (chunk) => {
+        lineBuffer += chunk;
+        const lines = lineBuffer.split("\n");
+        lineBuffer = lines.pop() || ""; // keep incomplete last line in buffer
+
+        for (const line of lines) {
+          const match = line.match(STEP_MARKER_RE);
+          if (match) {
+            const stepNum = parseInt(match[1], 10);
+            const stepName = match[2];
+
+            // Complete previous step
+            if (currentStep !== null) {
+              onProgress?.({
+                operationId,
+                type: "plan-step-completed",
+                phase: "execution",
+                timestamp: new Date(),
+                overallProgress: 10 + (currentStep / Math.max(totalSteps, 1)) * 80,
+                stepIndex: currentStep - 1,
+                stepDescription: plan.stepSummary[currentStep - 1]?.description ?? "",
+                totalSteps,
+              });
+            }
+
+            currentStep = stepNum;
+            onProgress?.({
+              operationId,
+              type: "plan-step-started",
+              phase: "execution",
+              timestamp: new Date(),
+              overallProgress: 10 + ((stepNum - 1) / Math.max(totalSteps, 1)) * 80,
+              stepIndex: stepNum - 1,
+              stepDescription: stepName,
+              totalSteps,
+            });
+          } else if (line.trim()) {
+            onProgress?.({
+              operationId,
+              type: "step-output",
+              phase: "execution",
+              output: line,
+              timestamp: new Date(),
+              overallProgress: 10 + ((currentStep ?? 1) / Math.max(totalSteps, 1)) * 80,
+              stepIndex: (currentStep ?? 1) - 1,
+            });
+          }
+        }
       },
     );
 
     if (executionResult.success) {
+      // Complete the last plan step
+      if (currentStep !== null) {
+        onProgress?.({
+          operationId,
+          type: "plan-step-completed",
+          phase: "execution",
+          timestamp: new Date(),
+          overallProgress: 90,
+          stepIndex: currentStep - 1,
+          stepDescription: plan.stepSummary[currentStep - 1]?.description ?? "",
+          totalSteps,
+        });
+      }
+
       onProgress?.({
         operationId,
         type: "script-completed",
@@ -147,7 +216,21 @@ export class ScriptRunner {
       };
     }
 
-    // Execution failed
+    // Execution failed — mark the active plan step as failed
+    if (currentStep !== null) {
+      onProgress?.({
+        operationId,
+        type: "plan-step-failed",
+        phase: "execution",
+        timestamp: new Date(),
+        overallProgress: 60,
+        stepIndex: currentStep - 1,
+        stepDescription: plan.stepSummary[currentStep - 1]?.description ?? "",
+        totalSteps,
+        error: executionResult.stderr || `Exit code ${executionResult.exitCode}`,
+      });
+    }
+
     envoyError("Script execution failed", {
       exitCode: executionResult.exitCode,
       timedOut: executionResult.timedOut,

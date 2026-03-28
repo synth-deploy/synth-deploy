@@ -40,7 +40,11 @@ interface ProgressEvent {
     | "step-failed"
     | "rollback-started"
     | "rollback-completed"
-    | "deployment-completed";
+    | "deployment-completed"
+    | "plan-step-started"
+    | "plan-step-completed"
+    | "plan-step-failed"
+    | "step-output";
   stepIndex: number;
   stepDescription: string;
   status: "in_progress" | "completed" | "failed";
@@ -144,9 +148,19 @@ export default function DeploymentDetailPanel({ deploymentId, title }: Props) {
   const [postmortem, setPostmortem] = useState<PostmortemReport | null>(null);
   const [expandedEntries, setExpandedEntries] = useState<Set<string>>(new Set());
   const [expandedPlanSteps, setExpandedPlanSteps] = useState<Set<number>>(new Set());
+  const [expandedStepLogs, setExpandedStepLogs] = useState<Set<number>>(new Set());
 
   function togglePlanStep(i: number) {
     setExpandedPlanSteps((prev) => {
+      const next = new Set(prev);
+      if (next.has(i)) next.delete(i);
+      else next.add(i);
+      return next;
+    });
+  }
+
+  function toggleStepLog(i: number) {
+    setExpandedStepLogs((prev) => {
       const next = new Set(prev);
       if (next.has(i)) next.delete(i);
       else next.add(i);
@@ -208,13 +222,22 @@ export default function DeploymentDetailPanel({ deploymentId, title }: Props) {
     return () => clearInterval(interval);
   }, [stale, isRunning, refreshDeployment]);
 
-  // Build step state map from progress events
-  const stepMap = new Map<number, ProgressEvent>();
+  // Build step state map from progress events — prefer plan-step events (per-step
+  // granularity from markers) and fall back to phase-level step events.
+  const planStepMap = new Map<number, ProgressEvent>();
+  const phaseStepMap = new Map<number, ProgressEvent>();
+  const stepLogs = new Map<number, string[]>();
   for (const event of progressEvents) {
-    if (event.type === "step-started" || event.type === "step-completed" || event.type === "step-failed") {
-      stepMap.set(event.stepIndex, event);
+    if (event.type === "plan-step-started" || event.type === "plan-step-completed" || event.type === "plan-step-failed") {
+      planStepMap.set(event.stepIndex, event);
+    } else if (event.type === "step-started" || event.type === "step-completed" || event.type === "step-failed") {
+      phaseStepMap.set(event.stepIndex, event);
+    } else if (event.type === "step-output" && event.output) {
+      if (!stepLogs.has(event.stepIndex)) stepLogs.set(event.stepIndex, []);
+      stepLogs.get(event.stepIndex)!.push(event.output);
     }
   }
+  const stepMap = planStepMap.size > 0 ? planStepMap : phaseStepMap;
   const overallProgress = progressEvents.length > 0
     ? progressEvents[progressEvents.length - 1].overallProgress
     : 0;
@@ -341,32 +364,62 @@ export default function DeploymentDetailPanel({ deploymentId, title }: Props) {
           {planSummary.length > 0 ? (
             planSummary.map((step, i) => {
               const evt = stepMap.get(i);
-              const isCompleted = evt?.type === "step-completed";
-              const isActive = evt?.type === "step-started";
-              const isFailed = evt?.type === "step-failed";
+              const isCompleted = evt?.type === "step-completed" || evt?.type === "plan-step-completed";
+              const isActive = evt?.type === "step-started" || evt?.type === "plan-step-started";
+              const isFailed = evt?.type === "step-failed" || evt?.type === "plan-step-failed";
+              const logs = stepLogs.get(i);
+              const hasLogs = logs && logs.length > 0;
+              const isLogExpanded = expandedStepLogs.has(i);
               return (
-                <div
-                  key={i}
-                  className="exec-step-row"
-                  style={{ opacity: isCompleted || isActive || isFailed ? 1 : 0.3 }}
-                >
-                  <span className={`exec-step-badge ${isCompleted ? "exec-step-badge-done" : isActive ? "exec-step-badge-active" : isFailed ? "exec-step-badge-pending" : "exec-step-badge-pending"}`}
-                    style={isFailed ? { background: "var(--status-failed-bg)", color: "var(--status-failed)", border: "1px solid var(--status-failed-border)" } : undefined}
+                <div key={i}>
+                  <div
+                    className="exec-step-row"
+                    style={{ opacity: isCompleted || isActive || isFailed ? 1 : 0.3, cursor: hasLogs ? "pointer" : undefined }}
+                    onClick={hasLogs ? () => toggleStepLog(i) : undefined}
                   >
-                    {isCompleted ? "✓" : isFailed ? "✗" : i + 1}
-                  </span>
-                  <span style={{
-                    fontSize: 13,
-                    color: isCompleted
-                      ? "var(--status-succeeded)"
-                      : isFailed
-                        ? "var(--status-failed)"
-                        : isActive
-                          ? "var(--text)"
-                          : "var(--text-muted)",
-                  }}>
-                    {step.description}
-                  </span>
+                    <span className={`exec-step-badge ${isCompleted ? "exec-step-badge-done" : isActive ? "exec-step-badge-active" : isFailed ? "exec-step-badge-pending" : "exec-step-badge-pending"}`}
+                      style={isFailed ? { background: "var(--status-failed-bg)", color: "var(--status-failed)", border: "1px solid var(--status-failed-border)" } : undefined}
+                    >
+                      {isCompleted ? "✓" : isFailed ? "✗" : i + 1}
+                    </span>
+                    <span style={{
+                      fontSize: 13,
+                      flex: 1,
+                      color: isCompleted
+                        ? "var(--status-succeeded)"
+                        : isFailed
+                          ? "var(--status-failed)"
+                          : isActive
+                            ? "var(--text)"
+                            : "var(--text-muted)",
+                    }}>
+                      {step.description}
+                    </span>
+                    {hasLogs && (
+                      <span style={{ fontSize: 10, color: "var(--text-muted)", marginLeft: 6 }}>
+                        {isLogExpanded ? "▼" : "▶"}
+                      </span>
+                    )}
+                  </div>
+                  {hasLogs && isLogExpanded && (
+                    <pre style={{
+                      margin: "0 0 4px 28px",
+                      padding: "6px 8px",
+                      fontSize: 11,
+                      lineHeight: 1.4,
+                      fontFamily: "var(--font-mono, monospace)",
+                      background: "var(--bg-input)",
+                      border: "1px solid var(--border-subtle)",
+                      borderRadius: 4,
+                      color: "var(--text-muted)",
+                      maxHeight: 150,
+                      overflowY: "auto",
+                      whiteSpace: "pre-wrap",
+                      wordBreak: "break-all",
+                    }}>
+                      {logs.join("\n")}
+                    </pre>
+                  )}
                 </div>
               );
             })
@@ -374,16 +427,52 @@ export default function DeploymentDetailPanel({ deploymentId, title }: Props) {
             Array.from(stepMap.entries())
               .sort(([a], [b]) => a - b)
               .map(([idx, event]) => {
-                const isActive = event.type === "step-started";
-                const isCompleted = event.type === "step-completed";
+                const isActive = event.type === "step-started" || event.type === "plan-step-started";
+                const isCompleted = event.type === "step-completed" || event.type === "plan-step-completed";
+                const isFailed = event.type === "step-failed" || event.type === "plan-step-failed";
+                const logs = stepLogs.get(idx);
+                const hasLogs = logs && logs.length > 0;
+                const isLogExpanded = expandedStepLogs.has(idx);
                 return (
-                  <div key={idx} className="exec-step-row">
-                    <span className={`exec-step-badge ${isCompleted ? "exec-step-badge-done" : isActive ? "exec-step-badge-active" : "exec-step-badge-pending"}`}>
-                      {isCompleted ? "✓" : idx + 1}
-                    </span>
-                    <span style={{ fontSize: 13, color: isCompleted ? "var(--status-succeeded)" : isActive ? "var(--text)" : "var(--text-muted)" }}>
-                      {event.stepDescription}
-                    </span>
+                  <div key={idx}>
+                    <div
+                      className="exec-step-row"
+                      style={{ cursor: hasLogs ? "pointer" : undefined }}
+                      onClick={hasLogs ? () => toggleStepLog(idx) : undefined}
+                    >
+                      <span className={`exec-step-badge ${isCompleted ? "exec-step-badge-done" : isActive ? "exec-step-badge-active" : isFailed ? "exec-step-badge-pending" : "exec-step-badge-pending"}`}
+                        style={isFailed ? { background: "var(--status-failed-bg)", color: "var(--status-failed)", border: "1px solid var(--status-failed-border)" } : undefined}
+                      >
+                        {isCompleted ? "✓" : isFailed ? "✗" : idx + 1}
+                      </span>
+                      <span style={{ fontSize: 13, flex: 1, color: isCompleted ? "var(--status-succeeded)" : isFailed ? "var(--status-failed)" : isActive ? "var(--text)" : "var(--text-muted)" }}>
+                        {event.stepDescription}
+                      </span>
+                      {hasLogs && (
+                        <span style={{ fontSize: 10, color: "var(--text-muted)", marginLeft: 6 }}>
+                          {isLogExpanded ? "▼" : "▶"}
+                        </span>
+                      )}
+                    </div>
+                    {hasLogs && isLogExpanded && (
+                      <pre style={{
+                        margin: "0 0 4px 28px",
+                        padding: "6px 8px",
+                        fontSize: 11,
+                        lineHeight: 1.4,
+                        fontFamily: "var(--font-mono, monospace)",
+                        background: "var(--bg-input)",
+                        border: "1px solid var(--border-subtle)",
+                        borderRadius: 4,
+                        color: "var(--text-muted)",
+                        maxHeight: 150,
+                        overflowY: "auto",
+                        whiteSpace: "pre-wrap",
+                        wordBreak: "break-all",
+                      }}>
+                        {logs.join("\n")}
+                      </pre>
+                    )}
                   </div>
                 );
               })
