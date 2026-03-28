@@ -2068,6 +2068,45 @@ export function registerOperationRoutes(
       }
     }
 
+    // Cycle detection (Kahn's algorithm) — catch dependency cycles at plan time
+    // so a cyclic composite fails before the user is asked to approve anything.
+    if (compositeSteps.some((s) => (s.waitForSteps?.length ?? 0) > 0)) {
+      const inDeg = new Array(compositeSteps.length).fill(0);
+      const adj: number[][] = compositeSteps.map(() => []);
+      for (let i = 0; i < compositeSteps.length; i++) {
+        for (const dep of (compositeSteps[i].waitForSteps ?? [])) {
+          if (dep >= 0 && dep < compositeSteps.length && dep !== i) {
+            adj[dep].push(i);
+            inDeg[i]++;
+          }
+        }
+      }
+      const queue = inDeg.reduce<number[]>((acc, d, i) => (d === 0 ? [...acc, i] : acc), []);
+      let processed = 0;
+      while (queue.length > 0) {
+        const node = queue.shift()!;
+        processed++;
+        for (const next of adj[node]) {
+          if (--inDeg[next] === 0) queue.push(next);
+        }
+      }
+      if (processed < compositeSteps.length) {
+        const cycleSteps = inDeg.map((d, i) => (d > 0 ? i + 1 : -1)).filter((i) => i > 0);
+        const parentDep = deployments.get(parentOp.id);
+        if (parentDep) {
+          parentDep.status = "failed" as typeof parentDep.status;
+          parentDep.failureReason = `Composite has a dependency cycle involving steps [${cycleSteps.join(", ")}] — fix waitForSteps`;
+          deployments.save(parentDep);
+        }
+        // Cancel all child stubs created in Phase 1
+        for (const id of childIds) {
+          const child = deployments.get(id);
+          if (child) { child.status = "cancelled" as typeof child.status; deployments.save(child); }
+        }
+        return;
+      }
+    }
+
     const hasAnyDependencies = compositeSteps.some((s) => (s.waitForSteps?.length ?? 0) > 0 || (s.waitFor?.length ?? 0) > 0);
 
     debrief.record({
@@ -2345,13 +2384,13 @@ export function registerOperationRoutes(
         const childIdx = childIds.indexOf(childId);
 
         if (!child.plan || !child.rollbackPlan) {
-          failComposite(parentId, `Child operation ${childIdx + 1} has no plan — cannot execute`, childId, childIdx);
+          failComposite(parentId, `Child operation ${childIdx + 1} has no plan — cannot execute`, childId, childIdx, childIds);
           return;
         }
 
         const targetEnvoy = child.envoyId ? envoyRegistry?.get(child.envoyId) : envoyRegistry?.list()[0];
         if (!targetEnvoy) {
-          failComposite(parentId, `No envoy available for child operation ${childIdx + 1}`, childId, childIdx);
+          failComposite(parentId, `No envoy available for child operation ${childIdx + 1}`, childId, childIdx, childIds);
           return;
         }
 
@@ -2394,15 +2433,28 @@ export function registerOperationRoutes(
             `Child operation ${childIdx + 1} (${child.input.type}) execution dispatch failed: ${err instanceof Error ? err.message : "unknown error"}`,
             childId,
             childIdx,
+            childIds,
           );
           return;
         }
       }
 
       if (running.size === 0 && pending.size > 0) {
-        // Deadlock: nothing running, nothing ready, but still pending
-        const pendingList = [...pending].map((id) => childIds.indexOf(id) + 1).join(", ");
-        failComposite(parentId, `Composite deadlocked — steps [${pendingList}] have unsatisfiable wait conditions`, "", -1);
+        // Deadlock: nothing running, nothing ready, but still pending — diagnose why
+        const pendingList = [...pending].map((id) => {
+          const c = deployments.get(id);
+          const idx = childIds.indexOf(id) + 1;
+          const blockers = (c?.waitFor ?? [])
+            .filter((w) => deployments.get(w.operationId)?.status !== w.status)
+            .map((w) => {
+              const depIdx = childIds.indexOf(w.operationId) + 1;
+              const depStatus = deployments.get(w.operationId)?.status ?? "missing";
+              return `step ${depIdx} is "${depStatus}", expected "${w.status}"`;
+            })
+            .join("; ");
+          return `step ${idx} (${blockers || "unknown reason"})`;
+        }).join(", ");
+        failComposite(parentId, `Composite deadlocked — ${pendingList}`, "", -1, childIds);
         return;
       }
 
@@ -2430,7 +2482,7 @@ export function registerOperationRoutes(
           running.delete(childId);
           failed.add(childId);
           const reason = updated.failureReason ?? `Child operation ${childIdx + 1} failed`;
-          failComposite(parentId, `Composite stopped: step ${childIdx + 1}/${childIds.length} (${updated.input.type}): ${reason}`, childId, childIdx);
+          failComposite(parentId, `Composite stopped: step ${childIdx + 1}/${childIds.length} (${updated.input.type}): ${reason}`, childId, childIdx, childIds);
           return;
         }
         // Still running — continue polling
@@ -2455,8 +2507,8 @@ export function registerOperationRoutes(
     }
   }
 
-  /** Helper: mark parent composite as failed with debrief */
-  function failComposite(parentId: string, reason: string, childId: string, childIndex: number): void {
+  /** Helper: mark parent composite as failed with debrief, and cancel all pending/running siblings */
+  function failComposite(parentId: string, reason: string, childId: string, childIndex: number, allChildIds: string[] = []): void {
     const dep = deployments.get(parentId);
     if (dep) {
       dep.status = "failed" as typeof dep.status;
@@ -2473,6 +2525,16 @@ export function registerOperationRoutes(
         context: { childId, childIndex },
       });
     }
+    // Cancel siblings that are stuck in a non-terminal state so they don't sit in limbo
+    for (const id of allChildIds) {
+      if (id === childId) continue;
+      const sibling = deployments.get(id);
+      if (sibling && (sibling.status === "pending" || sibling.status === "running" || sibling.status === "awaiting_approval" || sibling.status === "approved")) {
+        sibling.status = "cancelled" as typeof sibling.status;
+        sibling.failureReason = "Parent composite operation failed";
+        deployments.save(sibling);
+      }
+    }
   }
 
   /** Sequential fallback for composites with no wait conditions (backward compatible) */
@@ -2484,13 +2546,13 @@ export function registerOperationRoutes(
       const childId = childIds[i];
       const child = deployments.get(childId);
       if (!child || !child.plan || !child.rollbackPlan) {
-        failComposite(parentId, `Child operation ${i + 1} has no plan — cannot execute`, childId, i);
+        failComposite(parentId, `Child operation ${i + 1} has no plan — cannot execute`, childId, i, childIds);
         return;
       }
 
       const targetEnvoy = child.envoyId ? envoyRegistry?.get(child.envoyId) : envoyRegistry?.list()[0];
       if (!targetEnvoy) {
-        failComposite(parentId, `No envoy available for child operation ${i + 1}`, childId, i);
+        failComposite(parentId, `No envoy available for child operation ${i + 1}`, childId, i, childIds);
         return;
       }
 
@@ -2531,6 +2593,7 @@ export function registerOperationRoutes(
           `Child operation ${i + 1} (${child.input.type}) execution dispatch failed: ${err instanceof Error ? err.message : "unknown error"}`,
           childId,
           i,
+          childIds,
         );
         return;
       }
@@ -2560,7 +2623,7 @@ export function registerOperationRoutes(
       const finalChild = deployments.get(childId);
       if (!childSucceeded) {
         const reason = finalChild?.failureReason ?? `Child operation ${i + 1} did not complete in time`;
-        failComposite(parentId, `Composite stopped at step ${i + 1}/${childIds.length} (${child.input.type}): ${reason}`, childId, i);
+        failComposite(parentId, `Composite stopped at step ${i + 1}/${childIds.length} (${child.input.type}): ${reason}`, childId, i, childIds);
         return;
       }
 

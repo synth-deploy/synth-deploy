@@ -253,7 +253,7 @@ const ChildOperationInputSchema = z.discriminatedUnion("type", [
 
 const WaitConditionSchema = z.object({
   operationId: z.string().min(1),
-  status: z.string().min(1),
+  status: z.enum(["pending", "planning", "awaiting_approval", "approved", "rejected", "shelved", "running", "succeeded", "failed", "rolled_back", "cancelled"]),
 });
 
 const CompositeStepSchema = z.object({
