@@ -368,11 +368,14 @@ describe("Composite Operations — approval and execution", () => {
       payload: { approvedBy: "ops@example.com" },
     });
 
+    // Verify approval was applied — children may have progressed past "approved"
+    // due to fire-and-forget executeCompositeChildren running asynchronously.
     const c1 = ctx.deployments.get(child1.id);
     const c2 = ctx.deployments.get(child2.id);
-    expect(c1?.status).toBe("approved");
-    expect(c2?.status).toBe("approved");
     expect((c1 as any)?.approvedBy).toBe("ops@example.com");
+    expect((c2 as any)?.approvedBy).toBe("ops@example.com");
+    expect((c1 as any)?.approvedAt).toBeDefined();
+    expect((c2 as any)?.approvedAt).toBeDefined();
   });
 
   it("returns 409 when approving composite in non-awaiting_approval status", async () => {
