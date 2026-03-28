@@ -277,7 +277,7 @@ export function registerOperationRoutes(
               decisionType: "plan-generation",
               decision: `Operation plan blocked — infrastructure prerequisites not met`,
               reasoning: result.blockReason ?? result.plan.reasoning,
-              context: { stepCount: result.plan.scriptedPlan.stepSummary.length, envoyId: planningEnvoy.id, blocked: true },
+              context: { stepCount: result.plan.scriptedPlan.steps.length, envoyId: planningEnvoy.id, blocked: true },
             });
           } else {
             // Plan is valid — transition to awaiting_approval
@@ -290,9 +290,9 @@ export function registerOperationRoutes(
               operationId: dep.id,
               agent: "envoy",
               decisionType: "plan-generation",
-              decision: `Operation plan generated with ${result.plan.scriptedPlan.stepSummary.length} steps`,
+              decision: `Operation plan generated with ${result.plan.scriptedPlan.steps.length} steps`,
               reasoning: result.plan.reasoning,
-              context: { stepCount: result.plan.scriptedPlan.stepSummary.length, envoyId: planningEnvoy.id, delta: result.delta },
+              context: { stepCount: result.plan.scriptedPlan.steps.length, envoyId: planningEnvoy.id, delta: result.delta },
             });
           }
         }).catch((err) => {
@@ -411,9 +411,9 @@ export function registerOperationRoutes(
         operationId: deployment.id,
         agent: "envoy",
         decisionType: "plan-generation",
-        decision: `Operation plan submitted with ${parsed.data.plan.scriptedPlan.stepSummary.length} steps`,
+        decision: `Operation plan submitted with ${parsed.data.plan.scriptedPlan.steps.length} steps`,
         reasoning: parsed.data.plan.reasoning,
-        context: { stepCount: parsed.data.plan.scriptedPlan.stepSummary.length },
+        context: { stepCount: parsed.data.plan.scriptedPlan.steps.length },
       });
 
       return reply.status(200).send({ deployment });
@@ -467,7 +467,7 @@ export function registerOperationRoutes(
         target: { type: "deployment", id: deployment.id },
         details: parsed.data.modifications
           ? { modifications: parsed.data.modifications }
-          : { planStepCount: deployment.plan?.scriptedPlan.stepSummary.length ?? 0 },
+          : { planStepCount: deployment.plan?.scriptedPlan.steps.length ?? 0 },
       });
 
       // Composite operations: execute children (sequentially or as DAG)
@@ -806,9 +806,9 @@ export function registerOperationRoutes(
         operationId: dep.id,
         agent: "envoy",
         decisionType: "plan-generation",
-        decision: `Plan regenerated from shelf (${result.plan.scriptedPlan.stepSummary.length} steps)`,
+        decision: `Plan regenerated from shelf (${result.plan.scriptedPlan.steps.length} steps)`,
         reasoning: result.plan.reasoning,
-        context: { stepCount: result.plan.scriptedPlan.stepSummary.length, envoyId: planningEnvoy.id, activatedFromShelf: true },
+        context: { stepCount: result.plan.scriptedPlan.steps.length, envoyId: planningEnvoy.id, activatedFromShelf: true },
       });
       telemetry.record({ actor, action: "operation.activated", target: { type: "deployment", id: dep.id }, details: { feedback: parsed.data.feedback } });
 
@@ -844,8 +844,7 @@ export function registerOperationRoutes(
         try {
           const modifiedScript: import("@synth-deploy/core").ScriptedPlan = {
             ...deployment.plan.scriptedPlan,
-            executionScript: parsed.data.executionScript,
-            ...(parsed.data.rollbackScript !== undefined ? { rollbackScript: parsed.data.rollbackScript } : {}),
+            steps: parsed.data.steps,
           };
           const validation = await envoyClient.validatePlan(modifiedScript);
           if (!validation.valid) {
@@ -859,22 +858,13 @@ export function registerOperationRoutes(
         }
       }
 
-      // Compute diff description
-      const oldScript = deployment.plan.scriptedPlan?.executionScript ?? "";
-      const newScript = parsed.data.executionScript;
-      const diffFromPreviousPlan = oldScript !== newScript
-        ? "Execution script modified by user"
-        : "Plan metadata changed (script unchanged)";
-
       // Apply modifications
       deployment.plan = {
         ...deployment.plan,
         scriptedPlan: {
           ...deployment.plan.scriptedPlan,
-          executionScript: parsed.data.executionScript,
-          ...(parsed.data.rollbackScript !== undefined ? { rollbackScript: parsed.data.rollbackScript } : {}),
+          steps: parsed.data.steps,
         },
-        diffFromPreviousPlan,
       };
       deployments.save(deployment);
 
@@ -904,7 +894,7 @@ export function registerOperationRoutes(
         actor,
         action: "agent.recommendation.overridden",
         target: { type: "deployment", id: deployment.id },
-        details: { reason: parsed.data.reason, diff: diffFromPreviousPlan },
+        details: { reason: parsed.data.reason },
       });
 
       return { deployment, modified: true };
@@ -949,7 +939,7 @@ export function registerOperationRoutes(
       try {
         const validation = await planningClientForValidation.validateRefinementFeedback({
           feedback: parsed.data.feedback,
-          currentPlanSummary: (deployment.plan?.scriptedPlan?.stepSummary ?? []).map((s) => ({
+          currentPlanSummary: (deployment.plan?.scriptedPlan?.steps ?? []).map((s) => ({
             description: s.description,
             reversible: s.reversible,
           })),
@@ -1035,9 +1025,9 @@ export function registerOperationRoutes(
         operationId: dep.id,
         agent: "envoy",
         decisionType: "plan-generation",
-        decision: `Plan regenerated with user feedback (${result.plan.scriptedPlan.stepSummary.length} steps)`,
+        decision: `Plan regenerated with user feedback (${result.plan.scriptedPlan.steps.length} steps)`,
         reasoning: result.plan.reasoning,
-        context: { stepCount: result.plan.scriptedPlan.stepSummary.length, envoyId: planningEnvoy.id, refinementFeedback: parsed.data.feedback },
+        context: { stepCount: result.plan.scriptedPlan.steps.length, envoyId: planningEnvoy.id, refinementFeedback: parsed.data.feedback },
       });
 
       return { deployment: dep, replanned: true };
@@ -1157,7 +1147,7 @@ export function registerOperationRoutes(
         target: "",
         status: s.status,
         output: s.output ?? s.error,
-      })) ?? deployment.plan?.scriptedPlan?.stepSummary.map((s) => ({
+      })) ?? deployment.plan?.scriptedPlan?.steps.map((s) => ({
         description: s.description,
         action: "script-step",
         target: "",
@@ -1206,7 +1196,7 @@ export function registerOperationRoutes(
           reasoning: rollbackPlan.reasoning,
           context: {
             requestedBy: actor,
-            stepCount: rollbackPlan.scriptedPlan.stepSummary.length,
+            stepCount: rollbackPlan.scriptedPlan.steps.length,
             envoyId: targetEnvoy.id,
             deploymentStatus: deployment.status,
           },
@@ -1216,7 +1206,7 @@ export function registerOperationRoutes(
           actor,
           action: "deployment.rollback-plan-requested" as Parameters<typeof telemetry.record>[0]["action"],
           target: { type: "deployment", id: deployment.id },
-          details: { stepCount: rollbackPlan.scriptedPlan.stepSummary.length },
+          details: { stepCount: rollbackPlan.scriptedPlan.steps.length },
         });
 
         return reply.status(200).send({ deployment, rollbackPlan });
@@ -1273,15 +1263,15 @@ export function registerOperationRoutes(
         agent: "server",
         decisionType: "rollback-execution",
         decision: `Rollback execution initiated for ${artifact?.name ?? getArtifactId(deployment)} v${deployment.version}`,
-        reasoning: `Rollback requested by ${actor}. Executing ${deployment.rollbackPlan.scriptedPlan.stepSummary.length} rollback step(s).`,
-        context: { initiatedBy: actor, stepCount: deployment.rollbackPlan.scriptedPlan.stepSummary.length },
+        reasoning: `Rollback requested by ${actor}. Executing ${deployment.rollbackPlan.scriptedPlan.steps.length} rollback step(s).`,
+        context: { initiatedBy: actor, stepCount: deployment.rollbackPlan.scriptedPlan.steps.length },
         actor: request.user?.email,
       });
       telemetry.record({
         actor,
         action: "deployment.rollback-executed" as Parameters<typeof telemetry.record>[0]["action"],
         target: { type: "deployment", id: deployment.id },
-        details: { stepCount: deployment.rollbackPlan.scriptedPlan.stepSummary.length },
+        details: { stepCount: deployment.rollbackPlan.scriptedPlan.steps.length },
       });
 
       const rollbackClient = new EnvoyClient(targetEnvoy.url);
@@ -1291,11 +1281,8 @@ export function registerOperationRoutes(
       const emptyPlan: import("@synth-deploy/core").OperationPlan = {
         scriptedPlan: {
           platform: "bash",
-          executionScript: "# No rollback of rollback",
-          dryRunScript: null,
-          rollbackScript: null,
           reasoning: "No rollback of rollback.",
-          stepSummary: [],
+          steps: [],
         },
         reasoning: "No rollback of rollback.",
       };
@@ -1478,7 +1465,7 @@ export function registerOperationRoutes(
                 decisionType: "plan-generation",
                 decision: `Operation plan blocked — infrastructure prerequisites not met`,
                 reasoning: result.blockReason ?? result.plan.reasoning,
-                context: { stepCount: result.plan.scriptedPlan.stepSummary.length, envoyId: planningEnvoy.id, blocked: true },
+                context: { stepCount: result.plan.scriptedPlan.steps.length, envoyId: planningEnvoy.id, blocked: true },
               });
             } else {
               dep.status = "awaiting_approval" as typeof dep.status;
@@ -1490,9 +1477,9 @@ export function registerOperationRoutes(
                 operationId: dep.id,
                 agent: "envoy",
                 decisionType: "plan-generation",
-                decision: `Operation plan generated with ${result.plan.scriptedPlan.stepSummary.length} steps`,
+                decision: `Operation plan generated with ${result.plan.scriptedPlan.steps.length} steps`,
                 reasoning: result.plan.reasoning,
-                context: { stepCount: result.plan.scriptedPlan.stepSummary.length, envoyId: planningEnvoy.id, delta: result.delta },
+                context: { stepCount: result.plan.scriptedPlan.steps.length, envoyId: planningEnvoy.id, delta: result.delta },
               });
             }
           }).catch((err) => {
@@ -2225,9 +2212,9 @@ export function registerOperationRoutes(
           operationId: childDep.id,
           agent: "envoy",
           decisionType: "plan-generation",
-          decision: `Child operation plan generated with ${result.plan.scriptedPlan.stepSummary.length} steps`,
+          decision: `Child operation plan generated with ${result.plan.scriptedPlan.steps.length} steps`,
           reasoning: result.plan.reasoning,
-          context: { stepCount: result.plan.scriptedPlan.stepSummary.length, envoyId: resolvedEnvoy.id, parentOperationId: parentOp.id },
+          context: { stepCount: result.plan.scriptedPlan.steps.length, envoyId: resolvedEnvoy.id, parentOperationId: parentOp.id },
         });
       } catch (err) {
         const childDep = deployments.get(childId);
@@ -2261,10 +2248,10 @@ export function registerOperationRoutes(
       // All children planned — build combined summary plan and await approval
       const allChildren = childIds.map((id) => deployments.get(id)).filter(Boolean) as import("@synth-deploy/core").Operation[];
 
-      const combinedStepSummary = allChildren.flatMap((c, idx) => {
+      const combinedSteps = allChildren.flatMap((c, idx) => {
         if (!c.plan?.scriptedPlan) return [];
         const envoyLabel = c.envoyId && c.envoyId !== defaultEnvoy.id ? ` @${c.envoyId}` : "";
-        return c.plan.scriptedPlan.stepSummary.map((step) => ({
+        return c.plan.scriptedPlan.steps.map((step) => ({
           ...step,
           description: `[${idx + 1}/${allChildren.length}: ${c.input.type}${envoyLabel}] ${step.description}`,
         }));
@@ -2276,32 +2263,21 @@ export function registerOperationRoutes(
         return `Step ${idx + 1} (${c.input.type}${envoyLabel}${waitLabel}): ${c.plan?.reasoning ?? "no reasoning"}`;
       }).join("\n\n");
 
-      // Combine child execution scripts into a single composite script
-      const combinedScript = allChildren
-        .map((c, idx) => `# --- Child ${idx + 1}/${allChildren.length}: ${c.input.type} ---\n${c.plan?.scriptedPlan?.executionScript ?? "# no script"}`)
-        .join("\n\n");
-
       const parentDep = deployments.get(parentOp.id);
       if (parentDep && parentDep.status === "pending") {
         parentDep.plan = {
           scriptedPlan: {
             platform: "bash",
-            executionScript: combinedScript,
-            dryRunScript: null,
-            rollbackScript: null,
             reasoning: combinedReasoning,
-            stepSummary: combinedStepSummary,
+            steps: combinedSteps,
           },
           reasoning: combinedReasoning,
         };
         parentDep.rollbackPlan = {
           scriptedPlan: {
             platform: "bash",
-            executionScript: "# Child operations handle their own rollback",
-            dryRunScript: null,
-            rollbackScript: null,
             reasoning: "Child operations handle their own rollback",
-            stepSummary: [],
+            steps: [],
           },
           reasoning: "Child operations handle their own rollback",
         };
@@ -2316,7 +2292,7 @@ export function registerOperationRoutes(
           decisionType: "composite-plan-ready",
           decision: `All ${allChildren.length} child plans ready — composite awaiting approval`,
           reasoning: combinedReasoning,
-          context: { childIds, totalSteps: combinedStepSummary.length, hasWaitConditions: hasAnyDependencies },
+          context: { childIds, totalSteps: combinedSteps.length, hasWaitConditions: hasAnyDependencies },
         });
       }
     }

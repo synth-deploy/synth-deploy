@@ -248,11 +248,8 @@ export class GraphExecutor {
             rollbackPlan: {
               scriptedPlan: {
                 platform: "bash",
-                executionScript: "# No rollback plan provided",
-                dryRunScript: null,
-                rollbackScript: null,
                 reasoning: "No rollback plan provided",
-                stepSummary: [],
+                steps: [],
               },
               reasoning: "No rollback plan provided",
             },
@@ -428,11 +425,8 @@ export class GraphExecutor {
           rollbackPlan: {
             scriptedPlan: {
               platform: "bash",
-              executionScript: "# Rollback of rollback not supported",
-              dryRunScript: null,
-              rollbackScript: null,
               reasoning: "Rollback of rollback not supported",
-              stepSummary: [],
+              steps: [],
             },
             reasoning: "Rollback of rollback not supported",
           },

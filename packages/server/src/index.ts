@@ -305,16 +305,13 @@ if (process.env.SYNTH_SEED_DEMO !== 'false' && partitions.list().length === 0) {
     plan: {
       scriptedPlan: {
         platform: "bash",
-        executionScript: "#!/usr/bin/env bash\nset -euo pipefail\nsystemctl stop web-app\ncp -r /opt/web-app/ /opt/web-app.bak/\ntar -xzf /opt/releases/web-app-2.3.0.tar.gz -C /opt/web-app/\nenvsubst < /opt/web-app/config.template > /opt/web-app/.env\nsystemctl start web-app\ncurl -f --retry 3 --retry-delay 5 http://localhost:8080/health",
-        dryRunScript: null,
-        rollbackScript: "#!/usr/bin/env bash\nset -euo pipefail\nsystemctl stop web-app\ncp -r /opt/web-app.bak/ /opt/web-app/\ncp /opt/web-app.bak/.env /opt/web-app/.env\nsystemctl start web-app",
         reasoning: "Standard 5-step deploy: stop, backup, extract, config, start. One config change: API_ENDPOINT updated to v2 endpoint validated in staging for 4h.",
-        stepSummary: [
-          { description: "Stop service", reversible: true },
-          { description: "Backup current binaries", reversible: false },
-          { description: "Deploy new artifact", reversible: true },
-          { description: "Apply environment config (1 variable changed: API_ENDPOINT)", reversible: true },
-          { description: "Start service and verify health endpoint → 200 OK", reversible: true },
+        steps: [
+          { description: "Stop service", script: "systemctl stop web-app", dryRunScript: "systemctl status web-app", rollbackScript: "systemctl start web-app", reversible: true },
+          { description: "Backup current binaries", script: "cp -r /opt/web-app/ /opt/web-app.bak/", dryRunScript: null, rollbackScript: null, reversible: false },
+          { description: "Deploy new artifact", script: "tar -xzf /opt/releases/web-app-2.3.0.tar.gz -C /opt/web-app/", dryRunScript: null, rollbackScript: "cp -r /opt/web-app.bak/ /opt/web-app/", reversible: true },
+          { description: "Apply environment config (1 variable changed: API_ENDPOINT)", script: "envsubst < /opt/web-app/config.template > /opt/web-app/.env", dryRunScript: null, rollbackScript: "cp /opt/web-app.bak/.env /opt/web-app/.env", reversible: true },
+          { description: "Start service and verify health endpoint → 200 OK", script: "systemctl start web-app\ncurl -f --retry 3 --retry-delay 5 http://localhost:8080/health", dryRunScript: "curl -f http://localhost:8080/health || true", rollbackScript: "systemctl stop web-app", reversible: true },
         ],
         diffFromCurrent: [
           { key: "API_ENDPOINT", from: "https://api.acme.corp/v1", to: "https://api.acme.corp/v2" },
@@ -386,15 +383,12 @@ if (process.env.SYNTH_SEED_DEMO !== 'false' && partitions.list().length === 0) {
     plan: {
       scriptedPlan: {
         platform: "bash",
-        executionScript: "#!/usr/bin/env bash\nset -euo pipefail\ndocker pull registry.internal/api:1.13.0-beta.2\ndocker stop api-staging\ndocker run -d --name api-staging --env-file /opt/api/.env -p 8080:8080 registry.internal/api:1.13.0-beta.2\ncurl -f --retry 3 --retry-delay 5 http://localhost:8080/health",
-        dryRunScript: null,
-        rollbackScript: "#!/usr/bin/env bash\nset -euo pipefail\ndocker stop api-staging\ndocker pull registry.internal/api:1.12.0\ndocker start api-staging",
         reasoning: "Container swap: pull new image, stop old container, start new one, verify health. Staging environment — rollback is fast via image tag swap.",
-        stepSummary: [
-          { description: "Pull latest image from registry", reversible: true },
-          { description: "Stop running container", reversible: true },
-          { description: "Start new container with updated image", reversible: true },
-          { description: "Verify health endpoint returns 200", reversible: false },
+        steps: [
+          { description: "Pull latest image from registry", script: "docker pull registry.internal/api:1.13.0-beta.2", dryRunScript: null, rollbackScript: null, reversible: true },
+          { description: "Stop running container", script: "docker stop api-staging", dryRunScript: null, rollbackScript: "docker start api-staging", reversible: true },
+          { description: "Start new container with updated image", script: "docker run -d --name api-staging --env-file /opt/api/.env -p 8080:8080 registry.internal/api:1.13.0-beta.2", dryRunScript: null, rollbackScript: "docker stop api-staging && docker pull registry.internal/api:1.12.0 && docker start api-staging", reversible: true },
+          { description: "Verify health endpoint returns 200", script: "curl -f --retry 3 --retry-delay 5 http://localhost:8080/health", dryRunScript: null, rollbackScript: null, reversible: false },
         ],
       },
       reasoning: "Container swap: pull new image, stop old container, start new one, verify health. Staging environment — rollback is fast via image tag swap.",
@@ -409,17 +403,14 @@ if (process.env.SYNTH_SEED_DEMO !== 'false' && partitions.list().length === 0) {
     plan: {
       scriptedPlan: {
         platform: "bash",
-        executionScript: "#!/usr/bin/env bash\nset -euo pipefail\nnpm run worker:drain --timeout=120\nsystemctl stop synth-worker\ncp -r /opt/releases/worker-3.1.0/* /opt/worker/\nenvsubst < /opt/worker/config.template > /opt/worker/.env\nsystemctl start synth-worker\ncurl -f --retry 6 --retry-delay 5 http://localhost:9090/metrics",
-        dryRunScript: null,
-        rollbackScript: "#!/usr/bin/env bash\nset -euo pipefail\nsystemctl stop synth-worker\ncp -r /opt/worker.bak/* /opt/worker/\ncp /opt/worker.bak/.env /opt/worker/.env\nsystemctl start synth-worker",
         reasoning: "Worker upgrade with concurrency increase. Drain first to avoid job loss, then replace binary and config atomically. Queue depth check confirms processing resumed.",
-        stepSummary: [
-          { description: "Drain queue — wait for in-flight jobs to complete", reversible: false },
-          { description: "Stop worker processes on all nodes", reversible: true },
-          { description: "Deploy new worker binary", reversible: true },
-          { description: "Update queue concurrency config (WORKER_CONCURRENCY: 4 → 8)", reversible: true },
-          { description: "Start worker and verify queue depth drops", reversible: true },
-          { description: "Verify queue processing resumes within 30s", reversible: false },
+        steps: [
+          { description: "Drain queue — wait for in-flight jobs to complete", script: "npm run worker:drain --timeout=120", dryRunScript: null, rollbackScript: null, reversible: false },
+          { description: "Stop worker processes on all nodes", script: "systemctl stop synth-worker", dryRunScript: null, rollbackScript: "systemctl start synth-worker", reversible: true },
+          { description: "Deploy new worker binary", script: "cp -r /opt/releases/worker-3.1.0/* /opt/worker/", dryRunScript: null, rollbackScript: "cp -r /opt/worker.bak/* /opt/worker/", reversible: true },
+          { description: "Update queue concurrency config (WORKER_CONCURRENCY: 4 → 8)", script: "envsubst < /opt/worker/config.template > /opt/worker/.env", dryRunScript: null, rollbackScript: "cp /opt/worker.bak/.env /opt/worker/.env", reversible: true },
+          { description: "Start worker and verify queue depth drops", script: "systemctl start synth-worker", dryRunScript: null, rollbackScript: "systemctl stop synth-worker", reversible: true },
+          { description: "Verify queue processing resumes within 30s", script: "curl -f --retry 6 --retry-delay 5 http://localhost:9090/metrics", dryRunScript: null, rollbackScript: null, reversible: false },
         ],
       },
       reasoning: "Worker upgrade with concurrency increase. Drain first to avoid job loss, then replace binary and config atomically. Queue depth check confirms processing resumed.",
