@@ -548,9 +548,8 @@ export function registerOperationRoutes(
       // Normal operations: dispatch approved plan to envoy for execution
       else if (deployment.plan && deployment.rollbackPlan) {
         // Resolve the envoy that planned this deployment; fall back to first registered envoy
-        const registryEnvoy = deployment.envoyId
-          ? envoyRegistry?.get(deployment.envoyId)
-          : envoyRegistry?.list()[0];
+        const registryEnvoy = (deployment.envoyId ? envoyRegistry?.get(deployment.envoyId) : undefined)
+          ?? envoyRegistry?.list()[0];
         const execClient = registryEnvoy ? new EnvoyClient(registryEnvoy.url) : envoyClient;
 
         if (!execClient) {
