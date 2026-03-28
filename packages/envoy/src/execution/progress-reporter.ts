@@ -42,8 +42,16 @@ function toServerEvent(event: ExecutionProgressEvent): ServerProgressEvent | nul
       return { deploymentId: event.deploymentId, type: "rollback-completed", ...PHASE_STEP["rollback"], status: "completed", timestamp: ts, overallProgress: event.overallProgress };
     case "deployment-completed":
       return { deploymentId: event.deploymentId, type: "deployment-completed", stepIndex: 99, stepDescription: "Done", status: event.status, timestamp: ts, overallProgress: 100 };
+    case "plan-step-started":
+      return { deploymentId: event.deploymentId, type: "plan-step-started", stepIndex: event.stepIndex ?? 0, stepDescription: event.stepDescription ?? "", status: "in_progress", timestamp: ts, overallProgress: event.overallProgress };
+    case "plan-step-completed":
+      return { deploymentId: event.deploymentId, type: "plan-step-completed", stepIndex: event.stepIndex ?? 0, stepDescription: event.stepDescription ?? "", status: "completed", timestamp: ts, overallProgress: event.overallProgress };
+    case "plan-step-failed":
+      return { deploymentId: event.deploymentId, type: "plan-step-failed", stepIndex: event.stepIndex ?? 0, stepDescription: event.stepDescription ?? "", status: "failed", error: event.error, timestamp: ts, overallProgress: event.overallProgress };
+    case "step-output":
+      return { deploymentId: event.deploymentId, type: "step-output", stepIndex: event.stepIndex ?? 0, stepDescription: "", status: "in_progress", output: event.output, timestamp: ts, overallProgress: event.overallProgress };
     case "script-output":
-      return null; // stdout lines — not forwarded individually
+      return null; // raw stdout chunks — not forwarded (plan-step markers handle this now)
     default:
       return null;
   }

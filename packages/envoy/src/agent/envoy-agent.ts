@@ -1895,7 +1895,11 @@ export class EnvoyAgent {
       `- Scripts must be self-contained and executable\n` +
       `- Do NOT use tools that are listed as unavailable\n` +
       `- The dryRunScript must be read-only (no mutations)\n` +
-      `- The rollbackScript must undo what executionScript does`;
+      `- The rollbackScript must undo what executionScript does\n` +
+      `- In the executionScript, at the start of each logical step emit a progress marker:\n` +
+      `  echo "##SYNTH_STEP:<n>:<description>" where <n> is 1-indexed and <description> matches the corresponding stepSummary entry.\n` +
+      `  Example: echo "##SYNTH_STEP:1:Install dependencies" followed by the commands for that step.\n` +
+      `  Place one marker per stepSummary entry, in order, before the commands for that step.`;
 
     const probeSystemPrompt =
       `You are Synth's envoy agent performing a maintenance operation.\n\n` +
@@ -2472,7 +2476,11 @@ ${recent.map((p) => `- ${p.artifactName} → ${p.environmentId}: ${p.failureAnal
       `- Scripts must be self-contained and executable\n` +
       `- Do NOT use tools that are listed as unavailable\n` +
       `- The dryRunScript must be read-only (no mutations)\n` +
-      `- The rollbackScript must undo what executionScript does`;
+      `- The rollbackScript must undo what executionScript does\n` +
+      `- In the executionScript, at the start of each logical step emit a progress marker:\n` +
+      `  echo "##SYNTH_STEP:<n>:<description>" where <n> is 1-indexed and <description> matches the corresponding stepSummary entry.\n` +
+      `  Example: echo "##SYNTH_STEP:1:Install dependencies" followed by the commands for that step.\n` +
+      `  Place one marker per stepSummary entry, in order, before the commands for that step.`;
 
     // Attempt 1: probe loop — model uses the probe() tool to observe real machine state.
     const probeSystemPrompt =

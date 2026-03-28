@@ -52,13 +52,23 @@ export interface ScriptProgressEvent {
     | "script-failed"
     | "rollback-started"
     | "rollback-completed"
-    | "execution-completed";
+    | "execution-completed"
+    | "plan-step-started"
+    | "plan-step-completed"
+    | "plan-step-failed"
+    | "step-output";
   phase: "dry-run" | "execution" | "rollback";
   output?: string;
   error?: string;
   exitCode?: number;
   timestamp: Date;
   overallProgress: number;
+  /** 0-based index of the plan step (for plan-step-* and step-output events) */
+  stepIndex?: number;
+  /** Human-readable step description (for plan-step-started events) */
+  stepDescription?: string;
+  /** Total number of plan steps (for plan-step-* events) */
+  totalSteps?: number;
 }
 
 export type ScriptProgressCallback = (event: ScriptProgressEvent) => void;
@@ -69,6 +79,76 @@ export type ScriptProgressCallback = (event: ScriptProgressEvent) => void;
 
 /** Default timeout for script execution: 5 minutes */
 const DEFAULT_TIMEOUT_MS = 300_000;
+
+/** Regex to detect an existing step marker in the script */
+const EXISTING_MARKER_RE = /^echo\s+["']##SYNTH_STEP:\d+:/m;
+
+/**
+ * Inject step markers into a script that lacks them. This ensures step-level
+ * progress tracking works even when the LLM doesn't include markers.
+ *
+ * Strategy: find "command blocks" in the script (groups of non-empty,
+ * non-comment, non-shebang lines separated by blank lines or comments)
+ * and place a marker at the start of each block, distributing stepSummary
+ * descriptions across blocks proportionally.
+ */
+function injectStepMarkers(script: string, stepSummary: { description: string }[]): string {
+  if (stepSummary.length === 0) return script;
+
+  // Count existing markers — if the script already has enough, leave it alone
+  const existingCount = (script.match(/##SYNTH_STEP:\d+:/g) || []).length;
+  if (existingCount >= stepSummary.length) return script;
+
+  const lines = script.split("\n");
+  // Find block boundaries: a "block start" is a non-empty command line
+  // preceded by a blank line, comment line, or shebang (or the very first command)
+  const blockStarts: number[] = [];
+  let inBlock = false;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    const isCommand = line !== "" && !line.startsWith("#") && !line.startsWith("echo \"##SYNTH_STEP:");
+    if (isCommand && !inBlock) {
+      blockStarts.push(i);
+      inBlock = true;
+    } else if (!isCommand) {
+      inBlock = false;
+    }
+  }
+
+  if (blockStarts.length === 0) return script;
+
+  // Distribute steps across blocks: assign each step to a block position
+  const markerPositions: { lineIndex: number; stepNum: number; description: string }[] = [];
+  for (let s = 0; s < stepSummary.length; s++) {
+    // Map step s to the proportional block index
+    const blockIdx = Math.min(
+      Math.floor((s / stepSummary.length) * blockStarts.length),
+      blockStarts.length - 1,
+    );
+    markerPositions.push({
+      lineIndex: blockStarts[blockIdx],
+      stepNum: s + 1,
+      description: stepSummary[s].description,
+    });
+  }
+
+  // Deduplicate: if multiple steps map to the same block, keep only the first
+  const seen = new Set<number>();
+  const uniquePositions = markerPositions.filter((p) => {
+    if (seen.has(p.lineIndex)) return false;
+    seen.add(p.lineIndex);
+    return true;
+  });
+
+  // Insert markers in reverse order so line indices remain valid
+  const result = [...lines];
+  for (let i = uniquePositions.length - 1; i >= 0; i--) {
+    const { lineIndex, stepNum, description } = uniquePositions[i];
+    result.splice(lineIndex, 0, `echo "##SYNTH_STEP:${stepNum}:${description}"`);
+  }
+
+  return result.join("\n");
+}
 
 /**
  * The script runner is the deterministic execution engine for scripted plans.
@@ -97,6 +177,11 @@ export class ScriptRunner {
     onProgress?: ScriptProgressCallback,
   ): Promise<ScriptedPlanResult> {
     const planStart = Date.now();
+    const totalSteps = plan.stepSummary.length;
+
+    // Ensure step markers exist in the script for progress tracking.
+    // If the LLM didn't include them, inject them deterministically.
+    const executionScript = injectStepMarkers(plan.executionScript, plan.stepSummary);
 
     // Run execution script
     onProgress?.({
@@ -107,22 +192,80 @@ export class ScriptRunner {
       overallProgress: 10,
     });
 
+    // Track current plan step for marker-based progress
+    const STEP_MARKER_RE = /^##SYNTH_STEP:(\d+):(.+)$/;
+    let currentStep: number | null = null;
+    let lineBuffer = "";
+
     const executionResult = await this.runScript(
-      plan.executionScript,
+      executionScript,
       plan.platform,
-      (output) => {
-        onProgress?.({
-          operationId,
-          type: "script-output",
-          phase: "execution",
-          output,
-          timestamp: new Date(),
-          overallProgress: 50,
-        });
+      (chunk) => {
+        lineBuffer += chunk;
+        const lines = lineBuffer.split("\n");
+        lineBuffer = lines.pop() || ""; // keep incomplete last line in buffer
+
+        for (const line of lines) {
+          const match = line.match(STEP_MARKER_RE);
+          if (match) {
+            const stepNum = parseInt(match[1], 10);
+            const stepName = match[2];
+
+            // Complete previous step
+            if (currentStep !== null) {
+              onProgress?.({
+                operationId,
+                type: "plan-step-completed",
+                phase: "execution",
+                timestamp: new Date(),
+                overallProgress: 10 + (currentStep / Math.max(totalSteps, 1)) * 80,
+                stepIndex: currentStep - 1,
+                stepDescription: plan.stepSummary[currentStep - 1]?.description ?? "",
+                totalSteps,
+              });
+            }
+
+            currentStep = stepNum;
+            onProgress?.({
+              operationId,
+              type: "plan-step-started",
+              phase: "execution",
+              timestamp: new Date(),
+              overallProgress: 10 + ((stepNum - 1) / Math.max(totalSteps, 1)) * 80,
+              stepIndex: stepNum - 1,
+              stepDescription: stepName,
+              totalSteps,
+            });
+          } else if (line.trim()) {
+            onProgress?.({
+              operationId,
+              type: "step-output",
+              phase: "execution",
+              output: line,
+              timestamp: new Date(),
+              overallProgress: 10 + ((currentStep ?? 1) / Math.max(totalSteps, 1)) * 80,
+              stepIndex: (currentStep ?? 1) - 1,
+            });
+          }
+        }
       },
     );
 
     if (executionResult.success) {
+      // Complete the last plan step
+      if (currentStep !== null) {
+        onProgress?.({
+          operationId,
+          type: "plan-step-completed",
+          phase: "execution",
+          timestamp: new Date(),
+          overallProgress: 90,
+          stepIndex: currentStep - 1,
+          stepDescription: plan.stepSummary[currentStep - 1]?.description ?? "",
+          totalSteps,
+        });
+      }
+
       onProgress?.({
         operationId,
         type: "script-completed",
@@ -147,7 +290,21 @@ export class ScriptRunner {
       };
     }
 
-    // Execution failed
+    // Execution failed — mark the active plan step as failed
+    if (currentStep !== null) {
+      onProgress?.({
+        operationId,
+        type: "plan-step-failed",
+        phase: "execution",
+        timestamp: new Date(),
+        overallProgress: 60,
+        stepIndex: currentStep - 1,
+        stepDescription: plan.stepSummary[currentStep - 1]?.description ?? "",
+        totalSteps,
+        error: executionResult.stderr || `Exit code ${executionResult.exitCode}`,
+      });
+    }
+
     envoyError("Script execution failed", {
       exitCode: executionResult.exitCode,
       timedOut: executionResult.timedOut,

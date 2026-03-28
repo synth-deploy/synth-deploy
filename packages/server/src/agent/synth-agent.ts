@@ -1395,7 +1395,7 @@ export class SynthAgent {
       // Construct progress callback URL so the envoy can stream execution events back
       const commandPort = parseInt(process.env.PORT ?? "9410", 10);
       const commandHost = process.env.SYNTH_COMMAND_HOST ?? "localhost";
-      const progressCallbackUrl = `http://${commandHost}:${commandPort}/api/deployments/${deployment.id}/progress`;
+      const progressCallbackUrl = `http://${commandHost}:${commandPort}/api/operations/${deployment.id}/progress`;
 
       envoyResult = await client.deploy({
         deploymentId: deployment.id,

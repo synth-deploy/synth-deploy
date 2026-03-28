@@ -547,8 +547,9 @@ export function registerOperationRoutes(
       }
       // Normal operations: dispatch approved plan to envoy for execution
       else if (deployment.plan && deployment.rollbackPlan) {
-        // Resolve the envoy that planned this deployment; fall back to default
-        const registryEnvoy = deployment.envoyId ? envoyRegistry?.get(deployment.envoyId) : undefined;
+        // Resolve the envoy that planned this deployment; fall back to first registered envoy
+        const registryEnvoy = (deployment.envoyId ? envoyRegistry?.get(deployment.envoyId) : undefined)
+          ?? envoyRegistry?.list()[0];
         const execClient = registryEnvoy ? new EnvoyClient(registryEnvoy.url) : envoyClient;
 
         if (!execClient) {
@@ -1605,7 +1606,7 @@ export function registerOperationRoutes(
   // Progress streaming — envoy callback and SSE endpoints
   // ---------------------------------------------------------------------------
 
-  // POST /api/deployments/:id/progress — receives progress events from envoy
+  // POST /api/operations/:id/progress — receives progress events from envoy
   app.post<{ Params: { id: string } }>(
     "/api/operations/:id/progress",
     async (request, reply) => {
@@ -1639,7 +1640,7 @@ export function registerOperationRoutes(
     },
   );
 
-  // GET /api/deployments/:id/stream — SSE endpoint for live progress
+  // GET /api/operations/:id/stream — SSE endpoint for live progress
   // Auth is via ?token= query param since EventSource cannot send headers
   app.get<{ Params: { id: string } }>(
     "/api/operations/:id/stream",

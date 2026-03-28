@@ -221,11 +221,13 @@ export function createEnvoyServer(
     }
 
     const { operationId, artifactType, artifactName, environmentId, plan, rollbackPlan, progressCallbackUrl, callbackToken } = parsed.data;
+    // Fall back to envoy's own auth token if no callback token provided by server
+    const effectiveToken = callbackToken ?? process.env.SYNTH_ENVOY_TOKEN;
     const result = await agent.executeApprovedPlan(operationId, plan, rollbackPlan, {
       artifactType,
       artifactName,
       environmentId,
-    }, progressCallbackUrl, callbackToken);
+    }, progressCallbackUrl, effectiveToken);
 
     return reply.status(result.success ? 200 : 500).send(result);
   });
