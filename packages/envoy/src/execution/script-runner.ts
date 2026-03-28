@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import type { ScriptedPlan } from "@synth-deploy/core";
+import type { ScriptedPlan, PlanStep } from "@synth-deploy/core";
 import { envoyLog, envoyWarn, envoyError } from "../logger.js";
 import type { Platform } from "./platform.js";
 
@@ -11,32 +11,45 @@ import type { Platform } from "./platform.js";
  * Result of executing a single script (execution, dry-run, or rollback).
  */
 export interface ScriptResult {
-  /** Exit code from the script process */
   exitCode: number;
-  /** Combined stdout output */
   stdout: string;
-  /** Combined stderr output */
   stderr: string;
-  /** Whether the script completed without error (exit code 0) */
   success: boolean;
-  /** Execution duration in milliseconds */
   durationMs: number;
-  /** True if the script was killed due to timeout */
   timedOut: boolean;
 }
 
 /**
- * Full result of executing a scripted plan (execution + optional rollback).
+ * Result of executing a single plan step.
+ */
+export interface StepResult {
+  stepIndex: number;
+  description: string;
+  result: ScriptResult;
+  /** Working directory captured after this step completed */
+  cwdAfter?: string;
+  /** Environment variables that changed during this step */
+  envDelta?: Record<string, string>;
+}
+
+/**
+ * Result of a single dry-run step.
+ */
+export interface DryRunStepResult {
+  stepIndex: number;
+  description: string;
+  status: "passed" | "failed" | "skipped";
+  result?: ScriptResult;
+}
+
+/**
+ * Full result of executing a scripted plan.
  */
 export interface ScriptedPlanResult {
   success: boolean;
-  /** Result of the execution script */
-  executionResult: ScriptResult;
-  /** Result of the dry-run script (if one was run) */
-  dryRunResult?: ScriptResult;
-  /** Result of the rollback script (if rollback was triggered) */
-  rollbackResult?: ScriptResult;
-  /** Total wall-clock duration */
+  stepResults: StepResult[];
+  dryRunResults?: DryRunStepResult[];
+  rollbackStepResults?: StepResult[];
   totalDurationMs: number;
 }
 
@@ -46,120 +59,101 @@ export interface ScriptedPlanResult {
 export interface ScriptProgressEvent {
   operationId: string;
   type:
-    | "script-started"
-    | "script-output"
-    | "script-completed"
-    | "script-failed"
-    | "rollback-started"
-    | "rollback-completed"
-    | "execution-completed"
     | "plan-step-started"
     | "plan-step-completed"
     | "plan-step-failed"
-    | "step-output";
+    | "step-output"
+    | "rollback-step-started"
+    | "rollback-step-completed"
+    | "rollback-step-failed"
+    | "rollback-step-skipped"
+    | "dry-run-step-started"
+    | "dry-run-step-passed"
+    | "dry-run-step-failed"
+    | "dry-run-step-skipped"
+    | "execution-completed";
   phase: "dry-run" | "execution" | "rollback";
   output?: string;
   error?: string;
   exitCode?: number;
   timestamp: Date;
   overallProgress: number;
-  /** 0-based index of the plan step (for plan-step-* and step-output events) */
   stepIndex?: number;
-  /** Human-readable step description (for plan-step-started events) */
   stepDescription?: string;
-  /** Total number of plan steps (for plan-step-* events) */
   totalSteps?: number;
 }
 
 export type ScriptProgressCallback = (event: ScriptProgressEvent) => void;
 
 // ---------------------------------------------------------------------------
-// ScriptRunner — executes approved scripts verbatim
+// Internal: state threading markers
 // ---------------------------------------------------------------------------
 
-/** Default timeout for script execution: 5 minutes */
-const DEFAULT_TIMEOUT_MS = 300_000;
+const CWD_MARKER = "##SYNTH_INTERNAL_CWD:";
+const ENV_START_MARKER = "##SYNTH_INTERNAL_ENV_START";
 
-/** Regex to detect an existing step marker in the script */
-const EXISTING_MARKER_RE = /^echo\s+["']##SYNTH_STEP:\d+:/m;
+/** Append state-capture commands to a step script (invisible to the user) */
+function appendStateCapture(script: string, platform: ScriptedPlan["platform"]): string {
+  if (platform === "powershell") {
+    return `${script}\nWrite-Output "${CWD_MARKER}$(Get-Location)"\nWrite-Output "${ENV_START_MARKER}"\nGet-ChildItem Env: | ForEach-Object { "$($_.Name)=$($_.Value)" }`;
+  }
+  return `${script}\necho "${CWD_MARKER}$(pwd)"\necho "${ENV_START_MARKER}"\nenv`;
+}
 
-/**
- * Inject step markers into a script that lacks them. This ensures step-level
- * progress tracking works even when the LLM doesn't include markers.
- *
- * Strategy: find "command blocks" in the script (groups of non-empty,
- * non-comment, non-shebang lines separated by blank lines or comments)
- * and place a marker at the start of each block, distributing stepSummary
- * descriptions across blocks proportionally.
- */
-function injectStepMarkers(script: string, stepSummary: { description: string }[]): string {
-  if (stepSummary.length === 0) return script;
+/** Parse cwd and env delta from script output; return cleaned output */
+function parseStateFromOutput(
+  rawOutput: string,
+  prevEnv: Record<string, string>,
+): { cleanOutput: string; cwdAfter?: string; envDelta: Record<string, string> } {
+  const cwdIndex = rawOutput.lastIndexOf(CWD_MARKER);
+  const envIndex = rawOutput.lastIndexOf(ENV_START_MARKER);
 
-  // Count existing markers — if the script already has enough, leave it alone
-  const existingCount = (script.match(/##SYNTH_STEP:\d+:/g) || []).length;
-  if (existingCount >= stepSummary.length) return script;
+  let cwdAfter: string | undefined;
+  const envDelta: Record<string, string> = {};
 
-  const lines = script.split("\n");
-  // Find block boundaries: a "block start" is a non-empty command line
-  // preceded by a blank line, comment line, or shebang (or the very first command)
-  const blockStarts: number[] = [];
-  let inBlock = false;
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].trim();
-    const isCommand = line !== "" && !line.startsWith("#") && !line.startsWith("echo \"##SYNTH_STEP:");
-    if (isCommand && !inBlock) {
-      blockStarts.push(i);
-      inBlock = true;
-    } else if (!isCommand) {
-      inBlock = false;
+  if (cwdIndex !== -1) {
+    const cwdLine = rawOutput.slice(cwdIndex + CWD_MARKER.length).split("\n")[0]?.trim();
+    if (cwdLine) cwdAfter = cwdLine;
+  }
+
+  if (envIndex !== -1) {
+    const envBlock = rawOutput.slice(envIndex + ENV_START_MARKER.length).trim();
+    for (const line of envBlock.split("\n")) {
+      const eqIdx = line.indexOf("=");
+      if (eqIdx === -1) continue;
+      const key = line.slice(0, eqIdx).trim();
+      const val = line.slice(eqIdx + 1).trim();
+      if (!key || key.startsWith("##SYNTH_INTERNAL")) continue;
+      if (prevEnv[key] !== val) {
+        envDelta[key] = val;
+      }
     }
   }
 
-  if (blockStarts.length === 0) return script;
-
-  // Distribute steps across blocks: assign each step to a block position
-  const markerPositions: { lineIndex: number; stepNum: number; description: string }[] = [];
-  for (let s = 0; s < stepSummary.length; s++) {
-    // Map step s to the proportional block index
-    const blockIdx = Math.min(
-      Math.floor((s / stepSummary.length) * blockStarts.length),
-      blockStarts.length - 1,
-    );
-    markerPositions.push({
-      lineIndex: blockStarts[blockIdx],
-      stepNum: s + 1,
-      description: stepSummary[s].description,
-    });
+  // Strip the internal markers and everything after the CWD marker from visible output
+  let cleanOutput = rawOutput;
+  const firstMarkerIdx = Math.min(
+    cwdIndex === -1 ? Infinity : cwdIndex,
+    envIndex === -1 ? Infinity : envIndex,
+  );
+  if (firstMarkerIdx !== Infinity) {
+    cleanOutput = rawOutput.slice(0, firstMarkerIdx).trimEnd();
   }
 
-  // Deduplicate: if multiple steps map to the same block, keep only the first
-  const seen = new Set<number>();
-  const uniquePositions = markerPositions.filter((p) => {
-    if (seen.has(p.lineIndex)) return false;
-    seen.add(p.lineIndex);
-    return true;
-  });
-
-  // Insert markers in reverse order so line indices remain valid
-  const result = [...lines];
-  for (let i = uniquePositions.length - 1; i >= 0; i--) {
-    const { lineIndex, stepNum, description } = uniquePositions[i];
-    result.splice(lineIndex, 0, `echo "##SYNTH_STEP:${stepNum}:${description}"`);
-  }
-
-  return result.join("\n");
+  return { cleanOutput, cwdAfter, envDelta };
 }
+
+// ---------------------------------------------------------------------------
+// ScriptRunner — executes approved scripts verbatim
+// ---------------------------------------------------------------------------
+
+/** Default timeout per step: 5 minutes */
+const DEFAULT_TIMEOUT_MS = 300_000;
 
 /**
  * The script runner is the deterministic execution engine for scripted plans.
- * It runs approved scripts verbatim — no re-reasoning, no improvisation.
- *
- * Contract:
- * 1. Scripts run exactly as approved — zero modification
- * 2. stdout/stderr captured in real-time for progress and debrief
- * 3. Exit code determines success/failure
- * 4. On failure, rollback script executes automatically (if one exists)
- * 5. System always left in a known state with full execution record
+ * Each step runs as an independent process with state (cwd, env) threaded
+ * between steps transparently.
  */
 export class ScriptRunner {
   constructor(
@@ -168,8 +162,8 @@ export class ScriptRunner {
   ) {}
 
   /**
-   * Execute a scripted plan: run the execution script, and on failure
-   * automatically run the rollback script if one exists.
+   * Execute a scripted plan: run each step sequentially. On failure, roll back
+   * completed steps in reverse order.
    */
   async executePlan(
     plan: ScriptedPlan,
@@ -177,234 +171,248 @@ export class ScriptRunner {
     onProgress?: ScriptProgressCallback,
   ): Promise<ScriptedPlanResult> {
     const planStart = Date.now();
-    const totalSteps = plan.stepSummary.length;
+    const totalSteps = plan.steps.length;
+    const stepResults: StepResult[] = [];
+    const completedStepIndices: number[] = [];
 
-    // Ensure step markers exist in the script for progress tracking.
-    // If the LLM didn't include them, inject them deterministically.
-    const executionScript = injectStepMarkers(plan.executionScript, plan.stepSummary);
+    // State threading: track cwd and env between steps
+    let capturedCwd: string | undefined;
+    let capturedEnv: Record<string, string> = { ...process.env } as Record<string, string>;
 
-    // Run execution script
-    onProgress?.({
-      operationId,
-      type: "script-started",
-      phase: "execution",
-      timestamp: new Date(),
-      overallProgress: 10,
-    });
+    for (let i = 0; i < totalSteps; i++) {
+      const step = plan.steps[i];
 
-    // Track current plan step for marker-based progress
-    const STEP_MARKER_RE = /^##SYNTH_STEP:(\d+):(.+)$/;
-    let currentStep: number | null = null;
-    let lineBuffer = "";
+      onProgress?.({
+        operationId,
+        type: "plan-step-started",
+        phase: "execution",
+        stepIndex: i,
+        stepDescription: step.description,
+        totalSteps,
+        timestamp: new Date(),
+        overallProgress: 10 + (i / totalSteps) * 80,
+      });
 
-    const executionResult = await this.runScript(
-      executionScript,
-      plan.platform,
-      (chunk) => {
-        lineBuffer += chunk;
-        const lines = lineBuffer.split("\n");
-        lineBuffer = lines.pop() || ""; // keep incomplete last line in buffer
-
-        for (const line of lines) {
-          const match = line.match(STEP_MARKER_RE);
-          if (match) {
-            const stepNum = parseInt(match[1], 10);
-            const stepName = match[2];
-
-            // Complete previous step
-            if (currentStep !== null) {
-              onProgress?.({
-                operationId,
-                type: "plan-step-completed",
-                phase: "execution",
-                timestamp: new Date(),
-                overallProgress: 10 + (currentStep / Math.max(totalSteps, 1)) * 80,
-                stepIndex: currentStep - 1,
-                stepDescription: plan.stepSummary[currentStep - 1]?.description ?? "",
-                totalSteps,
-              });
-            }
-
-            currentStep = stepNum;
-            onProgress?.({
-              operationId,
-              type: "plan-step-started",
-              phase: "execution",
-              timestamp: new Date(),
-              overallProgress: 10 + ((stepNum - 1) / Math.max(totalSteps, 1)) * 80,
-              stepIndex: stepNum - 1,
-              stepDescription: stepName,
-              totalSteps,
-            });
-          } else if (line.trim()) {
+      const scriptWithCapture = appendStateCapture(step.script, plan.platform);
+      const result = await this.runScript(
+        scriptWithCapture,
+        plan.platform,
+        (chunk) => {
+          // Strip internal markers from progress output
+          const clean = chunk.replace(/##SYNTH_INTERNAL[^\n]*/g, "").trim();
+          if (clean) {
             onProgress?.({
               operationId,
               type: "step-output",
               phase: "execution",
-              output: line,
+              output: clean,
               timestamp: new Date(),
-              overallProgress: 10 + ((currentStep ?? 1) / Math.max(totalSteps, 1)) * 80,
-              stepIndex: (currentStep ?? 1) - 1,
+              overallProgress: 10 + (i / totalSteps) * 80,
+              stepIndex: i,
             });
           }
-        }
-      },
-    );
+        },
+        { cwd: capturedCwd, env: capturedEnv },
+      );
 
-    if (executionResult.success) {
-      // Complete the last plan step
-      if (currentStep !== null) {
+      // Parse state from output
+      const { cleanOutput, cwdAfter, envDelta } = parseStateFromOutput(result.stdout, capturedEnv);
+      const cleanResult: ScriptResult = { ...result, stdout: cleanOutput };
+
+      if (result.success) {
+        // Update state for next step
+        if (cwdAfter) capturedCwd = cwdAfter;
+        capturedEnv = { ...capturedEnv, ...envDelta };
+
+        const stepResult: StepResult = {
+          stepIndex: i,
+          description: step.description,
+          result: cleanResult,
+          cwdAfter,
+          envDelta: Object.keys(envDelta).length > 0 ? envDelta : undefined,
+        };
+        stepResults.push(stepResult);
+        completedStepIndices.push(i);
+
         onProgress?.({
           operationId,
           type: "plan-step-completed",
           phase: "execution",
-          timestamp: new Date(),
-          overallProgress: 90,
-          stepIndex: currentStep - 1,
-          stepDescription: plan.stepSummary[currentStep - 1]?.description ?? "",
+          stepIndex: i,
+          stepDescription: step.description,
           totalSteps,
+          timestamp: new Date(),
+          overallProgress: 10 + ((i + 1) / totalSteps) * 80,
         });
-      }
-
-      onProgress?.({
-        operationId,
-        type: "script-completed",
-        phase: "execution",
-        exitCode: executionResult.exitCode,
-        timestamp: new Date(),
-        overallProgress: 90,
-      });
-
-      onProgress?.({
-        operationId,
-        type: "execution-completed",
-        phase: "execution",
-        timestamp: new Date(),
-        overallProgress: 100,
-      });
-
-      return {
-        success: true,
-        executionResult,
-        totalDurationMs: Date.now() - planStart,
-      };
-    }
-
-    // Execution failed — mark the active plan step as failed
-    if (currentStep !== null) {
-      onProgress?.({
-        operationId,
-        type: "plan-step-failed",
-        phase: "execution",
-        timestamp: new Date(),
-        overallProgress: 60,
-        stepIndex: currentStep - 1,
-        stepDescription: plan.stepSummary[currentStep - 1]?.description ?? "",
-        totalSteps,
-        error: executionResult.stderr || `Exit code ${executionResult.exitCode}`,
-      });
-    }
-
-    envoyError("Script execution failed", {
-      exitCode: executionResult.exitCode,
-      timedOut: executionResult.timedOut,
-      stderr: executionResult.stderr.slice(0, 500),
-    });
-
-    onProgress?.({
-      operationId,
-      type: "script-failed",
-      phase: "execution",
-      error: executionResult.stderr || `Exit code ${executionResult.exitCode}`,
-      exitCode: executionResult.exitCode,
-      timestamp: new Date(),
-      overallProgress: 60,
-    });
-
-    // Run rollback script if available
-    let rollbackResult: ScriptResult | undefined;
-    if (plan.rollbackScript) {
-      envoyLog("Executing rollback script");
-
-      onProgress?.({
-        operationId,
-        type: "rollback-started",
-        phase: "rollback",
-        timestamp: new Date(),
-        overallProgress: 70,
-      });
-
-      rollbackResult = await this.runScript(
-        plan.rollbackScript,
-        plan.platform,
-        (output) => {
-          onProgress?.({
-            operationId,
-            type: "script-output",
-            phase: "rollback",
-            output,
-            timestamp: new Date(),
-            overallProgress: 80,
-          });
-        },
-      );
-
-      if (rollbackResult.success) {
-        envoyLog("Rollback completed successfully");
       } else {
-        envoyError("Rollback script also failed", {
-          exitCode: rollbackResult.exitCode,
-          stderr: rollbackResult.stderr.slice(0, 500),
-        });
-      }
+        const stepResult: StepResult = {
+          stepIndex: i,
+          description: step.description,
+          result: cleanResult,
+        };
+        stepResults.push(stepResult);
 
-      onProgress?.({
-        operationId,
-        type: "rollback-completed",
-        phase: "rollback",
-        exitCode: rollbackResult.exitCode,
-        timestamp: new Date(),
-        overallProgress: 90,
-      });
+        envoyError("Step execution failed", {
+          stepIndex: i,
+          description: step.description,
+          exitCode: result.exitCode,
+          timedOut: result.timedOut,
+          stderr: result.stderr.slice(0, 500),
+        });
+
+        onProgress?.({
+          operationId,
+          type: "plan-step-failed",
+          phase: "execution",
+          stepIndex: i,
+          stepDescription: step.description,
+          totalSteps,
+          timestamp: new Date(),
+          overallProgress: 10 + (i / totalSteps) * 80,
+          error: result.stderr || `Exit code ${result.exitCode}`,
+        });
+
+        // Rollback completed steps in reverse order
+        const rollbackResults = await this.rollbackSteps(
+          plan,
+          completedStepIndices,
+          operationId,
+          onProgress,
+        );
+
+        onProgress?.({
+          operationId,
+          type: "execution-completed",
+          phase: "execution",
+          timestamp: new Date(),
+          overallProgress: 100,
+          error: result.stderr || `Exit code ${result.exitCode}`,
+        });
+
+        return {
+          success: false,
+          stepResults,
+          rollbackStepResults: rollbackResults,
+          totalDurationMs: Date.now() - planStart,
+        };
+      }
     }
 
     onProgress?.({
       operationId,
       type: "execution-completed",
       phase: "execution",
-      error: executionResult.stderr || `Exit code ${executionResult.exitCode}`,
       timestamp: new Date(),
       overallProgress: 100,
     });
 
     return {
-      success: false,
-      executionResult,
-      rollbackResult,
+      success: true,
+      stepResults,
       totalDurationMs: Date.now() - planStart,
     };
   }
 
   /**
-   * Execute a dry-run script. Returns the result for LLM feedback.
-   * Dry-run scripts are read-only probes — they should not mutate state.
+   * Execute per-step dry-run. Runs all steps even on failure (unlike execution
+   * which stops). Returns step-level pass/fail/skipped results.
    */
-  async executeDryRun(
-    script: string,
-    scriptPlatform: ScriptedPlan["platform"],
-  ): Promise<ScriptResult> {
-    envoyLog("Executing dry-run script");
-    return this.runScript(script, scriptPlatform);
+  async executeDryRunPlan(
+    plan: ScriptedPlan,
+    operationId: string,
+    onProgress?: ScriptProgressCallback,
+  ): Promise<DryRunStepResult[]> {
+    const totalSteps = plan.steps.length;
+    const results: DryRunStepResult[] = [];
+
+    let capturedCwd: string | undefined;
+    let capturedEnv: Record<string, string> = { ...process.env } as Record<string, string>;
+
+    for (let i = 0; i < totalSteps; i++) {
+      const step = plan.steps[i];
+
+      if (!step.dryRunScript) {
+        onProgress?.({
+          operationId,
+          type: "dry-run-step-skipped",
+          phase: "dry-run",
+          stepIndex: i,
+          stepDescription: step.description,
+          totalSteps,
+          timestamp: new Date(),
+          overallProgress: (i / totalSteps) * 100,
+        });
+        results.push({ stepIndex: i, description: step.description, status: "skipped" });
+        continue;
+      }
+
+      onProgress?.({
+        operationId,
+        type: "dry-run-step-started",
+        phase: "dry-run",
+        stepIndex: i,
+        stepDescription: step.description,
+        totalSteps,
+        timestamp: new Date(),
+        overallProgress: (i / totalSteps) * 100,
+      });
+
+      const scriptWithCapture = appendStateCapture(step.dryRunScript, plan.platform);
+      const result = await this.runScript(
+        scriptWithCapture,
+        plan.platform,
+        undefined,
+        { cwd: capturedCwd, env: capturedEnv },
+      );
+
+      const { cleanOutput, cwdAfter, envDelta } = parseStateFromOutput(result.stdout, capturedEnv);
+      const cleanResult: ScriptResult = { ...result, stdout: cleanOutput };
+
+      if (result.success) {
+        if (cwdAfter) capturedCwd = cwdAfter;
+        capturedEnv = { ...capturedEnv, ...envDelta };
+
+        onProgress?.({
+          operationId,
+          type: "dry-run-step-passed",
+          phase: "dry-run",
+          stepIndex: i,
+          stepDescription: step.description,
+          totalSteps,
+          timestamp: new Date(),
+          overallProgress: ((i + 1) / totalSteps) * 100,
+          output: cleanResult.stdout,
+        });
+        results.push({ stepIndex: i, description: step.description, status: "passed", result: cleanResult });
+      } else {
+        onProgress?.({
+          operationId,
+          type: "dry-run-step-failed",
+          phase: "dry-run",
+          stepIndex: i,
+          stepDescription: step.description,
+          totalSteps,
+          timestamp: new Date(),
+          overallProgress: ((i + 1) / totalSteps) * 100,
+          error: cleanResult.stderr || `Exit code ${cleanResult.exitCode}`,
+          output: cleanResult.stdout,
+        });
+        results.push({ stepIndex: i, description: step.description, status: "failed", result: cleanResult });
+        // Continue even on failure — report all failures
+      }
+    }
+
+    return results;
   }
 
   /**
-   * Run a script and capture its output. This is the core execution
-   * primitive — all script types (execution, dry-run, rollback) use it.
+   * Run a single script and capture output.
    */
   async runScript(
     script: string,
     scriptPlatform: ScriptedPlan["platform"],
     onOutput?: (chunk: string) => void,
+    context?: { cwd?: string; env?: Record<string, string> },
   ): Promise<ScriptResult> {
     const startTime = Date.now();
 
@@ -422,14 +430,13 @@ export class ScriptRunner {
       // explicit user approval before execution — this is the intentional execution surface.
       const child = spawn(shell, args, {
         stdio: ["ignore", "pipe", "pipe"],
-        timeout: this.timeoutMs,
-        env: { ...process.env },
+        cwd: context?.cwd ?? undefined,
+        env: context?.env ? { ...process.env, ...context.env } : { ...process.env },
       });
 
       const timer = setTimeout(() => {
         timedOut = true;
         child.kill("SIGTERM");
-        // Give it 5s to clean up, then force kill
         setTimeout(() => child.kill("SIGKILL"), 5000);
       }, this.timeoutMs);
 
@@ -454,14 +461,7 @@ export class ScriptRunner {
           envoyWarn("Script timed out", { timeoutMs: this.timeoutMs, durationMs });
         }
 
-        resolve({
-          exitCode,
-          stdout,
-          stderr,
-          success: exitCode === 0,
-          durationMs,
-          timedOut,
-        });
+        resolve({ exitCode, stdout, stderr, success: exitCode === 0, durationMs, timedOut });
       });
 
       child.on("error", (err) => {
@@ -477,5 +477,103 @@ export class ScriptRunner {
         });
       });
     });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Private: rollback completed steps in reverse order
+  // ---------------------------------------------------------------------------
+
+  private async rollbackSteps(
+    plan: ScriptedPlan,
+    completedStepIndices: number[],
+    operationId: string,
+    onProgress?: ScriptProgressCallback,
+  ): Promise<StepResult[]> {
+    const rollbackResults: StepResult[] = [];
+    // Reverse order: last completed first
+    const reversed = [...completedStepIndices].reverse();
+
+    for (const stepIndex of reversed) {
+      const step = plan.steps[stepIndex];
+
+      if (!step.reversible || !step.rollbackScript) {
+        envoyLog("Skipping rollback for non-reversible step", { stepIndex, description: step.description });
+        onProgress?.({
+          operationId,
+          type: "rollback-step-skipped",
+          phase: "rollback",
+          stepIndex,
+          stepDescription: step.description,
+          timestamp: new Date(),
+          overallProgress: 50,
+        });
+        continue;
+      }
+
+      onProgress?.({
+        operationId,
+        type: "rollback-step-started",
+        phase: "rollback",
+        stepIndex,
+        stepDescription: step.description,
+        timestamp: new Date(),
+        overallProgress: 60,
+      });
+
+      const result = await this.runScript(
+        step.rollbackScript,
+        plan.platform,
+        (chunk) => {
+          onProgress?.({
+            operationId,
+            type: "step-output",
+            phase: "rollback",
+            output: chunk,
+            timestamp: new Date(),
+            overallProgress: 70,
+            stepIndex,
+          });
+        },
+      );
+
+      rollbackResults.push({
+        stepIndex,
+        description: `Rollback: ${step.description}`,
+        result,
+      });
+
+      if (result.success) {
+        envoyLog("Rollback step succeeded", { stepIndex, description: step.description });
+        onProgress?.({
+          operationId,
+          type: "rollback-step-completed",
+          phase: "rollback",
+          stepIndex,
+          stepDescription: step.description,
+          timestamp: new Date(),
+          overallProgress: 80,
+        });
+      } else {
+        envoyError("Rollback step failed", {
+          stepIndex,
+          description: step.description,
+          exitCode: result.exitCode,
+          stderr: result.stderr.slice(0, 500),
+        });
+        onProgress?.({
+          operationId,
+          type: "rollback-step-failed",
+          phase: "rollback",
+          stepIndex,
+          stepDescription: step.description,
+          timestamp: new Date(),
+          overallProgress: 80,
+          error: result.stderr || `Exit code ${result.exitCode}`,
+        });
+        // Continue to next rollback step — best effort
+      }
+    }
+
+    return rollbackResults;
   }
 }
