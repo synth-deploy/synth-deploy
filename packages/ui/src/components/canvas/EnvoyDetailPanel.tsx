@@ -19,7 +19,7 @@ import type {
 } from "../../api.js";
 import type { Environment, Partition, Deployment, Artifact } from "../../types.js";
 import { useCanvas } from "../../context/CanvasContext.js";
-import { useQuery, invalidateExact } from "../../hooks/useQuery.js";
+import { useQuery, invalidateExact, setQueryData } from "../../hooks/useQuery.js";
 import CanvasPanelHost from "./CanvasPanelHost.js";
 
 interface Props {
@@ -407,7 +407,10 @@ export default function EnvoyDetailPanel({ envoyId, title }: Props) {
                   onClick={async () => {
                     setSavingContext(true);
                     try {
-                      await updateEnvoyContext(envoyId, contextDraft.trim() || null);
+                      const newContext = contextDraft.trim() || null;
+                      await updateEnvoyContext(envoyId, newContext);
+                      // Optimistic update: reflect the new value immediately
+                      if (envoy) setQueryData(`envoyHealth:${envoyId}`, { ...envoy, envoyContext: newContext });
                       invalidateExact(`envoyHealth:${envoyId}`);
                       setEditingContext(false);
                     } finally {

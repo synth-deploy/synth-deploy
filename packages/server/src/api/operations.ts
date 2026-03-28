@@ -2129,8 +2129,24 @@ export function registerOperationRoutes(
       const childInput = child.input;
       const step = compositeSteps[i];
 
-      // Resolve the envoy for this step
+      // Resolve the envoy for this step; reject explicitly if a requested envoy isn't registered
       const stepEnvoy = step.envoyId ? registry.get(step.envoyId) : undefined;
+      if (step.envoyId && !stepEnvoy) {
+        const childDep = deployments.get(childId);
+        if (childDep) {
+          childDep.status = "failed" as typeof childDep.status;
+          childDep.failureReason = `Step ${i + 1} specifies envoyId "${step.envoyId}" which is not registered`;
+          deployments.save(childDep);
+        }
+        const parentDep = deployments.get(parentOp.id);
+        if (parentDep && parentDep.status === "pending") {
+          parentDep.status = "failed" as typeof parentDep.status;
+          parentDep.failureReason = `Step ${i + 1} specifies envoyId "${step.envoyId}" which is not registered`;
+          deployments.save(parentDep);
+        }
+        anyFailed = true;
+        break;
+      }
       const resolvedEnvoy = stepEnvoy ?? defaultEnvoy;
 
       const childArtifact = childInput.type === "deploy"

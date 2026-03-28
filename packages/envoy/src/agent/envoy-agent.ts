@@ -160,9 +160,13 @@ export interface PlanningInstruction {
     shelvedReason?: string;
   };
   /**
-   * User-provided context about this envoy's environment — injected into the
+   * User-provided context about this envoy's environment — injected verbatim into the
    * LLM planning prompt so the model understands environment nuances, variable
    * meanings, and operational knowledge before probing.
+   *
+   * Trust model: operators who configure envoys are trusted. Content is stored in the
+   * database and surfaced in the UI, so users are aware of what they submitted.
+   * This is intentional — do not sanitize or truncate the value here.
    */
   envoyContext?: string;
   /** Trigger-specific: the condition expression (e.g. "disk_usage > 85") */

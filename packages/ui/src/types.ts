@@ -387,9 +387,11 @@ export interface CompositeStep {
   waitFor?: WaitCondition[];
 }
 
+export type OperationStatus = "pending" | "planning" | "awaiting_approval" | "approved" | "rejected" | "shelved" | "running" | "succeeded" | "failed" | "rolled_back" | "cancelled";
+
 export interface WaitCondition {
   operationId: string;
-  status: string;
+  status: OperationStatus;
 }
 
 // --- Debrief ---
