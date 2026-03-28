@@ -17,8 +17,7 @@ import type {
   Deployment,
   DeploymentEnrichment,
   DeploymentRecommendation,
-  ScriptedPlan,
-  StepSummary,
+  PlanStep,
 } from "../../types.js";
 import { useCanvas } from "../../context/CanvasContext.js";
 import { useQuery } from "../../hooks/useQuery.js";
@@ -373,9 +372,7 @@ export default function PlanReviewPanel({ deploymentId }: Props) {
           if (res.deployment.status !== "pending") {
             setDeployment(res.deployment);
             if (res.deployment.plan?.scriptedPlan) {
-              setModifiedScript(res.deployment.plan.scriptedPlan.executionScript);
-              setModifiedRollbackScript(res.deployment.plan.scriptedPlan.rollbackScript ?? "");
-              setModifiedSummary(res.deployment.plan.scriptedPlan.stepSummary.map((s) => ({ ...s })));
+              setModifiedSteps(res.deployment.plan.scriptedPlan.steps.map((s) => ({ ...s })));
             }
             if (pollRef.current) clearInterval(pollRef.current);
           }
@@ -390,9 +387,7 @@ export default function PlanReviewPanel({ deploymentId }: Props) {
   const [dryRunScriptExpanded, setDryRunScriptExpanded] = useState(false);
   const [rollbackScriptExpanded, setRollbackScriptExpanded] = useState(false);
   const [shelveReason, setShelveReason] = useState("");
-  const [modifiedScript, setModifiedScript] = useState("");
-  const [modifiedRollbackScript, setModifiedRollbackScript] = useState("");
-  const [modifiedSummary, setModifiedSummary] = useState<StepSummary[]>([]);
+  const [modifiedSteps, setModifiedSteps] = useState<PlanStep[]>([]);
   const [modifyReason, setModifyReason] = useState("");
   const [refineFeedback, setRefineFeedback] = useState("");
   const [refining, setRefining] = useState(false);
@@ -403,9 +398,7 @@ export default function PlanReviewPanel({ deploymentId }: Props) {
     if (result?.deployment) {
       setDeployment(result.deployment);
       if (result.deployment.plan?.scriptedPlan) {
-        setModifiedScript(result.deployment.plan.scriptedPlan.executionScript);
-        setModifiedRollbackScript(result.deployment.plan.scriptedPlan.rollbackScript ?? "");
-        setModifiedSummary(result.deployment.plan.scriptedPlan.stepSummary.map((s) => ({ ...s })));
+        setModifiedSteps(result.deployment.plan.scriptedPlan.steps.map((s) => ({ ...s })));
       }
     }
   }, [result]);
@@ -546,27 +539,15 @@ export default function PlanReviewPanel({ deploymentId }: Props) {
       setError("A reason for the modification is required");
       return;
     }
-    if (!modifiedScript.trim()) {
-      setError("Execution script cannot be empty");
-      return;
-    }
-    const currentPlan = deployment?.plan?.scriptedPlan;
-    if (!currentPlan) {
-      setError("No scripted plan to modify");
+    if (modifiedSteps.length === 0) {
+      setError("Plan must have at least one step");
       return;
     }
     setActionLoading(true);
     setError(null);
     try {
-      const updatedPlan: ScriptedPlan = {
-        ...currentPlan,
-        executionScript: modifiedScript,
-        rollbackScript: modifiedRollbackScript.trim() || null,
-        stepSummary: modifiedSummary,
-      };
       const res = await modifyDeploymentPlan(deploymentId, {
-        scriptedPlan: updatedPlan,
-        stepSummary: modifiedSummary,
+        steps: modifiedSteps,
         reason: modifyReason.trim(),
       });
       setDeployment(res.deployment);
@@ -606,22 +587,22 @@ export default function PlanReviewPanel({ deploymentId }: Props) {
     }
   }
 
-  function updateSummaryStep(index: number, field: keyof StepSummary, value: string | boolean) {
-    setModifiedSummary((prev) => {
+  function updateStep(index: number, field: keyof PlanStep, value: string | boolean | null) {
+    setModifiedSteps((prev) => {
       const next = [...prev];
       next[index] = { ...next[index], [field]: value };
       return next;
     });
   }
 
-  function removeSummaryStep(index: number) {
-    setModifiedSummary((prev) => prev.filter((_, i) => i !== index));
+  function removeStep(index: number) {
+    setModifiedSteps((prev) => prev.filter((_, i) => i !== index));
   }
 
-  function addSummaryStep() {
-    setModifiedSummary((prev) => [
+  function addStep() {
+    setModifiedSteps((prev) => [
       ...prev,
-      { description: "", reversible: true },
+      { description: "", script: "", dryRunScript: null, rollbackScript: null, reversible: true },
     ]);
   }
 
@@ -690,8 +671,8 @@ export default function PlanReviewPanel({ deploymentId }: Props) {
             Envoy&apos;s Plan{revised && " (Revised)"}
           </div>
 
-          {/* Step summary list */}
-          {plan.scriptedPlan.stepSummary.map((step, i) => {
+          {/* Step list */}
+          {plan.scriptedPlan.steps.map((step, i) => {
             const risk = !step.reversible ? "high" : "low";
             return (
               <div key={i} className="plan-step-row">
@@ -722,7 +703,7 @@ export default function PlanReviewPanel({ deploymentId }: Props) {
             );
           })}
 
-          {/* Execution script toggle */}
+          {/* Script toggle — shows combined scripts for all steps */}
           <button
             onClick={() => setScriptExpanded((p) => !p)}
             style={{
@@ -740,7 +721,7 @@ export default function PlanReviewPanel({ deploymentId }: Props) {
               fontFamily: "var(--font-mono)",
             }}
           >
-            {scriptExpanded ? "▲ Hide Script" : "▼ View Script"}
+            {scriptExpanded ? "▲ Hide Scripts" : "▼ View Scripts"}
           </button>
           {scriptExpanded && (
             <pre style={{
@@ -758,12 +739,12 @@ export default function PlanReviewPanel({ deploymentId }: Props) {
               wordBreak: "break-word",
               lineHeight: 1.5,
             }}>
-              {plan.scriptedPlan.executionScript}
+              {plan.scriptedPlan.steps.map((s, i) => `# Step ${i + 1}: ${s.description}\n${s.script}`).join("\n\n")}
             </pre>
           )}
 
-          {/* Simulation script toggle (only if dryRunScript exists) */}
-          {plan.scriptedPlan.dryRunScript && (
+          {/* Simulation script toggle (only if any step has dryRunScript) */}
+          {plan.scriptedPlan.steps.some((s) => s.dryRunScript) && (
             <>
               <button
                 onClick={() => setDryRunScriptExpanded((p) => !p)}
@@ -800,14 +781,17 @@ export default function PlanReviewPanel({ deploymentId }: Props) {
                   wordBreak: "break-word",
                   lineHeight: 1.5,
                 }}>
-                  {plan.scriptedPlan.dryRunScript}
+                  {plan.scriptedPlan.steps
+                    .filter((s) => s.dryRunScript)
+                    .map((s, i) => `# Step ${i + 1}: ${s.description}\n${s.dryRunScript}`)
+                    .join("\n\n")}
                 </pre>
               )}
             </>
           )}
 
-          {/* Rollback script toggle (only if exists) */}
-          {plan.scriptedPlan.rollbackScript && (
+          {/* Rollback script toggle (only if any step has rollbackScript) */}
+          {plan.scriptedPlan.steps.some((s) => s.rollbackScript) && (
             <>
               <button
                 onClick={() => setRollbackScriptExpanded((p) => !p)}
@@ -844,7 +828,10 @@ export default function PlanReviewPanel({ deploymentId }: Props) {
                   wordBreak: "break-word",
                   lineHeight: 1.5,
                 }}>
-                  {plan.scriptedPlan.rollbackScript}
+                  {plan.scriptedPlan.steps
+                    .filter((s) => s.rollbackScript)
+                    .map((s, i) => `# Step ${i + 1}: ${s.description}\n${s.rollbackScript}`)
+                    .join("\n\n")}
                 </pre>
               )}
             </>
@@ -883,78 +870,71 @@ export default function PlanReviewPanel({ deploymentId }: Props) {
           <h3 className="canvas-section-title">Edit Plan</h3>
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
 
-            {/* Execution script */}
-            <div>
-              <label style={{ fontSize: 12, color: "var(--text-muted)", display: "block", marginBottom: 4, fontFamily: "var(--font-mono)" }}>
-                Execution Script
-              </label>
-              <textarea
-                value={modifiedScript}
-                onChange={(e) => setModifiedScript(e.target.value)}
-                className="v2-input"
-                rows={12}
-                style={{ resize: "vertical", fontFamily: "var(--font-mono)", fontSize: 12, lineHeight: 1.5 }}
-              />
-            </div>
-
-            {/* Rollback script */}
-            <div>
-              <label style={{ fontSize: 12, color: "var(--text-muted)", display: "block", marginBottom: 4, fontFamily: "var(--font-mono)" }}>
-                Rollback Script (optional)
-              </label>
-              <textarea
-                value={modifiedRollbackScript}
-                onChange={(e) => setModifiedRollbackScript(e.target.value)}
-                className="v2-input"
-                rows={6}
-                style={{ resize: "vertical", fontFamily: "var(--font-mono)", fontSize: 12, lineHeight: 1.5 }}
-                placeholder="Leave empty if no rollback is needed"
-              />
-            </div>
-
-            {/* Step summaries */}
-            <div>
-              <label style={{ fontSize: 12, color: "var(--text-muted)", display: "block", marginBottom: 8, fontFamily: "var(--font-mono)" }}>
-                Step Summaries
-              </label>
-              {modifiedSummary.map((step, i) => (
-                <div key={i} style={{
-                  background: "var(--surface-alt)",
-                  padding: 10,
-                  borderRadius: 8,
-                  border: "1px solid var(--border)",
-                  marginBottom: 8,
-                }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                    <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text)" }}>Step {i + 1}</span>
-                    <button
-                      onClick={() => removeSummaryStep(i)}
-                      style={{ background: "transparent", border: "none", color: "var(--status-failed)", cursor: "pointer", fontSize: 11 }}
-                    >
-                      Remove
-                    </button>
-                  </div>
-                  <input
-                    value={step.description}
-                    onChange={(e) => updateSummaryStep(i, "description", e.target.value)}
-                    placeholder="Description"
-                    className="v2-input"
-                    style={{ fontSize: 12, marginBottom: 6 }}
-                  />
-                  <label style={{ fontSize: 12, color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 4 }}>
-                    <input
-                      type="checkbox"
-                      checked={step.reversible}
-                      onChange={(e) => updateSummaryStep(i, "reversible", e.target.checked)}
-                    />
-                    Reversible
-                  </label>
+            {/* Per-step editors */}
+            {modifiedSteps.map((step, i) => (
+              <div key={i} style={{
+                background: "var(--surface-alt)",
+                padding: 12,
+                borderRadius: 8,
+                border: "1px solid var(--border)",
+              }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text)", fontFamily: "var(--font-mono)" }}>
+                    Step {i + 1}
+                  </span>
+                  <button
+                    onClick={() => removeStep(i)}
+                    style={{ background: "transparent", border: "none", color: "var(--status-failed)", cursor: "pointer", fontSize: 11 }}
+                  >
+                    Remove
+                  </button>
                 </div>
-              ))}
-              <button onClick={addSummaryStep} className="v2-btn" style={{ alignSelf: "flex-start", fontSize: 11 }}>
-                + Add Step
-              </button>
-            </div>
+
+                <input
+                  value={step.description}
+                  onChange={(e) => updateStep(i, "description", e.target.value)}
+                  placeholder="Description"
+                  className="v2-input"
+                  style={{ fontSize: 12, marginBottom: 8 }}
+                />
+
+                <label style={{ fontSize: 11, color: "var(--text-muted)", display: "block", marginBottom: 2, fontFamily: "var(--font-mono)" }}>
+                  Script
+                </label>
+                <textarea
+                  value={step.script}
+                  onChange={(e) => updateStep(i, "script", e.target.value)}
+                  className="v2-input"
+                  rows={4}
+                  style={{ resize: "vertical", fontFamily: "var(--font-mono)", fontSize: 12, lineHeight: 1.5, marginBottom: 8 }}
+                />
+
+                <label style={{ fontSize: 11, color: "var(--text-muted)", display: "block", marginBottom: 2, fontFamily: "var(--font-mono)" }}>
+                  Rollback Script (optional)
+                </label>
+                <textarea
+                  value={step.rollbackScript ?? ""}
+                  onChange={(e) => updateStep(i, "rollbackScript", e.target.value || null)}
+                  className="v2-input"
+                  rows={2}
+                  style={{ resize: "vertical", fontFamily: "var(--font-mono)", fontSize: 12, lineHeight: 1.5, marginBottom: 8 }}
+                  placeholder="Leave empty if no rollback is needed"
+                />
+
+                <label style={{ fontSize: 12, color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 4 }}>
+                  <input
+                    type="checkbox"
+                    checked={step.reversible}
+                    onChange={(e) => updateStep(i, "reversible", e.target.checked)}
+                  />
+                  Reversible
+                </label>
+              </div>
+            ))}
+
+            <button onClick={addStep} className="v2-btn" style={{ alignSelf: "flex-start", fontSize: 11 }}>
+              + Add Step
+            </button>
 
             {/* Reason */}
             <div>
@@ -1165,9 +1145,7 @@ export default function PlanReviewPanel({ deploymentId }: Props) {
               setMode("review");
               setError(null);
               if (deployment.plan?.scriptedPlan) {
-                setModifiedScript(deployment.plan.scriptedPlan.executionScript);
-                setModifiedRollbackScript(deployment.plan.scriptedPlan.rollbackScript ?? "");
-                setModifiedSummary(deployment.plan.scriptedPlan.stepSummary.map((s) => ({ ...s })));
+                setModifiedSteps(deployment.plan.scriptedPlan.steps.map((s) => ({ ...s })));
               }
               setModifyReason("");
             }}

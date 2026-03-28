@@ -240,18 +240,25 @@ export interface ConfigChange {
   to: string;
 }
 
-export interface StepSummary {
+export interface PlanStep {
   description: string;
+  script: string;
+  dryRunScript: string | null;
+  rollbackScript: string | null;
   reversible: boolean;
+}
+
+export interface StepDiff {
+  stepIndex: number;
+  status: "unchanged" | "changed" | "added" | "removed";
+  previous: PlanStep | null;
+  current: PlanStep | null;
 }
 
 export interface ScriptedPlan {
   platform: "bash" | "powershell";
-  executionScript: string;
-  dryRunScript: string | null;
-  rollbackScript: string | null;
   reasoning: string;
-  stepSummary: StepSummary[];
+  steps: PlanStep[];
   diffFromCurrent?: ConfigChange[];
 }
 
@@ -259,7 +266,7 @@ export interface DeploymentPlan {
   scriptedPlan: ScriptedPlan;
   reasoning: string;
   diffFromCurrent?: ConfigChange[];
-  diffFromPreviousPlan?: string;
+  stepDiffs?: StepDiff[];
 }
 
 export interface ExecutionRecord {
