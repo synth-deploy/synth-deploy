@@ -1605,7 +1605,7 @@ export function registerOperationRoutes(
   // Progress streaming — envoy callback and SSE endpoints
   // ---------------------------------------------------------------------------
 
-  // POST /api/deployments/:id/progress — receives progress events from envoy
+  // POST /api/operations/:id/progress — receives progress events from envoy
   app.post<{ Params: { id: string } }>(
     "/api/operations/:id/progress",
     async (request, reply) => {
@@ -1639,7 +1639,7 @@ export function registerOperationRoutes(
     },
   );
 
-  // GET /api/deployments/:id/stream — SSE endpoint for live progress
+  // GET /api/operations/:id/stream — SSE endpoint for live progress
   // Auth is via ?token= query param since EventSource cannot send headers
   app.get<{ Params: { id: string } }>(
     "/api/operations/:id/stream",
