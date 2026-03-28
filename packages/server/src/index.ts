@@ -124,6 +124,13 @@ const envoyRegistry = new EnvoyRegistry(envoyRegistryStore);
 
 const envoyUrl = process.env.SYNTH_ENVOY_URL ?? "http://localhost:9411";
 
+// Bootstrap the default envoy in the registry if SYNTH_ENVOY_TOKEN is set.
+// This ensures the envoy's auth token is recognized for progress callbacks.
+const defaultEnvoyToken = process.env.SYNTH_ENVOY_TOKEN;
+if (defaultEnvoyToken) {
+  envoyRegistry.ensureRegisteredWithToken({ name: "local", url: envoyUrl }, defaultEnvoyToken);
+}
+
 const jwtSecret: Uint8Array = new TextEncoder().encode(resolvedJwtSecret);
 
 // --- Seed default roles ---
