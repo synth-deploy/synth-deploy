@@ -116,7 +116,7 @@ export class DefaultOperationExecutor {
    * Run per-step dry-run validation and return the results for LLM feedback.
    * This is read-only — dry-run scripts should only probe system state.
    */
-  async executeDryRun(plan: ScriptedPlan): Promise<DryRunPlanResult> {
+  async executeDryRun(plan: ScriptedPlan, onProgress?: ProgressCallback): Promise<DryRunPlanResult> {
     if (plan.steps.length === 0 || plan.steps.every((s) => !s.dryRunScript)) {
       return {
         output: "No dry-run scripts for this operation.",
@@ -128,7 +128,27 @@ export class DefaultOperationExecutor {
       };
     }
 
-    const stepResults = await this.scriptRunner.executeDryRunPlan(plan, "dry-run");
+    const dryRunBridge: ScriptProgressCallback | undefined = onProgress
+      ? (event) => {
+          const mappedType = event.type as ExecutionProgressEvent["type"];
+          onProgress({
+            deploymentId: "dry-run",
+            type: mappedType,
+            phase: event.phase,
+            status: event.type.includes("failed") ? "failed"
+              : event.type.includes("passed") || event.type.includes("completed") ? "completed"
+              : "in_progress",
+            output: event.output,
+            error: event.error,
+            timestamp: event.timestamp,
+            overallProgress: event.overallProgress,
+            stepIndex: event.stepIndex,
+            stepDescription: event.stepDescription,
+            totalSteps: event.totalSteps,
+          });
+        }
+      : undefined;
+    const stepResults = await this.scriptRunner.executeDryRunPlan(plan, "dry-run", dryRunBridge);
 
     // Aggregate results
     const failedSteps = stepResults.filter((r) => r.status === "failed");
@@ -267,6 +287,8 @@ export class DefaultOperationExecutor {
           durationMs: sr.result.durationMs,
           stdout: sr.result.stdout.slice(0, 500),
           stderr: sr.result.stderr.slice(0, 500),
+          cwdAfter: sr.cwdAfter,
+          envDelta: sr.envDelta,
         })),
       },
     });

@@ -178,6 +178,7 @@ export class ScriptRunner {
     // State threading: track cwd and env between steps
     let capturedCwd: string | undefined;
     let capturedEnv: Record<string, string> = { ...process.env } as Record<string, string>;
+    const stepStateSnapshots = new Map<number, { cwd?: string; env: Record<string, string> }>();
 
     for (let i = 0; i < totalSteps; i++) {
       const step = plan.steps[i];
@@ -233,6 +234,7 @@ export class ScriptRunner {
         };
         stepResults.push(stepResult);
         completedStepIndices.push(i);
+        stepStateSnapshots.set(i, { cwd: capturedCwd, env: { ...capturedEnv } });
 
         onProgress?.({
           operationId,
@@ -276,6 +278,7 @@ export class ScriptRunner {
         const rollbackResults = await this.rollbackSteps(
           plan,
           completedStepIndices,
+          stepStateSnapshots,
           operationId,
           onProgress,
         );
@@ -486,6 +489,7 @@ export class ScriptRunner {
   private async rollbackSteps(
     plan: ScriptedPlan,
     completedStepIndices: number[],
+    stepStateSnapshots: Map<number, { cwd?: string; env: Record<string, string> }>,
     operationId: string,
     onProgress?: ScriptProgressCallback,
   ): Promise<StepResult[]> {
@@ -520,6 +524,7 @@ export class ScriptRunner {
         overallProgress: 60,
       });
 
+      const snapshot = stepStateSnapshots.get(stepIndex);
       const result = await this.runScript(
         step.rollbackScript,
         plan.platform,
@@ -534,6 +539,7 @@ export class ScriptRunner {
             stepIndex,
           });
         },
+        { cwd: snapshot?.cwd, env: snapshot?.env ?? {} },
       );
 
       rollbackResults.push({
