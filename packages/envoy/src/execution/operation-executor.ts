@@ -4,7 +4,7 @@ import type {
 } from "@synth-deploy/core";
 import { envoyLog, envoyError } from "../logger.js";
 import { ScriptRunner } from "./script-runner.js";
-import type { ScriptResult, ScriptProgressCallback } from "./script-runner.js";
+import type { ScriptResult, StepResult, DryRunStepResult, ScriptProgressCallback } from "./script-runner.js";
 import type { Platform } from "./platform.js";
 
 // ---------------------------------------------------------------------------
@@ -18,17 +18,19 @@ import type { Platform } from "./platform.js";
 export interface ExecutionProgressEvent {
   deploymentId: string;
   type:
-    | "script-started"
-    | "script-output"
-    | "script-completed"
-    | "script-failed"
-    | "rollback-started"
-    | "rollback-completed"
-    | "deployment-completed"
     | "plan-step-started"
     | "plan-step-completed"
     | "plan-step-failed"
-    | "step-output";
+    | "step-output"
+    | "rollback-step-started"
+    | "rollback-step-completed"
+    | "rollback-step-failed"
+    | "rollback-step-skipped"
+    | "dry-run-step-started"
+    | "dry-run-step-passed"
+    | "dry-run-step-failed"
+    | "dry-run-step-skipped"
+    | "deployment-completed";
   phase: "dry-run" | "execution" | "rollback";
   status: "in_progress" | "completed" | "failed";
   output?: string;
@@ -55,10 +57,12 @@ export type ProgressCallback = (event: ExecutionProgressEvent) => void;
  */
 export interface PlanExecutionResult {
   success: boolean;
-  /** Result of the execution script */
+  /** Synthesized execution result (aggregated from all steps) */
   executionResult: ScriptResult;
-  /** Result of the rollback script (if rollback was triggered) */
-  rollbackResult?: ScriptResult;
+  /** Per-step results */
+  stepResults: StepResult[];
+  /** Rollback step results (if rollback ran) */
+  rollbackStepResults?: StepResult[];
   totalDurationMs: number;
 }
 
@@ -76,6 +80,8 @@ export interface DryRunPlanResult {
   exitCode: number;
   /** Execution duration */
   durationMs: number;
+  /** Per-step dry-run results */
+  stepResults: DryRunStepResult[];
 }
 
 // ---------------------------------------------------------------------------
@@ -85,15 +91,15 @@ export interface DryRunPlanResult {
 /**
  * The operation executor is the deterministic engine that runs approved
  * scripted plans. It does NOT reason — that happened during planning.
- * It executes the approved script verbatim, captures output, and
- * handles failures with automatic rollback.
+ * It executes the approved steps verbatim, captures output, and
+ * handles failures with automatic per-step rollback.
  *
  * Contract:
- * 1. The approved script runs exactly as written — no re-reasoning
+ * 1. The approved steps run exactly as written — no re-reasoning
  * 2. stdout/stderr captured in real-time for progress and debrief
- * 3. Exit code determines success/failure
- * 4. On failure, the rollback script runs automatically (if one exists)
- * 5. Debrief records all scripts, output, timing, and outcomes
+ * 3. Exit code determines success/failure per step
+ * 4. On failure, completed steps roll back in reverse order
+ * 5. Debrief records all steps, output, timing, and outcomes
  */
 export class DefaultOperationExecutor {
   private scriptRunner: ScriptRunner;
@@ -107,37 +113,74 @@ export class DefaultOperationExecutor {
   }
 
   /**
-   * Run a dry-run script and return the results for LLM feedback.
-   * This is read-only — the dry-run script should only probe system state.
+   * Run per-step dry-run validation and return the results for LLM feedback.
+   * This is read-only — dry-run scripts should only probe system state.
    */
-  async executeDryRun(plan: ScriptedPlan): Promise<DryRunPlanResult> {
-    if (!plan.dryRunScript) {
+  async executeDryRun(plan: ScriptedPlan, onProgress?: ProgressCallback): Promise<DryRunPlanResult> {
+    if (plan.steps.length === 0 || plan.steps.every((s) => !s.dryRunScript)) {
       return {
-        output: "No dry-run script for this operation type.",
+        output: "No dry-run scripts for this operation.",
         errors: "",
         success: true,
         exitCode: 0,
         durationMs: 0,
+        stepResults: [],
       };
     }
 
-    const result = await this.scriptRunner.executeDryRun(
-      plan.dryRunScript,
-      plan.platform,
-    );
+    const dryRunBridge: ScriptProgressCallback | undefined = onProgress
+      ? (event) => {
+          const mappedType = event.type as ExecutionProgressEvent["type"];
+          onProgress({
+            deploymentId: "dry-run",
+            type: mappedType,
+            phase: event.phase,
+            status: event.type.includes("failed") ? "failed"
+              : event.type.includes("passed") || event.type.includes("completed") ? "completed"
+              : "in_progress",
+            output: event.output,
+            error: event.error,
+            timestamp: event.timestamp,
+            overallProgress: event.overallProgress,
+            stepIndex: event.stepIndex,
+            stepDescription: event.stepDescription,
+            totalSteps: event.totalSteps,
+          });
+        }
+      : undefined;
+    const stepResults = await this.scriptRunner.executeDryRunPlan(plan, "dry-run", dryRunBridge);
+
+    // Aggregate results
+    const failedSteps = stepResults.filter((r) => r.status === "failed");
+    const success = failedSteps.length === 0;
+
+    const outputParts: string[] = [];
+    const errorParts: string[] = [];
+    let totalDurationMs = 0;
+
+    for (const sr of stepResults) {
+      if (!sr.result) continue;
+      totalDurationMs += sr.result.durationMs;
+      if (sr.status === "failed") {
+        const prefix = `[Step ${sr.stepIndex + 1}: ${sr.description}] `;
+        if (sr.result.stdout) outputParts.push(prefix + sr.result.stdout.slice(0, 500));
+        if (sr.result.stderr) errorParts.push(prefix + sr.result.stderr.slice(0, 500));
+      }
+    }
 
     return {
-      output: result.stdout,
-      errors: result.stderr,
-      success: result.success,
-      exitCode: result.exitCode,
-      durationMs: result.durationMs,
+      output: outputParts.join("\n"),
+      errors: errorParts.join("\n"),
+      success,
+      exitCode: success ? 0 : 1,
+      durationMs: totalDurationMs,
+      stepResults,
     };
   }
 
   /**
-   * Execute an approved scripted plan. Runs the execution script verbatim
-   * and triggers rollback on failure.
+   * Execute an approved scripted plan. Runs each step verbatim
+   * and triggers per-step rollback on failure.
    */
   async executePlan(
     plan: ScriptedPlan,
@@ -149,19 +192,23 @@ export class DefaultOperationExecutor {
 
     envoyLog("Executing scripted plan", {
       platform: plan.platform,
-      hasRollback: !!plan.rollbackScript,
-      stepCount: plan.stepSummary.length,
+      stepCount: plan.steps.length,
     });
 
-    // Bridge progress events
+    // Bridge progress events from ScriptRunner to ExecutionProgressEvent
     const progressBridge: ScriptProgressCallback | undefined = onProgress
       ? (event) => {
+          // Map "execution-completed" to "deployment-completed" for the external type
+          const mappedType = event.type === "execution-completed"
+            ? "deployment-completed"
+            : event.type as ExecutionProgressEvent["type"];
+
           onProgress({
             deploymentId: opId,
-            type: event.type as ExecutionProgressEvent["type"],
+            type: mappedType,
             phase: event.phase,
             status: event.type.includes("failed") ? "failed"
-              : event.type.includes("completed") ? "completed"
+              : event.type.includes("completed") || event.type === "execution-completed" ? "completed"
               : "in_progress",
             output: event.output,
             error: event.error,
@@ -177,13 +224,25 @@ export class DefaultOperationExecutor {
 
     const result = await this.scriptRunner.executePlan(plan, opId, progressBridge);
 
+    // Synthesize a backward-compatible ScriptResult from step results
+    const lastFailedStep = result.stepResults.find((s) => !s.result.success);
+    const executionResult: ScriptResult = {
+      exitCode: lastFailedStep?.result.exitCode ?? 0,
+      stdout: result.stepResults.map((s) => s.result.stdout).filter(Boolean).join("\n"),
+      stderr: result.stepResults.map((s) => s.result.stderr).filter(Boolean).join("\n"),
+      success: result.success,
+      durationMs: result.totalDurationMs,
+      timedOut: result.stepResults.some((s) => s.result.timedOut),
+    };
+
     // Record to debrief
-    this.recordDebrief(plan, result.executionResult, result.rollbackResult, opId);
+    this.recordDebrief(plan, result.stepResults, result.rollbackStepResults, opId);
 
     return {
       success: result.success,
-      executionResult: result.executionResult,
-      rollbackResult: result.rollbackResult,
+      executionResult,
+      stepResults: result.stepResults,
+      rollbackStepResults: result.rollbackStepResults,
       totalDurationMs: Date.now() - planStart,
     };
   }
@@ -194,11 +253,15 @@ export class DefaultOperationExecutor {
 
   private recordDebrief(
     plan: ScriptedPlan,
-    executionResult: ScriptResult,
-    rollbackResult: ScriptResult | undefined,
+    stepResults: StepResult[],
+    rollbackStepResults: StepResult[] | undefined,
     operationId: string,
   ): void {
     if (!this.debrief) return;
+
+    const success = stepResults.every((s) => s.result.success);
+    const totalDurationMs = stepResults.reduce((sum, s) => sum + s.result.durationMs, 0);
+    const lastFailedStep = stepResults.find((s) => !s.result.success);
 
     // Record execution result
     this.debrief.record({
@@ -206,44 +269,57 @@ export class DefaultOperationExecutor {
       operationId,
       agent: "envoy",
       decisionType: "deployment-execution",
-      decision: executionResult.success
-        ? `Script execution succeeded (exit code 0) in ${executionResult.durationMs}ms`
-        : `Script execution failed (exit code ${executionResult.exitCode}) in ${executionResult.durationMs}ms${executionResult.timedOut ? " — timed out" : ""}`,
+      decision: success
+        ? `Script execution succeeded (${plan.steps.length} steps completed) in ${totalDurationMs}ms`
+        : `Script execution failed at step ${(lastFailedStep?.stepIndex ?? 0) + 1} (exit code ${lastFailedStep?.result.exitCode ?? 1}) in ${totalDurationMs}ms`,
       reasoning: plan.reasoning,
       context: {
         platform: plan.platform,
-        exitCode: executionResult.exitCode,
-        success: executionResult.success,
-        timedOut: executionResult.timedOut,
-        durationMs: executionResult.durationMs,
-        stdout: executionResult.stdout.slice(0, 2000),
-        stderr: executionResult.stderr.slice(0, 2000),
-        executionScript: plan.executionScript,
-        dryRunScript: plan.dryRunScript,
-        rollbackScript: plan.rollbackScript,
-        stepSummary: plan.stepSummary,
+        stepCount: plan.steps.length,
+        success,
+        totalDurationMs,
+        steps: plan.steps.map((s) => s.description),
+        stepResults: stepResults.map((sr) => ({
+          stepIndex: sr.stepIndex,
+          description: sr.description,
+          exitCode: sr.result.exitCode,
+          success: sr.result.success,
+          durationMs: sr.result.durationMs,
+          stdout: sr.result.stdout.slice(0, 500),
+          stderr: sr.result.stderr.slice(0, 500),
+          cwdAfter: sr.cwdAfter,
+          envDelta: sr.envDelta,
+        })),
       },
     });
 
     // Record rollback result if one occurred
-    if (rollbackResult) {
+    if (rollbackStepResults && rollbackStepResults.length > 0) {
+      const rollbackSuccess = rollbackStepResults.every((s) => s.result.success);
+      const rollbackDurationMs = rollbackStepResults.reduce((sum, s) => sum + s.result.durationMs, 0);
+
       this.debrief.record({
         partitionId: null,
         operationId,
         agent: "envoy",
         decisionType: "rollback-execution",
-        decision: rollbackResult.success
-          ? `Rollback script succeeded (exit code 0) in ${rollbackResult.durationMs}ms`
-          : `Rollback script failed (exit code ${rollbackResult.exitCode}) in ${rollbackResult.durationMs}ms. ` +
+        decision: rollbackSuccess
+          ? `Rollback completed successfully (${rollbackStepResults.length} steps) in ${rollbackDurationMs}ms`
+          : `Rollback partially failed — ${rollbackStepResults.filter((s) => !s.result.success).length} step(s) failed. ` +
             `System may be in a partially-rolled-back state. Manual intervention may be required.`,
         reasoning: `Automatic rollback triggered after execution failure. ` +
-          `Rollback script ${rollbackResult.success ? "restored" : "failed to restore"} the previous state.`,
+          `Attempted to reverse ${rollbackStepResults.length} step(s) in reverse order.`,
         context: {
-          exitCode: rollbackResult.exitCode,
-          success: rollbackResult.success,
-          stdout: rollbackResult.stdout.slice(0, 2000),
-          stderr: rollbackResult.stderr.slice(0, 2000),
-          rollbackScript: plan.rollbackScript,
+          rollbackStepCount: rollbackStepResults.length,
+          rollbackSuccess,
+          rollbackDurationMs,
+          rollbackStepResults: rollbackStepResults.map((sr) => ({
+            stepIndex: sr.stepIndex,
+            description: sr.description,
+            exitCode: sr.result.exitCode,
+            success: sr.result.success,
+            stderr: sr.result.stderr.slice(0, 500),
+          })),
         },
       });
     }

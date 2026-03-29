@@ -14,16 +14,19 @@ export interface ProgressEvent {
   id?: number;
   deploymentId: string;
   type:
-    | "step-started"
-    | "step-completed"
-    | "step-failed"
-    | "rollback-started"
-    | "rollback-completed"
-    | "deployment-completed"
     | "plan-step-started"
     | "plan-step-completed"
     | "plan-step-failed"
-    | "step-output";
+    | "step-output"
+    | "rollback-step-started"
+    | "rollback-step-completed"
+    | "rollback-step-failed"
+    | "rollback-step-skipped"
+    | "dry-run-step-started"
+    | "dry-run-step-passed"
+    | "dry-run-step-failed"
+    | "dry-run-step-skipped"
+    | "deployment-completed";
   stepIndex: number;
   stepDescription: string;
   status: "in_progress" | "completed" | "failed";

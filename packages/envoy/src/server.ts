@@ -86,18 +86,18 @@ const PlanRequestSchema = z.object({
   envoyContext: z.string().optional(),
 });
 
-const StepSummarySchema = z.object({
+const PlanStepSchema = z.object({
   description: z.string(),
+  script: z.string(),
+  dryRunScript: z.string().nullable(),
+  rollbackScript: z.string().nullable(),
   reversible: z.boolean(),
 });
 
 const ScriptedPlanSchema = z.object({
   platform: z.enum(["bash", "powershell"]),
-  executionScript: z.string(),
-  dryRunScript: z.string().nullable(),
-  rollbackScript: z.string().nullable(),
   reasoning: z.string(),
-  stepSummary: z.array(StepSummarySchema),
+  steps: z.array(PlanStepSchema),
   diffFromCurrent: z.array(z.object({ key: z.string(), from: z.string(), to: z.string() })).optional(),
 });
 
@@ -105,7 +105,12 @@ const PlanSchema = z.object({
   scriptedPlan: ScriptedPlanSchema,
   reasoning: z.string(),
   diffFromCurrent: z.array(z.object({ key: z.string(), from: z.string(), to: z.string() })).optional(),
-  diffFromPreviousPlan: z.string().optional(),
+  stepDiffs: z.array(z.object({
+    stepIndex: z.number(),
+    status: z.enum(["unchanged", "changed", "added", "removed"]),
+    previous: PlanStepSchema.nullable(),
+    current: PlanStepSchema.nullable(),
+  })).optional(),
 });
 
 const ExecuteRequestSchema = z.object({

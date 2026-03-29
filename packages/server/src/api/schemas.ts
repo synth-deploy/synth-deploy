@@ -301,23 +301,26 @@ export const ShelveDeploymentSchema = z.object({
   reason: z.string().optional(),
 });
 
-export const ModifyDeploymentPlanSchema = z.object({
-  executionScript: z.string().min(1, "Execution script must not be empty"),
-  rollbackScript: z.string().optional(),
-  reason: z.string().min(1),
+const PlanStepSchema = z.object({
+  description: z.string().min(1),
+  script: z.string().min(1),
+  dryRunScript: z.string().nullable(),
+  rollbackScript: z.string().nullable(),
+  reversible: z.boolean(),
 });
 
 const ScriptedPlanSchema = z.object({
   platform: z.enum(["bash", "powershell"]),
-  executionScript: z.string().min(1),
-  dryRunScript: z.string().nullable(),
-  rollbackScript: z.string().nullable(),
   reasoning: z.string().min(1),
-  stepSummary: z.array(z.object({
-    description: z.string().min(1),
-    reversible: z.boolean(),
-  })),
+  steps: z.array(PlanStepSchema),
   diffFromCurrent: z.array(z.object({ key: z.string(), from: z.string(), to: z.string() })).optional(),
+});
+
+const StepDiffSchema = z.object({
+  stepIndex: z.number().int().nonnegative(),
+  status: z.enum(["unchanged", "changed", "added", "removed"]),
+  previous: PlanStepSchema.nullable(),
+  current: PlanStepSchema.nullable(),
 });
 
 export const SubmitPlanSchema = z.object({
@@ -325,12 +328,17 @@ export const SubmitPlanSchema = z.object({
     scriptedPlan: ScriptedPlanSchema,
     reasoning: z.string().min(1),
     diffFromCurrent: z.array(z.object({ key: z.string(), from: z.string(), to: z.string() })).optional(),
-    diffFromPreviousPlan: z.string().optional(),
+    stepDiffs: z.array(StepDiffSchema).optional(),
   }),
   rollbackPlan: z.object({
     scriptedPlan: ScriptedPlanSchema,
     reasoning: z.string().min(1),
   }),
+});
+
+export const ModifyDeploymentPlanSchema = z.object({
+  steps: z.array(PlanStepSchema).min(1, "Plan must have at least one step"),
+  reason: z.string().min(1),
 });
 
 export const DeploymentListQuerySchema = z.object({
@@ -355,16 +363,19 @@ export const DebriefQuerySchema = z.object({
 export const ProgressEventSchema = z.object({
   deploymentId: z.string(),
   type: z.enum([
-    "step-started",
-    "step-completed",
-    "step-failed",
-    "rollback-started",
-    "rollback-completed",
-    "deployment-completed",
     "plan-step-started",
     "plan-step-completed",
     "plan-step-failed",
     "step-output",
+    "rollback-step-started",
+    "rollback-step-completed",
+    "rollback-step-failed",
+    "rollback-step-skipped",
+    "dry-run-step-started",
+    "dry-run-step-passed",
+    "dry-run-step-failed",
+    "dry-run-step-skipped",
+    "deployment-completed",
   ]),
   stepIndex: z.number().int().nonnegative(),
   stepDescription: z.string(),

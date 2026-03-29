@@ -212,7 +212,7 @@ export class EnvoyClient {
     progressCallbackUrl?: string;
     callbackToken?: string;
   }): Promise<EnvoyDeployResult> {
-    serverLog("ENVOY-EXECUTE", { operationId: params.operationId, envoyUrl: this.baseUrl, artifact: params.artifactName, steps: params.plan?.scriptedPlan?.stepSummary?.length ?? 0 });
+    serverLog("ENVOY-EXECUTE", { operationId: params.operationId, envoyUrl: this.baseUrl, artifact: params.artifactName, steps: params.plan?.scriptedPlan?.steps?.length ?? 0 });
     const execStart = Date.now();
     const response = await fetchWithRetry(
       `${this.baseUrl}/execute`,
@@ -310,7 +310,7 @@ export class EnvoyClient {
     }
 
     const planResult = (await response.json()) as Awaited<ReturnType<typeof this.requestPlan>>;
-    serverLog("ENVOY-PLAN-RECEIVED", { operationId: params.operationId, steps: planResult.plan?.scriptedPlan?.stepSummary?.length ?? 0, blocked: planResult.blocked ?? false, durationMs: Date.now() - planStart });
+    serverLog("ENVOY-PLAN-RECEIVED", { operationId: params.operationId, steps: planResult.plan?.scriptedPlan?.steps?.length ?? 0, blocked: planResult.blocked ?? false, durationMs: Date.now() - planStart });
     return planResult;
   }
 

@@ -608,13 +608,13 @@ export default function EnvoyDetailPanel({ envoyId, title }: Props) {
           <div style={{ borderRadius: 10, overflow: "hidden", border: "1px solid var(--border)", background: "var(--surface)" }}>
             {recentPlans.map((d, i, arr) => {
               const artifactName = (d.artifactId ? artifactMap.get(d.artifactId) : undefined) ?? d.artifactId ?? d.intent ?? "—";
-              const stepCount = d.plan?.scriptedPlan?.stepSummary.length;
+              const stepCount = d.plan?.scriptedPlan?.steps.length;
               const execStart = d.executionRecord?.startedAt;
               const execEnd = d.executionRecord?.completedAt;
               const durationMs = execStart && execEnd
                 ? new Date(execEnd).getTime() - new Date(execStart).getTime()
                 : null;
-              const delta = d.plan?.diffFromPreviousPlan;
+              const delta = d.plan?.diffFromCurrent;
               const isAwaiting = d.status === "awaiting_approval";
               function handlePlanClick() {
                 if (isAwaiting) {

@@ -106,17 +106,17 @@ export default function DeploymentDetail() {
       </div>
 
       {/* Deployment Plan */}
-      {deployment.plan?.scriptedPlan && deployment.plan.scriptedPlan.stepSummary.length > 0 && (
+      {deployment.plan?.scriptedPlan && deployment.plan.scriptedPlan.steps.length > 0 && (
         <div className="section">
           <div className="card">
             <div className="card-header">
               <h3>Deployment Plan</h3>
               <span className="text-muted" style={{ fontSize: 12 }}>
-                {deployment.plan.scriptedPlan.stepSummary.length} step{deployment.plan.scriptedPlan.stepSummary.length !== 1 ? "s" : ""}
+                {deployment.plan.scriptedPlan.steps.length} step{deployment.plan.scriptedPlan.steps.length !== 1 ? "s" : ""}
               </span>
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "8px 0" }}>
-              {deployment.plan.scriptedPlan.stepSummary.map((s, i) => (
+              {deployment.plan.scriptedPlan.steps.map((s, i) => (
                 <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "6px 0", borderBottom: "1px solid var(--border)" }}>
                   <span style={{ fontWeight: 600, fontSize: 12, color: "var(--text-secondary)", minWidth: 24 }}>{i + 1}.</span>
                   <div style={{ flex: 1 }}>
@@ -133,14 +133,14 @@ export default function DeploymentDetail() {
       )}
 
       {/* Rollback Plan */}
-      {deployment.rollbackPlan?.scriptedPlan && deployment.rollbackPlan.scriptedPlan.stepSummary.length > 0 && (
+      {deployment.rollbackPlan?.scriptedPlan && deployment.rollbackPlan.scriptedPlan.steps.length > 0 && (
         <div className="section">
           <div className="card">
             <div className="card-header">
               <h3>Rollback Plan</h3>
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 4, padding: "8px 0" }}>
-              {deployment.rollbackPlan.scriptedPlan.stepSummary.map((s, i) => (
+              {deployment.rollbackPlan.scriptedPlan.steps.map((s, i) => (
                 <div key={i} style={{ fontSize: 13, padding: "4px 0", borderBottom: "1px solid var(--border)" }}>
                   <span style={{ fontWeight: 600, fontSize: 12, color: "var(--text-secondary)" }}>{i + 1}.</span> {s.description}
                 </div>

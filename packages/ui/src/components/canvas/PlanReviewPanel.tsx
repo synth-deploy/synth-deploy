@@ -17,8 +17,8 @@ import type {
   Deployment,
   DeploymentEnrichment,
   DeploymentRecommendation,
-  ScriptedPlan,
-  StepSummary,
+  PlanStep,
+  StepDiff,
 } from "../../types.js";
 import { useCanvas } from "../../context/CanvasContext.js";
 import { useQuery } from "../../hooks/useQuery.js";
@@ -373,9 +373,7 @@ export default function PlanReviewPanel({ deploymentId }: Props) {
           if (res.deployment.status !== "pending") {
             setDeployment(res.deployment);
             if (res.deployment.plan?.scriptedPlan) {
-              setModifiedScript(res.deployment.plan.scriptedPlan.executionScript);
-              setModifiedRollbackScript(res.deployment.plan.scriptedPlan.rollbackScript ?? "");
-              setModifiedSummary(res.deployment.plan.scriptedPlan.stepSummary.map((s) => ({ ...s })));
+              setModifiedSteps(res.deployment.plan.scriptedPlan.steps.map((s) => ({ ...s })));
             }
             if (pollRef.current) clearInterval(pollRef.current);
           }
@@ -386,13 +384,9 @@ export default function PlanReviewPanel({ deploymentId }: Props) {
     }
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [deployment?.status, deploymentId]);
-  const [scriptExpanded, setScriptExpanded] = useState(false);
-  const [dryRunScriptExpanded, setDryRunScriptExpanded] = useState(false);
-  const [rollbackScriptExpanded, setRollbackScriptExpanded] = useState(false);
+  const [expandedSteps, setExpandedSteps] = useState<Set<number>>(new Set());
   const [shelveReason, setShelveReason] = useState("");
-  const [modifiedScript, setModifiedScript] = useState("");
-  const [modifiedRollbackScript, setModifiedRollbackScript] = useState("");
-  const [modifiedSummary, setModifiedSummary] = useState<StepSummary[]>([]);
+  const [modifiedSteps, setModifiedSteps] = useState<PlanStep[]>([]);
   const [modifyReason, setModifyReason] = useState("");
   const [refineFeedback, setRefineFeedback] = useState("");
   const [refining, setRefining] = useState(false);
@@ -403,9 +397,7 @@ export default function PlanReviewPanel({ deploymentId }: Props) {
     if (result?.deployment) {
       setDeployment(result.deployment);
       if (result.deployment.plan?.scriptedPlan) {
-        setModifiedScript(result.deployment.plan.scriptedPlan.executionScript);
-        setModifiedRollbackScript(result.deployment.plan.scriptedPlan.rollbackScript ?? "");
-        setModifiedSummary(result.deployment.plan.scriptedPlan.stepSummary.map((s) => ({ ...s })));
+        setModifiedSteps(result.deployment.plan.scriptedPlan.steps.map((s) => ({ ...s })));
       }
     }
   }, [result]);
@@ -546,27 +538,15 @@ export default function PlanReviewPanel({ deploymentId }: Props) {
       setError("A reason for the modification is required");
       return;
     }
-    if (!modifiedScript.trim()) {
-      setError("Execution script cannot be empty");
-      return;
-    }
-    const currentPlan = deployment?.plan?.scriptedPlan;
-    if (!currentPlan) {
-      setError("No scripted plan to modify");
+    if (modifiedSteps.length === 0) {
+      setError("Plan must have at least one step");
       return;
     }
     setActionLoading(true);
     setError(null);
     try {
-      const updatedPlan: ScriptedPlan = {
-        ...currentPlan,
-        executionScript: modifiedScript,
-        rollbackScript: modifiedRollbackScript.trim() || null,
-        stepSummary: modifiedSummary,
-      };
       const res = await modifyDeploymentPlan(deploymentId, {
-        scriptedPlan: updatedPlan,
-        stepSummary: modifiedSummary,
+        steps: modifiedSteps,
         reason: modifyReason.trim(),
       });
       setDeployment(res.deployment);
@@ -606,22 +586,22 @@ export default function PlanReviewPanel({ deploymentId }: Props) {
     }
   }
 
-  function updateSummaryStep(index: number, field: keyof StepSummary, value: string | boolean) {
-    setModifiedSummary((prev) => {
+  function updateStep(index: number, field: keyof PlanStep, value: string | boolean | null) {
+    setModifiedSteps((prev) => {
       const next = [...prev];
       next[index] = { ...next[index], [field]: value };
       return next;
     });
   }
 
-  function removeSummaryStep(index: number) {
-    setModifiedSummary((prev) => prev.filter((_, i) => i !== index));
+  function removeStep(index: number) {
+    setModifiedSteps((prev) => prev.filter((_, i) => i !== index));
   }
 
-  function addSummaryStep() {
-    setModifiedSummary((prev) => [
+  function addStep() {
+    setModifiedSteps((prev) => [
       ...prev,
-      { description: "", reversible: true },
+      { description: "", script: "", dryRunScript: null, rollbackScript: null, reversible: true },
     ]);
   }
 
@@ -690,165 +670,186 @@ export default function PlanReviewPanel({ deploymentId }: Props) {
             Envoy&apos;s Plan{revised && " (Revised)"}
           </div>
 
-          {/* Step summary list */}
-          {plan.scriptedPlan.stepSummary.map((step, i) => {
+          {/* Per-step collapsible cards */}
+          {plan.scriptedPlan.steps.map((step, i) => {
             const risk = !step.reversible ? "high" : "low";
+            const diff: StepDiff | undefined = plan.stepDiffs?.[i];
+            const isExpanded = expandedSteps.has(i);
+            const diffColor = diff?.status === "changed" ? "var(--status-warning)"
+              : diff?.status === "added" ? "var(--status-succeeded)"
+              : diff?.status === "removed" ? "var(--status-failed)"
+              : undefined;
+
             return (
-              <div key={i} className="plan-step-row">
-                <span className="plan-step-num">{i + 1}</span>
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 13, color: "var(--text)" }}>
-                        {step.description}
-                      </div>
-                    </div>
+              <div key={i} style={{
+                background: "var(--surface-alt)",
+                borderRadius: 8,
+                border: `1px solid ${diffColor ? `color-mix(in srgb, ${diffColor} 40%, var(--border))` : "var(--border)"}`,
+                marginBottom: 8,
+                overflow: "hidden",
+              }}>
+                {/* Step header — clickable to expand */}
+                <button
+                  onClick={() => setExpandedSteps((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(i)) next.delete(i); else next.add(i);
+                    return next;
+                  })}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    width: "100%",
+                    padding: "10px 12px",
+                    background: "none",
+                    border: "none",
+                    cursor: "pointer",
+                    textAlign: "left",
+                  }}
+                >
+                  <span className="plan-step-num">{i + 1}</span>
+                  <div style={{ flex: 1, fontSize: 13, color: "var(--text)" }}>
+                    {step.description}
+                  </div>
+                  {diff && diff.status !== "unchanged" && (
                     <span style={{
                       fontSize: 10,
                       fontFamily: "var(--font-mono)",
                       fontWeight: 600,
                       padding: "2px 6px",
                       borderRadius: 4,
-                      color: risk === "high" ? "var(--status-failed)" : "var(--status-succeeded)",
-                      background: risk === "high"
-                        ? "color-mix(in srgb, var(--status-failed) 12%, transparent)"
-                        : "color-mix(in srgb, var(--status-succeeded) 12%, transparent)",
+                      color: diffColor,
+                      background: `color-mix(in srgb, ${diffColor} 12%, transparent)`,
                     }}>
-                      {step.reversible ? "reversible" : "irreversible"}
+                      {diff.status}
                     </span>
+                  )}
+                  <span style={{
+                    fontSize: 10,
+                    fontFamily: "var(--font-mono)",
+                    fontWeight: 600,
+                    padding: "2px 6px",
+                    borderRadius: 4,
+                    color: risk === "high" ? "var(--status-failed)" : "var(--status-succeeded)",
+                    background: risk === "high"
+                      ? "color-mix(in srgb, var(--status-failed) 12%, transparent)"
+                      : "color-mix(in srgb, var(--status-succeeded) 12%, transparent)",
+                  }}>
+                    {step.reversible ? "reversible" : "irreversible"}
+                  </span>
+                  <span style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
+                    {isExpanded ? "▲" : "▼"}
+                  </span>
+                </button>
+
+                {/* Expanded: per-step scripts */}
+                {isExpanded && (
+                  <div style={{ padding: "0 12px 12px", borderTop: "1px solid var(--border)" }}>
+                    <div style={{ marginTop: 8 }}>
+                      <div style={{ fontSize: 10, fontFamily: "var(--font-mono)", color: "var(--text-muted)", fontWeight: 600, marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                        Script
+                      </div>
+                      <pre style={{
+                        margin: 0,
+                        padding: "10px 12px",
+                        borderRadius: 6,
+                        background: "var(--surface)",
+                        border: "1px solid var(--border)",
+                        fontSize: 12,
+                        fontFamily: "var(--font-mono)",
+                        color: "var(--text)",
+                        overflow: "auto",
+                        maxHeight: 300,
+                        whiteSpace: "pre-wrap",
+                        wordBreak: "break-word",
+                        lineHeight: 1.5,
+                      }}>
+                        {step.script}
+                      </pre>
+                    </div>
+
+                    {step.dryRunScript && (
+                      <div style={{ marginTop: 10 }}>
+                        <div style={{ fontSize: 10, fontFamily: "var(--font-mono)", color: "var(--text-muted)", fontWeight: 600, marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                          Dry-run
+                        </div>
+                        <pre style={{
+                          margin: 0,
+                          padding: "10px 12px",
+                          borderRadius: 6,
+                          background: "var(--surface)",
+                          border: "1px solid color-mix(in srgb, var(--status-running) 30%, var(--border))",
+                          fontSize: 12,
+                          fontFamily: "var(--font-mono)",
+                          color: "var(--text)",
+                          overflow: "auto",
+                          maxHeight: 200,
+                          whiteSpace: "pre-wrap",
+                          wordBreak: "break-word",
+                          lineHeight: 1.5,
+                        }}>
+                          {step.dryRunScript}
+                        </pre>
+                      </div>
+                    )}
+
+                    {step.rollbackScript && (
+                      <div style={{ marginTop: 10 }}>
+                        <div style={{ fontSize: 10, fontFamily: "var(--font-mono)", color: "var(--text-muted)", fontWeight: 600, marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                          Rollback
+                        </div>
+                        <pre style={{
+                          margin: 0,
+                          padding: "10px 12px",
+                          borderRadius: 6,
+                          background: "var(--surface)",
+                          border: "1px solid color-mix(in srgb, var(--status-warning) 30%, var(--border))",
+                          fontSize: 12,
+                          fontFamily: "var(--font-mono)",
+                          color: "var(--text)",
+                          overflow: "auto",
+                          maxHeight: 200,
+                          whiteSpace: "pre-wrap",
+                          wordBreak: "break-word",
+                          lineHeight: 1.5,
+                        }}>
+                          {step.rollbackScript}
+                        </pre>
+                      </div>
+                    )}
+
+                    {/* Diff drill-in: show previous vs current when step changed */}
+                    {diff?.status === "changed" && diff.previous && (
+                      <div style={{ marginTop: 10 }}>
+                        <div style={{ fontSize: 10, fontFamily: "var(--font-mono)", color: "var(--status-warning)", fontWeight: 600, marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                          Previous Script
+                        </div>
+                        <pre style={{
+                          margin: 0,
+                          padding: "10px 12px",
+                          borderRadius: 6,
+                          background: "var(--surface)",
+                          border: "1px solid color-mix(in srgb, var(--status-warning) 20%, var(--border))",
+                          fontSize: 12,
+                          fontFamily: "var(--font-mono)",
+                          color: "var(--text-muted)",
+                          overflow: "auto",
+                          maxHeight: 200,
+                          whiteSpace: "pre-wrap",
+                          wordBreak: "break-word",
+                          lineHeight: 1.5,
+                          textDecoration: "line-through",
+                          opacity: 0.7,
+                        }}>
+                          {diff.previous.script}
+                        </pre>
+                      </div>
+                    )}
                   </div>
-                </div>
+                )}
               </div>
             );
           })}
-
-          {/* Execution script toggle */}
-          <button
-            onClick={() => setScriptExpanded((p) => !p)}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              background: "none",
-              border: "1px solid var(--border)",
-              borderRadius: 6,
-              padding: "6px 12px",
-              marginTop: 12,
-              cursor: "pointer",
-              color: "var(--text-muted)",
-              fontSize: 12,
-              fontFamily: "var(--font-mono)",
-            }}
-          >
-            {scriptExpanded ? "▲ Hide Script" : "▼ View Script"}
-          </button>
-          {scriptExpanded && (
-            <pre style={{
-              marginTop: 8,
-              padding: "14px 16px",
-              borderRadius: 8,
-              background: "var(--surface-alt)",
-              border: "1px solid var(--border)",
-              fontSize: 12,
-              fontFamily: "var(--font-mono)",
-              color: "var(--text)",
-              overflow: "auto",
-              maxHeight: 400,
-              whiteSpace: "pre-wrap",
-              wordBreak: "break-word",
-              lineHeight: 1.5,
-            }}>
-              {plan.scriptedPlan.executionScript}
-            </pre>
-          )}
-
-          {/* Simulation script toggle (only if dryRunScript exists) */}
-          {plan.scriptedPlan.dryRunScript && (
-            <>
-              <button
-                onClick={() => setDryRunScriptExpanded((p) => !p)}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 6,
-                  background: "none",
-                  border: "1px solid var(--border)",
-                  borderRadius: 6,
-                  padding: "6px 12px",
-                  marginTop: 8,
-                  cursor: "pointer",
-                  color: "var(--text-muted)",
-                  fontSize: 12,
-                  fontFamily: "var(--font-mono)",
-                }}
-              >
-                {dryRunScriptExpanded ? "▲ Hide Simulation Script" : "▼ Simulation Script"}
-              </button>
-              {dryRunScriptExpanded && (
-                <pre style={{
-                  marginTop: 8,
-                  padding: "14px 16px",
-                  borderRadius: 8,
-                  background: "var(--surface-alt)",
-                  border: "1px solid color-mix(in srgb, var(--status-running) 30%, var(--border))",
-                  fontSize: 12,
-                  fontFamily: "var(--font-mono)",
-                  color: "var(--text)",
-                  overflow: "auto",
-                  maxHeight: 400,
-                  whiteSpace: "pre-wrap",
-                  wordBreak: "break-word",
-                  lineHeight: 1.5,
-                }}>
-                  {plan.scriptedPlan.dryRunScript}
-                </pre>
-              )}
-            </>
-          )}
-
-          {/* Rollback script toggle (only if exists) */}
-          {plan.scriptedPlan.rollbackScript && (
-            <>
-              <button
-                onClick={() => setRollbackScriptExpanded((p) => !p)}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 6,
-                  background: "none",
-                  border: "1px solid var(--border)",
-                  borderRadius: 6,
-                  padding: "6px 12px",
-                  marginTop: 8,
-                  cursor: "pointer",
-                  color: "var(--text-muted)",
-                  fontSize: 12,
-                  fontFamily: "var(--font-mono)",
-                }}
-              >
-                {rollbackScriptExpanded ? "▲ Hide Rollback Script" : "▼ Rollback Script"}
-              </button>
-              {rollbackScriptExpanded && (
-                <pre style={{
-                  marginTop: 8,
-                  padding: "14px 16px",
-                  borderRadius: 8,
-                  background: "var(--surface-alt)",
-                  border: "1px solid color-mix(in srgb, var(--status-warning) 30%, var(--border))",
-                  fontSize: 12,
-                  fontFamily: "var(--font-mono)",
-                  color: "var(--text)",
-                  overflow: "auto",
-                  maxHeight: 400,
-                  whiteSpace: "pre-wrap",
-                  wordBreak: "break-word",
-                  lineHeight: 1.5,
-                }}>
-                  {plan.scriptedPlan.rollbackScript}
-                </pre>
-              )}
-            </>
-          )}
         </div>
       )}
 
@@ -883,78 +884,71 @@ export default function PlanReviewPanel({ deploymentId }: Props) {
           <h3 className="canvas-section-title">Edit Plan</h3>
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
 
-            {/* Execution script */}
-            <div>
-              <label style={{ fontSize: 12, color: "var(--text-muted)", display: "block", marginBottom: 4, fontFamily: "var(--font-mono)" }}>
-                Execution Script
-              </label>
-              <textarea
-                value={modifiedScript}
-                onChange={(e) => setModifiedScript(e.target.value)}
-                className="v2-input"
-                rows={12}
-                style={{ resize: "vertical", fontFamily: "var(--font-mono)", fontSize: 12, lineHeight: 1.5 }}
-              />
-            </div>
-
-            {/* Rollback script */}
-            <div>
-              <label style={{ fontSize: 12, color: "var(--text-muted)", display: "block", marginBottom: 4, fontFamily: "var(--font-mono)" }}>
-                Rollback Script (optional)
-              </label>
-              <textarea
-                value={modifiedRollbackScript}
-                onChange={(e) => setModifiedRollbackScript(e.target.value)}
-                className="v2-input"
-                rows={6}
-                style={{ resize: "vertical", fontFamily: "var(--font-mono)", fontSize: 12, lineHeight: 1.5 }}
-                placeholder="Leave empty if no rollback is needed"
-              />
-            </div>
-
-            {/* Step summaries */}
-            <div>
-              <label style={{ fontSize: 12, color: "var(--text-muted)", display: "block", marginBottom: 8, fontFamily: "var(--font-mono)" }}>
-                Step Summaries
-              </label>
-              {modifiedSummary.map((step, i) => (
-                <div key={i} style={{
-                  background: "var(--surface-alt)",
-                  padding: 10,
-                  borderRadius: 8,
-                  border: "1px solid var(--border)",
-                  marginBottom: 8,
-                }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                    <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text)" }}>Step {i + 1}</span>
-                    <button
-                      onClick={() => removeSummaryStep(i)}
-                      style={{ background: "transparent", border: "none", color: "var(--status-failed)", cursor: "pointer", fontSize: 11 }}
-                    >
-                      Remove
-                    </button>
-                  </div>
-                  <input
-                    value={step.description}
-                    onChange={(e) => updateSummaryStep(i, "description", e.target.value)}
-                    placeholder="Description"
-                    className="v2-input"
-                    style={{ fontSize: 12, marginBottom: 6 }}
-                  />
-                  <label style={{ fontSize: 12, color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 4 }}>
-                    <input
-                      type="checkbox"
-                      checked={step.reversible}
-                      onChange={(e) => updateSummaryStep(i, "reversible", e.target.checked)}
-                    />
-                    Reversible
-                  </label>
+            {/* Per-step editors */}
+            {modifiedSteps.map((step, i) => (
+              <div key={i} style={{
+                background: "var(--surface-alt)",
+                padding: 12,
+                borderRadius: 8,
+                border: "1px solid var(--border)",
+              }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text)", fontFamily: "var(--font-mono)" }}>
+                    Step {i + 1}
+                  </span>
+                  <button
+                    onClick={() => removeStep(i)}
+                    style={{ background: "transparent", border: "none", color: "var(--status-failed)", cursor: "pointer", fontSize: 11 }}
+                  >
+                    Remove
+                  </button>
                 </div>
-              ))}
-              <button onClick={addSummaryStep} className="v2-btn" style={{ alignSelf: "flex-start", fontSize: 11 }}>
-                + Add Step
-              </button>
-            </div>
+
+                <input
+                  value={step.description}
+                  onChange={(e) => updateStep(i, "description", e.target.value)}
+                  placeholder="Description"
+                  className="v2-input"
+                  style={{ fontSize: 12, marginBottom: 8 }}
+                />
+
+                <label style={{ fontSize: 11, color: "var(--text-muted)", display: "block", marginBottom: 2, fontFamily: "var(--font-mono)" }}>
+                  Script
+                </label>
+                <textarea
+                  value={step.script}
+                  onChange={(e) => updateStep(i, "script", e.target.value)}
+                  className="v2-input"
+                  rows={4}
+                  style={{ resize: "vertical", fontFamily: "var(--font-mono)", fontSize: 12, lineHeight: 1.5, marginBottom: 8 }}
+                />
+
+                <label style={{ fontSize: 11, color: "var(--text-muted)", display: "block", marginBottom: 2, fontFamily: "var(--font-mono)" }}>
+                  Rollback Script (optional)
+                </label>
+                <textarea
+                  value={step.rollbackScript ?? ""}
+                  onChange={(e) => updateStep(i, "rollbackScript", e.target.value || null)}
+                  className="v2-input"
+                  rows={2}
+                  style={{ resize: "vertical", fontFamily: "var(--font-mono)", fontSize: 12, lineHeight: 1.5, marginBottom: 8 }}
+                  placeholder="Leave empty if no rollback is needed"
+                />
+
+                <label style={{ fontSize: 12, color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 4 }}>
+                  <input
+                    type="checkbox"
+                    checked={step.reversible}
+                    onChange={(e) => updateStep(i, "reversible", e.target.checked)}
+                  />
+                  Reversible
+                </label>
+              </div>
+            ))}
+
+            <button onClick={addStep} className="v2-btn" style={{ alignSelf: "flex-start", fontSize: 11 }}>
+              + Add Step
+            </button>
 
             {/* Reason */}
             <div>
@@ -1165,9 +1159,7 @@ export default function PlanReviewPanel({ deploymentId }: Props) {
               setMode("review");
               setError(null);
               if (deployment.plan?.scriptedPlan) {
-                setModifiedScript(deployment.plan.scriptedPlan.executionScript);
-                setModifiedRollbackScript(deployment.plan.scriptedPlan.rollbackScript ?? "");
-                setModifiedSummary(deployment.plan.scriptedPlan.stepSummary.map((s) => ({ ...s })));
+                setModifiedSteps(deployment.plan.scriptedPlan.steps.map((s) => ({ ...s })));
               }
               setModifyReason("");
             }}

@@ -1,15 +1,9 @@
 import type { ExecutionProgressEvent, ProgressCallback } from "./operation-executor.js";
 
 // ---------------------------------------------------------------------------
-// Schema translation — maps envoy's script-phase events to the step-based
-// format the server's ProgressEventSchema expects.
+// Schema translation — maps envoy's per-step events to the format
+// the server's ProgressEventSchema expects.
 // ---------------------------------------------------------------------------
-
-const PHASE_STEP: Record<string, { stepIndex: number; stepDescription: string }> = {
-  "dry-run":  { stepIndex: 0, stepDescription: "Dry run" },
-  "execution": { stepIndex: 1, stepDescription: "Executing" },
-  "rollback":  { stepIndex: 2, stepDescription: "Rolling back" },
-};
 
 interface ServerProgressEvent {
   deploymentId: string;
@@ -24,24 +18,11 @@ interface ServerProgressEvent {
 }
 
 function toServerEvent(event: ExecutionProgressEvent): ServerProgressEvent | null {
-  const step = PHASE_STEP[event.phase] ?? { stepIndex: 0, stepDescription: event.phase };
   const ts = event.timestamp instanceof Date
     ? event.timestamp.toISOString()
     : (event.timestamp as string);
 
   switch (event.type) {
-    case "script-started":
-      return { deploymentId: event.deploymentId, type: "step-started", ...step, status: "in_progress", timestamp: ts, overallProgress: event.overallProgress };
-    case "script-completed":
-      return { deploymentId: event.deploymentId, type: "step-completed", ...step, status: "completed", output: event.output, timestamp: ts, overallProgress: event.overallProgress };
-    case "script-failed":
-      return { deploymentId: event.deploymentId, type: "step-failed", ...step, status: "failed", error: event.error, output: event.output, timestamp: ts, overallProgress: event.overallProgress };
-    case "rollback-started":
-      return { deploymentId: event.deploymentId, type: "rollback-started", ...PHASE_STEP["rollback"], status: "in_progress", timestamp: ts, overallProgress: event.overallProgress };
-    case "rollback-completed":
-      return { deploymentId: event.deploymentId, type: "rollback-completed", ...PHASE_STEP["rollback"], status: "completed", timestamp: ts, overallProgress: event.overallProgress };
-    case "deployment-completed":
-      return { deploymentId: event.deploymentId, type: "deployment-completed", stepIndex: 99, stepDescription: "Done", status: event.status, timestamp: ts, overallProgress: 100 };
     case "plan-step-started":
       return { deploymentId: event.deploymentId, type: "plan-step-started", stepIndex: event.stepIndex ?? 0, stepDescription: event.stepDescription ?? "", status: "in_progress", timestamp: ts, overallProgress: event.overallProgress };
     case "plan-step-completed":
@@ -50,8 +31,24 @@ function toServerEvent(event: ExecutionProgressEvent): ServerProgressEvent | nul
       return { deploymentId: event.deploymentId, type: "plan-step-failed", stepIndex: event.stepIndex ?? 0, stepDescription: event.stepDescription ?? "", status: "failed", error: event.error, timestamp: ts, overallProgress: event.overallProgress };
     case "step-output":
       return { deploymentId: event.deploymentId, type: "step-output", stepIndex: event.stepIndex ?? 0, stepDescription: "", status: "in_progress", output: event.output, timestamp: ts, overallProgress: event.overallProgress };
-    case "script-output":
-      return null; // raw stdout chunks — not forwarded (plan-step markers handle this now)
+    case "rollback-step-started":
+      return { deploymentId: event.deploymentId, type: "rollback-step-started", stepIndex: event.stepIndex ?? 0, stepDescription: event.stepDescription ?? "", status: "in_progress", timestamp: ts, overallProgress: event.overallProgress };
+    case "rollback-step-completed":
+      return { deploymentId: event.deploymentId, type: "rollback-step-completed", stepIndex: event.stepIndex ?? 0, stepDescription: event.stepDescription ?? "", status: "completed", timestamp: ts, overallProgress: event.overallProgress };
+    case "rollback-step-failed":
+      return { deploymentId: event.deploymentId, type: "rollback-step-failed", stepIndex: event.stepIndex ?? 0, stepDescription: event.stepDescription ?? "", status: "failed", error: event.error, timestamp: ts, overallProgress: event.overallProgress };
+    case "rollback-step-skipped":
+      return { deploymentId: event.deploymentId, type: "rollback-step-skipped", stepIndex: event.stepIndex ?? 0, stepDescription: event.stepDescription ?? "", status: "completed", timestamp: ts, overallProgress: event.overallProgress };
+    case "dry-run-step-started":
+      return { deploymentId: event.deploymentId, type: "dry-run-step-started", stepIndex: event.stepIndex ?? 0, stepDescription: event.stepDescription ?? "", status: "in_progress", timestamp: ts, overallProgress: event.overallProgress };
+    case "dry-run-step-passed":
+      return { deploymentId: event.deploymentId, type: "dry-run-step-passed", stepIndex: event.stepIndex ?? 0, stepDescription: event.stepDescription ?? "", status: "completed", output: event.output, timestamp: ts, overallProgress: event.overallProgress };
+    case "dry-run-step-failed":
+      return { deploymentId: event.deploymentId, type: "dry-run-step-failed", stepIndex: event.stepIndex ?? 0, stepDescription: event.stepDescription ?? "", status: "failed", error: event.error, output: event.output, timestamp: ts, overallProgress: event.overallProgress };
+    case "dry-run-step-skipped":
+      return { deploymentId: event.deploymentId, type: "dry-run-step-skipped", stepIndex: event.stepIndex ?? 0, stepDescription: event.stepDescription ?? "", status: "completed", timestamp: ts, overallProgress: event.overallProgress };
+    case "deployment-completed":
+      return { deploymentId: event.deploymentId, type: "deployment-completed", stepIndex: 99, stepDescription: "Done", status: event.status, timestamp: ts, overallProgress: 100 };
     default:
       return null;
   }
@@ -64,7 +61,7 @@ function toServerEvent(event: ExecutionProgressEvent): ServerProgressEvent | nul
 /**
  * Creates a ProgressCallback that POSTs events to a callback URL.
  *
- * Translates the envoy's script-phase event model to the step-based format
+ * Translates the envoy's per-step event model to the format
  * the server's ProgressEventSchema expects. Buffers at 500ms intervals.
  * On POST failure, retries with exponential backoff (capped at 30s).
  * Failures are non-fatal — the synchronous result delivery is the fallback.
@@ -127,11 +124,11 @@ export function createCallbackReporter(callbackUrl: string, token?: string): Pro
 
   return (event: ExecutionProgressEvent): void => {
     const translated = toServerEvent(event);
-    if (!translated) return; // script-output and unmapped events are skipped
+    if (!translated) return; // unmapped events are skipped
 
     pendingEvents.push(translated);
 
-    const isTerminal = translated.type === "deployment-completed" || translated.type === "step-failed";
+    const isTerminal = translated.type === "deployment-completed" || translated.type === "plan-step-failed";
     if (isTerminal) {
       if (flushTimer) {
         clearTimeout(flushTimer);

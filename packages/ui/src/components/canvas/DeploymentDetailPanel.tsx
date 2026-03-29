@@ -302,7 +302,7 @@ export default function DeploymentDetailPanel({ deploymentId, title }: Props) {
 
   // ── Running — full-screen execution overlay ───────────────────────────────
   if (isRunning) {
-    const planSummary = deployment.plan?.scriptedPlan?.stepSummary ?? [];
+    const planSummary = deployment.plan?.scriptedPlan?.steps ?? [];
     const isRollback = progressEvents.some((e) => e.type === "rollback-started");
     const rollbackDone = progressEvents.some((e) => e.type === "rollback-completed");
     const anyFailed = progressEvents.some((e) => e.type === "step-failed");
@@ -650,7 +650,7 @@ export default function DeploymentDetailPanel({ deploymentId, title }: Props) {
             {/* Step summaries */}
             {deployment.plan.scriptedPlan && (
               <div>
-                {deployment.plan.scriptedPlan.stepSummary.map((step, i) => (
+                {deployment.plan.scriptedPlan.steps.map((step, i) => (
                   <div key={i} className="plan-step-row">
                     <span className="plan-step-num">{i + 1}</span>
                     <div style={{ flex: 1 }}>
@@ -713,12 +713,12 @@ export default function DeploymentDetailPanel({ deploymentId, title }: Props) {
                     wordBreak: "break-word",
                     lineHeight: 1.5,
                   }}>
-                    {deployment.plan.scriptedPlan.executionScript}
+                    {deployment.plan.scriptedPlan.steps.map((s, i) => `# Step ${i + 1}: ${s.description}\n${s.script}`).join("\n\n")}
                   </pre>
                 )}
 
                 {/* Rollback script toggle */}
-                {deployment.plan.scriptedPlan.rollbackScript && (
+                {deployment.plan.scriptedPlan.steps.some((s) => s.rollbackScript) && (
                   <>
                     <button
                       onClick={() => togglePlanStep(-2)}
@@ -755,7 +755,10 @@ export default function DeploymentDetailPanel({ deploymentId, title }: Props) {
                         wordBreak: "break-word",
                         lineHeight: 1.5,
                       }}>
-                        {deployment.plan.scriptedPlan.rollbackScript}
+                        {deployment.plan.scriptedPlan.steps
+                          .filter((s) => s.rollbackScript)
+                          .map((s, i) => `# Step ${i + 1}: ${s.description}\n${s.rollbackScript}`)
+                          .join("\n\n")}
                       </pre>
                     )}
                   </>

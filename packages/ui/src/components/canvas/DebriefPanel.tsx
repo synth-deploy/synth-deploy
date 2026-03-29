@@ -850,7 +850,7 @@ function DeploymentDebriefDetail({ deploymentId, onBack, onNavigate }: { deploym
         </div>
       )}
 
-      {/* Executed Plan steps — prefer executionRecord, fall back to plan.scriptedPlan.stepSummary, then debrief entries */}
+      {/* Executed Plan steps — prefer executionRecord, fall back to plan.scriptedPlan.steps, then debrief entries */}
       {(deployment.executionRecord || deployment.plan || executionEntries.length > 0) && (
         <div className="canvas-section">
           <h3 className="canvas-section-title">Executed Plan</h3>
@@ -877,9 +877,9 @@ function DeploymentDebriefDetail({ deploymentId, onBack, onNavigate }: { deploym
                   );
                 })
               : deployment.plan?.scriptedPlan
-              ? deployment.plan.scriptedPlan.stepSummary.map((step, i) => {
-                  const summarySteps = deployment.plan!.scriptedPlan!.stepSummary;
-                  const isLast = i === summarySteps.length - 1;
+              ? deployment.plan.scriptedPlan.steps.map((step, i) => {
+                  const steps = deployment.plan!.scriptedPlan!.steps;
+                  const isLast = i === steps.length - 1;
                   const succeeded = deployment.status === "succeeded";
                   const failed = deployment.status === "failed" || deployment.status === "rolled_back";
                   const iconColor = succeeded ? "var(--status-succeeded)" : failed ? "var(--status-failed)" : "var(--text-muted)";
@@ -1050,9 +1050,9 @@ function DeploymentDebriefDetail({ deploymentId, onBack, onNavigate }: { deploym
               )}
               {deployment.rollbackPlan.scriptedPlan ? (
                 <div style={{ borderRadius: 10, overflow: "hidden", border: "1px solid var(--border)", background: "var(--surface)" }}>
-                  {deployment.rollbackPlan.scriptedPlan.stepSummary.map((step, i) => {
-                    const summarySteps = deployment.rollbackPlan!.scriptedPlan!.stepSummary;
-                    const isLast = i === summarySteps.length - 1;
+                  {deployment.rollbackPlan.scriptedPlan.steps.map((step, i) => {
+                    const steps = deployment.rollbackPlan!.scriptedPlan!.steps;
+                    const isLast = i === steps.length - 1;
                     return (
                       <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "11px 16px", borderBottom: isLast ? "none" : "1px solid var(--border)" }}>
                         <span style={{

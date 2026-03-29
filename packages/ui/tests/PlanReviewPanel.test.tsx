@@ -95,14 +95,29 @@ import { useQuery } from "../src/hooks/useQuery";
 const mockPlan = {
   scriptedPlan: {
     platform: "bash" as const,
-    executionScript: "#!/bin/bash\nset -euo pipefail\ndocker pull web-app:1.2.0\ndocker stop web-app\ndocker run -d --name web-app web-app:1.2.0",
-    dryRunScript: "#!/bin/bash\nset -euo pipefail\ndocker image inspect web-app:1.2.0 || true\ndocker ps -q -f name=web-app",
-    rollbackScript: "#!/bin/bash\nset -euo pipefail\ndocker stop web-app-new || true\ndocker start web-app",
     reasoning: "Standard rolling deployment with pre-pull for zero-downtime.",
-    stepSummary: [
-      { description: "Pull image web-app:1.2.0", reversible: true },
-      { description: "Stop current container", reversible: true },
-      { description: "Start new container", reversible: true },
+    steps: [
+      {
+        description: "Pull image web-app:1.2.0",
+        script: "docker pull web-app:1.2.0",
+        dryRunScript: "docker image inspect web-app:1.2.0 || true",
+        rollbackScript: null,
+        reversible: true,
+      },
+      {
+        description: "Stop current container",
+        script: "docker stop web-app",
+        dryRunScript: "docker ps -q -f name=web-app",
+        rollbackScript: "docker start web-app",
+        reversible: true,
+      },
+      {
+        description: "Start new container",
+        script: "docker run -d --name web-app web-app:1.2.0",
+        dryRunScript: null,
+        rollbackScript: "docker stop web-app-new || true",
+        reversible: true,
+      },
     ],
   },
   reasoning: "Standard rolling deployment with pre-pull for zero-downtime.",
