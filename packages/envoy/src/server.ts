@@ -40,7 +40,7 @@ const EscalateGeneralSchema = z.object({
 const PlanRequestSchema = z.object({
   operationId: z.string(),
   /** Operation type — determines which planning path to use. Defaults to "deploy". */
-  operationType: z.enum(["deploy", "query", "investigate", "maintain", "trigger"]).optional(),
+  operationType: z.enum(["deploy", "query", "investigate", "maintain", "execute", "trigger"]).optional(),
   /** Natural language objective for non-deploy operations */
   intent: z.string().optional(),
   /** Whether the investigation is allowed to run write probes (default false) */
@@ -84,6 +84,17 @@ const PlanRequestSchema = z.object({
   triggerResponseIntent: z.string().optional(),
   /** User-provided context about this envoy's environment */
   envoyContext: z.string().optional(),
+  /** Prior composite step outputs available on disk for this step to reference */
+  priorStepOutputs: z.array(z.object({
+    stepIndex: z.number(),
+    type: z.string(),
+    intent: z.string(),
+    outputPath: z.string(),
+  })).optional(),
+  /** Parent composite operation ID — used for inter-step output path convention */
+  parentOperationId: z.string().optional(),
+  /** Index of this step within the parent composite operation */
+  compositeStepIndex: z.number().int().nonnegative().optional(),
 });
 
 const PlanStepSchema = z.object({

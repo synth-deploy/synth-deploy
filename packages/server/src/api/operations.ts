@@ -1,3 +1,6 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import type { FastifyInstance } from "fastify";
 import { generatePostmortem, generatePostmortemAsync, resolveApprovalMode } from "@synth-deploy/core";
 import type { LlmClient, IPartitionStore, IEnvironmentStore, IArtifactStore, ISettingsStore, IDeploymentStore, ITelemetryStore, DebriefWriter, DebriefReader, DebriefPinStore, DeploymentEnrichment, RecommendationVerdict, TelemetryAction } from "@synth-deploy/core";
@@ -82,7 +85,7 @@ export function registerOperationRoutes(
     const partitionVars = partition?.variables ?? {};
     const resolved: Record<string, string> = { ...partitionVars, ...envVars };
 
-    const operationInput = operationType === "deploy"
+    const operationInput = (operationType === "deploy"
       ? { type: "deploy" as const, artifactId: artifactId!, ...(version ? { artifactVersionId: version } : {}) }
       : operationType === "trigger"
         ? { type: "trigger" as const, condition: condition ?? intent ?? "", responseIntent: responseIntent ?? intent ?? "" }
@@ -90,7 +93,9 @@ export function registerOperationRoutes(
           ? { type: "composite" as const, steps: (steps ?? (parsed.data.operations ?? []).map((op: import("@synth-deploy/core").OperationInput) => ({ input: op }))) as import("@synth-deploy/core").CompositeStep[] }
           : operationType === "investigate"
             ? { type: "investigate" as const, intent: intent ?? "", ...(allowWrite !== undefined ? { allowWrite } : {}) }
-            : { type: operationType as "maintain" | "query", intent: intent ?? "" };
+            : operationType === "execute"
+              ? { type: "execute" as const, intent: intent ?? "" }
+              : { type: operationType as "maintain" | "query", intent: intent ?? "" }) as import("@synth-deploy/core").OperationInput;
 
     const deployment = {
       id: crypto.randomUUID(),
@@ -150,7 +155,7 @@ export function registerOperationRoutes(
 
         planningClient.requestPlan({
           operationId: deployment.id,
-          operationType: deployment.input.type as "deploy" | "query" | "investigate" | "maintain" | "trigger",
+          operationType: deployment.input.type as "deploy" | "query" | "investigate" | "maintain" | "execute" | "trigger",
           intent: deployment.intent ?? (deployment.input.type === "trigger"
             ? `Monitor: ${(deployment.input as { condition: string }).condition}. When triggered: ${(deployment.input as { responseIntent: string }).responseIntent}`
             : undefined),
@@ -737,7 +742,7 @@ export function registerOperationRoutes(
       try {
         result = await planningClient.requestPlan({
           operationId: deploymentId,
-          operationType: deployment.input.type as "deploy" | "query" | "investigate" | "maintain" | "trigger",
+          operationType: deployment.input.type as "deploy" | "query" | "investigate" | "maintain" | "execute" | "trigger",
           intent: deployment.intent,
           ...(artifact ? {
             artifact: {
@@ -1810,7 +1815,7 @@ export function registerOperationRoutes(
 
         planningClient.requestPlan({
           operationId: childOp.id,
-          operationType: responseType as "deploy" | "query" | "investigate" | "maintain" | "trigger",
+          operationType: responseType as "deploy" | "query" | "investigate" | "maintain" | "execute" | "trigger",
           intent: childOp.intent,
           environment: environmentForPlanning,
           version: "",
@@ -2109,6 +2114,14 @@ export function registerOperationRoutes(
 
     let anyFailed = false;
 
+    // Track prior step outputs for inter-step data flow
+    const priorStepOutputs: Array<{
+      stepIndex: number;
+      type: string;
+      intent: string;
+      outputPath: string;
+    }> = [];
+
     // Phase 2: Plan each child against its target envoy
     for (let i = 0; i < childIds.length; i++) {
       const childId = childIds[i];
@@ -2150,7 +2163,7 @@ export function registerOperationRoutes(
       try {
         const result = await planningClient.requestPlan({
           operationId: childId,
-          operationType: childInput.type as "deploy" | "query" | "investigate" | "maintain" | "trigger",
+          operationType: childInput.type as "deploy" | "query" | "investigate" | "maintain" | "execute" | "trigger",
           intent: "intent" in childInput ? (childInput as { intent?: string }).intent
             : childInput.type === "trigger" ? `Monitor: ${(childInput as { condition: string }).condition}`
             : undefined,
@@ -2170,6 +2183,9 @@ export function registerOperationRoutes(
           version: parentOp.version ?? "",
           resolvedVariables: parentOp.variables,
           envoyContext: resolvedEnvoy.envoyContext ?? undefined,
+          parentOperationId: parentOp.id,
+          compositeStepIndex: i,
+          ...(priorStepOutputs.length > 0 ? { priorStepOutputs } : {}),
         });
 
         const childDep = deployments.get(childId);
@@ -2206,6 +2222,17 @@ export function registerOperationRoutes(
         if (childInput.type === "investigate" && result.investigationFindings) childDep.investigationFindings = result.investigationFindings;
         childDep.status = "awaiting_approval" as typeof childDep.status;
         deployments.save(childDep);
+
+        // Track step output for inter-step data flow
+        if (result.stepOutputPath) {
+          const childIntent = "intent" in childInput ? (childInput as { intent?: string }).intent ?? childInput.type : childInput.type;
+          priorStepOutputs.push({
+            stepIndex: i,
+            type: childInput.type,
+            intent: childIntent,
+            outputPath: result.stepOutputPath,
+          });
+        }
 
         debrief.record({
           partitionId: childDep.partitionId ?? null,
@@ -2488,6 +2515,7 @@ export function registerOperationRoutes(
       dep.status = "succeeded" as typeof dep.status;
       dep.completedAt = new Date();
       deployments.save(dep);
+      cleanupPipelineOutputs(dep.id);
       debrief.record({
         partitionId: dep.partitionId ?? null,
         operationId: dep.id,
@@ -2508,6 +2536,7 @@ export function registerOperationRoutes(
       dep.failureReason = reason;
       dep.completedAt = new Date();
       deployments.save(dep);
+      cleanupPipelineOutputs(dep.id);
       debrief.record({
         partitionId: dep.partitionId ?? null,
         operationId: dep.id,
@@ -2527,6 +2556,16 @@ export function registerOperationRoutes(
         sibling.failureReason = "Parent composite operation failed";
         deployments.save(sibling);
       }
+    }
+  }
+
+  /** Clean up inter-step pipeline output directory when a composite operation finishes */
+  function cleanupPipelineOutputs(parentOperationId: string): void {
+    const pipelineDir = path.join(os.tmpdir(), "synth", "pipeline", parentOperationId);
+    try {
+      fs.rmSync(pipelineDir, { recursive: true, force: true });
+    } catch {
+      // Best-effort cleanup — don't fail the operation if tmp cleanup fails
     }
   }
 
@@ -2637,6 +2676,7 @@ export function registerOperationRoutes(
       dep.status = "succeeded" as typeof dep.status;
       dep.completedAt = new Date();
       deployments.save(dep);
+      cleanupPipelineOutputs(dep.id);
       debrief.record({
         partitionId: dep.partitionId ?? null,
         operationId: dep.id,

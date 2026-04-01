@@ -23,7 +23,7 @@ import { EnvoyClient } from "../agent/envoy-client.js";
 import type { EnvoyRegistry } from "../agent/envoy-registry.js";
 
 const VALID_SOURCES: AlertWebhookSource[] = ["prometheus", "pagerduty", "datadog", "grafana", "generic"];
-const VALID_OP_TYPES = ["maintain", "deploy", "query", "investigate"] as const;
+const VALID_OP_TYPES = ["maintain", "deploy", "query", "investigate", "execute"] as const;
 
 export function registerAlertWebhookRoutes(
   app: FastifyInstance,
@@ -94,7 +94,7 @@ export function registerAlertWebhookRoutes(
         source: source as AlertWebhookSource,
         enabled: true,
         authToken,
-        defaultOperationType: defaultOperationType as "maintain" | "deploy" | "query" | "investigate",
+        defaultOperationType: defaultOperationType as "maintain" | "deploy" | "query" | "investigate" | "execute",
         defaultIntent,
         environmentId,
         partitionId,
@@ -246,7 +246,9 @@ export function registerAlertWebhookRoutes(
             ? { type: "investigate" as const, intent }
             : channel.defaultOperationType === "query"
               ? { type: "query" as const, intent }
-              : { type: "maintain" as const, intent };
+              : channel.defaultOperationType === "execute"
+                ? { type: "execute" as const, intent }
+                : { type: "maintain" as const, intent };
 
         const operation = {
           id: crypto.randomUUID(),
@@ -309,7 +311,7 @@ export function registerAlertWebhookRoutes(
 
             planningClient.requestPlan({
               operationId: operation.id,
-              operationType: channel.defaultOperationType as "deploy" | "query" | "investigate" | "maintain",
+              operationType: channel.defaultOperationType as "deploy" | "query" | "investigate" | "maintain" | "execute",
               intent,
               environment: environmentForPlanning,
               partition: partition

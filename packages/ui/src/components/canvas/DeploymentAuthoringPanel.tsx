@@ -31,7 +31,7 @@ interface Props {
 }
 
 type DeployScope = "environment" | "envoy" | "partition";
-type OpType = "deploy" | "maintain" | "query" | "investigate" | "trigger" | "composite";
+type OpType = "deploy" | "maintain" | "query" | "investigate" | "execute" | "trigger" | "composite";
 
 export default function OperationAuthoringPanel({ title, preselectedArtifactId, preselectedEnvironmentId, preselectedPartitionId, preselectedOpType, preselectedIntent, preselectedTriggerCondition, preselectedTriggerResponseIntent }: Props) {
   const { pushPanel } = useCanvas();
@@ -70,7 +70,7 @@ export default function OperationAuthoringPanel({ title, preselectedArtifactId, 
   // Composite: child operation list
   const [compositeChildren, setCompositeChildren] = useState<Array<{
     id: string;
-    type: "deploy" | "maintain" | "query" | "investigate";
+    type: "deploy" | "maintain" | "query" | "investigate" | "execute";
     intent: string;
     artifactId?: string;
   }>>([]);
@@ -136,7 +136,7 @@ export default function OperationAuthoringPanel({ title, preselectedArtifactId, 
           operations: compositeChildren.map((c) =>
             c.type === "deploy"
               ? { type: "deploy" as const, artifactId: c.artifactId ?? "" }
-              : { type: c.type as "maintain" | "query" | "investigate", intent: c.intent }
+              : { type: c.type as "maintain" | "query" | "investigate" | "execute", intent: c.intent }
           ),
         } : {}),
       } as Parameters<typeof createOperation>[0]);
@@ -255,8 +255,8 @@ export default function OperationAuthoringPanel({ title, preselectedArtifactId, 
         <div style={{ marginBottom: 18 }}>
           <div className="section-label" style={{ marginBottom: 8 }}>Operation type</div>
           <div style={{ display: "flex", gap: 4 }}>
-            {(["deploy", "maintain", "query", "investigate", "trigger", "composite"] as OpType[]).map((t) => {
-              const isAvailable = t === "deploy" || t === "maintain" || t === "query" || t === "investigate" || t === "trigger" || t === "composite";
+            {(["deploy", "maintain", "query", "investigate", "execute", "trigger", "composite"] as OpType[]).map((t) => {
+              const isAvailable = t === "deploy" || t === "maintain" || t === "query" || t === "investigate" || t === "execute" || t === "trigger" || t === "composite";
               return (
                 <button
                   key={t}
@@ -371,7 +371,7 @@ export default function OperationAuthoringPanel({ title, preselectedArtifactId, 
                   </span>
                   <select
                     value={child.type}
-                    onChange={(e) => updateCompositeChild(child.id, { type: e.target.value as "deploy" | "maintain" | "query" | "investigate", intent: "" })}
+                    onChange={(e) => updateCompositeChild(child.id, { type: e.target.value as "deploy" | "maintain" | "query" | "investigate" | "execute", intent: "" })}
                     style={{
                       padding: "4px 8px",
                       fontSize: 12,
@@ -386,6 +386,7 @@ export default function OperationAuthoringPanel({ title, preselectedArtifactId, 
                     <option value="maintain">maintain</option>
                     <option value="query">query</option>
                     <option value="investigate">investigate</option>
+                    <option value="execute">execute</option>
                   </select>
                   <button
                     onClick={() => removeCompositeChild(child.id)}
@@ -422,7 +423,8 @@ export default function OperationAuthoringPanel({ title, preselectedArtifactId, 
                     onChange={(e) => updateCompositeChild(child.id, { intent: e.target.value })}
                     placeholder={
                       child.type === "query" ? "What to check…" :
-                      child.type === "maintain" ? "What to do…" :
+                      child.type === "maintain" ? "What to maintain…" :
+                      child.type === "execute" ? "What to do…" :
                       "What to investigate…"
                     }
                     style={{

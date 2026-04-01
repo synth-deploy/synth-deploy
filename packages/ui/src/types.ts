@@ -12,6 +12,7 @@ export interface ApprovalDefaults {
   trigger: ApprovalMode;
   deploy: ApprovalMode;
   maintain: ApprovalMode;
+  execute: ApprovalMode;
   composite: ApprovalMode;
   environmentOverrides: Record<string, Partial<Record<string, ApprovalMode>>>;
 }
@@ -384,6 +385,7 @@ export type OperationInput =
   | { type: "maintain"; intent: string; parameters?: Record<string, unknown> }
   | { type: "query"; intent: string }
   | { type: "investigate"; intent: string; allowWrite?: boolean }
+  | { type: "execute"; intent: string }
   | { type: "trigger"; condition: string; responseIntent: string; parameters?: Record<string, unknown> }
   | { type: "composite"; steps: CompositeStep[] };
 

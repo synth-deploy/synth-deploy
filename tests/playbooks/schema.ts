@@ -3,7 +3,7 @@
  */
 import { z } from "zod";
 
-const OperationTypeEnum = z.enum(["deploy", "maintain", "query", "investigate", "trigger", "composite"]);
+const OperationTypeEnum = z.enum(["deploy", "maintain", "query", "investigate", "execute", "trigger", "composite"]);
 
 const SetupEntitySchema = z.object({
   name: z.string().min(1),

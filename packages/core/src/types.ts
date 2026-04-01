@@ -42,6 +42,7 @@ export type OperationInput =
   | { type: "maintain"; intent: string }
   | { type: "query"; intent: string }
   | { type: "investigate"; intent: string; allowWrite?: boolean }
+  | { type: "execute"; intent: string }
   | { type: "trigger"; condition: string; responseIntent: string }
   | { type: "composite"; steps: CompositeStep[] };
 
@@ -532,6 +533,7 @@ export interface ApprovalDefaults {
   trigger: ApprovalMode;
   deploy: ApprovalMode;
   maintain: ApprovalMode;
+  execute: ApprovalMode;
   composite: ApprovalMode;
   environmentOverrides: Record<string, Partial<Record<OperationType, ApprovalMode>>>;
 }
@@ -542,6 +544,7 @@ export const DEFAULT_APPROVAL_DEFAULTS: ApprovalDefaults = {
   trigger: 'required',
   deploy: 'required',
   maintain: 'required',
+  execute: 'required',
   composite: 'required',
   environmentOverrides: {},
 };
@@ -976,7 +979,7 @@ export interface AlertWebhookChannel {
   enabled: boolean;
   authToken: string;
   /** Default operation type for spawned operations */
-  defaultOperationType: "maintain" | "deploy" | "query" | "investigate";
+  defaultOperationType: "maintain" | "deploy" | "query" | "investigate" | "execute";
   /** Default intent template — {{alert.name}}, {{alert.summary}} are interpolated */
   defaultIntent?: string;
   /** Default target environment */

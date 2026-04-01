@@ -240,9 +240,17 @@ export class EnvoyClient {
    */
   async requestPlan(params: {
     operationId: string;
-    operationType?: "deploy" | "query" | "investigate" | "maintain" | "trigger";
+    operationType?: "deploy" | "query" | "investigate" | "maintain" | "execute" | "trigger";
     intent?: string;
     allowWrite?: boolean;
+    priorStepOutputs?: Array<{
+      stepIndex: number;
+      type: string;
+      intent: string;
+      outputPath: string;
+    }>;
+    parentOperationId?: string;
+    compositeStepIndex?: number;
     triggerCondition?: string;
     triggerResponseIntent?: string;
     artifact?: {
@@ -287,6 +295,7 @@ export class EnvoyClient {
     investigationFindings?: { targetsSurveyed: string[]; summary: string; findings: Array<{ target: string; observations: string[] }>; rootCause?: string; proposedResolution?: { intent: string; operationType: "deploy" | "maintain" } };
     intervalMs?: number;
     cooldownMs?: number;
+    stepOutputPath?: string;
   }> {
     // Forward the LLM API key so the Envoy can use it if it started without one.
     // Sent in the request body (not headers) over the trusted server↔envoy channel.

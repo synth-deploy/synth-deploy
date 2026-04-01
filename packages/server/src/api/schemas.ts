@@ -248,6 +248,7 @@ const ChildOperationInputSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("maintain"), intent: z.string().min(1) }),
   z.object({ type: z.literal("query"), intent: z.string().min(1) }),
   z.object({ type: z.literal("investigate"), intent: z.string().min(1), allowWrite: z.boolean().optional() }),
+  z.object({ type: z.literal("execute"), intent: z.string().min(1) }),
   z.object({ type: z.literal("trigger"), condition: z.string().min(1), responseIntent: z.string().min(1) }),
 ]);
 
@@ -271,7 +272,7 @@ export const CreateOperationSchema = z.object({
   partitionId: z.string().optional(),
   envoyId: z.string().optional(),
   version: z.string().optional(),
-  type: z.enum(["deploy", "maintain", "query", "investigate", "trigger", "composite"]).default("deploy"),
+  type: z.enum(["deploy", "maintain", "query", "investigate", "execute", "trigger", "composite"]).default("deploy"),
   intent: z.string().optional(),
   allowWrite: z.boolean().optional(),
   /** Trigger-specific: condition expression (e.g. "disk_usage > 85") */

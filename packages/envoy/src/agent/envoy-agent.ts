@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { z } from "zod";
 import type {
@@ -116,7 +117,7 @@ export interface DeploymentResult {
 export interface PlanningInstruction {
   operationId: string;
   /** Operation type — determines which planning path to use. Defaults to "deploy". */
-  operationType?: "deploy" | "query" | "investigate" | "maintain" | "trigger";
+  operationType?: "deploy" | "query" | "investigate" | "maintain" | "execute" | "trigger";
   /** Natural language objective for non-deploy operations */
   intent?: string;
   /** Whether the investigation is allowed to run write probes (default false) */
@@ -174,6 +175,17 @@ export interface PlanningInstruction {
   triggerCondition?: string;
   /** Trigger-specific: what to do when the condition fires */
   triggerResponseIntent?: string;
+  /** Prior composite step outputs available on disk for this step to reference */
+  priorStepOutputs?: Array<{
+    stepIndex: number;
+    type: string;
+    intent: string;
+    outputPath: string;
+  }>;
+  /** Parent composite operation ID — when set, this step writes its output to disk */
+  parentOperationId?: string;
+  /** Index of this step within the parent composite operation */
+  compositeStepIndex?: number;
 }
 
 /**
@@ -201,6 +213,8 @@ export interface PlanningResult {
   intervalMs?: number;
   /** Trigger-specific: LLM-recommended cooldown in ms between firings (overrides server default of 300000) */
   cooldownMs?: number;
+  /** Path where this step's output was written (composite children only) */
+  stepOutputPath?: string;
 }
 
 export type { QueryFindings, InvestigationFindings } from "@synth-deploy/core";
@@ -294,6 +308,37 @@ export interface ExecutionResult {
  * Every decision is recorded with agent type "envoy" so the debrief
  * clearly shows which agent made which decision.
  */
+
+// --- Inter-step data flow helpers ---
+
+/** Deterministic output path for a composite step's findings/output. */
+function stepOutputPath(parentOperationId: string, stepIndex: number): string {
+  return path.join(os.tmpdir(), "synth", "pipeline", parentOperationId, `step-${stepIndex}-output.json`);
+}
+
+/** Write structured output for a composite step to disk. */
+function writeStepOutput(parentOperationId: string, stepIndex: number, data: unknown): string {
+  const outputPath = stepOutputPath(parentOperationId, stepIndex);
+  fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+  fs.writeFileSync(outputPath, JSON.stringify(data, null, 2), "utf-8");
+  return outputPath;
+}
+
+/** Build a prompt section describing prior step outputs available for probing. */
+function buildPriorStepManifest(priorStepOutputs: PlanningInstruction["priorStepOutputs"]): string {
+  if (!priorStepOutputs?.length) return "";
+  const lines = priorStepOutputs.map(
+    (s) => `- Step ${s.stepIndex + 1} (${s.type}: "${s.intent}"): ${s.outputPath}`,
+  );
+  return (
+    `## Prior Step Outputs\n` +
+    `The following outputs from earlier composite steps are available on disk.\n` +
+    `Use the probe() tool to read any files you need (e.g. cat or jq).\n` +
+    `Only read what is relevant to your current objective.\n\n` +
+    lines.join("\n")
+  );
+}
+
 export class EnvoyAgent {
   private operationExecutor: DefaultOperationExecutor | null = null;
   private scanner: EnvironmentScanner;
@@ -1282,6 +1327,9 @@ export class EnvoyAgent {
     if (opType === "maintain") {
       return this.planMaintain(instruction);
     }
+    if (opType === "execute") {
+      return this.planExecute(instruction);
+    }
     if (opType === "trigger") {
       return this.planTrigger(instruction);
     }
@@ -1628,6 +1676,8 @@ export class EnvoyAgent {
       process.env.SYNTH_LLM_API_KEY = instruction.llmApiKey;
     }
 
+    const priorStepManifest = buildPriorStepManifest(instruction.priorStepOutputs);
+
     const systemPrompt =
       `You are Synth's envoy agent performing a read-only query operation.\n\n` +
       `Your job: probe the target environment and produce a structured findings report. ` +
@@ -1637,6 +1687,7 @@ export class EnvoyAgent {
       `Objective: ${intent}\n\n` +
       `Available variables: ${JSON.stringify(instruction.resolvedVariables)}\n\n` +
       (instruction.envoyContext ? `Envoy Context:\n${instruction.envoyContext}\n\n` : "") +
+      (priorStepManifest ? `${priorStepManifest}\n\n` : "") +
       `Use the probe tool to run read-only shell commands and gather information. ` +
       `Then summarize your findings.\n\n` +
       `When you have enough information, respond with ONLY a JSON object matching this schema:\n` +
@@ -1702,10 +1753,17 @@ export class EnvoyAgent {
       reasoning: queryFindings.summary,
     };
 
+    // Write findings to disk for inter-step data flow in composite operations
+    let outputPath: string | undefined;
+    if (instruction.parentOperationId != null && instruction.compositeStepIndex != null) {
+      outputPath = writeStepOutput(instruction.parentOperationId, instruction.compositeStepIndex, queryFindings);
+    }
+
     return {
       plan: stubPlan,
       rollbackPlan: stubPlan,
       queryFindings,
+      stepOutputPath: outputPath,
     };
   }
 
@@ -1726,6 +1784,8 @@ export class EnvoyAgent {
       process.env.SYNTH_LLM_API_KEY = instruction.llmApiKey;
     }
 
+    const priorStepManifest = buildPriorStepManifest(instruction.priorStepOutputs);
+
     const systemPrompt =
       `You are Synth's envoy agent performing a diagnostic investigation.\n\n` +
       `Your job: iteratively probe the target environment to diagnose issues. ` +
@@ -1739,6 +1799,7 @@ export class EnvoyAgent {
         : `Write access: not authorized (read-only investigation)\n`) +
       `\nAvailable variables: ${JSON.stringify(instruction.resolvedVariables)}\n\n` +
       (instruction.envoyContext ? `Envoy Context:\n${instruction.envoyContext}\n\n` : "") +
+      (priorStepManifest ? `${priorStepManifest}\n\n` : "") +
       `Use the probe tool to run read-only shell commands. Probe iteratively — let each ` +
       `finding guide your next probe. Correlate findings to identify root causes.\n\n` +
       `When you have completed your investigation, respond with ONLY a JSON object matching this schema:\n` +
@@ -1814,10 +1875,17 @@ export class EnvoyAgent {
       reasoning: investigationFindings.summary,
     };
 
+    // Write findings to disk for inter-step data flow in composite operations
+    let outputPath: string | undefined;
+    if (instruction.parentOperationId != null && instruction.compositeStepIndex != null) {
+      outputPath = writeStepOutput(instruction.parentOperationId, instruction.compositeStepIndex, investigationFindings);
+    }
+
     return {
       plan: stubPlan,
       rollbackPlan: stubPlan,
       investigationFindings,
+      stepOutputPath: outputPath,
     };
   }
 
@@ -1977,6 +2045,12 @@ export class EnvoyAgent {
       `Installed tools: ${availableTools || "none"}\n` +
       `Unavailable tools: ${unavailableTools || "none"}`,
     );
+
+    // Include prior step outputs if this is part of a composite operation
+    const priorStepManifest = buildPriorStepManifest(instruction.priorStepOutputs);
+    if (priorStepManifest) {
+      baseSections.push(priorStepManifest);
+    }
 
     const reqId = instruction.operationId ?? crypto.randomUUID().slice(0, 8);
     this.planLog.startRequest(reqId, `maintain:${intent}`, "", envName);
@@ -2320,6 +2394,20 @@ export class EnvoyAgent {
   }
 
   /**
+   * Plan a general-purpose execute operation.
+   *
+   * Execute operations are intent-driven procedures that don't carry the
+   * "maintenance of existing infrastructure" framing. Structurally identical
+   * to maintain — same probe loop, same scripted plan output, same dry-run
+   * validation. The intent string carries the real context for the LLM.
+   */
+  private async planExecute(instruction: PlanningInstruction): Promise<PlanningResult> {
+    // Delegate to planMaintain — the planning pipeline is identical.
+    // The LLM differentiates via the intent string, not the operation type label.
+    return this.planMaintain(instruction);
+  }
+
+  /**
    * Produce a deployment plan using LLM reasoning.
    */
   private async planWithLlm(
@@ -2403,6 +2491,12 @@ Installed tools: ${availableTools || "none"}
 Unavailable tools: ${unavailableTools || "none"}
 
 IMPORTANT: Do NOT use tools that are listed as unavailable. Generate executable ${scriptPlatform} scripts.`);
+
+    // Include prior step outputs if this is part of a composite operation
+    const priorStepManifest = buildPriorStepManifest(instruction.priorStepOutputs);
+    if (priorStepManifest) {
+      sections.push(priorStepManifest);
+    }
 
     if (systemKnowledge.length > 0) {
       sections.push(`## System Knowledge
