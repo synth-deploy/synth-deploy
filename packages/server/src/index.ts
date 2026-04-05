@@ -723,7 +723,7 @@ registerHealthRoutes(app, {
 const progressStore = new ProgressEventStore();
 const defaultEnvoyClient = new EnvoyClient(settings.get().envoy.url, settings.get().envoy.timeoutMs);
 registerOperationRoutes(app, deployments, debrief, partitions, environments, artifactStore, settings, telemetryStore, progressStore, defaultEnvoyClient, envoyRegistry, llm);
-registerEnvoyReportRoutes(app, debrief, deployments, envoyRegistry);
+registerEnvoyReportRoutes(app, debrief, deployments, envoyRegistry, artifactStore);
 registerArtifactRoutes(app, artifactStore, telemetryStore, artifactAnalyzer);
 registerSecurityBoundaryRoutes(app, securityBoundaryStore, telemetryStore);
 registerPartitionRoutes(app, partitions, deployments, debrief, telemetryStore);

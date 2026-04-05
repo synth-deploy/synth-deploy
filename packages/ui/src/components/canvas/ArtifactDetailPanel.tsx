@@ -151,6 +151,19 @@ export default function ArtifactDetailPanel({ artifactId, title }: Props) {
                 <span style={{ fontSize: 12, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
                   {artifact.type}
                 </span>
+                {artifact.source?.type === "generated" && (
+                  <span style={{
+                    fontSize: 10,
+                    color: "var(--accent)",
+                    border: "1px solid var(--accent-border)",
+                    borderRadius: 4,
+                    padding: "1px 5px",
+                    letterSpacing: "0.03em",
+                    textTransform: "uppercase",
+                  }}>
+                    Generated
+                  </span>
+                )}
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                   <div style={{ width: 44, height: 3, borderRadius: 2, background: "color-mix(in srgb, var(--text) 10%, transparent)", overflow: "hidden" }}>
                     <div style={{ width: `${Math.round(confidence * 100)}%`, height: "100%", borderRadius: 2, background: cColor }} />

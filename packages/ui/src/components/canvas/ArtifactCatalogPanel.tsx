@@ -182,6 +182,19 @@ export default function ArtifactCatalogPanel({ title }: Props) {
                 <span style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
                   {art.type}
                 </span>
+                {art.source?.type === "generated" && (
+                  <span style={{
+                    fontSize: 10,
+                    color: "var(--accent)",
+                    border: "1px solid var(--accent-border)",
+                    borderRadius: 4,
+                    padding: "1px 5px",
+                    letterSpacing: "0.03em",
+                    textTransform: "uppercase",
+                  }}>
+                    Generated
+                  </span>
+                )}
                 <ConfidenceIndicator value={art.analysis.confidence} />
               </>
             )}

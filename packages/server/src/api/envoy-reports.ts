@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { DecisionTypeEnum } from "@synth-deploy/core";
-import type { DebriefWriter, DecisionType } from "@synth-deploy/core";
+import type { DebriefWriter, DecisionType, IArtifactStore } from "@synth-deploy/core";
 import type { DeploymentStore } from "../agent/synth-agent.js";
 import type { EnvoyRegistry } from "../agent/envoy-registry.js";
 
@@ -64,6 +64,7 @@ export function registerEnvoyReportRoutes(
   debrief: DebriefWriter,
   deployments: DeploymentStore,
   registry: EnvoyRegistry,
+  artifactStore?: IArtifactStore,
 ): void {
   app.post("/api/envoy/report", async (request, reply) => {
     const authHeader = (request.headers.authorization ?? "") as string;
@@ -147,6 +148,29 @@ export function registerEnvoyReportRoutes(
       }
       deployment.completedAt = new Date();
       deployments.save(deployment);
+
+      // Create output artifact from query/investigate findings on success
+      if (report.success && artifactStore && !deployment.outputArtifactId) {
+        const findings = deployment.queryFindings ?? deployment.investigationFindings;
+        if (findings) {
+          const opType = deployment.input.type;
+          const artifact = artifactStore.create({
+            name: `${opType}-output-${deployment.id.slice(0, 8)}`,
+            type: `${opType}-findings`,
+            analysis: {
+              summary: findings.summary,
+              dependencies: [],
+              configurationExpectations: {},
+              confidence: 1,
+            },
+            annotations: [],
+            learningHistory: [],
+            source: { type: "generated", operationId: deployment.id },
+          });
+          deployment.outputArtifactId = artifact.id;
+          deployments.save(deployment);
+        }
+      }
     }
 
     return reply.status(200).send({

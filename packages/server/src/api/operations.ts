@@ -44,6 +44,45 @@ export function registerOperationRoutes(
   llm?: LlmClient,
 ): void {
 
+  /**
+   * Create an output artifact from a completed operation's findings.
+   * Only applies to query/investigate operations that produced structured findings.
+   * Links the artifact back to the operation via outputArtifactId.
+   */
+  function maybeCreateOutputArtifact(op: import("@synth-deploy/core").Operation): void {
+    const findings = op.queryFindings ?? op.investigationFindings;
+    if (!findings) return;
+
+    const opType = op.input.type;
+    const intent = op.intent ?? opType;
+    const artifact = artifactStore.create({
+      name: `${opType}-output-${op.id.slice(0, 8)}`,
+      type: `${opType}-findings`,
+      analysis: {
+        summary: findings.summary,
+        dependencies: [],
+        configurationExpectations: {},
+        confidence: 1,
+      },
+      annotations: [],
+      learningHistory: [],
+      source: { type: "generated", operationId: op.id },
+    });
+
+    op.outputArtifactId = artifact.id;
+    deployments.save(op);
+
+    debrief.record({
+      partitionId: op.partitionId ?? null,
+      operationId: op.id,
+      agent: "server",
+      decisionType: "system",
+      decision: `Output artifact created: ${artifact.name}`,
+      reasoning: `${opType} operation produced structured findings — persisted as artifact for reference and reuse`,
+      context: { artifactId: artifact.id, artifactType: artifact.type, intent },
+    });
+  }
+
   // Create a deployment (plan phase)
   app.post("/api/operations", { preHandler: [requirePermission("deployment.create")] }, async (request, reply) => {
     const parsed = CreateOperationSchema.safeParse(request.body);
@@ -250,6 +289,8 @@ export function registerOperationRoutes(
               dep.status = "succeeded" as typeof dep.status;
               dep.completedAt = new Date();
               deployments.save(dep);
+
+              maybeCreateOutputArtifact(dep);
 
               const decisionType = dep.input.type === "query"
                 ? "query-findings" as const
@@ -2489,6 +2530,9 @@ export function registerOperationRoutes(
         if (updated.status === "succeeded") {
           running.delete(childId);
           completed.add(childId);
+          if (!updated.outputArtifactId) {
+            maybeCreateOutputArtifact(updated);
+          }
           debrief.record({
             partitionId: updated.partitionId ?? null,
             operationId: childId,
@@ -2657,6 +2701,11 @@ export function registerOperationRoutes(
         const reason = finalChild?.failureReason ?? `Child operation ${i + 1} did not complete in time`;
         failComposite(parentId, `Composite stopped at step ${i + 1}/${childIds.length} (${child.input.type}): ${reason}`, childId, i, childIds);
         return;
+      }
+
+      // Create output artifact from query/investigate findings if not already created
+      if (finalChild && !finalChild.outputArtifactId) {
+        maybeCreateOutputArtifact(finalChild);
       }
 
       debrief.record({
