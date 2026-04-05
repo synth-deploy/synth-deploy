@@ -34,7 +34,7 @@
     "@types/bcryptjs": "^2.4.6",
     "adm-zip": "^0.5.16",
     "bcryptjs": "^3.0.3",
-    "better-sqlite3": "^12.6.2",
+    "better-sqlite3": "^12.8.0",
     "fastify": "^5.0.0",
     "ldapjs": "^3.0.7",
     "openid-client": "^6.8.2",
