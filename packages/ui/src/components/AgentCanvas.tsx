@@ -20,9 +20,10 @@ import PlanReviewPanel from "./canvas/PlanReviewPanel.js";
 import FleetDeploymentPanel from "./canvas/FleetDeploymentPanel.js";
 import DeploymentGraphPanel from "./canvas/DeploymentGraphPanel.js";
 import TopologyPanel from "./canvas/TopologyPanel.js";
+import OperationTemplatePanel from "./canvas/OperationTemplatePanel.js";
 import ErrorBoundary from "./ErrorBoundary.js";
 
-const TAB_ORDER = ["operation-authoring", "artifact-catalog", "topology", "debrief"] as const;
+const TAB_ORDER = ["operation-authoring", "artifact-catalog", "topology", "debrief", "template-catalog"] as const;
 type TabType = typeof TAB_ORDER[number];
 
 export default function AgentCanvas() {
@@ -185,6 +186,9 @@ export default function AgentCanvas() {
 
       case "topology":
         return <TopologyPanel key="topology" title={panel.title} />;
+
+      case "template-catalog":
+        return <OperationTemplatePanel key="template-catalog" title={panel.title} />;
 
       case "settings":
         return <SettingsPanel key="settings" title={panel.title} />;

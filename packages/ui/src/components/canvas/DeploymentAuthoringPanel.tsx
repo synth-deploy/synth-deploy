@@ -6,6 +6,7 @@ import {
   listEnvoys,
   listDeployments,
   createOperation,
+  createTemplate,
   recordPreFlightResponse,
 } from "../../api.js";
 import type { Artifact, Partition, Environment, Deployment, ApprovalMode } from "../../types.js";
@@ -50,6 +51,12 @@ export default function OperationAuthoringPanel({ title, preselectedArtifactId, 
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [showSaveTemplate, setShowSaveTemplate] = useState(false);
+  const [templateName, setTemplateName] = useState("");
+  const [templateDesc, setTemplateDesc] = useState("");
+  const [savingTemplate, setSavingTemplate] = useState(false);
+  const [templateSaved, setTemplateSaved] = useState(false);
 
   const [selectedArtifactIds, setSelectedArtifactIds] = useState<string[]>(
     preselectedArtifactId ? [preselectedArtifactId] : [],
@@ -150,6 +157,38 @@ export default function OperationAuthoringPanel({ title, preselectedArtifactId, 
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function handleSaveTemplate() {
+    if (!templateName.trim()) return;
+    setSavingTemplate(true);
+    try {
+      let input: Record<string, unknown>;
+      if (opType === "deploy") {
+        input = { type: "deploy", artifactId: primaryArtifactId ?? "" };
+      } else if (opType === "trigger") {
+        input = { type: "trigger", condition: triggerCondition.trim(), responseIntent: triggerResponseIntent.trim() };
+      } else if (opType === "composite") {
+        input = {
+          type: "composite",
+          steps: compositeChildren.map((c) =>
+            c.type === "deploy"
+              ? { input: { type: "deploy", artifactId: c.artifactId ?? "" } }
+              : { input: { type: c.type, intent: c.intent } }
+          ),
+        };
+      } else {
+        input = { type: opType, intent: intent.trim() };
+      }
+      await createTemplate({ name: templateName.trim(), description: templateDesc.trim() || undefined, input: input as import("../../types.js").OperationInput });
+      setTemplateSaved(true);
+      setShowSaveTemplate(false);
+      setTemplateName("");
+      setTemplateDesc("");
+      setTimeout(() => setTemplateSaved(false), 3000);
+    } finally {
+      setSavingTemplate(false);
     }
   }
 
@@ -1065,6 +1104,55 @@ export default function OperationAuthoringPanel({ title, preselectedArtifactId, 
                 </button>
               )}
             </div>
+          </div>
+        )}
+
+        {/* Save as template */}
+        {canDeploy && (
+          <div style={{ padding: "4px 0 8px", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            {!showSaveTemplate && !templateSaved && (
+              <button
+                onClick={() => setShowSaveTemplate(true)}
+                style={{ fontSize: 11, color: "var(--text-muted)", background: "none", border: "none", cursor: "pointer", padding: 0, textDecoration: "underline" }}
+              >
+                Save as template
+              </button>
+            )}
+            {templateSaved && (
+              <span style={{ fontSize: 11, color: "var(--status-succeeded)" }}>Template saved.</span>
+            )}
+            {showSaveTemplate && (
+              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                <input
+                  type="text"
+                  placeholder="Template name"
+                  value={templateName}
+                  onChange={(e) => setTemplateName(e.target.value)}
+                  style={{ padding: "5px 8px", borderRadius: 5, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontSize: 12, width: 160 }}
+                />
+                <input
+                  type="text"
+                  placeholder="Description (optional)"
+                  value={templateDesc}
+                  onChange={(e) => setTemplateDesc(e.target.value)}
+                  style={{ padding: "5px 8px", borderRadius: 5, border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontSize: 12, width: 200 }}
+                />
+                <button
+                  className="btn btn-primary"
+                  onClick={handleSaveTemplate}
+                  disabled={savingTemplate || !templateName.trim()}
+                  style={{ fontSize: 12, padding: "5px 12px" }}
+                >
+                  {savingTemplate ? "Saving…" : "Save"}
+                </button>
+                <button
+                  onClick={() => setShowSaveTemplate(false)}
+                  style={{ fontSize: 11, color: "var(--text-muted)", background: "none", border: "none", cursor: "pointer", padding: 0 }}
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
           </div>
         )}
 

@@ -26,6 +26,7 @@ import { registerAgentRoutes } from "./api/agent.js";
 import { registerSettingsRoutes } from "./api/settings.js";
 import { registerTelemetryRoutes } from "./api/telemetry.js";
 import { registerEnvoyRoutes } from "./api/envoys.js";
+import { registerTemplateRoutes, OperationTemplateStore } from "./api/templates.js";
 import { EnvoyRegistry } from "./agent/envoy-registry.js";
 import { EnvoyClient } from "./agent/envoy-client.js";
 import { registerSystemRoutes } from "./api/system.js";
@@ -732,6 +733,8 @@ registerAgentRoutes(app, agent, partitions, environments, artifactStore, deploym
 registerSettingsRoutes(app, settings, telemetryStore);
 registerTelemetryRoutes(app, telemetryStore);
 registerEnvoyRoutes(app, settings, envoyRegistry, telemetryStore, deployments, debrief);
+const templateStore = new OperationTemplateStore();
+registerTemplateRoutes(app, templateStore);
 registerSystemRoutes(app, deployments, artifactStore, environments, partitions, envoyRegistry);
 registerAuthRoutes(app, userStore, roleStore, userRoleStore, sessionStore, jwtSecret);
 registerApiKeyRoutes(app, apiKeyStore, jwtSecret);

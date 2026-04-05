@@ -13,6 +13,8 @@ import type {
   SecurityBoundary,
   AppSettings,
   CommandInfo,
+  OperationTemplate,
+  OperationInput,
 } from "./types.js";
 
 const BASE = "";
@@ -1070,3 +1072,47 @@ export async function revokeApiKey(id: string): Promise<void> {
 export async function regenerateApiKey(id: string): Promise<{ key: ApiKeyPublic; fullKey: string }> {
   return fetchJson(`/api/auth/api-keys/${id}/regenerate`, { method: "POST" });
 }
+
+// --- Operation Templates ---
+
+export async function listTemplates(): Promise<OperationTemplate[]> {
+  const data = await fetchJson<{ templates: OperationTemplate[] }>("/api/templates");
+  return data.templates;
+}
+
+export async function getTemplate(id: string): Promise<OperationTemplate> {
+  const data = await fetchJson<{ template: OperationTemplate }>(`/api/templates/${id}`);
+  return data.template;
+}
+
+export async function createTemplate(params: {
+  name: string;
+  description?: string;
+  input: OperationInput;
+  parameters?: Array<{ name: string; description?: string; defaultValue?: string }>;
+}): Promise<OperationTemplate> {
+  const data = await fetchJson<{ template: OperationTemplate }>("/api/templates", {
+    method: "POST",
+    body: JSON.stringify(params),
+  });
+  return data.template;
+}
+
+export async function deleteTemplate(id: string): Promise<void> {
+  await fetchJson(`/api/templates/${id}`, { method: "DELETE" });
+}
+
+export async function applyTemplate(id: string, params: {
+  environmentId?: string;
+  partitionId?: string;
+  envoyId?: string;
+  version?: string;
+  requireApproval?: boolean;
+  parameters?: Record<string, string>;
+}): Promise<{ operationId: string; templateId: string }> {
+  return fetchJson(`/api/templates/${id}/apply`, {
+    method: "POST",
+    body: JSON.stringify(params),
+  });
+}
+

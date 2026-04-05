@@ -8,6 +8,7 @@ import ThemeToggle from "./ThemeToggle.js";
 const TABS = [
   { id: "operation-authoring", label: "Operations", panelTitle: "Operations" },
   { id: "artifact-catalog", label: "Artifacts", panelTitle: "Artifact Catalog" },
+  { id: "template-catalog", label: "Templates", panelTitle: "Operation Templates" },
   { id: "topology", label: "Topology", panelTitle: "Topology" },
   { id: "debrief", label: "Debriefs", panelTitle: "Debriefs" },
 ] as const;

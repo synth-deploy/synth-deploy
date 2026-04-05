@@ -217,6 +217,24 @@ export interface ArtifactVersion {
   createdAt: string;
 }
 
+// --- Operation Templates ---
+
+export interface OperationTemplateParam {
+  name: string;
+  description?: string;
+  defaultValue?: string;
+}
+
+export interface OperationTemplate {
+  id: string;
+  name: string;
+  description?: string;
+  input: OperationInput;
+  parameters: OperationTemplateParam[];
+  createdAt: string;
+  updatedAt: string;
+}
+
 // --- Security Boundaries ---
 
 export type SecurityBoundaryType =

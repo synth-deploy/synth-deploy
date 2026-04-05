@@ -30,6 +30,7 @@ import type {
   RoleMappingRule,
   ApiKey,
   ApiKeyId,
+  OperationTemplate,
 } from "./types.js";
 
 export interface IPartitionStore {
@@ -87,6 +88,14 @@ export interface ISettingsStore {
   update(partial: Partial<AppSettings>): AppSettings;
   setSecret(key: string, value: string): void;
   getSecret(key: string): string | null;
+}
+
+export interface IOperationTemplateStore {
+  create(template: Omit<OperationTemplate, "id" | "createdAt" | "updatedAt">): OperationTemplate;
+  get(id: string): OperationTemplate | undefined;
+  list(): OperationTemplate[];
+  update(id: string, updates: Partial<Omit<OperationTemplate, "id" | "createdAt">>): OperationTemplate;
+  delete(id: string): boolean;
 }
 
 export interface ITelemetryStore {

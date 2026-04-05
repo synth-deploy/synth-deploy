@@ -41,6 +41,8 @@ export type {
   LearningHistoryEntry,
   Artifact,
   ArtifactVersion,
+  OperationTemplateParam,
+  OperationTemplate,
   SecurityBoundaryType,
   SecurityBoundary,
   ConflictPolicy,
@@ -144,6 +146,7 @@ export type {
   IIdpProviderStore,
   IRoleMappingStore,
   IApiKeyStore,
+  IOperationTemplateStore,
 } from "./store-interfaces.js";
 export {
   openEntityDatabase,

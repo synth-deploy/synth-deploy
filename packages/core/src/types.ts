@@ -527,6 +527,30 @@ export interface SecurityBoundary {
   config: Record<string, unknown>;
 }
 
+// --- Operation Templates ---
+
+export interface OperationTemplateParam {
+  name: string;
+  description?: string;
+  defaultValue?: string;
+}
+
+/**
+ * A saved, reusable operation pattern with optional {{paramName}} placeholders.
+ * Any string field in `input` may contain one or more `{{paramName}}` tokens
+ * that are interpolated with concrete values at apply time.
+ */
+export interface OperationTemplate {
+  id: string;
+  name: string;
+  description?: string;
+  /** The operation input, potentially containing {{param}} placeholders */
+  input: OperationInput;
+  parameters: OperationTemplateParam[];
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 // --- Approval Model ---
 
 export type ApprovalMode = 'auto' | 'required';
