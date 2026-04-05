@@ -31,7 +31,7 @@
     "@modelcontextprotocol/sdk": "^1.26.0",
     "@node-saml/node-saml": "^5.1.0",
     "@synth-deploy/core": "*",
-    "@types/bcryptjs": "^2.4.6",
+    "@types/bcryptjs": "^3.0.0",
     "adm-zip": "^0.5.16",
     "bcryptjs": "^3.0.3",
     "better-sqlite3": "^12.6.2",
