@@ -28,7 +28,7 @@
     "@fastify/multipart": "^9.4.0",
     "@fastify/rate-limit": "^10.3.0",
     "@fastify/static": "^9.0.0",
-    "@modelcontextprotocol/sdk": "^1.26.0",
+    "@modelcontextprotocol/sdk": "^1.27.1",
     "@node-saml/node-saml": "^5.1.0",
     "@synth-deploy/core": "*",
     "@types/bcryptjs": "^2.4.6",
