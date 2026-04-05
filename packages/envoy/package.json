@@ -8,14 +8,16 @@
   },
   "main": "dist/index.js",
   "bin": {
-    "synth-envoy": "./dist/index.js"
+    "synth-envoy": "./dist/index.js",
+    "synth": "./dist/cli.js"
   },
   "exports": {
     ".": "./dist/index.js",
     "./agent/*": "./dist/agent/*",
     "./execution/*": "./dist/execution/*",
     "./state/*": "./dist/state/*",
-    "./server.js": "./dist/server.js"
+    "./server.js": "./dist/server.js",
+    "./local-executor": "./dist/local-executor.js"
   },
   "scripts": {
     "build": "tsc",
@@ -26,6 +28,7 @@
     "@synth-deploy/core": "*",
     "better-sqlite3": "^12.6.2",
     "fastify": "^5.0.0",
+    "yaml": "^2.4.2",
     "zod": "^3.23.0"
   },
   "devDependencies": {
