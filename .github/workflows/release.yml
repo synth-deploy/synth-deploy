@@ -144,7 +144,7 @@ jobs:
 
       - name: Build and push Server image
         if: steps.check.outputs.exists == 'true'
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: Dockerfile.server
@@ -207,7 +207,7 @@ jobs:
 
       - name: Build and push Envoy image
         if: steps.check.outputs.exists == 'true'
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: Dockerfile.envoy
